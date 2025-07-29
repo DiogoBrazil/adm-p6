@@ -15,25 +15,63 @@
             Voltar
         </a>
         
-        <h1 class="title">Cadastrar Procedimento</h1>
+        <h1 class="title">Cadastrar Processo/Procedimento</h1>
         
         <div class="form-section">
-            <h2>Novo Procedimento</h2>
+            <h2>Novo Registro</h2>
             <form id="processForm">
+                <div class="form-group">
+                    <label for="tipo_geral">Tipo de Cadastro</label>
+                    <select id="tipo_geral" required>
+                        <option value="">Selecione</option>
+                        <option value="processo">Processo</option>
+                        <option value="procedimento">Procedimento</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="documento_iniciador">Documento que iniciou</label>
+                    <select id="documento_iniciador" required>
+                        <option value="">Selecione</option>
+                        <option value="Portaria">Portaria</option>
+                        <option value="Memorando Disciplinar">Memorando Disciplinar</option>
+                        <option value="Feito Preliminar">Feito Preliminar</option>
+                    </select>
+                </div>
+
                 <div class="form-group">
                     <label for="numero">Número</label>
                     <input type="text" id="numero" required>
                 </div>
+
                 <div class="form-group">
-                    <label for="tipo">Tipo</label>
-                    <select id="tipo">
-                        <option value="inquiry">Inquérito</option>
-                        <option value="IPM">IPM</option>
+                    <label for="processo_sei">Processo SEI</label>
+                    <input type="text" id="processo_sei" placeholder="Opcional">
+                </div>
+
+                <div class="form-group" id="processo_tipo_group" style="display: none;">
+                    <label for="tipo_processo">Tipo de Processo</label>
+                    <select id="tipo_processo">
+                        <option value="">Selecione</option>
                         <option value="PADS">PADS</option>
+                        <option value="PAD">PAD</option>
+                        <option value="CD">CD</option>
                     </select>
                 </div>
+
+                <div class="form-group" id="procedimento_tipo_group" style="display: none;">
+                    <label for="tipo_procedimento">Tipo de Procedimento</label>
+                    <select id="tipo_procedimento">
+                        <option value="">Selecione</option>
+                        <option value="SR">SR</option>
+                        <option value="FP">FP</option>
+                        <option value="IPM">IPM</option>
+                        <option value="ISO">ISO</option>
+                    </select>
+                </div>
+
                 <div class="form-group">
-                    <label for="responsavel">Responsável</label>
+                    <label for="responsavel">Encarregado</label>
                     <select id="responsavel"></select>
                 </div>
                 <button type="submit" class="btn">Registrar</button>

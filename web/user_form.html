@@ -26,6 +26,38 @@
             </div>
             
             <form id="userForm">
+                <div class="form-group" id="userTypeSelection">
+                    <label for="tipo_usuario">Tipo de Usuário</label>
+                    <select id="tipo_usuario" name="tipo_usuario" required>
+                        <option value="">Selecione</option>
+                        <option value="operador">Operador</option>
+                        <option value="encarregado">Encarregado</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="posto_graduacao">Posto/Graduação</label>
+                    <select id="posto_graduacao" name="posto_graduacao" required>
+                        <option value="">Selecione</option>
+                        <option value="CEL PM">CEL PM</option>
+                        <option value="TC PM">TC PM</option>
+                        <option value="MAJ PM">MAJ PM</option>
+                        <option value="CAP PM">CAP PM</option>
+                        <option value="1º TEN PM">1º TEN PM</option>
+                        <option value="2º TEN PM">2º TEN PM</option>
+                        <option value="ASP OF PM">ASP OF PM</option>
+                        <option value="ST PM">ST PM</option>
+                        <option value="1º SGT PM">1º SGT PM</option>
+                        <option value="2º SGT PM">2º SGT PM</option>
+                        <option value="3º SGT PM">3º SGT PM</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="matricula">Matrícula</label>
+                    <input type="text" id="matricula" name="matricula" placeholder="Digite a matrícula" required>
+                </div>
+                
                 <div class="form-group">
                     <label for="nome">Nome Completo</label>
                     <input type="text" id="nome" name="nome" placeholder="Digite o nome completo" required>
@@ -35,10 +67,20 @@
                     <label for="email">Email</label>
                     <input type="email" id="email" name="email" placeholder="Digite o email" required>
                 </div>
-                
-                <div class="form-group">
-                    <label for="senha">Senha</label>
-                    <input type="password" id="senha" name="senha" placeholder="Digite a senha (mín. 4 caracteres)" required>
+
+                <div id="operatorFields" style="display: none;">
+                    <div class="form-group">
+                        <label for="senha">Senha</label>
+                        <input type="password" id="senha" name="senha" placeholder="Digite a senha (mín. 4 caracteres)">
+                    </div>
+                    <div class="form-group">
+                        <label for="profile">Perfil (Operador)</label>
+                        <select id="profile" name="profile">
+                            <option value="">Selecione</option>
+                            <option value="admin">Admin</option>
+                            <option value="comum">Comum</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn-primary" id="btnCadastrar">

@@ -1,33 +1,260 @@
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; min-height: 100vh; }
 .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
 .title { margin-bottom: 20px; font-size: 1.8rem; color: #333; }
 .card { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); padding: 30px; margin-bottom: 30px; }
-.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0; }
+.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0; flex-wrap: wrap; /* Adicionado para responsividade */ }
 .card-header i { color: #667eea; font-size: 1.3rem; }
 .card-header h2 { font-size: 1.5rem; color: #333; }
+
+/* Estilos para o formulário de cadastro/edição */
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 0.95rem; }
-.form-group input { width: 100%; padding: 15px; border: 2px solid #e1e8ed; border-radius: 12px; font-size: 1rem; transition: all 0.3s ease; background: #f8f9ff; }
-.form-group input:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+.form-group input, .form-group select { width: 100%; padding: 15px; border: 2px solid #e1e8ed; border-radius: 12px; font-size: 1rem; transition: all 0.3s ease; background: #f8f9ff; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
 .btn-primary { width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3); }
-.users-list { max-height: 400px; overflow-y: auto; }
-.user-item { display: flex; align-items: center; padding: 15px; margin-bottom: 10px; background: #f8f9ff; border-radius: 12px; border: 1px solid #e1e8ed; transition: all 0.3s ease; }
-.user-item:hover { background: #667eea; color: white; transform: translateX(5px); }
-.user-avatar { width: 45px; height: 45px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.1rem; margin-right: 15px; }
-.user-item:hover .user-avatar { background: rgba(255, 255, 255, 0.2); }
-.user-details { flex: 1; }
-.user-details h4 { font-size: 1rem; margin-bottom: 3px; }
-.user-details p { font-size: 0.85rem; opacity: 0.8; }
-.user-date { font-size: 0.8rem; opacity: 0.7; }
-.alert { padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; font-size: 0.95rem; display: flex; align-items: center; gap: 12px; }
-.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.back-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: #6c757d; color: white; text-decoration: none; border-radius: 25px; font-size: 0.9rem; transition: all 0.3s ease; margin-bottom: 20px; }
-.back-btn:hover { background: #5a6268; transform: translateY(-2px); text-decoration: none; color: white; }
-.empty-state { text-align: center; padding: 40px 20px; color: #666; }
+
+/* Estilos para a área de ações (pesquisa e botões) */
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-left: auto; /* Alinha à direita */
+}
+
+.actions input[type="text"] {
+    flex-grow: 1;
+    padding: 10px 15px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    max-width: 250px; /* Limita a largura do campo de pesquisa */
+}
+
+.btn-icon {
+    padding: 10px 18px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(102,126,234,0.08);
+    transition: background 0.3s, transform 0.2s;
+    outline: none;
+    border: 2px solid transparent;
+    margin-bottom: 2px;
+}
+
+.btn-icon:hover {
+    background: linear-gradient(135deg, #5a6ae0 0%, #764ba2 100%);
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 18px rgba(102,126,234,0.18);
+    border-color: #667eea;
+}
+
+.btn-search {
+    background: linear-gradient(135deg, #43cea2 0%, #185a9d 100%);
+    color: #fff;
+    border: 2px solid #43cea2;
+    margin-right: 4px;
+}
+.btn-search:hover {
+    background: linear-gradient(135deg, #185a9d 0%, #43cea2 100%);
+    border-color: #185a9d;
+}
+.btn-clear {
+    background: linear-gradient(135deg, #ff6a6a 0%, #ffb347 100%);
+    color: #fff;
+    border: 2px solid #ff6a6a;
+    margin-right: 4px;
+}
+.btn-clear:hover {
+    background: linear-gradient(135deg, #ffb347 0%, #ff6a6a 100%);
+    border-color: #ffb347;
+}
+.btn-new {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    border: 2px solid #667eea;
+}
+.btn-new:hover {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    border-color: #764ba2;
+}
+
+/* Estilos para a tabela */
+.table-responsive {
+    overflow-x: auto; /* Permite rolagem horizontal em telas pequenas */
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+}
+}
+
+.user-table {
+    width: auto;
+    min-width: 800px;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+
+
+
+.user-table th,
+.user-table td {
+    padding: 12px 15px;
+    text-align: center;
+    border-bottom: 2px solid #d1d8e6;
+    border-right: 1px solid #d1d8e6;
+}
+
+.user-table th:last-child,
+.user-table td:last-child {
+    border-right: none;
+}
+
+.user-table tbody tr {
+    border-bottom: 2px solid #d1d8e6;
+}
+
+.user-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.user-table th {
+    background-color: #f0f2f5;
+    color: #555;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+.user-table tbody tr:hover {
+    background-color: #f8f9ff;
+}
+
+.user-table td {
+    color: #444;
+    font-size: 0.9rem;
+}
+
+/* Estilos para a célula de ações */
+.actions-cell {
+    white-space: nowrap; /* Evita que os botões quebrem a linha */
+}
+
+.btn-action {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    margin: 0 5px;
+    transition: color 0.3s ease;
+}
+
+.edit-btn {
+    color: #667eea;
+}
+
+.edit-btn:hover {
+    color: #5a6ae0;
+}
+
+.delete-btn {
+    color: #dc3545;
+}
+
+.delete-btn:hover {
+    color: #c82333;
+}
+
+/* Estilos para paginação */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.btn-pagination {
+    padding: 8px 15px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+
+.btn-pagination:hover:not(:disabled) {
+    background: #5a6ae0;
+}
+
+.btn-pagination:disabled {
+    background: #cccccc;
+    cursor: not-allowed;
+}
+
+#pageInfo {
+    font-size: 0.95rem;
+    color: #555;
+}
+
+/* Estilos para o estado vazio */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+    display: none; /* Escondido por padrão, JS controla a exibição */
+}
 .empty-state i { font-size: 3rem; color: #ccc; margin-bottom: 15px; }
 .empty-state h3 { margin-bottom: 8px; color: #999; }
 .empty-state p { color: #aaa; }
+
+/* Media Queries para responsividade */
+@media (max-width: 768px) {
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .actions {
+        width: 100%;
+        margin-top: 15px;
+        justify-content: center;
+    }
+    .actions input[type="text"] {
+        max-width: 100%;
+    }
+    .user-table th,
+    .user-table td {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+    .btn-action {
+        font-size: 1rem;
+        margin: 0 3px;
+    }
+}
+
+@media (max-width: 480px) {
+    .actions {
+        flex-direction: column;
+    }
+    .btn-icon {
+        width: 100%;
+        justify-content: center;
+    }
+    .pagination-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
