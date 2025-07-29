@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <i class="fas fa-tachometer-alt"></i>
+                <h1>Dashboard Admin</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+
+        <!-- Conteúdo Principal - Cards de Navegação -->
+        <div class="content-section">
+            <!-- Card Usuários -->
+            <div class="section-card navigation-card" onclick="window.location.href='users_hub.html'">
+                <div class="card-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h2 class="card-title">Usuários</h2>
+                <p class="card-description">Gerenciar usuários do sistema</p>
+                <div class="card-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+
+            <!-- Card Processos/Procedimentos -->
+            <div class="section-card navigation-card" onclick="window.location.href='procedures_hub.html'">
+                <div class="card-icon">
+                    <i class="fas fa-folder-open"></i>
+                </div>
+                <h2 class="card-title">Processos/Procedimentos</h2>
+                <p class="card-description">Gerenciar processos e procedimentos</p>
+                <div class="card-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><i class="fas fa-database"></i> Sistema com SQLite - Banco local: <span id="dbPath">Carregando...</span></p>
+            <p style="margin-top: 5px; font-size: 0.8rem; opacity: 0.7;">
+                <i class="fas fa-info-circle"></i> 
+                Todos os dados são armazenados localmente no dispositivo
+            </p>
+        </div>
+    </div>
+
+    <script src="static/js/dashboard.js"></script>
+</body>
+</html>

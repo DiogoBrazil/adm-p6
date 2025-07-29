@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastrar Usuário</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/users.css">
+</head>
+<body>
+    <div class="container">
+        <a href="users_hub.html" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            Voltar
+        </a>
+        
+        <h1 class="title">Cadastrar Usuário</h1>
+        
+        <div id="alertContainer"></div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-user-plus"></i>
+                <h2>Novo Usuário</h2>
+            </div>
+            
+            <form id="userForm">
+                <div class="form-group">
+                    <label for="nome">Nome Completo</label>
+                    <input type="text" id="nome" name="nome" placeholder="Digite o nome completo" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="Digite o email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="senha">Senha</label>
+                    <input type="password" id="senha" name="senha" placeholder="Digite a senha (mín. 4 caracteres)" required>
+                </div>
+                
+                <button type="submit" class="btn-primary" id="btnCadastrar">
+                    <i class="fas fa-user-plus"></i>
+                    Cadastrar Usuário
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="static/js/user_form.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Usuários</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css"> <!-- Reusing dashboard styles -->
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <i class="fas fa-users"></i>
+                <h1>Gerenciar Usuários</h1>
+            </div>
+            <a href="dashboard.html" class="btn-logout" style="text-decoration: none;">Voltar</a>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="content-section">
+            <!-- Card Cadastrar Usuário -->
+            <div class="section-card navigation-card" onclick="window.location.href='user_form.html'">
+                <div class="card-icon">
+                    <i class="fas fa-user-plus"></i>
+                </div>
+                <h2 class="card-title">Cadastrar Usuário</h2>
+                <p class="card-description">Adicionar um novo usuário ao sistema.</p>
+                <div class="card-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+
+            <!-- Card Listar Usuários -->
+            <div class="section-card navigation-card" onclick="window.location.href='user_list.html'">
+                <div class="card-icon">
+                    <i class="fas fa-list-ul"></i>
+                </div>
+                <h2 class="card-title">Listar Usuários</h2>
+                <p class="card-description">Visualizar e gerenciar os usuários existentes.</p>
+                <div class="card-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

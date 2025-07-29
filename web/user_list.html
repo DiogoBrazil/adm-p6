@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listar Usuários</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/users.css">
+</head>
+<body>
+    <div class="container">
+        <a href="users_hub.html" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            Voltar
+        </a>
+        
+        <h1 class="title">Usuários Cadastrados</h1>
+        
+        <div id="alertContainer"></div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-users"></i>
+                <h2>Lista de Usuários</h2>
+                <button onclick="loadUsers()" style="margin-left: auto; padding: 8px 15px; border: none; background: #667eea; color: white; border-radius: 8px; cursor: pointer; font-size: 0.8rem;">
+                    <i class="fas fa-sync-alt"></i> Atualizar
+                </button>
+            </div>
+            
+            <div class="users-list" id="usersList">
+                <div class="empty-state">
+                    <i class="fas fa-users"></i>
+                    <h3>Carregando usuários...</h3>
+                    <p>Aguarde enquanto buscamos os dados</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="static/js/user_list.js"></script>
+</body>
+</html>
