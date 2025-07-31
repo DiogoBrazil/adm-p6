@@ -45,61 +45,195 @@
         <div class="form-section">
             <h2>Novo Registro</h2>
             <form id="processForm">
+                <!-- Tipo de Cadastro -->
                 <div class="form-group">
-                    <label for="tipo_geral">Tipo de Cadastro</label>
+                    <label for="tipo_geral">Tipo de Cadastro *</label>
                     <select id="tipo_geral" required>
-                        <option value="">Selecione</option>
+                        <option value="">Selecione...</option>
                         <option value="processo">Processo</option>
                         <option value="procedimento">Procedimento</option>
                     </select>
                 </div>
 
+                <!-- Campo dependente: Tipo de Procedimento -->
+                <div class="form-group" id="group_tipo_procedimento" style="display: none;">
+                    <label for="tipo_procedimento">Tipo de Procedimento *</label>
+                    <select id="tipo_procedimento" required>
+                        <option value="">Selecione...</option>
+                        <option value="SR">SR</option>
+                        <option value="IPM">IPM</option>
+                        <option value="FP">FP</option>
+                        <option value="ISO">ISO</option>
+                        <option value="CP">CP</option>
+                    </select>
+                </div>
+
+                <!-- Campo dependente: Tipo de Processo -->
+                <div class="form-group" id="group_tipo_processo" style="display: none;">
+                    <label for="tipo_processo">Tipo de Processo *</label>
+                    <select id="tipo_processo" required>
+                        <option value="">Selecione...</option>
+                        <option value="PADS">PADS</option>
+                        <option value="PAD">PAD</option>
+                        <option value="CJ">CJ</option>
+                        <option value="CD">CD</option>
+                    </select>
+                </div>
+
+                <!-- Documento que iniciou -->
                 <div class="form-group">
-                    <label for="documento_iniciador">Documento que iniciou</label>
+                    <label for="documento_iniciador">Documento que iniciou *</label>
                     <select id="documento_iniciador" required>
-                        <option value="">Selecione</option>
+                        <option value="">Selecione...</option>
                         <option value="Portaria">Portaria</option>
                         <option value="Memorando Disciplinar">Memorando Disciplinar</option>
                         <option value="Feito Preliminar">Feito Preliminar</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label for="numero">Número</label>
-                    <input type="text" id="numero" required>
+                <!-- Campos dependentes do documento -->
+                <div class="form-group" id="group_numero_portaria" style="display: none;">
+                    <label for="numero_portaria">Número da Portaria *</label>
+                    <input type="text" id="numero_portaria" required>
+                </div>
+                <div class="form-group" id="group_numero_memorando" style="display: none;">
+                    <label for="numero_memorando">Número do Memorando Disciplinar *</label>
+                    <input type="text" id="numero_memorando" required>
+                </div>
+                <div class="form-group" id="group_numero_feito" style="display: none;">
+                    <label for="numero_feito">Número do Feito Preliminar *</label>
+                    <input type="text" id="numero_feito" required>
                 </div>
 
+                <!-- RGF e SEI -->
                 <div class="form-group">
-                    <label for="processo_sei">Processo SEI</label>
-                    <input type="text" id="processo_sei" placeholder="Opcional">
+                    <label for="numero_rgf">Número do RGF *</label>
+                    <input type="text" id="numero_rgf" required>
+                </div>
+                <div class="form-group">
+                    <label for="processo_sei">Número do processo SEI (opcional)</label>
+                    <input type="text" id="processo_sei">
                 </div>
 
-                <div class="form-group" id="processo_tipo_group" style="display: none;">
-                    <label for="tipo_processo">Tipo de Processo</label>
-                    <select id="tipo_processo">
-                        <option value="">Selecione</option>
-                        <option value="PADS">PADS</option>
-                        <option value="PAD">PAD</option>
-                        <option value="CD">CD</option>
+                <!-- Local de Origem -->
+                <div class="form-group">
+                    <label for="local_origem">Local de Origem *</label>
+                    <select id="local_origem" required>
+                        <option value="">Selecione...</option>
+                        <option value="1ºBPM">1ºBPM</option>
+                        <option value="2ºBPM">2ºBPM</option>
+                        <option value="3ºBPM">3ºBPM</option>
+                        <option value="4ºBPM">4ºBPM</option>
+                        <option value="5ºBPM">5ºBPM</option>
+                        <option value="6ºBPM">6ºBPM</option>
+                        <option value="7ºBPM">7ºBPM</option>
+                        <option value="8ºBPM">8ºBPM</option>
+                        <option value="9ºBPM">9ºBPM</option>
+                        <option value="10ºBPM">10ºBPM</option>
+                        <option value="11ºBPM">11ºBPM</option>
+                        <option value="CIPO - BURITIS">CIPO - BURITIS</option>
+                        <option value="BPCHOQUE">BPCHOQUE</option>
+                        <option value="BOPE">BOPE</option>
+                        <option value="BPTRAN">BPTRAN</option>
+                        <option value="BPTAR">BPTAR</option>
+                        <option value="BPFRON">BPFRON</option>
+                        <option value="BAVOP">BAVOP</option>
+                        <option value="BPA">BPA</option>
+                        <option value="CORREGEPOM">CORREGEPOM</option>
                     </select>
                 </div>
 
-                <div class="form-group" id="procedimento_tipo_group" style="display: none;">
-                    <label for="tipo_procedimento">Tipo de Procedimento</label>
-                    <select id="tipo_procedimento">
-                        <option value="">Selecione</option>
-                        <option value="SR">SR</option>
-                        <option value="FP">FP</option>
-                        <option value="IPM">IPM</option>
-                        <option value="ISO">ISO</option>
+                <!-- Datas -->
+                <div class="form-group">
+                    <label for="data_instauracao">Data da Instauração *</label>
+                    <input type="date" id="data_instauracao" required>
+                </div>
+                <div class="form-group">
+                    <label for="data_recebimento">Data de Recebimento pelo Encarregado *</label>
+                    <input type="date" id="data_recebimento" required>
+                </div>
+
+                <!-- Encarregado -->
+                <div class="form-group">
+                    <label for="responsavel_nome">Encarregado *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="responsavel_nome" name="responsavel_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o encarregado...">
+                        <input type="hidden" id="responsavel_id" name="responsavel_id">
+                        <button type="button" id="btnBuscarEncarregado" class="btn-lupa" title="Buscar Encarregado" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Campo dependente: Escrivão (para IPM) -->
+                <div class="form-group" id="group_escrivao" style="display: none;">
+                    <label for="escrivao_nome">Nome do Escrivão *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="escrivao_nome" name="escrivao_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o escrivão...">
+                        <input type="hidden" id="escrivao_id" name="escrivao_id">
+                        <button type="button" id="btnBuscarEscrivao" class="btn-lupa" title="Buscar Escrivão" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status do PM -->
+                <div class="form-group">
+                    <label for="status_pm">Status do PM Envolvido *</label>
+                    <select id="status_pm" required>
+                        <option value="">Selecione...</option>
+                        <option value="Acusado">Acusado</option>
+                        <option value="Sindicado">Sindicado</option>
+                        <option value="Investigado">Investigado</option>
+                        <option value="Indiciado">Indiciado</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label for="responsavel">Encarregado</label>
-                    <select id="responsavel"></select>
+                <!-- Campo dependente do status do PM -->
+                <div class="form-group" id="group_nome_pm" style="display: none;">
+                    <label for="nome_pm_nome" id="label_nome_pm">Nome do PM *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="nome_pm_nome" name="nome_pm_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o PM...">
+                        <input type="hidden" id="nome_pm" name="nome_pm">
+                        <button type="button" id="btnBuscarPm" class="btn-lupa" title="Buscar PM" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
                 </div>
-                
+
+                <!-- Campo dependente: Nome da Vítima -->
+                <div class="form-group" id="group_nome_vitima" style="display: none;">
+                    <label for="nome_vitima">Nome da Vítima/Ofendido</label>
+                    <input type="text" id="nome_vitima">
+                </div>
+
+                <!-- Natureza Principal -->
+                <div class="form-group" id="group_natureza_processo" style="display: none;">
+                    <label for="natureza_processo">Natureza Principal Apurada (Processo) *</label>
+                    <select id="natureza_processo" required>
+                        <option value="">Selecione...</option>
+                        <option value="Grave">Grave</option>
+                        <option value="Leve">Leve</option>
+                        <option value="Média">Média</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group_natureza_procedimento" style="display: none;">
+                    <label for="natureza_procedimento">Natureza Principal Apurada (Procedimento) *</label>
+                    <select id="natureza_procedimento" required>
+                        <option value="">Selecione...</option>
+                        <option value="Sinistro de trânsito com Viatura Policial Militar">Sinistro de trânsito com Viatura Policial Militar</option>
+                        <option value="Sinistro de trânsito com veículo oficial, exceto viatura policial militar">Sinistro de trânsito com veículo oficial, exceto viatura policial militar</option>
+                        <option value="Agressão policial">Agressão policial</option>
+                        <option value="Lesão Corporal">Lesão Corporal</option>
+                    </select>
+                </div>
+
+                <!-- Resumo dos Fatos -->
+                <div class="form-group">
+                    <label for="resumo_fatos">Resumo dos Fatos (opcional)</label>
+                    <textarea id="resumo_fatos" rows="4"></textarea>
+                </div>
+
                 <button type="submit" class="btn-primary" id="btnCadastrar">
                     <i class="fas fa-folder-plus"></i>
                     Registrar
@@ -115,5 +249,71 @@
     </div>
     
     <script src="static/js/procedure_form.js"></script>
+    <!-- Modal de busca de usuário -->
+    <style>
+        .modal-busca-usuario {
+            display:none; position:fixed; top:0; left:0; width:100vw; height:100vh;
+            background:rgba(0,0,0,0.35); z-index:9999; align-items:center; justify-content:center;
+        }
+        .modal-busca-usuario .modal-content-busca {
+            background:#fff; border-radius:16px; max-width:480px; width:96%; padding:32px 24px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.18); position:relative; animation:fadeInModal 0.3s;
+        }
+        @keyframes fadeInModal {
+            from { opacity:0; transform:scale(0.98); }
+            to { opacity:1; transform:scale(1); }
+        }
+        .modal-busca-usuario h3 {
+            margin-bottom:18px; color:#222; font-size:1.25rem; font-weight:600;
+        }
+        .modal-busca-usuario #btnFecharModalBusca {
+            position:absolute; top:14px; right:14px; background:none; border:none; font-size:22px; cursor:pointer; color:#aaa; transition:color 0.2s;
+        }
+        .modal-busca-usuario #btnFecharModalBusca:hover {
+            color:#e74c3c;
+        }
+        .modal-busca-usuario #inputBuscaUsuario {
+            flex:1; padding:10px; border-radius:8px; border:1px solid #d1d5db; font-size:1rem;
+        }
+        .modal-busca-usuario #btnExecutarBuscaUsuario {
+            padding:10px 20px; border-radius:8px; border:none; background:#007bff; color:#fff; cursor:pointer; font-weight:500; font-size:1rem; box-shadow:0 2px 8px rgba(0,0,0,0.07);
+            transition:background 0.2s;
+        }
+        .modal-busca-usuario #btnExecutarBuscaUsuario:hover {
+            background:#0056b3;
+        }
+        .modal-busca-usuario #resultadosBuscaUsuario {
+            max-height:320px; overflow-y:auto; margin-top:8px;
+        }
+        .modal-busca-usuario .resultado-usuario {
+            display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #f0f0f0;
+        }
+        .modal-busca-usuario .resultado-usuario:last-child {
+            border-bottom:none;
+        }
+        .modal-busca-usuario .resultado-usuario .info {
+            font-size:1rem;
+        }
+        .modal-busca-usuario .resultado-usuario .info span {
+            margin-right:10px;
+        }
+        .modal-busca-usuario .btnEscolherUsuario {
+            background:none; border:none; color:#28a745; font-size:22px; cursor:pointer; transition:color 0.2s;
+        }
+        .modal-busca-usuario .btnEscolherUsuario:hover {
+            color:#218838;
+        }
+    </style>
+    <div id="modalBuscaUsuario" class="modal-busca-usuario">
+        <div class="modal-content-busca">
+            <button id="btnFecharModalBusca" title="Fechar"><i class="fas fa-times"></i></button>
+            <h3>Buscar Usuário</h3>
+            <div style="display:flex; gap:10px; margin-bottom:16px;">
+                <input type="text" id="inputBuscaUsuario" placeholder="Nome ou matrícula">
+                <button id="btnExecutarBuscaUsuario" class="btn-primary">Buscar</button>
+            </div>
+            <div id="resultadosBuscaUsuario"></div>
+        </div>
+    </div>
 </body>
 </html>

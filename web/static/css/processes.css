@@ -1,4 +1,3 @@
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; min-height: 100vh; }
 .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
@@ -6,7 +5,11 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .form-section, .list-section { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); padding: 20px; margin-bottom: 30px; }
 .form-group { margin-bottom: 15px; }
 .form-group label { display: block; margin-bottom: 6px; color: #333; font-weight: 600; }
-.form-group input, .form-group select { width: 100%; padding: 10px; border: 2px solid #e1e8ed; border-radius: 5px; font-size: 1rem; background: #f8f9ff; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 2px solid #e1e8ed; border-radius: 5px; font-size: 1rem; background: #f8f9ff; }
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
 .btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 1rem; cursor: pointer; transition: all 0.3s; }
 .btn:hover { background: #5a63d9; }
 .list { max-height: 400px; overflow-y: auto; border: 1px solid #e1e8ed; border-radius: 5px; }

@@ -77,6 +77,20 @@ class DatabaseManager:
                 processo_sei TEXT,
                 responsavel_id TEXT NOT NULL,
                 responsavel_tipo TEXT NOT NULL CHECK (responsavel_tipo IN ('encarregado', 'operador')),
+                local_origem TEXT,
+                data_instauracao DATE,
+                data_recebimento DATE,
+                escrivao_id TEXT,
+                status_pm TEXT,
+                nome_pm_id TEXT,
+                nome_vitima TEXT,
+                natureza_processo TEXT,
+                natureza_procedimento TEXT,
+                resumo_fatos TEXT,
+                numero_portaria TEXT,
+                numero_memorando TEXT,
+                numero_feito TEXT,
+                numero_rgf TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 ativo BOOLEAN DEFAULT 1
@@ -673,25 +687,67 @@ def obter_estatisticas():
     return db_manager.get_stats()
 
 @eel.expose
-def registrar_processo(numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo):
+@eel.expose
+def registrar_processo(
+    numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+    local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
+    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None
+):
     """Registra um novo processo/procedimento"""
+    print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
+    print(f"Parâmetros recebidos:")
+    params = {
+        "numero": numero, "tipo_geral": tipo_geral, "tipo_detalhe": tipo_detalhe,
+        "documento_iniciador": documento_iniciador, "processo_sei": processo_sei,
+        "responsavel_id": responsavel_id, "responsavel_tipo": responsavel_tipo,
+        "local_origem": local_origem, "data_instauracao": data_instauracao,
+        "data_recebimento": data_recebimento, "escrivao_id": escrivao_id,
+        "status_pm": status_pm, "nome_pm_id": nome_pm_id,
+        "nome_vitima": nome_vitima, "natureza_processo": natureza_processo,
+        "natureza_procedimento": natureza_procedimento, "resumo_fatos": resumo_fatos,
+        "numero_portaria": numero_portaria, "numero_memorando": numero_memorando,
+        "numero_feito": numero_feito, "numero_rgf": numero_rgf
+    }
+    for key, value in params.items():
+        print(f"  - {key}: {value}")
+    
+    # Validação do documento_iniciador
+    documentos_validos = ['Portaria', 'Memorando Disciplinar', 'Feito Preliminar']
+    if documento_iniciador not in documentos_validos:
+        print(f"❌ Documento iniciador inválido: {documento_iniciador}")
+        return {"sucesso": False, "mensagem": f"Documento iniciador inválido. Valores permitidos: {', '.join(documentos_validos)}"}
+    
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
-            INSERT INTO processos_procedimentos (id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (str(uuid.uuid4()), numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo))
+            INSERT INTO processos_procedimentos (
+                id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+                local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+                nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
+                numero_portaria, numero_memorando, numero_feito, numero_rgf
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(uuid.uuid4()), numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+            local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+            nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
+            numero_portaria, numero_memorando, numero_feito, numero_rgf
+        ))
 
         conn.commit()
         conn.close()
-
+        print(f"✅ Processo registrado com sucesso: {numero}")
         return {"sucesso": True, "mensagem": "Processo/Procedimento registrado com sucesso!"}
 
     except sqlite3.IntegrityError as e:
+        print(f"❌ Erro de integridade no banco de dados: {str(e)}")
         return {"sucesso": False, "mensagem": "Número de processo já existe."}
     except Exception as e:
+        print(f"❌ Erro ao registrar processo: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao registrar processo/procedimento: {str(e)}"}
 
 @eel.expose
@@ -708,7 +764,36 @@ def listar_processos():
                 WHEN p.responsavel_tipo = 'operador' THEN o.nome
                 ELSE 'Desconhecido'
             END as responsavel,
-            p.created_at 
+            p.created_at,
+            p.local_origem, 
+            p.data_instauracao,
+            p.status_pm,
+            CASE 
+                WHEN p.nome_pm_id IS NOT NULL THEN (
+                    SELECT 
+                        CASE 
+                            WHEN u_tipo.tipo = 'encarregado' THEN enc.nome
+                            WHEN u_tipo.tipo = 'operador' THEN op.nome
+                            ELSE 'Desconhecido'
+                        END
+                    FROM (
+                        SELECT 'encarregado' as tipo FROM encarregados WHERE id = p.nome_pm_id
+                        UNION ALL
+                        SELECT 'operador' as tipo FROM operadores WHERE id = p.nome_pm_id
+                    ) u_tipo
+                    LEFT JOIN encarregados enc ON enc.id = p.nome_pm_id AND u_tipo.tipo = 'encarregado'
+                    LEFT JOIN operadores op ON op.id = p.nome_pm_id AND u_tipo.tipo = 'operador'
+                    LIMIT 1
+                )
+                ELSE NULL
+            END as nome_pm,
+            p.numero_portaria,
+            p.numero_memorando,
+            p.numero_feito,
+            p.responsavel_id, 
+            p.responsavel_tipo,
+            e.posto_graduacao as responsavel_pg,
+            COALESCE(o.posto_graduacao, '') as responsavel_op_pg
         FROM processos_procedimentos p
         LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
         LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
@@ -718,16 +803,49 @@ def listar_processos():
 
     processos = cursor.fetchall()
     conn.close()
+    
+    # Formatar o número do procedimento baseado no tipo de documento iniciador
+    def formatar_numero_processo(processo):
+        numero_formatado = processo[1]  # Número original como fallback
+        tipo_detalhe = processo[3]
+        documento = processo[4]
+        local_origem = processo[8] or ""
+        data_instauracao = processo[9] or ""
+        ano_instauracao = ""
+        
+        # Extrair o ano da data de instauração, se disponível
+        if data_instauracao:
+            try:
+                ano_instauracao = str(datetime.strptime(data_instauracao, "%Y-%m-%d").year)
+            except:
+                ano_instauracao = ""
+        
+        # Criar um número formatado baseado no tipo de documento
+        if documento == 'Portaria' and processo[13]:  # numero_portaria
+            numero_formatado = f"{tipo_detalhe} nº {processo[13]}/{local_origem}/{ano_instauracao}"
+        elif documento == 'Memorando Disciplinar' and processo[14]:  # numero_memorando
+            numero_formatado = f"{tipo_detalhe} nº {processo[14]}/{local_origem}/{ano_instauracao}"
+        elif documento == 'Feito Preliminar' and processo[15]:  # numero_feito
+            numero_formatado = f"{tipo_detalhe} nº {processo[15]}/{local_origem}/{ano_instauracao}"
+        
+        return numero_formatado
 
     return [{
         "id": processo[0],
         "numero": processo[1],
+        "numero_formatado": formatar_numero_processo(processo),
         "tipo_geral": processo[2],
         "tipo_detalhe": processo[3],
         "documento_iniciador": processo[4],
         "processo_sei": processo[5],
         "responsavel": processo[6],
-        "data_criacao": processo[7]
+        "responsavel_posto_grad": processo[16] or processo[17] or "",  # Posto/graduação do responsável
+        "data_criacao": processo[7],
+        "local_origem": processo[8],
+        "data_instauracao": processo[9],
+        "status_pm": processo[10],
+        "nome_pm": processo[11],
+        "responsavel_completo": f"{processo[16] or processo[17] or ''} {processo[6]}"  # Posto/graduação + nome
     } for processo in processos]
 
 @eel.expose
@@ -794,7 +912,12 @@ def obter_processo(processo_id):
         return None
 
 @eel.expose
-def atualizar_processo(processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo):
+def atualizar_processo(
+    processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+    local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
+    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None
+):
     """Atualiza um processo/procedimento existente"""
     try:
         conn = db_manager.get_connection()
@@ -803,9 +926,19 @@ def atualizar_processo(processo_id, numero, tipo_geral, tipo_detalhe, documento_
         cursor.execute("""
             UPDATE processos_procedimentos 
             SET numero = ?, tipo_geral = ?, tipo_detalhe = ?, documento_iniciador = ?, 
-                processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?
+                processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?,
+                local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
+                nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
+                numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo, processo_id))
+        """, (
+            numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+            local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+            nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
+            numero_portaria, numero_memorando, numero_feito, numero_rgf,
+            processo_id
+        ))
         
         conn.commit()
         conn.close()

@@ -1,0 +1,137 @@
+/* Estilos para a listagem de procedimentos */
+
+/* Estilo geral da tabela */
+.user-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.user-table th {
+    padding: 12px 15px;
+    text-align: left;
+    background-color: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+}
+
+.user-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+}
+
+/* Estilo para tipos de procedimento */
+.procedure-type {
+    display: flex;
+    flex-direction: column;
+}
+
+.procedure-type strong {
+    margin-bottom: 5px;
+    color: #495057;
+}
+
+.procedure-type .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    align-self: flex-start;
+}
+
+.badge-primary {
+    background-color: #4e73df;
+    color: white;
+}
+
+.badge-secondary {
+    background-color: #858796;
+    color: white;
+}
+
+/* Estilos para status do PM */
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-danger {
+    background-color: #e74a3b;
+    color: white;
+}
+
+.status-warning {
+    background-color: #f6c23e;
+    color: #212529;
+}
+
+.status-info {
+    background-color: #36b9cc;
+    color: white;
+}
+
+.status-primary {
+    background-color: #4e73df;
+    color: white;
+}
+
+.status-secondary {
+    background-color: #858796;
+    color: white;
+}
+
+.status-none {
+    background-color: #eee;
+    color: #777;
+}
+
+/* Estilo para informações de usuário */
+.user-info-cell {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-info-cell strong {
+    color: #495057;
+}
+
+.user-info-cell small {
+    color: #6c757d;
+    margin-top: 3px;
+}
+
+/* Estilo para botões inline */
+.action-buttons-inline {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+}
+
+.btn-edit, .btn-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-edit {
+    color: #4e73df;
+}
+
+.btn-delete {
+    color: #e74a3b;
+}
+
+.btn-edit:hover {
+    background-color: rgba(78, 115, 223, 0.1);
+}
+
+.btn-delete:hover {
+    background-color: rgba(231, 74, 59, 0.1);
+}

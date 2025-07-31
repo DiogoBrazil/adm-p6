@@ -8,6 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="static/css/dashboard.css">
     <link rel="stylesheet" href="static/css/users.css">
+    <link rel="stylesheet" href="static/css/procedures.css">
 </head>
 <body>
     <header class="header">
@@ -54,7 +55,7 @@
                 
                 <div class="actions">
                     <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Buscar por nome do encarregado..." class="search-input">
+                        <input type="text" id="searchInput" placeholder="Buscar por número, tipo, encarregado ou PM envolvido..." class="search-input">
                         <button onclick="limparBusca()" id="clearButton" class="btn-clear" style="display: none;">
                             <i class="fas fa-times"></i>
                             Limpar
@@ -74,28 +75,33 @@
                 </div>
 
                 <div class="card-content">
-                    <div class="table-container">
-                        <table class="user-table">
-                            <thead>
-                                <tr>
-                                    <th>Número</th>
-                                    <th>Tipo</th>
-                                    <th>Encarregado</th>
-                                    <th>Data de Criação</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="procedureTableBody">
-                                <!-- Os procedimentos serão carregados aqui -->
-                            </tbody>
-                        </table>
+                    <!-- Mensagem para quando não houver registros -->
+                    <div id="noProceduresMessage" style="display: none; text-align: center; padding: 40px 20px; margin: 20px auto;">
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open" style="font-size: 50px; color: #adb5bd; margin-bottom: 20px;"></i>
+                            <h3 style="font-size: 22px; color: #495057; margin-bottom: 15px;">Nenhum registro encontrado</h3>
+                            <p style="font-size: 16px; color: #6c757d;">Não há processos ou procedimentos cadastrados no sistema.</p>
+                        </div>
                     </div>
 
-                    <div id="noProceduresMessage" style="display: none;">
-                        <div class="empty-state">
-                            <i class="fas fa-folder-open"></i>
-                            <h3>Nenhum procedimento encontrado</h3>
-                            <p>Não há procedimentos cadastrados no sistema.</p>
+                    <!-- Tabela de procedimentos -->
+                    <div id="tableWrapper">
+                        <div class="table-container">
+                            <table class="user-table">
+                                <thead>
+                                    <tr>
+                                        <th width="20%">Número</th>
+                                        <th width="15%">Tipo</th>
+                                        <th width="20%">Encarregado</th>
+                                        <th width="20%">PM Envolvido</th>
+                                        <th width="10%">Situação PM</th>
+                                        <th width="15%">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="procedureTableBody">
+                                    <!-- Os procedimentos serão carregados aqui -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -118,6 +124,39 @@
             </div>
         </div>
     </div>
+
+    <!-- Estilos adicionais -->
+    <style>
+        #noProceduresMessage {
+            margin: 30px auto;
+            max-width: 500px;
+        }
+        #noProceduresMessage .empty-state {
+            text-align: center;
+            padding: 30px;
+            border-radius: 10px;
+            background-color: #f8f9fa;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        #noProceduresMessage .empty-state i {
+            font-size: 50px;
+            color: #adb5bd;
+            margin-bottom: 20px;
+        }
+        #noProceduresMessage .empty-state h3 {
+            font-size: 22px;
+            color: #495057;
+            margin-bottom: 15px;
+        }
+        #noProceduresMessage .empty-state p {
+            font-size: 16px;
+            color: #6c757d;
+        }
+        /* Esconder a tabela quando não houver registros */
+        .table-container:empty + #noProceduresMessage {
+            display: block !important;
+        }
+    </style>
 
     <script src="static/js/procedure_list.js"></script>
 </body>
