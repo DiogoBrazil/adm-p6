@@ -758,31 +758,16 @@ def listar_processos():
     cursor.execute("""
         SELECT 
             p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
-            CASE 
-                WHEN p.responsavel_tipo = 'encarregado' THEN e.nome
-                WHEN p.responsavel_tipo = 'operador' THEN o.nome
-                ELSE 'Desconhecido'
-            END as responsavel,
+            COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel,
             p.created_at,
             p.local_origem, 
             p.data_instauracao,
             p.status_pm,
             CASE 
-                WHEN p.nome_pm_id IS NOT NULL THEN (
-                    SELECT 
-                        CASE 
-                            WHEN u_tipo.tipo = 'encarregado' THEN enc.nome
-                            WHEN u_tipo.tipo = 'operador' THEN op.nome
-                            ELSE 'Desconhecido'
-                        END
-                    FROM (
-                        SELECT 'encarregado' as tipo FROM encarregados WHERE id = p.nome_pm_id
-                        UNION ALL
-                        SELECT 'operador' as tipo FROM operadores WHERE id = p.nome_pm_id
-                    ) u_tipo
-                    LEFT JOIN encarregados enc ON enc.id = p.nome_pm_id AND u_tipo.tipo = 'encarregado'
-                    LEFT JOIN operadores op ON op.id = p.nome_pm_id AND u_tipo.tipo = 'operador'
-                    LIMIT 1
+                WHEN p.nome_pm_id IS NOT NULL THEN COALESCE(
+                    (SELECT nome FROM operadores WHERE id = p.nome_pm_id),
+                    (SELECT nome FROM encarregados WHERE id = p.nome_pm_id),
+                    'Desconhecido'
                 )
                 ELSE NULL
             END as nome_pm,
@@ -791,11 +776,15 @@ def listar_processos():
             p.numero_feito,
             p.responsavel_id, 
             p.responsavel_tipo,
-            e.posto_graduacao as responsavel_pg,
-            COALESCE(o.posto_graduacao, '') as responsavel_op_pg
+            COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_pg,
+            COALESCE(
+                (SELECT posto_graduacao FROM operadores WHERE id = p.nome_pm_id),
+                (SELECT posto_graduacao FROM encarregados WHERE id = p.nome_pm_id),
+                ''
+            ) as nome_pm_pg
         FROM processos_procedimentos p
-        LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
-        LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+        LEFT JOIN operadores o ON p.responsavel_id = o.id
+        LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
         WHERE p.ativo = 1
         ORDER BY p.created_at DESC
     """)
@@ -838,13 +827,15 @@ def listar_processos():
         "documento_iniciador": processo[4],
         "processo_sei": processo[5],
         "responsavel": processo[6],
-        "responsavel_posto_grad": processo[16] or processo[17] or "",  # Posto/graduação do responsável
+        "responsavel_posto_grad": processo[16] or "",  # Posto/graduação do responsável
         "data_criacao": processo[7],
         "local_origem": processo[8],
         "data_instauracao": processo[9],
         "status_pm": processo[10],
         "nome_pm": processo[11],
-        "responsavel_completo": f"{processo[16] or processo[17] or ''} {processo[6]}"  # Posto/graduação + nome
+        "nome_pm_posto_grad": processo[17] or "",  # Posto/graduação do PM envolvido
+        "responsavel_completo": f"{processo[16] or ''} {processo[6]}".strip(),  # Posto/graduação + nome
+        "nome_pm_completo": f"{processo[17] or ''} {processo[11] or ''}".strip() if processo[11] else None  # Posto/graduação + nome PM
     } for processo in processos]
 
 @eel.expose
@@ -878,14 +869,10 @@ def obter_processo(processo_id):
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
                 p.responsavel_id, p.responsavel_tipo,
-                CASE 
-                    WHEN p.responsavel_tipo = 'encarregado' THEN e.nome
-                    WHEN p.responsavel_tipo = 'operador' THEN o.nome
-                    ELSE 'Desconhecido'
-                END as responsavel_nome
+                COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome
             FROM processos_procedimentos p
-            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN operadores o ON p.responsavel_id = o.id
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
             WHERE p.id = ? AND p.ativo = 1
         """, (processo_id,))
         

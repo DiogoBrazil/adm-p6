@@ -9,17 +9,34 @@ function voltarParaListagem() {
 
 // Função para mostrar alertas
 function showAlert(message, type = 'error') {
-    const alertContainer = document.getElementById('alertContainer');
-    alertContainer.innerHTML = `
-        <div class="alert alert-${type}">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
-            ${message}
-        </div>
-    `;
+    showModalFeedback(message, type);
+}
+
+function showModalFeedback(message, type = 'error') {
+    const modal = document.getElementById('modalFeedback');
+    const icon = document.getElementById('modalIcon');
+    const msg = document.getElementById('modalMessage');
+    const btn = document.getElementById('modalCloseBtn');
     
-    setTimeout(() => {
-        alertContainer.innerHTML = '';
-    }, 5000);
+    if (type === 'success') {
+        icon.innerHTML = '<i class="fas fa-check-circle" style="color:#38c172;"></i>';
+    } else {
+        icon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#e3342f;"></i>';
+    }
+    
+    msg.textContent = message;
+    modal.style.display = 'flex';
+    
+    btn.onclick = () => {
+        modal.style.display = 'none';
+    };
+    
+    // Fechar modal clicando fora dele
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
 }
 
 // Função para carregar dados do usuário logado
@@ -554,15 +571,10 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
 
         if (result.sucesso) {
             showAlert(result.mensagem, 'success');
-            if (editandoProcedimento) {
-                setTimeout(() => {
-                    window.location.href = 'procedure_list.html';
-                }, 2000);
-            } else {
-                document.getElementById('processForm').reset();
-                document.getElementById('processo_tipo_group').style.display = 'none';
-                document.getElementById('procedimento_tipo_group').style.display = 'none';
-            }
+            // Redireciona para listagem tanto no cadastro quanto na edição após sucesso
+            setTimeout(() => {
+                window.location.href = 'procedure_list.html';
+            }, 1200); // Aguarda 1.2s para mostrar o modal
         } else {
             showAlert(result.mensagem, 'error');
         }

@@ -42,68 +42,49 @@
         
         <div class="user-management">
             <div class="page-header">
-                <h1 class="page-title">
+                <!-- <h1 class="page-title">
                     <i class="fas fa-folder-open page-icon"></i>
                     Gerenciar Procedimentos
-                </h1>
+                </h1> -->
             </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h2>Lista de Procedimentos</h2>
+                    <i class="fas fa-folder-open"></i>
+                    <h2>Lista de Processos e Procedimentos</h2>
                 </div>
                 
                 <div class="actions">
-                    <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Buscar por número, tipo, encarregado ou PM envolvido..." class="search-input">
-                        <button onclick="limparBusca()" id="clearButton" class="btn-clear" style="display: none;">
-                            <i class="fas fa-times"></i>
-                            Limpar
-                        </button>
-                    </div>
-                    
-                    <div class="action-buttons">
-                        <button onclick="window.location.href='procedure_form.html'" class="btn-primary">
-                            <i class="fas fa-plus"></i>
-                            Novo Processo/Procedimento
-                        </button>
-                        <button onclick="window.location.href='dashboard.html'" class="btn-secondary">
-                            <i class="fas fa-home"></i>
-                            Início
-                        </button>
-                    </div>
+                    <input type="text" id="searchInput" placeholder="Buscar por ano, número, tipo, encarregado ou PM envolvido...">
+                    <button onclick="realizarBusca()" id="searchButton" class="btn-icon btn-search"><i class="fas fa-search"></i> Buscar</button>
+                    <button onclick="limparBusca()" id="clearButton" class="btn-icon btn-clear" style="display: none;"><i class="fas fa-times"></i> Limpar</button>
+                    <button onclick="window.location.href='procedure_form.html'" class="btn-icon btn-new"><i class="fas fa-plus"></i> Novo Registro</button>
+                    <button onclick="window.location.href='dashboard.html'" class="btn-icon btn-home"><i class="fas fa-home"></i> Início</button>
                 </div>
 
-                <div class="card-content">
-                    <!-- Mensagem para quando não houver registros -->
-                    <div id="noProceduresMessage" style="display: none; text-align: center; padding: 40px 20px; margin: 20px auto;">
-                        <div class="empty-state">
-                            <i class="fas fa-folder-open" style="font-size: 50px; color: #adb5bd; margin-bottom: 20px;"></i>
-                            <h3 style="font-size: 22px; color: #495057; margin-bottom: 15px;">Nenhum registro encontrado</h3>
-                            <p style="font-size: 16px; color: #6c757d;">Não há processos ou procedimentos cadastrados no sistema.</p>
-                        </div>
-                    </div>
-
-                    <!-- Tabela de procedimentos -->
-                    <div id="tableWrapper">
-                        <div class="table-container">
-                            <table class="user-table">
-                                <thead>
-                                    <tr>
-                                        <th width="20%">Número</th>
-                                        <th width="15%">Tipo</th>
-                                        <th width="20%">Encarregado</th>
-                                        <th width="20%">PM Envolvido</th>
-                                        <th width="10%">Situação PM</th>
-                                        <th width="15%">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="procedureTableBody">
-                                    <!-- Os procedimentos serão carregados aqui -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div class="table-responsive">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th width="8%">Ano</th>
+                                <th width="15%">Número</th>
+                                <th width="10%">Tipo</th>
+                                <th width="25%">Encarregado</th>
+                                <th width="25%">PM Envolvido</th>
+                                <th width="12%">Tipo de Envolvimento</th>
+                                <th width="5%" style="text-align:center;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="procedureTableBody">
+                            <!-- Os procedimentos serão carregados aqui -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <i class="fas fa-folder-open"></i>
+                    <h3>Nenhum procedimento encontrado</h3>
+                    <p>Não há processos ou procedimentos cadastrados ou sua pesquisa não encontrou resultados.</p>
                 </div>
             </div>
         </div>
@@ -125,36 +106,73 @@
         </div>
     </div>
 
-    <!-- Estilos adicionais -->
+    <!-- Estilos adicionais específicos para procedimentos -->
     <style>
-        #noProceduresMessage {
-            margin: 30px auto;
-            max-width: 500px;
+        /* Centralizar os botões de ação */
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 30px auto 20px auto;
+            padding: 0 20px;
         }
-        #noProceduresMessage .empty-state {
+
+        /* Sobrescrever estilos específicos se necessário */
+        .empty-state {
             text-align: center;
-            padding: 30px;
-            border-radius: 10px;
-            background-color: #f8f9fa;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        #noProceduresMessage .empty-state i {
-            font-size: 50px;
-            color: #adb5bd;
-            margin-bottom: 20px;
-        }
-        #noProceduresMessage .empty-state h3 {
-            font-size: 22px;
-            color: #495057;
-            margin-bottom: 15px;
-        }
-        #noProceduresMessage .empty-state p {
-            font-size: 16px;
+            padding: 60px 20px;
             color: #6c757d;
         }
-        /* Esconder a tabela quando não houver registros */
-        .table-container:empty + #noProceduresMessage {
-            display: block !important;
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #dee2e6;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            color: #6c757d;
+        }
+
+        /* Ajustes específicos para campo de busca de procedimentos */
+        #searchInput {
+            max-width: 400px !important;
+            min-width: 350px;
+        }
+
+        @media (max-width: 768px) {
+            #searchInput {
+                min-width: 250px;
+                max-width: 100% !important;
+            }
+            
+            .actions {
+                padding: 0 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #searchInput {
+                min-width: 100%;
+            }
+            
+            .actions {
+                flex-direction: column;
+                padding: 0;
+            }
+            
+            .btn-icon {
+                width: 100%;
+                justify-content: center;
+            }
         }
     </style>
 
