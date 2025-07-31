@@ -687,7 +687,6 @@ def obter_estatisticas():
     return db_manager.get_stats()
 
 @eel.expose
-@eel.expose
 def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
