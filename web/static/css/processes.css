@@ -15,3 +15,11 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .list-item:hover { background: #f0f2ff; }
 .list-item div { flex: 1; }
 .list-header { display: flex; align-items: center; padding: 10px; background: #f8f9ff; border-bottom: 1px solid #e1e8ed; font-weight: 600; }
+
+/* Estilo para título do formulário */
+.form-section h2 { 
+    margin-bottom: 30px; 
+    font-size: 1.5rem; 
+    color: #333; 
+    font-weight: 600; 
+}

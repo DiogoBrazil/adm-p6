@@ -43,6 +43,9 @@ async function realizarLogin(email, senha) {
         if (resultado.sucesso) {
             showAlert(resultado.mensagem, 'success');
             
+            // Marca que o usuário acabou de fazer login
+            sessionStorage.setItem('justLoggedIn', 'true');
+            
             // Redireciona para dashboard após 1.5 segundos
             setTimeout(() => {
                 window.location.href = 'dashboard.html';

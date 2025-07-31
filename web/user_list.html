@@ -3,18 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listar Usuários</title>
+    <title>Listar Usuários - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
     <link rel="stylesheet" href="static/css/users.css">
 </head>
 <body>
-    <div class="container">
-        <div class="top-bar">
-            <button onclick="window.location.href='dashboard.html'" class="btn-icon btn-back">
-                <i class="fas fa-arrow-left"></i> Voltar para Dashboard
-            </button>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
         </div>
+    </header>
+
+    <div class="main-container">
         <div id="alertContainer"></div>
         <div class="card">
             <div class="card-header">
@@ -25,6 +47,7 @@
                     <button onclick="loadUsers()" class="btn-icon btn-search"><i class="fas fa-search"></i> Buscar</button>
                     <button onclick="clearSearch()" class="btn-icon btn-clear" style="display:none;"><i class="fas fa-times"></i> Limpar</button>
                     <button onclick="window.location.href='user_form.html'" class="btn-icon btn-new"><i class="fas fa-user-plus"></i> Novo Usuário</button>
+                    <button onclick="window.location.href='dashboard.html'" class="btn-icon btn-home"><i class="fas fa-home"></i> Início</button>
                 </div>
             </div>
             <div class="table-responsive">

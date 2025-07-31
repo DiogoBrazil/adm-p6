@@ -3,31 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listar Procedimentos</title>
+    <title>Gerenciar Procedimentos - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="static/css/processes.css">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
 </head>
 <body>
-    <div class="container">
-        <a href="procedures_hub.html" class="btn" style="background: #6c757d; padding: 8px 16px; text-decoration: none;">
-            <i class="fas fa-arrow-left"></i>
-            Voltar
-        </a>
-        
-        <h1 class="title">Procedimentos Cadastrados</h1>
-        
-        <div class="list-section">
-            <h2>Lista de Procedimentos</h2>
-            <div class="list-header">
-                <div>Número</div>
-                <div>Tipo</div>
-                <div>Responsável</div>
-                <div>Data Criação</div>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
             </div>
-            <div class="list" id="processList"></div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <div class="user-management">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-folder-open page-icon"></i>
+                    Gerenciar Procedimentos
+                </h1>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>Lista de Procedimentos</h2>
+                </div>
+                
+                <div class="actions">
+                    <div class="search-container">
+                        <input type="text" id="searchInput" placeholder="Buscar por nome do encarregado..." class="search-input">
+                        <button onclick="limparBusca()" id="clearButton" class="btn-clear" style="display: none;">
+                            <i class="fas fa-times"></i>
+                            Limpar
+                        </button>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button onclick="window.location.href='procedure_form.html'" class="btn-primary">
+                            <i class="fas fa-plus"></i>
+                            Novo Processo/Procedimento
+                        </button>
+                        <button onclick="window.location.href='dashboard.html'" class="btn-secondary">
+                            <i class="fas fa-home"></i>
+                            Início
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-content">
+                    <div class="table-container">
+                        <table class="user-table">
+                            <thead>
+                                <tr>
+                                    <th>Número</th>
+                                    <th>Tipo</th>
+                                    <th>Encarregado</th>
+                                    <th>Data de Criação</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="procedureTableBody">
+                                <!-- Os procedimentos serão carregados aqui -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="noProceduresMessage" style="display: none;">
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open"></i>
+                            <h3>Nenhum procedimento encontrado</h3>
+                            <p>Não há procedimentos cadastrados no sistema.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Modal de Confirmação -->
+    <div id="confirmModal" class="modal-feedback">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Confirmar Ação</h3>
+            </div>
+            <div class="modal-body">
+                <p id="modalMessage">Tem certeza que deseja realizar esta ação?</p>
+            </div>
+            <div class="modal-actions">
+                <button id="confirmBtn" class="btn-primary">Confirmar</button>
+                <button id="cancelBtn" class="btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <script src="static/js/procedure_list.js"></script>
 </body>
 </html>

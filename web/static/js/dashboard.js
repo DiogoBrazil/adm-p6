@@ -18,21 +18,62 @@ function showAlert(message, type = 'info') {
     }, 3000);
 }
 
-// Função para controlar loading do botão
-function setLoading(loading) {
-    const btnText = document.getElementById('btnText');
-    const loadingSpinner = document.getElementById('loadingSpinner');
-    const btnCadastrar = document.getElementById('btnCadastrar');
+// Funções de loading e animação removidas - não são necessárias no dashboard
 
-    if (loading) {
-        btnText.textContent = 'Cadastrando...';
-        loadingSpinner.style.display = 'block';
-        btnCadastrar.disabled = true;
-    } else {
-        btnText.textContent = 'Cadastrar Usuário';
-        loadingSpinner.style.display = 'none';
-        btnCadastrar.disabled = false;
+// Função para mostrar modal de confirmação
+function showConfirmModal(title, message, onConfirm) {
+    // Criar modal se não existir
+    let modal = document.getElementById('confirmModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'confirmModal';
+        modal.className = 'modal-feedback';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <i id="confirmIcon" class="fas fa-exclamation-triangle" style="color: #ff6b6b;"></i>
+                <h3 id="confirmTitle" style="margin-bottom: 15px; color: #333;"></h3>
+                <p id="confirmMessage" style="margin-bottom: 25px; color: #666;"></p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="confirmCancel" class="btn-secondary" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 8px; cursor: pointer;">Cancelar</button>
+                    <button id="confirmOk" class="btn-danger" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer;">Confirmar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
     }
+
+    // Atualizar conteúdo do modal
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
+    
+    // Event listeners
+    const cancelBtn = document.getElementById('confirmCancel');
+    const okBtn = document.getElementById('confirmOk');
+    
+    const closeModal = () => {
+        modal.style.display = 'none';
+    };
+    
+    // Remover listeners anteriores
+    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    okBtn.replaceWith(okBtn.cloneNode(true));
+    
+    // Novos listeners
+    document.getElementById('confirmCancel').addEventListener('click', closeModal);
+    document.getElementById('confirmOk').addEventListener('click', () => {
+        closeModal();
+        onConfirm();
+    });
+    
+    // Fechar ao clicar fora do modal
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
 }
 
 // Função para carregar dados do usuário logado
@@ -69,148 +110,50 @@ async function carregarUsuarioLogado() {
     }
 }
 
-// Função para carregar estatísticas
-async function carregarEstatisticas() {
-    try {
-        const stats = await eel.obter_estatisticas()();
-        
-        document.getElementById('totalUsuarios').textContent = stats.total_usuarios;
-        document.getElementById('totalGeral').textContent = stats.total_geral;
-        document.getElementById('novosHoje').textContent = stats.novos_hoje;
-        document.getElementById('dbPath').textContent = stats.banco_path;
-        
-        // Anima os números
-        animateNumbers();
-    } catch (error) {
-        console.error('Erro ao carregar estatísticas:', error);
-    }
-}
+// Função para carregar estatísticas removida - rodapé foi removido
 
-// Função para carregar lista de usuários
-async function carregarUsuarios() {
-    try {
-        const usuarios = await eel.listar_usuarios()();
-        const usersList = document.getElementById('usersList');
-        
-        if (usuarios.length === 0) {
-            usersList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-user-slash"></i>
-                    <h3>Nenhum usuário cadastrado</h3>
-                    <p>Use o formulário ao lado para cadastrar o primeiro usuário</p>
-                </div>
-            `;
-        } else {
-            usersList.innerHTML = usuarios.map(user => `
-                <div class="user-item fade-in">
-                    <div class="user-avatar-small">
-                        ${user.nome.charAt(0).toUpperCase()}
-                    </div>
-                    <div class="user-details-small">
-                        <h4>${user.nome}</h4>
-                        <p>${user.email}</p>
-                    </div>
-                    <div class="user-date">
-                        ${new Date(user.data_criacao).toLocaleDateString('pt-BR')}
-                    </div>
-                </div>
-            `).join('');
-        }
-    } catch (error) {
-        console.error('Erro ao carregar usuários:', error);
-        showAlert('Erro ao carregar lista de usuários!', 'error');
-    }
-}
+// Função para carregar lista de usuários removida - não é necessária no dashboard
 
-// Função para cadastrar usuário
-async function cadastrarUsuario(nome, email, senha) {
-    try {
-        setLoading(true);
-        
-        const resultado = await eel.cadastrar_usuario(nome, email, senha)();
-        
-        if (resultado.sucesso) {
-            showAlert(resultado.mensagem, 'success');
-            
-            // Limpa o formulário
-            document.getElementById('cadastroForm').reset();
-            
-            // Recarrega dados
-            await carregarUsuarios();
-            await carregarEstatisticas();
-        } else {
-            showAlert(resultado.mensagem, 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao cadastrar usuário:', error);
-        showAlert('Erro ao conectar com o servidor!', 'error');
-    } finally {
-        setLoading(false);
-    }
-}
+// Função de cadastro removida - não é necessária no dashboard
 
 // Função de logout
 async function realizarLogout() {
-    if (confirm('Tem certeza que deseja sair do sistema?')) {
-        try {
-            await eel.fazer_logout()();
-            showAlert('Logout realizado com sucesso! Redirecionando...', 'success');
-            
-            setTimeout(() => {
-                window.location.href = 'login.html';
-            }, 1000);
-        } catch (error) {
-            console.error('Erro no logout:', error);
-            showAlert('Erro ao fazer logout!', 'error');
+    showConfirmModal(
+        'Confirmar Logout',
+        'Tem certeza que deseja sair do sistema?',
+        async () => {
+            try {
+                await eel.fazer_logout()();
+                showAlert('Logout realizado com sucesso! Redirecionando...', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1000);
+            } catch (error) {
+                console.error('Erro no logout:', error);
+                showAlert('Erro ao fazer logout!', 'error');
+            }
         }
-    }
+    );
 }
 
-// Função para animar números das estatísticas
-function animateNumbers() {
-    document.querySelectorAll('.stat-value').forEach(element => {
-        const finalValue = parseInt(element.textContent);
-        let currentValue = 0;
-        const increment = Math.ceil(finalValue / 30);
-        
-        const timer = setInterval(() => {
-            currentValue += increment;
-            if (currentValue >= finalValue) {
-                element.textContent = finalValue;
-                clearInterval(timer);
-            } else {
-                element.textContent = currentValue;
-            }
-        }, 50);
-    });
-}
+// Função para animar números removida - não é necessária no dashboard atual
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
     // Carrega dados iniciais
     const loginOk = await carregarUsuarioLogado();
     if (loginOk) {
-        await carregarEstatisticas();
-        await carregarUsuarios();
-        showAlert(`Bem-vindo, ${usuarioLogado.nome}! Dashboard carregado com sucesso.`, 'success');
+        // Só mostra mensagem de boas-vindas se o usuário acabou de fazer login
+        if (sessionStorage.getItem('justLoggedIn') === 'true') {
+            showAlert(`Bem-vindo, ${usuarioLogado.nome}! Dashboard carregado com sucesso.`, 'success');
+            // Remove a marcação para não mostrar novamente
+            sessionStorage.removeItem('justLoggedIn');
+        }
     }
 });
 
-// Event listener do formulário de cadastro
-document.getElementById('cadastroForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const nome = document.getElementById('nome').value.trim();
-    const email = document.getElementById('email').value.trim();
-    const senha = document.getElementById('senha').value;
-    
-    if (!nome || !email || !senha) {
-        showAlert('Por favor, preencha todos os campos!', 'error');
-        return;
-    }
-    
-    await cadastrarUsuario(nome, email, senha);
-});
+// Event listener do formulário de cadastro removido - não existe no dashboard
 
 // Atalho de teclado para logout (Ctrl+L)
 document.addEventListener('keydown', (e) => {
@@ -220,7 +163,4 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Auto-focus no primeiro campo
-window.addEventListener('load', () => {
-    document.getElementById('nome').focus();
-});
+// Auto-focus removido - não há campos de entrada no dashboard

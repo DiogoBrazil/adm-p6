@@ -8,61 +8,6 @@ from datetime import datetime
 import uuid
 import time
 
-@eel.expose
-def obter_usuario_por_id(user_id, user_type):
-    """Retorna os dados atuais de um usuário para edição"""
-    conn = db_manager.get_connection()
-    cursor = conn.cursor()
-    user = None
-    if user_type == 'operador':
-        cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, profile, created_at, updated_at, ativo
-            FROM operadores WHERE id = ?
-        ''', (user_id,))
-        row = cursor.fetchone()
-        if row:
-            user = {
-                "id": row[0],
-                "posto_graduacao": row[1],
-                "matricula": row[2],
-                "nome": row[3],
-                "email": row[4],
-                "profile": row[5],
-                "created_at": row[6],
-                "updated_at": row[7],
-                "ativo": bool(row[8]),
-                "tipo": "operador"
-            }
-    elif user_type == 'encarregado':
-        cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo
-            FROM encarregados WHERE id = ?
-        ''', (user_id,))
-        row = cursor.fetchone()
-        if row:
-            user = {
-                "id": row[0],
-                "posto_graduacao": row[1],
-                "matricula": row[2],
-                "nome": row[3],
-                "email": row[4],
-                "created_at": row[5],
-                "updated_at": row[6],
-                "ativo": bool(row[7]),
-                "tipo": "encarregado"
-            }
-    conn.close()
-    return user
-# main.py - Sistema Login com Cadastro usando SQLite
-import eel
-import sqlite3
-import hashlib
-import os
-import sys
-from datetime import datetime
-import uuid
-import time
-
 class DatabaseManager:
     """Gerenciador do banco de dados SQLite"""
     
@@ -89,28 +34,25 @@ class DatabaseManager:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Dropar tabelas existentes para recriar com novo esquema (APENAS PARA DESENVOLVIMENTO)
-        cursor.execute('DROP TABLE IF EXISTS processos_procedimentos')
-        cursor.execute('DROP TABLE IF EXISTS encarregados')
-        cursor.execute('DROP TABLE IF EXISTS operadores')
+        # Não apagar tabelas existentes para evitar perda de dados
 
-        # Criar tabela encarregados
+        # Criar tabela encarregados se não existir
         cursor.execute('''
-            CREATE TABLE encarregados (
+            CREATE TABLE IF NOT EXISTS encarregados (
                 id TEXT PRIMARY KEY,
                 posto_graduacao TEXT NOT NULL,
                 matricula TEXT UNIQUE NOT NULL,
                 nome TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 ativo BOOLEAN DEFAULT 1
             )
         ''')
         
-        # Criar tabela operadores
+        # Criar tabela operadores se não existir
         cursor.execute('''
-            CREATE TABLE operadores (
+            CREATE TABLE IF NOT EXISTS operadores (
                 id TEXT PRIMARY KEY,
                 posto_graduacao TEXT NOT NULL,
                 matricula TEXT UNIQUE NOT NULL,
@@ -124,9 +66,9 @@ class DatabaseManager:
             )
         ''')
         
-        # Criar tabela processos_procedimentos
+        # Criar tabela processos_procedimentos se não existir
         cursor.execute('''
-            CREATE TABLE processos_procedimentos (
+            CREATE TABLE IF NOT EXISTS processos_procedimentos (
                 id TEXT PRIMARY KEY,
                 numero TEXT UNIQUE NOT NULL,
                 tipo_geral TEXT NOT NULL CHECK (tipo_geral IN ('processo', 'procedimento')),
@@ -199,7 +141,7 @@ class DatabaseManager:
         cursor.execute('''
             SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at
             FROM encarregados
-            WHERE email = ? AND ativo = 1
+            WHERE email = ? AND ativo = 1 AND email IS NOT NULL
         ''', (email,))
         user = cursor.fetchone()
         
@@ -262,11 +204,15 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
-            # Verifica se email já existe em encarregados
-            cursor.execute("SELECT id FROM encarregados WHERE email = ?", (email,))
-            if cursor.fetchone():
-                conn.close()
-                return {"sucesso": False, "mensagem": "Email já está em uso como encarregado!"}
+            # Converter email vazio para None (NULL no banco)
+            email = email.strip() if email and email.strip() else None
+            
+            # Verifica se email já existe em encarregados (apenas se email não for None)
+            if email:
+                cursor.execute("SELECT id FROM encarregados WHERE email = ?", (email,))
+                if cursor.fetchone():
+                    conn.close()
+                    return {"sucesso": False, "mensagem": "Email já está em uso como encarregado!"}
             
             # Verifica se matrícula já existe em encarregados
             cursor.execute("SELECT id FROM encarregados WHERE matricula = ?", (matricula,))
@@ -314,7 +260,8 @@ class DatabaseManager:
                         posto_graduacao = ?, matricula = ?, nome = ?, email = ?, updated_at = CURRENT_TIMESTAMP
                 """
                 params = [posto_graduacao, matricula, nome, email]
-                if senha:
+                # Só atualiza a senha se ela foi fornecida e não está vazia
+                if senha and senha.strip():
                     senha_hash = self.hash_password(senha)
                     update_query += ", senha = ?"
                     params.append(senha_hash)
@@ -328,26 +275,27 @@ class DatabaseManager:
                 cursor.execute(update_query, tuple(params))
                 
             elif user_type == 'encarregado':
-                # Verifica se email já existe para outro encarregado
-                cursor.execute("SELECT id FROM encarregados WHERE email = ? AND id != ?", (email, user_id))
-                if cursor.fetchone():
-                    conn.close()
-                    return {"sucesso": False, "mensagem": "Email já está em uso por outro encarregado!"}
+                # Converter email vazio para None (NULL no banco)
+                email = email.strip() if email and email.strip() else None
+                
+                # Só verifica email duplicado se email for preenchido
+                if email:
+                    cursor.execute("SELECT id FROM encarregados WHERE email = ? AND id != ?", (email, user_id))
+                    if cursor.fetchone():
+                        conn.close()
+                        return {"sucesso": False, "mensagem": "Email já está em uso por outro encarregado!"}
                 
                 # Verifica se matrícula já existe para outro encarregado
                 cursor.execute("SELECT id FROM encarregados WHERE matricula = ? AND id != ?", (matricula, user_id))
                 if cursor.fetchone():
                     conn.close()
                     return {"sucesso": False, "mensagem": "Matrícula já está em uso por outro encarregado!"}
-
-                cursor.execute('''
+                
+                cursor.execute("""
                     UPDATE encarregados SET
                         posto_graduacao = ?, matricula = ?, nome = ?, email = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                ''', (posto_graduacao, matricula, nome, email, user_id))
-            else:
-                conn.close()
-                return {"sucesso": False, "mensagem": "Tipo de usuário inválido para atualização!"}
+                """, (posto_graduacao, matricula, nome, email, user_id))
             
             conn.commit()
             conn.close()
@@ -392,25 +340,27 @@ class DatabaseManager:
             return {"sucesso": False, "mensagem": f"Erro ao desativar usuário: {str(e)}"}
     
     def get_paginated_users(self, search_term=None, page=1, per_page=10):
-        """Retorna usuários paginados e filtrados (encarregados e operadores, exceto admin)"""
+        """Retorna usuários paginados e filtrados (encarregados e operadores)"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         users = []
-        total_users = 0
 
         # Construir a cláusula WHERE para pesquisa
         where_clause = "WHERE ativo = 1"
+        search_params = []
         if search_term:
+            where_clause += " AND (nome LIKE ? OR matricula LIKE ?)"
             search_term_like = f"%{search_term}%"
-            where_clause += f" AND (nome LIKE '{search_term_like}' OR matricula LIKE '{search_term_like}')"
+            search_params = [search_term_like, search_term_like]
 
         # Contar total de encarregados
-        cursor.execute(f"SELECT COUNT(*) FROM encarregados {where_clause}")
+        cursor.execute(f"SELECT COUNT(*) FROM encarregados {where_clause}", search_params)
         total_encarregados = cursor.fetchone()[0]
 
-        # Contar total de operadores (exceto admin)
-        cursor.execute(f"SELECT COUNT(*) FROM operadores {where_clause} AND profile != 'admin'")
+        # Contar total de operadores (incluindo admin, mas excluindo o usuário padrão "Administrador")
+        operador_where = where_clause + " AND nome != 'Administrador'"
+        cursor.execute(f"SELECT COUNT(*) FROM operadores {operador_where}", search_params)
         total_operadores = cursor.fetchone()[0]
 
         total_users = total_encarregados + total_operadores
@@ -418,16 +368,25 @@ class DatabaseManager:
         # Calcular offset para paginação
         offset = (page - 1) * per_page
 
-        # Buscar encarregados
-        cursor.execute(f'''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo 
+        # Buscar todos os usuários em uma única consulta usando UNION
+        union_query = f'''
+            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, 'encarregado' as tipo, NULL as profile
             FROM encarregados 
             {where_clause}
+            UNION ALL
+            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, 'operador' as tipo, profile
+            FROM operadores 
+            {where_clause} AND nome != 'Administrador'
             ORDER BY nome ASC
             LIMIT ? OFFSET ?
-        ''', (per_page, offset))
-        encarregados = cursor.fetchall()
-        for user in encarregados:
+        '''
+        
+        # Combinar parâmetros para ambas as partes do UNION
+        all_params = search_params + search_params + [per_page, offset]
+        cursor.execute(union_query, all_params)
+        
+        all_users = cursor.fetchall()
+        for user in all_users:
             users.append({
                 "id": user[0],
                 "posto_graduacao": user[1],
@@ -437,37 +396,11 @@ class DatabaseManager:
                 "created_at": user[5],
                 "updated_at": user[6],
                 "ativo": bool(user[7]),
-                "tipo": "encarregado"
+                "tipo": user[8],
+                "profile": user[9] if user[8] == 'operador' else None
             })
-
-        # Buscar operadores (incluindo admin)
-        cursor.execute(f'''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, profile 
-            FROM operadores 
-            {where_clause}
-            ORDER BY nome ASC
-            LIMIT ? OFFSET ?
-        ''', (per_page, offset))
-        operadores = cursor.fetchall()
-        for user in operadores:
-            if user[3] != "Administrador":
-                users.append({
-                    "id": user[0],
-                    "posto_graduacao": user[1],
-                    "matricula": user[2],
-                    "nome": user[3],
-                    "email": user[4],
-                    "created_at": user[5],
-                    "updated_at": user[6],
-                    "ativo": bool(user[7]),
-                    "tipo": "operador",
-                    "profile": user[8]
-                })
         
         conn.close()
-        
-        # Opcional: ordenar a lista combinada se necessário
-        users.sort(key=lambda x: x['nome'])
         
         return {"users": users, "total": total_users}
     
@@ -483,12 +416,9 @@ class DatabaseManager:
         total_operadores = cursor.fetchone()[0]
         total_usuarios = total_encarregados + total_operadores
         
-        # Total geral (incluindo admin)
-        cursor.execute("SELECT COUNT(*) FROM encarregados WHERE ativo = 1")
-        total_encarregados_geral = cursor.fetchone()[0]
+        # Total geral incluindo admin
         cursor.execute("SELECT COUNT(*) FROM operadores WHERE ativo = 1")
-        total_operadores_geral = cursor.fetchone()[0]
-        total_geral = total_encarregados_geral + total_operadores_geral
+        total_geral = cursor.fetchone()[0] + total_encarregados
         
         # Usuários criados hoje
         cursor.execute('''
@@ -520,6 +450,52 @@ eel.init('web')
 
 # Variável para usuário logado
 usuario_logado = None
+
+@eel.expose
+def obter_usuario_por_id(user_id, user_type):
+    """Retorna os dados atuais de um usuário para edição"""
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    user = None
+    if user_type == 'operador':
+        cursor.execute('''
+            SELECT id, posto_graduacao, matricula, nome, email, profile, created_at, updated_at, ativo
+            FROM operadores WHERE id = ?
+        ''', (user_id,))
+        row = cursor.fetchone()
+        if row:
+            user = {
+                "id": row[0],
+                "posto_graduacao": row[1],
+                "matricula": row[2],
+                "nome": row[3],
+                "email": row[4],
+                "profile": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
+                "ativo": bool(row[8]),
+                "tipo": "operador"
+            }
+    elif user_type == 'encarregado':
+        cursor.execute('''
+            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo
+            FROM encarregados WHERE id = ?
+        ''', (user_id,))
+        row = cursor.fetchone()
+        if row:
+            user = {
+                "id": row[0],
+                "posto_graduacao": row[1],
+                "matricula": row[2],
+                "nome": row[3],
+                "email": row[4],
+                "created_at": row[5],
+                "updated_at": row[6],
+                "ativo": bool(row[7]),
+                "tipo": "encarregado"
+            }
+    conn.close()
+    return user
 
 @eel.expose
 def fazer_login(email, senha):
@@ -562,16 +538,17 @@ def fazer_logout():
 def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, senha=None, profile=None):
     """Cadastra novo usuário (operador ou encarregado)"""
     # Validações básicas comuns
-    if not tipo_usuario or not posto_graduacao or not matricula or not nome or not email:
-        return {"sucesso": False, "mensagem": "Todos os campos obrigatórios (exceto senha para encarregado) devem ser preenchidos!"}
-    
+    if not tipo_usuario or not posto_graduacao or not matricula or not nome:
+        return {"sucesso": False, "mensagem": "Todos os campos obrigatórios devem ser preenchidos!"}
+
     if len(nome.strip()) < 2:
         return {"sucesso": False, "mensagem": "Nome deve ter pelo menos 2 caracteres!"}
-    
-    if "@" not in email or "." not in email:
-        return {"sucesso": False, "mensagem": "Email inválido!"}
 
     if tipo_usuario == 'operador':
+        if not email:
+            return {"sucesso": False, "mensagem": "Email é obrigatório para operadores!"}
+        if "@" not in email or "." not in email:
+            return {"sucesso": False, "mensagem": "Email inválido!"}
         if not senha:
             return {"sucesso": False, "mensagem": "Senha é obrigatória para operadores!"}
         if len(senha) < 4:
@@ -580,7 +557,13 @@ def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, sen
             return {"sucesso": False, "mensagem": "Perfil inválido para operador!"}
         return db_manager.add_operador(posto_graduacao, matricula.strip(), nome.strip(), email.strip().lower(), senha, profile)
     elif tipo_usuario == 'encarregado':
-        return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome.strip(), email.strip().lower())
+        # Email é opcional para encarregado, mas se preenchido, deve ser válido
+        if email:
+            if "@" not in email or "." not in email:
+                return {"sucesso": False, "mensagem": "Email inválido!"}
+            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome.strip(), email.strip().lower())
+        else:
+            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome.strip(), None)
     else:
         return {"sucesso": False, "mensagem": "Tipo de usuário inválido!"}
 
@@ -649,6 +632,27 @@ def listar_todos_usuarios():
 @eel.expose
 def atualizar_usuario(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
     """Atualiza um usuário existente"""
+    # Validações básicas
+    if not user_id or not user_type or not posto_graduacao or not matricula or not nome:
+        return {"sucesso": False, "mensagem": "Todos os campos obrigatórios devem ser preenchidos!"}
+
+    if len(nome.strip()) < 2:
+        return {"sucesso": False, "mensagem": "Nome deve ter pelo menos 2 caracteres!"}
+
+    if user_type == 'operador':
+        if not email or not email.strip():
+            return {"sucesso": False, "mensagem": "Email é obrigatório para operadores!"}
+        if "@" not in email or "." not in email:
+            return {"sucesso": False, "mensagem": "Email inválido!"}
+        # Senha é opcional na atualização - se fornecida, deve ter pelo menos 4 caracteres
+        if senha and senha.strip() and len(senha.strip()) < 4:
+            return {"sucesso": False, "mensagem": "Senha deve ter pelo menos 4 caracteres!"}
+    elif user_type == 'encarregado':
+        # Email é opcional para encarregado, mas se preenchido, deve ser válido
+        if email and email.strip():
+            if "@" not in email or "." not in email:
+                return {"sucesso": False, "mensagem": "Email inválido!"}
+
     return db_manager.update_user(user_id, user_type, posto_graduacao, matricula, nome, email, senha, profile)
 
 @eel.expose
@@ -662,7 +666,11 @@ def verificar_admin():
     if usuario_logado and usuario_logado.get('tipo') == 'operador':
         return usuario_logado.get('profile') == 'admin'
     return False
-    
+
+@eel.expose
+def obter_estatisticas():
+    """Retorna estatísticas do sistema"""
+    return db_manager.get_stats()
 
 @eel.expose
 def registrar_processo(numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo):
@@ -685,7 +693,6 @@ def registrar_processo(numero, tipo_geral, tipo_detalhe, documento_iniciador, pr
         return {"sucesso": False, "mensagem": "Número de processo já existe."}
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao registrar processo/procedimento: {str(e)}"}
-
 
 @eel.expose
 def listar_processos():
@@ -723,7 +730,92 @@ def listar_processos():
         "data_criacao": processo[7]
     } for processo in processos]
 
-    
+@eel.expose
+def excluir_processo(processo_id):
+    """Exclui um processo/procedimento (soft delete)"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE processos_procedimentos 
+            SET ativo = 0 
+            WHERE id = ?
+        """, (processo_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return {"sucesso": True, "mensagem": "Processo/Procedimento excluído com sucesso!"}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao excluir processo/procedimento: {str(e)}"}
+
+@eel.expose
+def obter_processo(processo_id):
+    """Obtém dados de um processo específico para edição"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
+                p.responsavel_id, p.responsavel_tipo,
+                CASE 
+                    WHEN p.responsavel_tipo = 'encarregado' THEN e.nome
+                    WHEN p.responsavel_tipo = 'operador' THEN o.nome
+                    ELSE 'Desconhecido'
+                END as responsavel_nome
+            FROM processos_procedimentos p
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            WHERE p.id = ? AND p.ativo = 1
+        """, (processo_id,))
+        
+        processo = cursor.fetchone()
+        conn.close()
+        
+        if processo:
+            return {
+                "id": processo[0],
+                "numero": processo[1],
+                "tipo_geral": processo[2],
+                "tipo_detalhe": processo[3],
+                "documento_iniciador": processo[4],
+                "processo_sei": processo[5],
+                "responsavel_id": processo[6],
+                "responsavel_tipo": processo[7],
+                "responsavel_nome": processo[8]
+            }
+        else:
+            return None
+    except Exception as e:
+        print(f"Erro ao obter processo: {e}")
+        return None
+
+@eel.expose
+def atualizar_processo(processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo):
+    """Atualiza um processo/procedimento existente"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            UPDATE processos_procedimentos 
+            SET numero = ?, tipo_geral = ?, tipo_detalhe = ?, documento_iniciador = ?, 
+                processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?
+            WHERE id = ?
+        """, (numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo, processo_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {"sucesso": True, "mensagem": "Processo/Procedimento atualizado com sucesso!"}
+    except sqlite3.IntegrityError as e:
+        return {"sucesso": False, "mensagem": "Número de processo já existe."}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao atualizar processo/procedimento: {str(e)}"}
+
 def main():
     """Função principal"""
     print("🚀 Iniciando Sistema de Login com Cadastro...")

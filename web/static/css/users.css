@@ -1,9 +1,111 @@
+/* Modal de feedback */
+.modal-feedback {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.modal-content {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 30px;
+    box-shadow: 0 8px 32px rgba(102,126,234,0.18);
+    text-align: center;
+    min-width: 300px;
+    max-width: 90vw;
+}
+#modalIcon {
+    font-size: 2.5rem;
+    margin-bottom: 18px;
+    display: block;
+}
+#modalMessage {
+    font-size: 1.15rem;
+    color: #333;
+    margin-bottom: 10px;
+    display: block;
+}
+
+/* Estilos para botões do modal de confirmação */
+.btn-secondary {
+    padding: 10px 20px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+.btn-secondary:hover {
+    background: #5a6268;
+}
+.btn-danger {
+    padding: 10px 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+.btn-danger:hover {
+    background: #c82333;
+}
+
+/* Estilo para o botão Voltar */
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: white;
+    text-decoration: none;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.15);
+    border: 2px solid transparent;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.back-btn:hover {
+    background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(108, 117, 125, 0.25);
+    border-color: #495057;
+    color: white;
+    text-decoration: none;
+}
+
+.back-btn i {
+    font-size: 1rem;
+}
+
+/* Responsividade para o botão Voltar */
+@media (max-width: 768px) {
+    .back-btn {
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 15px;
+        padding: 14px 20px;
+    }
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; min-height: 100vh; }
 .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
 .title { margin-bottom: 20px; font-size: 1.8rem; color: #333; }
 .card { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); padding: 30px; margin-bottom: 30px; }
-.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0; flex-wrap: wrap; /* Adicionado para responsividade */ }
+.card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 35px; padding-bottom: 25px; border-bottom: 2px solid #f0f0f0; flex-wrap: wrap; /* Adicionado para responsividade */ }
 .card-header i { color: #667eea; font-size: 1.3rem; }
 .card-header h2 { font-size: 1.5rem; color: #333; }
 
@@ -15,12 +117,37 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .btn-primary { width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3); }
 
+/* Botão secundário para formulários (mesmo tamanho do primário) */
+.btn-secondary-form { 
+    width: 100%; 
+    padding: 15px; 
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%); 
+    color: white; 
+    border: none; 
+    border-radius: 12px; 
+    font-size: 1rem; 
+    font-weight: 600; 
+    cursor: pointer; 
+    transition: all 0.3s ease; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 8px; 
+    margin-top: 15px;
+}
+.btn-secondary-form:hover { 
+    background: linear-gradient(135deg, #495057 0%, #343a40 100%); 
+    transform: translateY(-2px); 
+    box-shadow: 0 10px 25px rgba(108, 117, 125, 0.3); 
+}
+
 /* Estilos para a área de ações (pesquisa e botões) */
 .actions {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    margin-left: auto; /* Alinha à direita */
+    justify-content: center; /* Centraliza horizontalmente */
+    margin: 30px auto 0 auto; /* Adiciona margem superior para separar do título */
 }
 
 .actions input[type="text"] {
@@ -29,7 +156,12 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     border: 1px solid #ccc;
     border-radius: 8px;
     font-size: 0.9rem;
-    max-width: 250px; /* Limita a largura do campo de pesquisa */
+    max-width: 450px; /* Aumenta ainda mais a largura do campo de pesquisa */
+}
+
+#searchUserInput {
+    max-width: 500px !important; /* Força a largura máxima do campo de pesquisa */
+    min-width: 400px; /* Define uma largura mínima */
 }
 
 .btn-icon {
@@ -49,6 +181,8 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     outline: none;
     border: 2px solid transparent;
     margin-bottom: 2px;
+    min-width: 140px; /* Largura mínima para uniformizar os botões */
+    justify-content: center;
 }
 
 .btn-icon:hover {
@@ -87,6 +221,15 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
     border-color: #764ba2;
 }
+.btn-home {
+    background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+    color: #fff;
+    border: 2px solid #6f42c1;
+}
+.btn-home:hover {
+    background: linear-gradient(135deg, #e83e8c 0%, #6f42c1 100%);
+    border-color: #e83e8c;
+}
 
 /* Estilos para a tabela */
 .table-responsive {
@@ -94,7 +237,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     margin-top: 20px;
     display: flex;
     justify-content: center;
-}
 }
 
 .user-table {
@@ -257,4 +399,54 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
         flex-direction: column;
         gap: 10px;
     }
+}
+
+/* Estilos específicos para procedimentos */
+.procedure-type {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.procedure-type small {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.action-buttons-inline {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.btn-edit, .btn-delete {
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-edit {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.btn-edit:hover {
+    background: linear-gradient(135deg, #5a63d9 0%, #6c4298 100%);
+    transform: translateY(-1px);
+}
+
+.btn-delete {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+.btn-delete:hover {
+    background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+    transform: translateY(-1px);
 }

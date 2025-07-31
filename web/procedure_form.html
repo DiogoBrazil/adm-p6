@@ -3,19 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cadastrar Procedimento</title>
+    <title>Cadastrar Procedimento - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
     <link rel="stylesheet" href="static/css/processes.css">
 </head>
 <body>
-    <div class="container">
-        <a href="procedures_hub.html" class="btn" style="background: #6c757d; padding: 8px 16px; text-decoration: none;">
-            <i class="fas fa-arrow-left"></i>
-            Voltar
-        </a>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
         
-        <h1 class="title">Cadastrar Processo/Procedimento</h1>
+        <div class="container">
         
         <div class="form-section">
             <h2>Novo Registro</h2>
@@ -74,10 +99,21 @@
                     <label for="responsavel">Encarregado</label>
                     <select id="responsavel"></select>
                 </div>
-                <button type="submit" class="btn">Registrar</button>
+                
+                <button type="submit" class="btn-primary" id="btnCadastrar">
+                    <i class="fas fa-folder-plus"></i>
+                    Registrar
+                </button>
+                
+                <button type="button" onclick="voltarParaListagem()" class="btn-secondary-form">
+                    <i class="fas fa-arrow-left"></i>
+                    Voltar
+                </button>
             </form>
         </div>
+        </div>
     </div>
+    
     <script src="static/js/procedure_form.js"></script>
 </body>
 </html>

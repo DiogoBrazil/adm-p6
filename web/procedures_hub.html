@@ -3,19 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciar Procedimentos</title>
+    <title>Gerenciar Procedimentos - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="static/css/dashboard.css"> <!-- Reusing dashboard styles -->
+    <link rel="stylesheet" href="static/css/dashboard.css">
 </head>
 <body>
     <header class="header">
         <div class="header-content">
             <div class="logo-dashboard">
-                <i class="fas fa-folder-open"></i>
-                <h1>Gerenciar Procedimentos</h1>
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
             </div>
-            <a href="dashboard.html" class="btn-logout" style="text-decoration: none;">Voltar</a>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
         </div>
     </header>
 
@@ -46,5 +62,7 @@
             </div>
         </div>
     </div>
+    
+    <script src="static/js/dashboard.js"></script>
 </body>
 </html>

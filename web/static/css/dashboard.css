@@ -37,11 +37,20 @@ body {
     gap: 15px;
 }
 
-.logo-dashboard i {
-    font-size: 2rem;
-    background: rgba(255, 255, 255, 0.2);
-    padding: 10px;
+.logo-dashboard .logo-image {
+    height: 50px;
+    width: auto;
+    max-width: 80px;
+    object-fit: contain;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px;
     border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.logo-dashboard .logo-image:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
 }
 
 .logo-dashboard h1 {
@@ -419,6 +428,11 @@ body {
     .section-card {
         padding: 20px;
     }
+
+    .logo-dashboard .logo-image {
+        height: 45px;
+        max-width: 70px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -428,6 +442,16 @@ body {
 
     .logo-dashboard h1 {
         font-size: 1.4rem;
+    }
+
+    .logo-dashboard .logo-image {
+        height: 40px;
+        max-width: 60px;
+        padding: 6px;
+    }
+
+    .logo-dashboard {
+        gap: 10px;
     }
 
     .stat-card {
@@ -546,4 +570,56 @@ body {
     background: rgba(102, 126, 234, 0.2);
     border-color: rgba(102, 126, 234, 0.4);
     color: #5a63d9;
+}
+
+/* Modal de confirmação */
+.modal-feedback {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.35);
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.modal-content {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px 30px;
+    box-shadow: 0 8px 32px rgba(102,126,234,0.18);
+    text-align: center;
+    min-width: 300px;
+    max-width: 90vw;
+}
+
+/* Estilos para botões do modal de confirmação */
+.btn-secondary {
+    padding: 10px 20px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-danger {
+    padding: 10px 20px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.3s ease;
+}
+
+.btn-danger:hover {
+    background: #c82333;
 }
