@@ -42,10 +42,17 @@
             <div class="card-header">
                 <i class="fas fa-users"></i>
                 <h2>Lista de Usuários</h2>
-                <div class="actions">
+            </div>
+            
+            <div class="actions">
+                <!-- Área de Busca Simples -->
+                <div class="search-area">
                     <input type="text" id="searchUserInput" placeholder="Pesquisar por nome ou matrícula...">
-                    <button onclick="loadUsers()" class="btn-icon btn-search"><i class="fas fa-search"></i> Buscar</button>
                     <button onclick="clearSearch()" class="btn-icon btn-clear" style="display:none;"><i class="fas fa-times"></i> Limpar</button>
+                </div>
+                
+                <!-- Área de Ações -->
+                <div class="main-actions">
                     <button onclick="window.location.href='user_form.html'" class="btn-icon btn-new"><i class="fas fa-user-plus"></i> Novo Usuário</button>
                     <button onclick="window.location.href='dashboard.html'" class="btn-icon btn-home"><i class="fas fa-home"></i> Início</button>
                 </div>

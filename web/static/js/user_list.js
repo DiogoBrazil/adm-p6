@@ -6,6 +6,9 @@ let totalUsers = 0;
 // Variável para usuário logado
 let usuarioLogado = null;
 
+// Variável para debounce da busca
+let searchTimeout = null;
+
 // Função para carregar dados do usuário logado
 async function carregarUsuarioLogado() {
     try {
@@ -217,18 +220,25 @@ async function deleteUser(userId, userType, userName) {
 document.getElementById('prevPage').addEventListener('click', prevPage);
 document.getElementById('nextPage').addEventListener('click', nextPage);
 
-// Adicionar evento para pesquisa ao digitar e ao clicar no botão
-document.getElementById('searchUserInput').addEventListener('keyup', (event) => {
+// Adicionar evento para pesquisa ao digitar em tempo real com debounce
+document.getElementById('searchUserInput').addEventListener('input', (event) => {
     const clearBtn = document.querySelector('.btn-clear');
     if (event.target.value.length > 0) {
         if (clearBtn) clearBtn.style.display = 'inline-flex';
     } else {
         if (clearBtn) clearBtn.style.display = 'none';
     }
-    if (event.key === 'Enter') {
+    
+    // Clear do timeout anterior para implementar debounce
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Busca em tempo real com delay de 300ms para otimizar performance
+    searchTimeout = setTimeout(() => {
         currentPage = 1; // Resetar para a primeira página ao pesquisar
         loadUsers();
-    }
+    }, 300);
 });
 
 function clearSearch() {

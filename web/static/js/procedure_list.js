@@ -2,6 +2,7 @@
 // Variáveis globais
 let todosOsProcedimentos = [];
 let procedimentosFiltrados = [];
+let filtrosAtivos = {};
 
 // Função para carregar dados do usuário logado
 async function carregarUsuarioLogado() {
@@ -102,16 +103,17 @@ function closeAlert(alertId) {
 
 // Função para carregar todos os procedimentos
 async function carregarProcedimentos() {
+    console.log("📝 Iniciando carregamento de procedimentos...");
     try {
         const procedimentos = await eel.listar_processos()();
-        console.log("Resposta do servidor (procedimentos):", procedimentos);
+        console.log("✅ Resposta do servidor (procedimentos):", procedimentos);
         todosOsProcedimentos = procedimentos || [];
         procedimentosFiltrados = [...todosOsProcedimentos];
-        console.log("Total de procedimentos carregados:", todosOsProcedimentos.length);
+        console.log("📊 Total de procedimentos carregados:", todosOsProcedimentos.length);
         
         // Verificar imediatamente se temos procedimentos
         if (todosOsProcedimentos.length === 0) {
-            console.log("Nenhum procedimento encontrado, mostrando mensagem");
+            console.log("⚠️ Nenhum procedimento encontrado, mostrando mensagem");
             // Exibir mensagem diretamente
             const emptyState = document.getElementById('emptyState');
             const tableResponsive = document.querySelector('.table-responsive');
@@ -126,11 +128,12 @@ async function carregarProcedimentos() {
                 `;
             }
         } else {
+            console.log("✅ Dados carregados, chamando exibirProcedimentos()");
             // Apenas chamar exibirProcedimentos se houver dados
             exibirProcedimentos();
         }
     } catch (error) {
-        console.error('Erro ao carregar procedimentos:', error);
+        console.error('❌ Erro ao carregar procedimentos:', error);
         showAlert('Erro ao carregar lista de procedimentos!', 'error');
         
         // Em caso de erro, também mostrar a mensagem de nenhum registro
@@ -151,7 +154,17 @@ async function carregarProcedimentos() {
 
 // Funções auxiliares para formatação
 function extrairAno(procedimento) {
-    // Tentar extrair o ano do número formatado ou da data de criação
+    // Priorizar o ano da data_instauracao
+    if (procedimento.data_instauracao) {
+        try {
+            const ano = new Date(procedimento.data_instauracao).getFullYear();
+            if (ano && ano > 2000) return ano.toString();
+        } catch (e) {
+            console.warn('Erro ao extrair ano da data_instauracao:', e);
+        }
+    }
+    
+    // Fallback: tentar extrair o ano do número formatado
     if (procedimento.numero_formatado) {
         const match = procedimento.numero_formatado.match(/(\d{4})/);
         if (match) return match[1];
@@ -162,7 +175,7 @@ function extrairAno(procedimento) {
         if (match) return match[1];
     }
     
-    // Se não encontrar no número, usar o ano da data de criação
+    // Se não encontrar, usar o ano da data de criação
     if (procedimento.data_criacao) {
         const ano = new Date(procedimento.data_criacao).getFullYear();
         if (ano && ano > 2000) return ano.toString();
@@ -172,47 +185,28 @@ function extrairAno(procedimento) {
 }
 
 function obterNumeroDocumento(procedimento) {
-    // Priorizar números específicos baseados no documento iniciador
-    if (procedimento.documento_iniciador === 'Portaria' && procedimento.numero_portaria) {
-        return procedimento.numero_portaria;
-    }
-    
-    if (procedimento.documento_iniciador === 'Memorando Disciplinar' && procedimento.numero_memorando) {
-        return procedimento.numero_memorando;
-    }
-    
-    if (procedimento.documento_iniciador === 'Feito Preliminar' && procedimento.numero_feito) {
-        return procedimento.numero_feito;
-    }
-    
-    // Fallback para número formatado ou número geral
-    return procedimento.numero_formatado || procedimento.numero || 'S/N';
-}
-
-function formatarNomeCompleto(nome) {
-    if (!nome || nome === 'Não informado' || nome === 'N/A') {
-        return 'Não informado';
-    }
-    
-    // Se já está no formato correto (contém posto/graduação e matrícula), retornar como está
-    if (nome.includes('SGT') || nome.includes('CEL') || nome.includes('TEN') || nome.includes('MAJ') || nome.includes('CAP')) {
-        return nome;
-    }
-    
-    // Se é apenas o nome, retornar como está (será melhorado quando tivermos mais dados)
-    return nome;
+    // Usar diretamente o campo "numero" da tabela
+    return procedimento.numero || 'S/N';
 }
 
 // Função para exibir procedimentos na tabela
 function exibirProcedimentos() {
+    console.log("🔄 Iniciando exibirProcedimentos()");
     const tableBody = document.getElementById('procedureTableBody');
     const emptyState = document.getElementById('emptyState');
     const tableResponsive = document.querySelector('.table-responsive');
     
-    console.log("Procedimentos filtrados:", procedimentosFiltrados.length);
+    console.log("🔍 Elementos encontrados:", {
+        tableBody: !!tableBody,
+        emptyState: !!emptyState,
+        tableResponsive: !!tableResponsive,
+        procedimentosFiltrados: procedimentosFiltrados.length
+    });
     
     // Limpar a tabela
-    tableBody.innerHTML = '';
+    if (tableBody) {
+        tableBody.innerHTML = '';
+    }
     
     // Verificar se temos procedimentos para mostrar
     if (procedimentosFiltrados.length === 0) {
@@ -251,29 +245,34 @@ function exibirProcedimentos() {
         
         // Preencher a tabela com os procedimentos
         tableBody.innerHTML = procedimentosFiltrados.map(procedimento => {
-            // Extrair o ano do número do procedimento
+            // Extrair o ano da data_instauracao
             const ano = extrairAno(procedimento);
             
-            // Obter o número da portaria/memorando/feito
+            // Obter o número do campo "numero"
             const numero = obterNumeroDocumento(procedimento);
             
-            // Formatar nome do encarregado
-            const encarregado = procedimento.responsavel_completo || formatarNomeCompleto(procedimento.responsavel) || 'Não informado';
+            // Formatar nome do encarregado (posto/graduação + matrícula + nome)
+            const encarregado = procedimento.responsavel_completo || 'Não informado';
             
-            // Formatar nome do PM envolvido
-            const pmEnvolvido = procedimento.nome_pm_completo || formatarNomeCompleto(procedimento.nome_pm) || 'Não informado';
+            // Formatar nome do PM envolvido (posto/graduação + matrícula + nome)
+            const pmEnvolvido = procedimento.nome_pm_completo || 'Não informado';
             
             // Obter tipo de envolvimento sem cores
             const tipoEnvolvimento = procedimento.status_pm || 'Não informado';
             
             return `
                 <tr>
+                    <td><strong>${procedimento.tipo_detalhe || 'N/A'}</strong></td>
                     <td><strong>${ano}</strong></td>
                     <td>
                         <strong>${numero}</strong>
-                        ${procedimento.processo_sei ? `<br><small>SEI: ${procedimento.processo_sei}</small>` : ''}
                     </td>
-                    <td><strong>${procedimento.tipo_detalhe || 'N/A'}</strong></td>
+                    <td>
+                        ${procedimento.local_origem || '<em style="color:#999;">Não informado</em>'}
+                    </td>
+                    <td>
+                        ${procedimento.processo_sei ? procedimento.processo_sei : '<em style="color:#999;">Não informado</em>'}
+                    </td>
                     <td>${encarregado}</td>
                     <td>${pmEnvolvido}</td>
                     <td>${tipoEnvolvimento}</td>
@@ -298,16 +297,56 @@ function buscarProcedimentos() {
     const termoBusca = document.getElementById('searchInput').value.toLowerCase().trim();
     const clearButton = document.getElementById('clearButton');
     
+    // Começar com os dados já filtrados pelos filtros avançados
+    let dadosParaBusca = todosOsProcedimentos;
+    
+    // Se há filtros ativos, aplicá-los primeiro
+    if (Object.values(filtrosAtivos).some(valor => valor && valor.trim())) {
+        dadosParaBusca = todosOsProcedimentos.filter(procedimento => {
+            // Filtro por tipo
+            if (filtrosAtivos.tipo && procedimento.tipo_detalhe !== filtrosAtivos.tipo) {
+                return false;
+            }
+            
+            // Filtro por ano
+            if (filtrosAtivos.ano && extrairAno(procedimento) !== filtrosAtivos.ano) {
+                return false;
+            }
+            
+            // Filtro por origem
+            if (filtrosAtivos.origem && procedimento.local_origem !== filtrosAtivos.origem) {
+                return false;
+            }
+            
+            // Filtro por encarregado
+            if (filtrosAtivos.encarregado && procedimento.responsavel !== filtrosAtivos.encarregado) {
+                return false;
+            }
+            
+            // Filtro por status PM
+            if (filtrosAtivos.status && procedimento.status_pm !== filtrosAtivos.status) {
+                return false;
+            }
+            
+            // Filtro por documento iniciador
+            if (filtrosAtivos.documento && procedimento.documento_iniciador !== filtrosAtivos.documento) {
+                return false;
+            }
+            
+            return true;
+        });
+    }
+    
     if (termoBusca === '') {
-        procedimentosFiltrados = [...todosOsProcedimentos];
+        procedimentosFiltrados = dadosParaBusca;
         clearButton.style.display = 'none';
     } else {
-        procedimentosFiltrados = todosOsProcedimentos.filter(procedimento => {
+        procedimentosFiltrados = dadosParaBusca.filter(procedimento => {
             // Extrair dados formatados para busca
             const ano = extrairAno(procedimento);
             const numero = obterNumeroDocumento(procedimento);
-            const encarregado = formatarNomeCompleto(procedimento.responsavel_completo || procedimento.responsavel);
-            const pmEnvolvido = formatarNomeCompleto(procedimento.nome_pm);
+            const encarregado = procedimento.responsavel_completo || 'Não informado';
+            const pmEnvolvido = procedimento.nome_pm_completo || 'Não informado';
             
             return (
                 // Busca por ano
@@ -318,18 +357,21 @@ function buscarProcedimentos() {
                 (procedimento.numero_formatado || '').toLowerCase().includes(termoBusca) ||
                 // Busca por número original (fallback)
                 (procedimento.numero || '').toLowerCase().includes(termoBusca) ||
+                // Busca por processo SEI
+                (procedimento.processo_sei || '').toLowerCase().includes(termoBusca) ||
                 // Busca por números específicos dos documentos
                 (procedimento.numero_portaria || '').toLowerCase().includes(termoBusca) ||
                 (procedimento.numero_memorando || '').toLowerCase().includes(termoBusca) ||
                 (procedimento.numero_feito || '').toLowerCase().includes(termoBusca) ||
                 // Busca por tipo de detalhe (PADS, IPM, SR, etc.)
                 (procedimento.tipo_detalhe || '').toLowerCase().includes(termoBusca) ||
-                // Busca por encarregado formatado
+                // Busca por local de origem
+                (procedimento.local_origem || '').toLowerCase().includes(termoBusca) ||
+                // Busca por encarregado completo (posto/graduação + matrícula + nome)
                 encarregado.toLowerCase().includes(termoBusca) ||
                 // Busca por responsável (fallback)
                 (procedimento.responsavel || '').toLowerCase().includes(termoBusca) ||
-                (procedimento.responsavel_completo || '').toLowerCase().includes(termoBusca) ||
-                // Busca por PM envolvido formatado
+                // Busca por PM envolvido completo (posto/graduação + matrícula + nome)
                 pmEnvolvido.toLowerCase().includes(termoBusca) ||
                 // Busca por nome do PM (fallback)
                 (procedimento.nome_pm || '').toLowerCase().includes(termoBusca) ||
@@ -345,30 +387,194 @@ function buscarProcedimentos() {
     exibirProcedimentos();
 }
 
-// Função para realizar busca via botão
-function realizarBusca() {
-    buscarProcedimentos();
-    
-    // Destacar visualmente que a busca foi realizada
-    const searchButton = document.getElementById('searchButton');
-    const originalText = searchButton.innerHTML;
-    
-    searchButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
-    searchButton.disabled = true;
-    
-    // Simular delay para feedback visual
-    setTimeout(() => {
-        searchButton.innerHTML = originalText;
-        searchButton.disabled = false;
+// === SISTEMA DE FILTROS COM MODAL ===
+
+// Função para abrir o modal de filtros
+function abrirModalFiltros() {
+    console.log('abrirModalFiltros chamada');
+    const modal = document.getElementById('modalFiltros');
+    if (modal) {
+        modal.style.display = 'flex';
         
-        // Mostrar feedback sobre o resultado
-        const termoBusca = document.getElementById('searchInput').value.trim();
-        if (termoBusca && procedimentosFiltrados.length === 0) {
-            showAlert(`Nenhum resultado encontrado para "${termoBusca}"`, 'warning');
-        } else if (termoBusca && procedimentosFiltrados.length > 0) {
-            showAlert(`${procedimentosFiltrados.length} resultado(s) encontrado(s)`, 'success');
+        // Carregar opções dos filtros quando abrir
+        carregarOpcoesDosFiltros();
+        
+        // Atualizar indicador visual
+        atualizarIndicadorFiltros();
+    } else {
+        console.error('Modal de filtros não encontrado');
+    }
+}
+
+// Função para fechar o modal de filtros
+function fecharModalFiltros() {
+    const modal = document.getElementById('modalFiltros');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Função para aplicar filtros do modal
+function aplicarFiltrosModal() {
+    aplicarFiltros();
+    fecharModalFiltros();
+}
+
+// Função para limpar filtros do modal
+function limparFiltrosModal() {
+    limparFiltros();
+    fecharModalFiltros();
+}
+
+// Função para carregar as opções dos filtros baseado nos dados
+function carregarOpcoesDosFiltros() {
+    if (todosOsProcedimentos.length === 0) return;
+    
+    // Coletar valores únicos para cada filtro
+    const tipos = [...new Set(todosOsProcedimentos.map(p => p.tipo_detalhe).filter(t => t))].sort();
+    const anos = [...new Set(todosOsProcedimentos.map(p => extrairAno(p)).filter(a => a))].sort().reverse();
+    const origens = [...new Set(todosOsProcedimentos.map(p => p.local_origem).filter(o => o))].sort();
+    const encarregados = [...new Set(todosOsProcedimentos.map(p => p.responsavel).filter(e => e))].sort();
+    const status = [...new Set(todosOsProcedimentos.map(p => p.status_pm).filter(s => s))].sort();
+    
+    // Povoar os selects
+    povoarSelect('filtroTipo', tipos);
+    povoarSelect('filtroAno', anos);
+    povoarSelect('filtroOrigem', origens);
+    povoarSelect('filtroEncarregado', encarregados);
+    povoarSelect('filtroStatus', status);
+}
+
+// Função auxiliar para povoar um select com opções
+function povoarSelect(selectId, opcoes) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Manter a opção "Todos"
+    const primeiraOpcao = select.children[0];
+    select.innerHTML = '';
+    select.appendChild(primeiraOpcao);
+    
+    // Adicionar as opções
+    opcoes.forEach(opcao => {
+        const option = document.createElement('option');
+        option.value = opcao;
+        option.textContent = opcao;
+        select.appendChild(option);
+    });
+}
+
+// Função para aplicar todos os filtros
+function aplicarFiltros() {
+    // Coletar valores dos filtros
+    filtrosAtivos = {
+        tipo: document.getElementById('filtroTipo').value,
+        ano: document.getElementById('filtroAno').value,
+        origem: document.getElementById('filtroOrigem').value,
+        encarregado: document.getElementById('filtroEncarregado').value,
+        status: document.getElementById('filtroStatus').value,
+        documento: document.getElementById('filtroDocumento').value
+    };
+    
+    // Aplicar filtros
+    procedimentosFiltrados = todosOsProcedimentos.filter(procedimento => {
+        // Filtro por tipo
+        if (filtrosAtivos.tipo && procedimento.tipo_detalhe !== filtrosAtivos.tipo) {
+            return false;
         }
-    }, 300);
+        
+        // Filtro por ano
+        if (filtrosAtivos.ano && extrairAno(procedimento) !== filtrosAtivos.ano) {
+            return false;
+        }
+        
+        // Filtro por origem
+        if (filtrosAtivos.origem && procedimento.local_origem !== filtrosAtivos.origem) {
+            return false;
+        }
+        
+        // Filtro por encarregado
+        if (filtrosAtivos.encarregado && procedimento.responsavel !== filtrosAtivos.encarregado) {
+            return false;
+        }
+        
+        // Filtro por status PM
+        if (filtrosAtivos.status && procedimento.status_pm !== filtrosAtivos.status) {
+            return false;
+        }
+        
+        // Filtro por documento iniciador
+        if (filtrosAtivos.documento && procedimento.documento_iniciador !== filtrosAtivos.documento) {
+            return false;
+        }
+        
+        return true;
+    });
+    
+    // Aplicar também a busca de texto se houver
+    const termoBusca = document.getElementById('searchInput').value.trim();
+    if (termoBusca) {
+        buscarProcedimentos();
+    } else {
+        exibirProcedimentos();
+    }
+    
+    // Atualizar indicador visual
+    atualizarIndicadorFiltros();
+    
+    showAlert(`Filtros aplicados! ${procedimentosFiltrados.length} registro(s) encontrado(s).`, 'info');
+}
+
+// Função para limpar todos os filtros
+function limparFiltros() {
+    // Limpar valores dos selects
+    document.getElementById('filtroTipo').value = '';
+    document.getElementById('filtroAno').value = '';
+    document.getElementById('filtroOrigem').value = '';
+    document.getElementById('filtroEncarregado').value = '';
+    document.getElementById('filtroStatus').value = '';
+    document.getElementById('filtroDocumento').value = '';
+    
+    // Limpar busca de texto também
+    document.getElementById('searchInput').value = '';
+    
+    // Resetar filtros
+    filtrosAtivos = {};
+    procedimentosFiltrados = [...todosOsProcedimentos];
+    
+    // Atualizar exibição
+    exibirProcedimentos();
+    atualizarIndicadorFiltros();
+    
+    // Ocultar botão limpar busca
+    document.getElementById('clearButton').style.display = 'none';
+    
+    showAlert('Todos os filtros foram limpos!', 'success');
+}
+
+// Função para atualizar indicador visual de filtros ativos
+function atualizarIndicadorFiltros() {
+    const toggleBtn = document.getElementById('filterToggle');
+    let filtrosAplicados = 0;
+    
+    // Contar quantos filtros estão ativos
+    Object.values(filtrosAtivos).forEach(valor => {
+        if (valor && valor.trim()) filtrosAplicados++;
+    });
+    
+    // Remover indicador anterior
+    const indicadorExistente = toggleBtn.querySelector('.filter-indicator');
+    if (indicadorExistente) {
+        indicadorExistente.remove();
+    }
+    
+    // Adicionar novo indicador se houver filtros ativos
+    if (filtrosAplicados > 0) {
+        const indicador = document.createElement('span');
+        indicador.className = 'filter-indicator';
+        indicador.textContent = filtrosAplicados;
+        toggleBtn.appendChild(indicador);
+    }
 }
 
 // Função para limpar busca
@@ -497,12 +703,32 @@ document.addEventListener('DOMContentLoaded', function() {
     if (searchInput) {
         searchInput.addEventListener('input', buscarProcedimentos);
         
-        // Enter para buscar com feedback visual
+        // Enter para buscar
         searchInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                realizarBusca();
+                buscarProcedimentos();
             }
         });
     }
+    
+    // Event listener para fechar modal ao clicar fora dele
+    const modalFiltros = document.getElementById('modalFiltros');
+    if (modalFiltros) {
+        modalFiltros.addEventListener('click', function(e) {
+            if (e.target === modalFiltros) {
+                fecharModalFiltros();
+            }
+        });
+    }
+    
+    // Event listener para tecla ESC fechar o modal
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('modalFiltros');
+            if (modal && modal.style.display === 'flex') {
+                fecharModalFiltros();
+            }
+        }
+    });
 });

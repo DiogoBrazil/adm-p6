@@ -168,32 +168,59 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     min-width: 400px; /* Define uma largura mínima */
 }
 
+/* Novos estilos para áreas de busca e ações principais */
+.search-area {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-height: 44px;
+}
+
+.search-area input[type="text"] {
+    flex: 1;
+    min-width: 300px;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    height: 44px;
+    box-sizing: border-box;
+}
+
+.main-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 44px;
+}
+
 .btn-icon {
-    padding: 10px 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 20px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
     box-shadow: 0 2px 8px rgba(102,126,234,0.08);
-    transition: background 0.3s, transform 0.2s;
+    transition: all 0.3s ease;
     outline: none;
-    border: 2px solid transparent;
-    margin-bottom: 2px;
-    min-width: 140px; /* Largura mínima para uniformizar os botões */
-    justify-content: center;
+    min-width: 140px;
+    height: 44px;
+    white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .btn-icon:hover {
-    background: linear-gradient(135deg, #5a6ae0 0%, #764ba2 100%);
-    transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 6px 18px rgba(102,126,234,0.18);
-    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-search {
@@ -207,32 +234,29 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     border-color: #185a9d;
 }
 .btn-clear {
-    background: linear-gradient(135deg, #ff6a6a 0%, #ffb347 100%);
-    color: #fff;
-    border: 2px solid #ff6a6a;
-    margin-right: 4px;
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
 }
 .btn-clear:hover {
-    background: linear-gradient(135deg, #ffb347 0%, #ff6a6a 100%);
-    border-color: #ffb347;
+    background: linear-gradient(135deg, #c82333 0%, #a02622 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
 }
 .btn-new {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
-    border: 2px solid #667eea;
 }
 .btn-new:hover {
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-    border-color: #764ba2;
 }
 .btn-home {
-    background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
-    color: #fff;
-    border: 2px solid #6f42c1;
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
 }
 .btn-home:hover {
-    background: linear-gradient(135deg, #e83e8c 0%, #6f42c1 100%);
-    border-color: #e83e8c;
+    background: linear-gradient(135deg, #138496 0%, #0f6674 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
 }
 
 /* Estilos para a tabela */
@@ -245,7 +269,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 
 .user-table {
     width: auto;
-    min-width: 800px;
+    min-width: 1200px;
     border-collapse: collapse;
     margin-bottom: 20px;
 }
@@ -380,6 +404,24 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     .actions input[type="text"] {
         max-width: 100%;
     }
+    
+    /* Responsividade para áreas de busca e ações */
+    .search-area {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .search-area input[type="text"] {
+        min-width: auto;
+        margin-bottom: 10px;
+    }
+    
+    .main-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
     .user-table th,
     .user-table td {
         padding: 8px 10px;

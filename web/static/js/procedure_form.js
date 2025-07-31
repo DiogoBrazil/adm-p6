@@ -198,7 +198,7 @@ async function verificarEdicao() {
 // Função para preencher formulário com dados do procedimento
 async function preencherFormularioEdicao(procedimento) {
     // Preencher campos básicos
-    document.getElementById('numero_rgf').value = procedimento.numero || '';
+    document.getElementById('numero_rgf').value = procedimento.numero_rgf || '';
     document.getElementById('tipo_geral').value = procedimento.tipo_geral || '';
     document.getElementById('documento_iniciador').value = procedimento.documento_iniciador || '';
     document.getElementById('processo_sei').value = procedimento.processo_sei || '';
@@ -508,8 +508,18 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const numero_memorando = document.getElementById('numero_memorando')?.value || null;
     const numero_feito = document.getElementById('numero_feito')?.value || null;
 
+    // Determinar o número do documento baseado no tipo de documento iniciador
+    let numero_documento = '';
+    if (documento_iniciador === 'Portaria' && numero_portaria) {
+        numero_documento = numero_portaria.trim();
+    } else if (documento_iniciador === 'Memorando Disciplinar' && numero_memorando) {
+        numero_documento = numero_memorando.trim();
+    } else if (documento_iniciador === 'Feito Preliminar' && numero_feito) {
+        numero_documento = numero_feito.trim();
+    }
+
     // Validação básica
-    if (!numero_rgf || !tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id) {
+    if (!numero_rgf || !tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento) {
         showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
         return;
     }
@@ -520,7 +530,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
             // Modo edição
             result = await eel.atualizar_processo(
                 editandoProcedimento.id,
-                numero_rgf, // Usando o numero_rgf como número
+                numero_documento, // Agora usando o número do documento específico
                 tipo_geral,
                 tipo_detalhe,
                 documento_iniciador,
@@ -545,7 +555,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         } else {
             // Modo criação
             result = await eel.registrar_processo(
-                numero_rgf, // Usando o numero_rgf como número
+                numero_documento, // Agora usando o número do documento específico
                 tipo_geral,
                 tipo_detalhe,
                 documento_iniciador,

@@ -777,11 +777,18 @@ def listar_processos():
             p.responsavel_id, 
             p.responsavel_tipo,
             COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_pg,
+            COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
             COALESCE(
                 (SELECT posto_graduacao FROM operadores WHERE id = p.nome_pm_id),
                 (SELECT posto_graduacao FROM encarregados WHERE id = p.nome_pm_id),
                 ''
-            ) as nome_pm_pg
+            ) as nome_pm_pg,
+            COALESCE(
+                (SELECT matricula FROM operadores WHERE id = p.nome_pm_id),
+                (SELECT matricula FROM encarregados WHERE id = p.nome_pm_id),
+                ''
+            ) as nome_pm_matricula,
+            p.numero_rgf
         FROM processos_procedimentos p
         LEFT JOIN operadores o ON p.responsavel_id = o.id
         LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -794,7 +801,7 @@ def listar_processos():
     
     # Formatar o número do procedimento baseado no tipo de documento iniciador
     def formatar_numero_processo(processo):
-        numero_formatado = processo[1]  # Número original como fallback
+        numero_documento = processo[1]  # Número do documento (portaria, memorando, feito)
         tipo_detalhe = processo[3]
         documento = processo[4]
         local_origem = processo[8] or ""
@@ -809,14 +816,18 @@ def listar_processos():
                 ano_instauracao = ""
         
         # Criar um número formatado baseado no tipo de documento
-        if documento == 'Portaria' and processo[13]:  # numero_portaria
-            numero_formatado = f"{tipo_detalhe} nº {processo[13]}/{local_origem}/{ano_instauracao}"
-        elif documento == 'Memorando Disciplinar' and processo[14]:  # numero_memorando
-            numero_formatado = f"{tipo_detalhe} nº {processo[14]}/{local_origem}/{ano_instauracao}"
-        elif documento == 'Feito Preliminar' and processo[15]:  # numero_feito
-            numero_formatado = f"{tipo_detalhe} nº {processo[15]}/{local_origem}/{ano_instauracao}"
+        if numero_documento:
+            return f"{tipo_detalhe} nº {numero_documento}/{local_origem}/{ano_instauracao}"
+        else:
+            # Fallback para campos específicos se numero estiver vazio
+            if documento == 'Portaria' and processo[13]:  # numero_portaria
+                return f"{tipo_detalhe} nº {processo[13]}/{local_origem}/{ano_instauracao}"
+            elif documento == 'Memorando Disciplinar' and processo[14]:  # numero_memorando
+                return f"{tipo_detalhe} nº {processo[14]}/{local_origem}/{ano_instauracao}"
+            elif documento == 'Feito Preliminar' and processo[15]:  # numero_feito
+                return f"{tipo_detalhe} nº {processo[15]}/{local_origem}/{ano_instauracao}"
         
-        return numero_formatado
+        return numero_documento or "S/N"
 
     return [{
         "id": processo[0],
@@ -827,15 +838,18 @@ def listar_processos():
         "documento_iniciador": processo[4],
         "processo_sei": processo[5],
         "responsavel": processo[6],
-        "responsavel_posto_grad": processo[16] or "",  # Posto/graduação do responsável
+        "responsavel_posto_grad": processo[17] or "",  # Posto/graduação do responsável (índice 17)
+        "responsavel_matricula": processo[18] or "",  # Matrícula do responsável (índice 18)
         "data_criacao": processo[7],
         "local_origem": processo[8],
         "data_instauracao": processo[9],
         "status_pm": processo[10],
         "nome_pm": processo[11],
-        "nome_pm_posto_grad": processo[17] or "",  # Posto/graduação do PM envolvido
-        "responsavel_completo": f"{processo[16] or ''} {processo[6]}".strip(),  # Posto/graduação + nome
-        "nome_pm_completo": f"{processo[17] or ''} {processo[11] or ''}".strip() if processo[11] else None  # Posto/graduação + nome PM
+        "nome_pm_posto_grad": processo[19] or "",  # Posto/graduação do PM envolvido (índice 19)
+        "nome_pm_matricula": processo[20] or "",  # Matrícula do PM envolvido (índice 20)
+        "numero_rgf": processo[21] or "",  # Número do RGF (índice 21)
+        "responsavel_completo": f"{processo[17] or ''} {processo[18] or ''} {processo[6]}".strip(),  # Posto/graduação + matrícula + nome
+        "nome_pm_completo": f"{processo[19] or ''} {processo[20] or ''} {processo[11] or ''}".strip() if processo[11] else None  # Posto/graduação + matrícula + nome PM
     } for processo in processos]
 
 @eel.expose
@@ -869,7 +883,10 @@ def obter_processo(processo_id):
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
                 p.responsavel_id, p.responsavel_tipo,
-                COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome
+                COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome,
+                p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
+                p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
+                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -889,7 +906,21 @@ def obter_processo(processo_id):
                 "processo_sei": processo[5],
                 "responsavel_id": processo[6],
                 "responsavel_tipo": processo[7],
-                "responsavel_nome": processo[8]
+                "responsavel_nome": processo[8],
+                "local_origem": processo[9],
+                "data_instauracao": processo[10],
+                "data_recebimento": processo[11],
+                "escrivao_id": processo[12],
+                "status_pm": processo[13],
+                "nome_pm_id": processo[14],
+                "nome_vitima": processo[15],
+                "natureza_processo": processo[16],
+                "natureza_procedimento": processo[17],
+                "resumo_fatos": processo[18],
+                "numero_portaria": processo[19],
+                "numero_memorando": processo[20],
+                "numero_feito": processo[21],
+                "numero_rgf": processo[22]
             }
         else:
             return None
