@@ -1,2 +1,6 @@
 .venv
 usuarios.db
+start_app.py
+teste_insercao.py
+verificar_tabela.py
+web/static/js/user_form.js.backup
