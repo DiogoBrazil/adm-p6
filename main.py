@@ -4,9 +4,10 @@ import sqlite3
 import hashlib
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import time
+from prazos_andamentos_manager import PrazosAndamentosManager
 
 class DatabaseManager:
     """Gerenciador do banco de dados SQLite"""
@@ -458,6 +459,9 @@ class DatabaseManager:
 
 # Inicializar gerenciador de banco
 db_manager = DatabaseManager()
+
+# Inicializar gerenciador de prazos e andamentos
+prazos_manager = PrazosAndamentosManager(db_manager.db_path)
 
 # Inicializar Eel
 eel.init('web')
@@ -965,6 +969,540 @@ def atualizar_processo(
         return {"sucesso": False, "mensagem": "Número de processo já existe."}
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao atualizar processo/procedimento: {str(e)}"}
+
+# ======== FUNÇÕES DE PRAZOS E ANDAMENTOS ========
+
+@eel.expose
+def definir_prazo_processo(processo_id, tipo_prazo, data_limite, descricao=None, responsavel_id=None):
+    """Define um prazo para um processo"""
+    try:
+        resultado = prazos_manager.definir_prazo(
+            processo_id=processo_id,
+            tipo_prazo=tipo_prazo,
+            data_limite=data_limite,
+            descricao=descricao,
+            responsavel_id=responsavel_id
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao definir prazo: {str(e)}"}
+
+@eel.expose
+def prorrogar_prazo_processo(prazo_id, nova_data_limite, motivo_prorrogacao, responsavel_id=None):
+    """Prorroga um prazo existente"""
+    try:
+        resultado = prazos_manager.prorrogar_prazo(
+            prazo_id=prazo_id,
+            nova_data_limite=nova_data_limite,
+            motivo_prorrogacao=motivo_prorrogacao,
+            responsavel_id=responsavel_id
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao prorrogar prazo: {str(e)}"}
+
+@eel.expose
+def concluir_prazo_processo(prazo_id, observacoes=None, responsavel_id=None):
+    """Marca um prazo como concluído"""
+    try:
+        resultado = prazos_manager.concluir_prazo(
+            prazo_id=prazo_id,
+            observacoes=observacoes,
+            responsavel_id=responsavel_id
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao concluir prazo: {str(e)}"}
+
+@eel.expose
+def listar_prazos_processo(processo_id):
+    """Lista todos os prazos de um processo"""
+    try:
+        prazos = prazos_manager.listar_prazos_processo(processo_id)
+        return {"sucesso": True, "prazos": prazos}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao listar prazos: {str(e)}"}
+
+@eel.expose
+def obter_prazos_vencendo(dias_antecedencia=7):
+    """Obtém prazos que estão vencendo nos próximos dias"""
+    try:
+        prazos = prazos_manager.obter_prazos_vencendo(dias_antecedencia)
+        return {"sucesso": True, "prazos": prazos}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter prazos vencendo: {str(e)}"}
+
+@eel.expose
+def obter_prazos_vencidos():
+    """Obtém prazos que já venceram"""
+    try:
+        prazos = prazos_manager.obter_prazos_vencidos()
+        return {"sucesso": True, "prazos": prazos}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter prazos vencidos: {str(e)}"}
+
+@eel.expose
+def registrar_andamento_processo(processo_id, tipo_andamento, descricao, data_andamento=None, responsavel_id=None, observacoes=None):
+    """Registra um novo andamento para um processo"""
+    try:
+        resultado = prazos_manager.registrar_andamento(
+            processo_id=processo_id,
+            tipo_andamento=tipo_andamento,
+            descricao=descricao,
+            data_andamento=data_andamento,
+            responsavel_id=responsavel_id,
+            observacoes=observacoes
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao registrar andamento: {str(e)}"}
+
+@eel.expose
+def listar_andamentos_processo(processo_id):
+    """Lista todos os andamentos de um processo"""
+    try:
+        andamentos = prazos_manager.listar_andamentos_processo(processo_id)
+        return {"sucesso": True, "andamentos": andamentos}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
+
+@eel.expose
+def atualizar_status_detalhado_processo(processo_id, novo_status, observacoes=None, responsavel_id=None):
+    """Atualiza o status detalhado de um processo"""
+    try:
+        resultado = prazos_manager.atualizar_status_detalhado(
+            processo_id=processo_id,
+            novo_status=novo_status,
+            observacoes=observacoes,
+            responsavel_id=responsavel_id
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao atualizar status: {str(e)}"}
+
+@eel.expose
+def obter_status_detalhado_processo(processo_id):
+    """Obtém o histórico de status detalhado de um processo"""
+    try:
+        status = prazos_manager.obter_status_detalhado(processo_id)
+        return {"sucesso": True, "status": status}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter status: {str(e)}"}
+
+@eel.expose
+def obter_dashboard_prazos():
+    """Obtém dados para dashboard de prazos"""
+    try:
+        dashboard = prazos_manager.obter_dashboard_prazos()
+        return {"sucesso": True, "dashboard": dashboard}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter dashboard: {str(e)}"}
+
+@eel.expose
+def gerar_relatorio_processo(processo_id):
+    """Gera relatório completo de um processo"""
+    try:
+        relatorio = prazos_manager.gerar_relatorio_processo(processo_id)
+        return {"sucesso": True, "relatorio": relatorio}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao gerar relatório: {str(e)}"}
+
+@eel.expose
+def gerar_relatorio_prazos(filtros=None):
+    """Gera relatório de prazos com filtros opcionais"""
+    try:
+        relatorio = prazos_manager.gerar_relatorio_prazos(filtros)
+        return {"sucesso": True, "relatorio": relatorio}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao gerar relatório de prazos: {str(e)}"}
+
+# ======== FUNÇÕES AUXILIARES PARA PRAZOS ========
+
+# ======== FUNÇÕES AUXILIARES PARA PRAZOS ========
+
+def calcular_prazo_processo(tipo_detalhe, documento_iniciador, data_recebimento, prorrogacoes_dias=0):
+    """
+    Calcula o prazo de conclusão de um processo/procedimento baseado nas regras definidas
+    
+    Args:
+        tipo_detalhe (str): Tipo específico do processo (SR, PADS, IPM, etc.)
+        documento_iniciador (str): Tipo do documento iniciador
+        data_recebimento (str): Data de recebimento no formato YYYY-MM-DD
+        prorrogacoes_dias (int): Dias de prorrogação adicionais
+    
+    Returns:
+        dict: Informações sobre o prazo calculado
+    """
+    from datetime import datetime, timedelta
+    
+    # Definir prazos base conforme regras
+    prazos_base = {
+        'SR': 30,
+        'PADS': 30, 
+        'IPM': 40,
+        'Feito Preliminar': 15  # Baseado no documento iniciador
+    }
+    
+    # Determinar prazo base
+    prazo_dias = 30  # Padrão
+    
+    if documento_iniciador == 'Feito Preliminar':
+        prazo_dias = prazos_base['Feito Preliminar']
+    elif tipo_detalhe in prazos_base:
+        prazo_dias = prazos_base[tipo_detalhe]
+    elif 'SR' in tipo_detalhe.upper():
+        prazo_dias = prazos_base['SR']
+    elif 'PADS' in tipo_detalhe.upper():
+        prazo_dias = prazos_base['PADS']
+    elif 'IPM' in tipo_detalhe.upper():
+        prazo_dias = prazos_base['IPM']
+    
+    # Calcular prazo total com prorrogações
+    prazo_total_dias = prazo_dias + prorrogacoes_dias
+    
+    if not data_recebimento:
+        return {
+            "prazo_base_dias": prazo_dias,
+            "prorrogacoes_dias": prorrogacoes_dias,
+            "prazo_total_dias": prazo_total_dias,
+            "data_limite": None,
+            "dias_restantes": None,
+            "status_prazo": "Sem data de recebimento",
+            "vencido": False
+        }
+    
+    try:
+        # Converter data de recebimento
+        data_inicio = datetime.strptime(data_recebimento, "%Y-%m-%d")
+        data_limite = data_inicio + timedelta(days=prazo_total_dias)
+        
+        # Calcular dias restantes
+        hoje = datetime.now()
+        dias_restantes = (data_limite - hoje).days
+        
+        # Determinar status do prazo
+        if dias_restantes < 0:
+            status_prazo = f"Vencido há {abs(dias_restantes)} dias"
+            vencido = True
+        elif dias_restantes == 0:
+            status_prazo = "Vence hoje"
+            vencido = False
+        elif dias_restantes <= 5:
+            status_prazo = f"Vence em {dias_restantes} dias (URGENTE)"
+            vencido = False
+        elif dias_restantes <= 10:
+            status_prazo = f"Vence em {dias_restantes} dias (ATENÇÃO)"
+            vencido = False
+        else:
+            status_prazo = f"Vence em {dias_restantes} dias"
+            vencido = False
+        
+        return {
+            "prazo_base_dias": prazo_dias,
+            "prorrogacoes_dias": prorrogacoes_dias,
+            "prazo_total_dias": prazo_total_dias,
+            "data_limite": data_limite.strftime("%Y-%m-%d"),
+            "data_limite_formatada": data_limite.strftime("%d/%m/%Y"),
+            "dias_restantes": dias_restantes,
+            "status_prazo": status_prazo,
+            "vencido": vencido
+        }
+        
+    except ValueError:
+        return {
+            "prazo_base_dias": prazo_dias,
+            "prorrogacoes_dias": prorrogacoes_dias,
+            "prazo_total_dias": prazo_total_dias,
+            "data_limite": None,
+            "dias_restantes": None,
+            "status_prazo": "Data de recebimento inválida",
+            "vencido": False
+        }
+
+@eel.expose
+def calcular_prazo_por_processo(processo_id):
+    """Calcula o prazo de um processo específico"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar dados do processo
+        cursor.execute("""
+            SELECT 
+                tipo_detalhe, documento_iniciador, data_recebimento,
+                numero, tipo_geral
+            FROM processos_procedimentos 
+            WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        processo = cursor.fetchone()
+        conn.close()
+        
+        if not processo:
+            return {"sucesso": False, "mensagem": "Processo não encontrado"}
+        
+        tipo_detalhe, documento_iniciador, data_recebimento, numero, tipo_geral = processo
+        
+        # Buscar prorrogações existentes na tabela de prazos
+        prorrogacoes_dias = 0
+        try:
+            prazos_existentes = prazos_manager.listar_prazos_processo(processo_id)
+            for prazo in prazos_existentes:
+                if prazo.get('prorrogacoes_dias'):
+                    prorrogacoes_dias += prazo['prorrogacoes_dias']
+        except:
+            pass  # Se ainda não há prazos cadastrados, continua sem prorrogações
+        
+        # Calcular prazo
+        calculo_prazo = calcular_prazo_processo(
+            tipo_detalhe=tipo_detalhe,
+            documento_iniciador=documento_iniciador,
+            data_recebimento=data_recebimento,
+            prorrogacoes_dias=prorrogacoes_dias
+        )
+        
+        return {
+            "sucesso": True,
+            "processo": {
+                "numero": numero,
+                "tipo_geral": tipo_geral,
+                "tipo_detalhe": tipo_detalhe,
+                "documento_iniciador": documento_iniciador,
+                "data_recebimento": data_recebimento
+            },
+            "prazo": calculo_prazo
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao calcular prazo: {str(e)}"}
+
+@eel.expose
+def listar_processos_com_prazos():
+    """Lista todos os processos com cálculo de prazo automatico"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, 
+                p.data_recebimento, p.created_at,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
+                    o_backup.nome,
+                    e_backup.nome,
+                    'Desconhecido'
+                ) as responsavel_nome,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao END,
+                    o_backup.posto_graduacao,
+                    e_backup.posto_graduacao,
+                    ''
+                ) as responsavel_posto,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.matricula END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.matricula END,
+                    o_backup.matricula,
+                    e_backup.matricula,
+                    ''
+                ) as responsavel_matricula,
+                p.local_origem, p.processo_sei, p.nome_pm_id, p.status_pm,
+                COALESCE(pm_env_e.nome, pm_env_o.nome, 'Não informado') as pm_envolvido_nome,
+                COALESCE(pm_env_e.posto_graduacao, pm_env_o.posto_graduacao, '') as pm_envolvido_posto,
+                COALESCE(pm_env_e.matricula, pm_env_o.matricula, '') as pm_envolvido_matricula
+            FROM processos_procedimentos p
+            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
+            LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
+            WHERE p.ativo = 1
+            ORDER BY p.created_at DESC
+        """)
+        
+        processos = cursor.fetchall()
+        conn.close()
+        
+        processos_com_prazos = []
+        
+        for processo in processos:
+            (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
+             data_recebimento, created_at, responsavel_nome, responsavel_posto, responsavel_matricula,
+             local_origem, processo_sei, nome_pm_id, status_pm, 
+             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula) = processo
+            
+            # Formatar responsável completo: "posto/grad + matrícula + nome"
+            responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
+            if responsavel_completo == "Desconhecido":
+                responsavel_completo = "Desconhecido"
+            
+            # Formatar PM envolvido completo: "posto/grad + matrícula + nome"
+            if pm_envolvido_nome != "Não informado":
+                pm_envolvido_completo = f"{pm_envolvido_posto} {pm_envolvido_matricula} {pm_envolvido_nome}".strip()
+            else:
+                pm_envolvido_completo = "Não informado"
+            
+            # Calcular prazo para cada processo
+            calculo_prazo = calcular_prazo_processo(
+                tipo_detalhe=tipo_detalhe,
+                documento_iniciador=documento_iniciador,
+                data_recebimento=data_recebimento,
+                prorrogacoes_dias=0  # Por enquanto sem prorrogações, será implementado depois
+            )
+            
+            # Formatar numero do processo
+            def formatar_numero_processo():
+                data_instauracao = ""
+                ano_instauracao = ""
+                
+                if data_recebimento:
+                    try:
+                        ano_instauracao = str(datetime.strptime(data_recebimento, "%Y-%m-%d").year)
+                    except:
+                        ano_instauracao = ""
+                
+                if numero:
+                    return f"{tipo_detalhe} nº {numero}/{local_origem or ''}/{ano_instauracao}"
+                return numero or "S/N"
+            
+            processo_formatado = {
+                "id": processo_id,
+                "numero": numero,
+                "numero_formatado": formatar_numero_processo(),
+                "tipo_geral": tipo_geral,
+                "tipo_detalhe": tipo_detalhe,
+                "documento_iniciador": documento_iniciador,
+                "data_recebimento": data_recebimento,
+                "data_recebimento_formatada": datetime.strptime(data_recebimento, "%Y-%m-%d").strftime("%d/%m/%Y") if data_recebimento else None,
+                "responsavel": responsavel_completo,
+                "responsavel_posto": responsavel_posto,
+                "responsavel_matricula": responsavel_matricula,
+                "responsavel_nome": responsavel_nome,
+                "local_origem": local_origem,
+                "processo_sei": processo_sei,
+                "nome_pm_id": nome_pm_id,
+                "pm_envolvido_nome": pm_envolvido_completo,
+                "pm_envolvido_posto": pm_envolvido_posto,
+                "pm_envolvido_matricula": pm_envolvido_matricula,
+                "status_pm": status_pm,
+                "data_criacao": created_at,
+                "prazo": calculo_prazo
+            }
+            
+            processos_com_prazos.append(processo_formatado)
+        
+        return {"sucesso": True, "processos": processos_com_prazos}
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"sucesso": False, "mensagem": f"Erro ao listar processos com prazos: {str(e)}"}
+
+@eel.expose
+def obter_dashboard_prazos_simples():
+    """Obtém estatísticas simples de prazos para dashboard"""
+    try:
+        # Buscar todos os processos ativos
+        resultado = listar_processos_com_prazos()
+        
+        if not resultado["sucesso"]:
+            return resultado
+        
+        processos = resultado["processos"]
+        
+        # Calcular estatísticas
+        total_processos = len(processos)
+        vencidos = 0
+        vencendo_5_dias = 0
+        vencendo_10_dias = 0
+        em_dia = 0
+        sem_data_recebimento = 0
+        
+        for processo in processos:
+            prazo = processo["prazo"]
+            
+            if not processo["data_recebimento"]:
+                sem_data_recebimento += 1
+            elif prazo["vencido"]:
+                vencidos += 1
+            elif prazo["dias_restantes"] is not None:
+                if prazo["dias_restantes"] <= 5:
+                    vencendo_5_dias += 1
+                elif prazo["dias_restantes"] <= 10:
+                    vencendo_10_dias += 1
+                else:
+                    em_dia += 1
+        
+        return {
+            "sucesso": True,
+            "dashboard": {
+                "total_processos": total_processos,
+                "vencidos": vencidos,
+                "vencendo_5_dias": vencendo_5_dias,
+                "vencendo_10_dias": vencendo_10_dias,
+                "em_dia": em_dia,
+                "sem_data_recebimento": sem_data_recebimento
+            }
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter dashboard: {str(e)}"}
+
+@eel.expose
+def obter_tipos_prazo():
+    """Retorna lista de tipos de prazo disponíveis"""
+    tipos = [
+        "Conclusão de IPM",
+        "Relatório Final",
+        "Manifestação da Defesa",
+        "Decisão da Autoridade",
+        "Cumprimento de Diligência",
+        "Prazo Processual",
+        "Audiência",
+        "Perícia",
+        "Outros"
+    ]
+    return {"sucesso": True, "tipos": tipos}
+
+@eel.expose
+def obter_tipos_andamento():
+    """Retorna lista de tipos de andamento disponíveis"""
+    tipos = [
+        "Instauração",
+        "Distribuição",
+        "Citação",
+        "Interrogatório",
+        "Oitiva de Testemunha",
+        "Juntada de Documento",
+        "Diligência",
+        "Perícia",
+        "Manifestação da Defesa",
+        "Relatório",
+        "Decisão",
+        "Recurso",
+        "Cumprimento",
+        "Arquivamento",
+        "Outros"
+    ]
+    return {"sucesso": True, "tipos": tipos}
+
+@eel.expose
+def obter_status_processo():
+    """Retorna lista de status disponíveis para processos"""
+    status = [
+        "Em Andamento",
+        "Aguardando Diligência",
+        "Aguardando Manifestação",
+        "Aguardando Decisão",
+        "Suspenso",
+        "Concluso",
+        "Arquivado",
+        "Remetido"
+    ]
+    return {"sucesso": True, "status": status}
 
 def main():
     """Função principal"""
