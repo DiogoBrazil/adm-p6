@@ -1,3 +1,4 @@
+# Dependências principais
 bottle==0.13.4
 bottle-websocket==0.2.9
 Eel==0.18.2
@@ -10,3 +11,11 @@ pyparsing==3.2.3
 typing_extensions==4.14.1
 zope.event==5.1.1
 zope.interface==7.2
+
+# Novas dependências para melhorias de segurança
+bcrypt==4.0.1
+schedule==1.2.0
+
+# Dependências para desenvolvimento e testes
+pytest==7.4.3
+pytest-cov==4.1.0
