@@ -1,2 +1,3 @@
 .venv
 web/static/js/user_form.js.backup
+*.pyc
