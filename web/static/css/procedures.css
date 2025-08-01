@@ -20,6 +20,78 @@
     vertical-align: middle;
 }
 
+/* ============================================ */
+/* ESTILOS PARA STATUS DE PRAZO */
+/* ============================================ */
+
+.status-prazo {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 120px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Status: Vencido */
+.status-prazo.vencido {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+    animation: pulse-red 2s infinite;
+}
+
+/* Status: Urgente (≤ 5 dias) */
+.status-prazo.urgente {
+    background: linear-gradient(135deg, #fd7e14, #e8590c);
+    color: white;
+    animation: pulse-orange 2s infinite;
+}
+
+/* Status: Atenção (≤ 10 dias) */
+.status-prazo.atencao {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+    color: #212529;
+    font-weight: 700;
+}
+
+/* Status: Em dia (> 10 dias) */
+.status-prazo.em-dia {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    color: white;
+}
+
+/* Status: Sem data */
+.status-prazo.sem-data {
+    background: linear-gradient(135deg, #6c757d, #545b62);
+    color: white;
+}
+
+/* Status: Concluído */
+.status-prazo.concluido {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+    color: white;
+}
+
+/* Animações para chamar atenção */
+@keyframes pulse-red {
+    0% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 10px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+@keyframes pulse-orange {
+    0% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 0 rgba(253, 126, 20, 0.7); }
+    70% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 8px rgba(253, 126, 20, 0); }
+    100% { box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 0 0 0 rgba(253, 126, 20, 0); }
+}
+
+/* Tooltip para informações detalhadas do prazo */
+.status-prazo[title] {
+    cursor: help;
+}
+
 /* Estilo para tipos de procedimento */
 .procedure-type {
     display: flex;

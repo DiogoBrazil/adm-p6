@@ -101,58 +101,120 @@ function closeAlert(alertId) {
     }
 }
 
-// Função para carregar todos os procedimentos
+// Função para carregar todos os procedimentos com cálculo de prazos
 async function carregarProcedimentos() {
-    console.log("📝 Iniciando carregamento de procedimentos...");
+    console.log("📝 Iniciando carregamento de procedimentos com prazos...");
     try {
-        const procedimentos = await eel.listar_processos()();
-        console.log("✅ Resposta do servidor (procedimentos):", procedimentos);
-        todosOsProcedimentos = procedimentos || [];
-        procedimentosFiltrados = [...todosOsProcedimentos];
-        console.log("📊 Total de procedimentos carregados:", todosOsProcedimentos.length);
+        // Usar a nova função que calcula prazos automaticamente
+        const resultado = await eel.listar_processos_com_prazos()();
+        console.log("✅ Resposta do servidor (procedimentos com prazos):", resultado);
         
-        // Verificar imediatamente se temos procedimentos
-        if (todosOsProcedimentos.length === 0) {
-            console.log("⚠️ Nenhum procedimento encontrado, mostrando mensagem");
-            // Exibir mensagem diretamente
-            const emptyState = document.getElementById('emptyState');
-            const tableResponsive = document.querySelector('.table-responsive');
+        if (resultado.sucesso) {
+            todosOsProcedimentos = resultado.processos || [];
+            procedimentosFiltrados = [...todosOsProcedimentos];
+            console.log("📊 Total de procedimentos carregados:", todosOsProcedimentos.length);
             
-            if (tableResponsive) tableResponsive.style.display = 'none';
-            if (emptyState) {
-                emptyState.style.display = 'block';
-                emptyState.innerHTML = `
-                    <i class="fas fa-folder-open"></i>
-                    <h3>Nenhum procedimento encontrado</h3>
-                    <p>Não há processos ou procedimentos cadastrados no sistema.</p>
-                `;
+            // Verificar imediatamente se temos procedimentos
+            if (todosOsProcedimentos.length === 0) {
+                console.log("⚠️ Nenhum procedimento encontrado, mostrando mensagem");
+                // Exibir mensagem diretamente
+                const emptyState = document.getElementById('emptyState');
+                const tableResponsive = document.querySelector('.table-responsive');
+                
+                if (tableResponsive) tableResponsive.style.display = 'none';
+                if (emptyState) {
+                    emptyState.style.display = 'block';
+                    emptyState.innerHTML = `
+                        <i class="fas fa-folder-open"></i>
+                        <h3>Nenhum procedimento encontrado</h3>
+                        <p>Não há processos ou procedimentos cadastrados no sistema.</p>
+                    `;
+                }
+            } else {
+                console.log("✅ Dados carregados, chamando exibirProcedimentos()");
+                // Apenas chamar exibirProcedimentos se houver dados
+                exibirProcedimentos();
             }
         } else {
-            console.log("✅ Dados carregados, chamando exibirProcedimentos()");
-            // Apenas chamar exibirProcedimentos se houver dados
-            exibirProcedimentos();
+            console.error('❌ Erro retornado pelo servidor:', resultado.mensagem);
+            showAlert(resultado.mensagem || 'Erro ao carregar procedimentos!', 'error');
+            mostrarMensagemErro('Erro ao carregar registros', resultado.mensagem);
         }
     } catch (error) {
         console.error('❌ Erro ao carregar procedimentos:', error);
         showAlert('Erro ao carregar lista de procedimentos!', 'error');
-        
-        // Em caso de erro, também mostrar a mensagem de nenhum registro
-        const emptyState = document.getElementById('emptyState');
-        const tableResponsive = document.querySelector('.table-responsive');
-        
-        if (tableResponsive) tableResponsive.style.display = 'none';
-        if (emptyState) {
-            emptyState.style.display = 'block';
-            emptyState.innerHTML = `
-                <i class="fas fa-exclamation-circle"></i>
-                <h3>Erro ao carregar registros</h3>
-                <p>Ocorreu um erro ao tentar carregar os procedimentos.</p>
-            `;
-        }
+        mostrarMensagemErro('Erro ao carregar registros', 'Ocorreu um erro ao tentar carregar os procedimentos.');
+    }
+}
+
+// Função auxiliar para mostrar mensagem de erro
+function mostrarMensagemErro(titulo, mensagem) {
+    const emptyState = document.getElementById('emptyState');
+    const tableResponsive = document.querySelector('.table-responsive');
+    
+    if (tableResponsive) tableResponsive.style.display = 'none';
+    if (emptyState) {
+        emptyState.style.display = 'block';
+        emptyState.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i>
+            <h3>${titulo}</h3>
+            <p>${mensagem}</p>
+        `;
     }
 }
 
 // Funções auxiliares para formatação
+
+// Função para gerar o HTML do status de prazo com cores
+function gerarStatusPrazoHTML(procedimento) {
+    const prazo = procedimento.prazo;
+    
+    if (!prazo) {
+        return '<span class="status-prazo sem-data" title="Sem informações de prazo">Sem dados</span>';
+    }
+    
+    let classe = 'sem-data';
+    let icone = '';
+    let texto = prazo.status_prazo || 'Sem dados';
+    let tooltip = '';
+    
+    // Determinar classe CSS e ícone baseado no status
+    if (!procedimento.data_recebimento) {
+        classe = 'sem-data';
+        icone = '<i class="fas fa-question-circle"></i> ';
+        texto = 'Sem data recebimento';
+        tooltip = 'Processo sem data de recebimento informada';
+    } else if (prazo.vencido) {
+        classe = 'vencido';
+        icone = '<i class="fas fa-exclamation-triangle"></i> ';
+        tooltip = `Vencido há ${Math.abs(prazo.dias_restantes)} dias. Data limite: ${prazo.data_limite_formatada}`;
+    } else if (prazo.dias_restantes !== null) {
+        if (prazo.dias_restantes <= 5) {
+            classe = 'urgente';
+            icone = '<i class="fas fa-clock"></i> ';
+            tooltip = `URGENTE: Vence em ${prazo.dias_restantes} dias. Data limite: ${prazo.data_limite_formatada}`;
+        } else if (prazo.dias_restantes <= 10) {
+            classe = 'atencao';
+            icone = '<i class="fas fa-bell"></i> ';
+            tooltip = `ATENÇÃO: Vence em ${prazo.dias_restantes} dias. Data limite: ${prazo.data_limite_formatada}`;
+        } else {
+            classe = 'em-dia';
+            icone = '<i class="fas fa-check-circle"></i> ';
+            tooltip = `Em dia: Vence em ${prazo.dias_restantes} dias. Data limite: ${prazo.data_limite_formatada}`;
+        }
+    }
+    
+    // Adicionar informações do prazo no tooltip
+    if (prazo.prazo_base_dias) {
+        tooltip += `\n\nPrazo base: ${prazo.prazo_base_dias} dias`;
+        if (prazo.prorrogacoes_dias > 0) {
+            tooltip += `\nProrrogações: +${prazo.prorrogacoes_dias} dias`;
+            tooltip += `\nPrazo total: ${prazo.prazo_total_dias} dias`;
+        }
+    }
+    
+    return `<span class="status-prazo ${classe}" title="${tooltip}">${icone}${texto}</span>`;
+}
 function extrairAno(procedimento) {
     // Priorizar o ano da data_instauracao
     if (procedimento.data_instauracao) {
@@ -251,14 +313,17 @@ function exibirProcedimentos() {
             // Obter o número do campo "numero"
             const numero = obterNumeroDocumento(procedimento);
             
-            // Formatar nome do encarregado (posto/graduação + matrícula + nome)
-            const encarregado = procedimento.responsavel_completo || 'Não informado';
+            // Backend já retorna formatado: "posto/grad + matrícula + nome"
+            const encarregadoCompleto = procedimento.responsavel || 'Não informado';
             
-            // Formatar nome do PM envolvido (posto/graduação + matrícula + nome)
-            const pmEnvolvido = procedimento.nome_pm_completo || 'Não informado';
+            // Backend já retorna formatado: "posto/grad + matrícula + nome"
+            const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
             
-            // Obter tipo de envolvimento sem cores
+            // Obter tipo de envolvimento
             const tipoEnvolvimento = procedimento.status_pm || 'Não informado';
+            
+            // Gerar HTML do status do prazo com cores
+            const statusPrazoHTML = gerarStatusPrazoHTML(procedimento);
             
             return `
                 <tr>
@@ -273,9 +338,10 @@ function exibirProcedimentos() {
                     <td>
                         ${procedimento.processo_sei ? procedimento.processo_sei : '<em style="color:#999;">Não informado</em>'}
                     </td>
-                    <td>${encarregado}</td>
+                    <td>${encarregadoCompleto}</td>
                     <td>${pmEnvolvido}</td>
                     <td>${tipoEnvolvimento}</td>
+                    <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
                         <div class="action-buttons-inline">
                             <button onclick="editarProcedimento('${procedimento.id}')" class="btn-edit" title="Editar">
@@ -345,8 +411,8 @@ function buscarProcedimentos() {
             // Extrair dados formatados para busca
             const ano = extrairAno(procedimento);
             const numero = obterNumeroDocumento(procedimento);
-            const encarregado = procedimento.responsavel_completo || 'Não informado';
-            const pmEnvolvido = procedimento.nome_pm_completo || 'Não informado';
+            const encarregadoCompleto = procedimento.responsavel || 'Não informado';
+            const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
             
             return (
                 // Busca por ano
@@ -367,14 +433,14 @@ function buscarProcedimentos() {
                 (procedimento.tipo_detalhe || '').toLowerCase().includes(termoBusca) ||
                 // Busca por local de origem
                 (procedimento.local_origem || '').toLowerCase().includes(termoBusca) ||
-                // Busca por encarregado completo (posto/graduação + matrícula + nome)
-                encarregado.toLowerCase().includes(termoBusca) ||
+                // Busca por encarregado completo
+                encarregadoCompleto.toLowerCase().includes(termoBusca) ||
                 // Busca por responsável (fallback)
                 (procedimento.responsavel || '').toLowerCase().includes(termoBusca) ||
-                // Busca por PM envolvido completo (posto/graduação + matrícula + nome)
+                // Busca por PM envolvido
                 pmEnvolvido.toLowerCase().includes(termoBusca) ||
                 // Busca por nome do PM (fallback)
-                (procedimento.nome_pm || '').toLowerCase().includes(termoBusca) ||
+                (procedimento.pm_envolvido_nome || '').toLowerCase().includes(termoBusca) ||
                 // Busca por tipo de envolvimento
                 (procedimento.status_pm || '').toLowerCase().includes(termoBusca) ||
                 // Busca por número do processo SEI
