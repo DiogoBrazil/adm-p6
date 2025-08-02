@@ -691,3 +691,116 @@
         font-size: 0.9rem;
     }
 }
+
+/* ============================================ */
+/* ESTILOS PARA AUTOCOMPLETE NOS FILTROS */
+/* ============================================ */
+
+.autocomplete-container {
+    position: relative;
+    width: 100%;
+}
+
+.filter-input-modal {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    background-color: #fff;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.filter-input-modal:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.autocomplete-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f5f5f5;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.highlighted {
+    background-color: #f8f9fa;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item.selected {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    font-weight: 500;
+}
+
+.no-results {
+    padding: 10px 12px;
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+}
+
+/* Indicador de campo preenchido */
+.filter-input-modal.has-value {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+/* Responsividade para dropdowns */
+@media (max-width: 768px) {
+    .autocomplete-dropdown {
+        max-height: 150px;
+    }
+    
+    .autocomplete-item {
+        padding: 8px 10px;
+        font-size: 0.85rem;
+    }
+}
+
+/* ============================================ */
+/* ESTILOS PARA DATALIST (INPUT PESQUISÁVEL) */
+/* ============================================ */
+
+/* Melhorar aparência dos inputs com datalist */
+input[list] {
+    padding-right: 20px;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 8px center;
+    background-repeat: no-repeat;
+    background-size: 16px;
+}
+
+/* Placeholder style para inputs com datalist */
+input[list]::placeholder {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+/* Focus state para inputs com datalist */
+input[list]:focus {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23007bff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}

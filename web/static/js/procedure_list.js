@@ -12,6 +12,11 @@ let totalProcedures = 0;
 // Variável para debounce da busca
 let searchTimeout = null;
 
+// Variáveis para autocomplete
+let opcoesEncarregados = [];
+let opcoesPmEnvolvidos = [];
+let opcoesVitimas = [];
+
 // Função para carregar dados do usuário logado
 async function carregarUsuarioLogado() {
     try {
@@ -512,15 +517,20 @@ async function carregarOpcoesDosFiltros() {
         if (resultado.sucesso) {
             const opcoes = resultado.opcoes;
             
-            // Povoar os selects com todas as opções do banco
+            // Armazenar opções para datalist
+            opcoesEncarregados = opcoes.encarregados || [];
+            opcoesPmEnvolvidos = opcoes.pm_envolvidos || [];
+            opcoesVitimas = opcoes.vitimas || [];
+            
+            // Povoar os selects normais
             povoarSelect('filtroTipo', opcoes.tipos);
             povoarSelect('filtroAno', opcoes.anos);
             povoarSelect('filtroOrigem', opcoes.origens);
-            povoarSelect('filtroEncarregado', opcoes.encarregados);
             povoarSelect('filtroStatus', opcoes.status);
-            povoarSelect('filtroPmEnvolvido', opcoes.pm_envolvidos);
-            povoarSelect('filtroVitima', opcoes.vitimas);
             povoarSelect('filtroDocumento', opcoes.documentos);
+            
+            // Configurar datalist para os campos especiais
+            configurarDatalist();
             
             console.log("✅ Opções dos filtros carregadas:", opcoes);
         } else {
@@ -550,8 +560,13 @@ function carregarOpcoesDosFiltrosLegacy() {
     povoarSelect('filtroTipo', tipos);
     povoarSelect('filtroAno', anos);
     povoarSelect('filtroOrigem', origens);
-    povoarSelect('filtroEncarregado', encarregados);
     povoarSelect('filtroStatus', status);
+    
+    // Povoar datalists para campos especiais no fallback
+    if (encarregados.length > 0) {
+        opcoesEncarregados = encarregados;
+        povoarDatalist('listaEncarregados', opcoesEncarregados);
+    }
 }
 
 // Função auxiliar para povoar um select com opções
@@ -582,10 +597,10 @@ async function aplicarFiltros() {
         tipo: document.getElementById('filtroTipo').value,
         ano: document.getElementById('filtroAno').value,
         origem: document.getElementById('filtroOrigem').value,
-        encarregado: document.getElementById('filtroEncarregado').value,
+        encarregado: getDatalistValue('filtroEncarregado'),
         status: document.getElementById('filtroStatus').value,
-        pm_envolvido: document.getElementById('filtroPmEnvolvido').value,
-        vitima: document.getElementById('filtroVitima').value,
+        pm_envolvido: getDatalistValue('filtroPmEnvolvido'),
+        vitima: getDatalistValue('filtroVitima'),
         documento: document.getElementById('filtroDocumento').value
     };
     
@@ -634,11 +649,13 @@ async function limparFiltros() {
     document.getElementById('filtroTipo').value = '';
     document.getElementById('filtroAno').value = '';
     document.getElementById('filtroOrigem').value = '';
-    document.getElementById('filtroEncarregado').value = '';
     document.getElementById('filtroStatus').value = '';
-    document.getElementById('filtroPmEnvolvido').value = '';
-    document.getElementById('filtroVitima').value = '';
     document.getElementById('filtroDocumento').value = '';
+    
+    // Limpar campos de datalist
+    limparCampoDatalist('filtroEncarregado');
+    limparCampoDatalist('filtroPmEnvolvido');
+    limparCampoDatalist('filtroVitima');
     
     // Resetar filtros (sem tocar no campo de busca)
     filtrosAtivos = {};
@@ -712,6 +729,51 @@ function limparBusca() {
         clearButton.style.display = 'none';
         carregarProcedimentos(); // Recarregar sem filtro de busca
     }
+}
+
+// Função para configurar datalist
+function configurarDatalist() {
+    povoarDatalist('listaEncarregados', opcoesEncarregados);
+    povoarDatalist('listaPmEnvolvidos', opcoesPmEnvolvidos);
+    povoarDatalist('listaVitimas', opcoesVitimas);
+}
+
+// Função para povoar um datalist com opções
+function povoarDatalist(datalistId, opcoes) {
+    const datalist = document.getElementById(datalistId);
+    if (!datalist) return;
+    
+    // Limpar opções existentes (exceto a primeira "Todos")
+    const primeiraOpcao = datalist.querySelector('option[value=""]');
+    datalist.innerHTML = '';
+    if (primeiraOpcao) {
+        datalist.appendChild(primeiraOpcao);
+    } else {
+        const opcaoTodos = document.createElement('option');
+        opcaoTodos.value = '';
+        opcaoTodos.textContent = 'Todos';
+        datalist.appendChild(opcaoTodos);
+    }
+    
+    // Adicionar as opções
+    opcoes.forEach(opcao => {
+        const option = document.createElement('option');
+        option.value = opcao;
+        option.textContent = opcao;
+        datalist.appendChild(option);
+    });
+}
+
+// Função para limpar um campo com datalist
+function limparCampoDatalist(campoId) {
+    const input = document.getElementById(campoId);
+    if (input) input.value = '';
+}
+
+// Função helper para obter valor de campo com datalist (igual aos inputs normais)
+function getDatalistValue(campoId) {
+    const input = document.getElementById(campoId);
+    return input ? input.value : '';
 }
 
 // Função para editar procedimento
