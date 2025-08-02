@@ -518,6 +518,8 @@ async function carregarOpcoesDosFiltros() {
             povoarSelect('filtroOrigem', opcoes.origens);
             povoarSelect('filtroEncarregado', opcoes.encarregados);
             povoarSelect('filtroStatus', opcoes.status);
+            povoarSelect('filtroPmEnvolvido', opcoes.pm_envolvidos);
+            povoarSelect('filtroVitima', opcoes.vitimas);
             povoarSelect('filtroDocumento', opcoes.documentos);
             
             console.log("✅ Opções dos filtros carregadas:", opcoes);
@@ -582,6 +584,8 @@ async function aplicarFiltros() {
         origem: document.getElementById('filtroOrigem').value,
         encarregado: document.getElementById('filtroEncarregado').value,
         status: document.getElementById('filtroStatus').value,
+        pm_envolvido: document.getElementById('filtroPmEnvolvido').value,
+        vitima: document.getElementById('filtroVitima').value,
         documento: document.getElementById('filtroDocumento').value
     };
     
@@ -597,6 +601,8 @@ async function aplicarFiltros() {
                 'origem': 'Origem',
                 'encarregado': 'Responsável',
                 'status': 'Status PM',
+                'pm_envolvido': 'PM Envolvido',
+                'vitima': 'Vítima/Ofendido',
                 'documento': 'Documento'
             };
             filtrosAplicados.push(`${nomeAmigavel[key]}: ${filtrosAtivos[key]}`);
@@ -630,6 +636,8 @@ async function limparFiltros() {
     document.getElementById('filtroOrigem').value = '';
     document.getElementById('filtroEncarregado').value = '';
     document.getElementById('filtroStatus').value = '';
+    document.getElementById('filtroPmEnvolvido').value = '';
+    document.getElementById('filtroVitima').value = '';
     document.getElementById('filtroDocumento').value = '';
     
     // Resetar filtros (sem tocar no campo de busca)

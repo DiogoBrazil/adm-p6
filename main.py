@@ -1339,6 +1339,20 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     END = ?
                 )"""
                 search_params.append(filtros['ano'])
+            
+            if filtros.get('pm_envolvido'):
+                where_clause += """ AND (
+                    TRIM(COALESCE(
+                        (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM operadores WHERE id = p.nome_pm_id),
+                        (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM encarregados WHERE id = p.nome_pm_id),
+                        ''
+                    )) = ?
+                )"""
+                search_params.append(filtros['pm_envolvido'])
+            
+            if filtros.get('vitima'):
+                where_clause += " AND p.nome_vitima = ?"
+                search_params.append(filtros['vitima'])
         
         # Contar total de registros
         count_query = f"""
@@ -1620,6 +1634,7 @@ def obter_opcoes_filtros():
                 p.local_origem,
                 p.documento_iniciador,
                 p.status_pm,
+                p.nome_vitima,
                 COALESCE(
                     CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
                     CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
@@ -1641,6 +1656,11 @@ def obter_opcoes_filtros():
                     e_backup.matricula,
                     ''
                 ) as responsavel_matricula,
+                COALESCE(
+                    (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM operadores WHERE id = p.nome_pm_id),
+                    (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM encarregados WHERE id = p.nome_pm_id),
+                    ''
+                ) as pm_envolvido_completo,
                 strftime('%Y', p.data_instauracao) as ano_instauracao,
                 strftime('%Y', p.data_recebimento) as ano_recebimento
             FROM processos_procedimentos p
@@ -1660,11 +1680,13 @@ def obter_opcoes_filtros():
         documentos = set()
         status = set()
         encarregados = set()
+        pm_envolvidos = set()
+        vitimas = set()
         anos = set()
         
         for row in resultados:
-            (tipo_detalhe, local_origem, documento_iniciador, status_pm, 
-             responsavel_nome, responsavel_posto, responsavel_matricula,
+            (tipo_detalhe, local_origem, documento_iniciador, status_pm, nome_vitima,
+             responsavel_nome, responsavel_posto, responsavel_matricula, pm_envolvido_completo,
              ano_instauracao, ano_recebimento) = row
             
             if tipo_detalhe:
@@ -1675,6 +1697,10 @@ def obter_opcoes_filtros():
                 documentos.add(documento_iniciador)
             if status_pm:
                 status.add(status_pm)
+            if nome_vitima:
+                vitimas.add(nome_vitima)
+            if pm_envolvido_completo and pm_envolvido_completo.strip():
+                pm_envolvidos.add(pm_envolvido_completo.strip())
             
             # Formatar responsável completo
             if responsavel_nome and responsavel_nome != 'Desconhecido':
@@ -1695,6 +1721,8 @@ def obter_opcoes_filtros():
                 "documentos": sorted(list(documentos)),
                 "status": sorted(list(status)),
                 "encarregados": sorted(list(encarregados)),
+                "pm_envolvidos": sorted(list(pm_envolvidos)),
+                "vitimas": sorted(list(vitimas)),
                 "anos": sorted(list(anos), reverse=True)  # Anos mais recentes primeiro
             }
         }
