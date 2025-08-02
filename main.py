@@ -1330,11 +1330,15 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 search_params.append(filtros['encarregado'])
             
             if filtros.get('ano'):
+                # Priorizar data_instauracao, depois data_recebimento, depois created_at
                 where_clause += """ AND (
-                    strftime('%Y', p.data_instauracao) = ? OR 
-                    strftime('%Y', p.data_recebimento) = ?
+                    CASE 
+                        WHEN p.data_instauracao IS NOT NULL THEN strftime('%Y', p.data_instauracao)
+                        WHEN p.data_recebimento IS NOT NULL THEN strftime('%Y', p.data_recebimento)
+                        ELSE strftime('%Y', p.created_at)
+                    END = ?
                 )"""
-                search_params.extend([filtros['ano'], filtros['ano']])
+                search_params.append(filtros['ano'])
         
         # Contar total de registros
         count_query = f"""

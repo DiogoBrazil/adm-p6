@@ -612,11 +612,12 @@ async function aplicarFiltros() {
     // Atualizar indicador visual
     atualizarIndicadorFiltros();
     
-    if (filtrosAplicados.length > 0) {
-        showAlert(`Filtros aplicados: ${filtrosAplicados.join(', ')}`, 'success');
-    } else {
-        showAlert('Filtros limpos! Mostrando todos os registros.', 'info');
-    }
+    // Mensagens de filtros removidas conforme solicitado
+    // if (filtrosAplicados.length > 0) {
+    //     showAlert(`Filtros aplicados: ${filtrosAplicados.join(', ')}`, 'success');
+    // } else {
+    //     showAlert('Filtros limpos! Mostrando todos os registros.', 'info');
+    // }
 }
 
 // Função para limpar todos os filtros
@@ -643,7 +644,8 @@ async function limparFiltros() {
     // Atualizar indicador visual
     atualizarIndicadorFiltros();
     
-    showAlert('Todos os filtros foram limpos!', 'success');
+    // Mensagem removida conforme solicitado
+    // showAlert('Todos os filtros foram limpos!', 'success');
 }
 
 // Função para limpar busca e filtros
