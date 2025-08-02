@@ -4,6 +4,14 @@ let todosOsProcedimentos = [];
 let procedimentosFiltrados = [];
 let filtrosAtivos = {};
 
+// Variáveis de paginação
+let currentPage = 1;
+const proceduresPerPage = 6;
+let totalProcedures = 0;
+
+// Variável para debounce da busca
+let searchTimeout = null;
+
 // Função para carregar dados do usuário logado
 async function carregarUsuarioLogado() {
     try {
@@ -105,14 +113,46 @@ function closeAlert(alertId) {
 async function carregarProcedimentos() {
     console.log("📝 Iniciando carregamento de procedimentos com prazos...");
     try {
-        // Usar a nova função que calcula prazos automaticamente
-        const resultado = await eel.listar_processos_com_prazos()();
+        // Obter termo de busca
+        const searchInput = document.getElementById('searchInput');
+        const searchTerm = searchInput ? searchInput.value.trim() : '';
+
+        // Construir objeto de filtros se houver filtros ativos
+        let filtrosObj = null;
+        if (Object.keys(filtrosAtivos).length > 0) {
+            filtrosObj = {};
+            Object.keys(filtrosAtivos).forEach(key => {
+                if (filtrosAtivos[key] && filtrosAtivos[key].trim()) {
+                    filtrosObj[key] = filtrosAtivos[key].trim();
+                }
+            });
+            // Se não há filtros válidos, deixar como null
+            if (Object.keys(filtrosObj).length === 0) {
+                filtrosObj = null;
+            }
+        }
+
+        console.log("🔍 Parâmetros de busca:", {
+            searchTerm,
+            filtros: filtrosObj,
+            page: currentPage,
+            perPage: proceduresPerPage
+        });
+
+        // Usar a nova função com paginação e filtros
+        const resultado = await eel.listar_processos_com_prazos(searchTerm, currentPage, proceduresPerPage, filtrosObj)();
         console.log("✅ Resposta do servidor (procedimentos com prazos):", resultado);
         
         if (resultado.sucesso) {
             todosOsProcedimentos = resultado.processos || [];
             procedimentosFiltrados = [...todosOsProcedimentos];
+            totalProcedures = resultado.total || 0;
+            
             console.log("📊 Total de procedimentos carregados:", todosOsProcedimentos.length);
+            console.log("📊 Total geral no banco:", totalProcedures);
+            
+            // Atualizar controles de paginação
+            updatePaginationControls();
             
             // Verificar imediatamente se temos procedimentos
             if (todosOsProcedimentos.length === 0) {
@@ -142,8 +182,45 @@ async function carregarProcedimentos() {
         }
     } catch (error) {
         console.error('❌ Erro ao carregar procedimentos:', error);
+        console.error('❌ Tipo do erro:', typeof error);
+        console.error('❌ Stack trace:', error.stack);
         showAlert('Erro ao carregar lista de procedimentos!', 'error');
-        mostrarMensagemErro('Erro ao carregar registros', 'Ocorreu um erro ao tentar carregar os procedimentos.');
+        mostrarMensagemErro('Erro ao carregar registros', `Erro: ${error.message || error.toString()}`);
+    }
+}
+
+// Funções de paginação
+function updatePaginationControls() {
+    const totalPages = Math.ceil(totalProcedures / proceduresPerPage);
+    const pageInfoSpan = document.getElementById('pageInfo');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    
+    if (pageInfoSpan) {
+        pageInfoSpan.textContent = `Página ${currentPage} de ${totalPages}`;
+    }
+    
+    if (prevPageBtn) {
+        prevPageBtn.disabled = currentPage === 1;
+    }
+    
+    if (nextPageBtn) {
+        nextPageBtn.disabled = currentPage === totalPages || totalPages === 0;
+    }
+}
+
+function nextPage() {
+    const totalPages = Math.ceil(totalProcedures / proceduresPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        carregarProcedimentos();
+    }
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        carregarProcedimentos();
     }
 }
 
@@ -355,7 +432,12 @@ function exibirProcedimentos() {
                 </tr>
             `;
         }).join('');
+        
+        console.log("✅ Tabela preenchida com", procedimentosFiltrados.length, "procedimentos");
     }
+    
+    // Sempre atualizar os controles de paginação
+    updatePaginationControls();
 }
 
 // Função para buscar procedimentos
@@ -363,94 +445,23 @@ function buscarProcedimentos() {
     const termoBusca = document.getElementById('searchInput').value.toLowerCase().trim();
     const clearButton = document.getElementById('clearButton');
     
-    // Começar com os dados já filtrados pelos filtros avançados
-    let dadosParaBusca = todosOsProcedimentos;
-    
-    // Se há filtros ativos, aplicá-los primeiro
-    if (Object.values(filtrosAtivos).some(valor => valor && valor.trim())) {
-        dadosParaBusca = todosOsProcedimentos.filter(procedimento => {
-            // Filtro por tipo
-            if (filtrosAtivos.tipo && procedimento.tipo_detalhe !== filtrosAtivos.tipo) {
-                return false;
-            }
-            
-            // Filtro por ano
-            if (filtrosAtivos.ano && extrairAno(procedimento) !== filtrosAtivos.ano) {
-                return false;
-            }
-            
-            // Filtro por origem
-            if (filtrosAtivos.origem && procedimento.local_origem !== filtrosAtivos.origem) {
-                return false;
-            }
-            
-            // Filtro por encarregado
-            if (filtrosAtivos.encarregado && procedimento.responsavel !== filtrosAtivos.encarregado) {
-                return false;
-            }
-            
-            // Filtro por status PM
-            if (filtrosAtivos.status && procedimento.status_pm !== filtrosAtivos.status) {
-                return false;
-            }
-            
-            // Filtro por documento iniciador
-            if (filtrosAtivos.documento && procedimento.documento_iniciador !== filtrosAtivos.documento) {
-                return false;
-            }
-            
-            return true;
-        });
+    // Clear do timeout anterior para implementar debounce
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
     }
     
+    // Busca em tempo real com delay de 300ms para otimizar performance
+    searchTimeout = setTimeout(() => {
+        currentPage = 1; // Resetar para a primeira página ao pesquisar
+        carregarProcedimentos(); // Recarregar com o novo termo de busca
+    }, 300);
+    
+    // Controlar visibilidade do botão de limpar
     if (termoBusca === '') {
-        procedimentosFiltrados = dadosParaBusca;
         clearButton.style.display = 'none';
     } else {
-        procedimentosFiltrados = dadosParaBusca.filter(procedimento => {
-            // Extrair dados formatados para busca
-            const ano = extrairAno(procedimento);
-            const numero = obterNumeroDocumento(procedimento);
-            const encarregadoCompleto = procedimento.responsavel || 'Não informado';
-            const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
-            
-            return (
-                // Busca por ano
-                ano.toLowerCase().includes(termoBusca) ||
-                // Busca por número do documento
-                numero.toLowerCase().includes(termoBusca) ||
-                // Busca por número formatado (fallback)
-                (procedimento.numero_formatado || '').toLowerCase().includes(termoBusca) ||
-                // Busca por número original (fallback)
-                (procedimento.numero || '').toLowerCase().includes(termoBusca) ||
-                // Busca por processo SEI
-                (procedimento.processo_sei || '').toLowerCase().includes(termoBusca) ||
-                // Busca por números específicos dos documentos
-                (procedimento.numero_portaria || '').toLowerCase().includes(termoBusca) ||
-                (procedimento.numero_memorando || '').toLowerCase().includes(termoBusca) ||
-                (procedimento.numero_feito || '').toLowerCase().includes(termoBusca) ||
-                // Busca por tipo de detalhe (PADS, IPM, SR, etc.)
-                (procedimento.tipo_detalhe || '').toLowerCase().includes(termoBusca) ||
-                // Busca por local de origem
-                (procedimento.local_origem || '').toLowerCase().includes(termoBusca) ||
-                // Busca por encarregado completo
-                encarregadoCompleto.toLowerCase().includes(termoBusca) ||
-                // Busca por responsável (fallback)
-                (procedimento.responsavel || '').toLowerCase().includes(termoBusca) ||
-                // Busca por PM envolvido
-                pmEnvolvido.toLowerCase().includes(termoBusca) ||
-                // Busca por nome do PM (fallback)
-                (procedimento.pm_envolvido_nome || '').toLowerCase().includes(termoBusca) ||
-                // Busca por tipo de envolvimento
-                (procedimento.status_pm || '').toLowerCase().includes(termoBusca) ||
-                // Busca por número do processo SEI
-                (procedimento.processo_sei || '').toLowerCase().includes(termoBusca)
-            );
-        });
         clearButton.style.display = 'inline-block';
     }
-    
-    exibirProcedimentos();
 }
 
 // === SISTEMA DE FILTROS COM MODAL ===
@@ -481,19 +492,49 @@ function fecharModalFiltros() {
 }
 
 // Função para aplicar filtros do modal
-function aplicarFiltrosModal() {
-    aplicarFiltros();
+async function aplicarFiltrosModal() {
+    await aplicarFiltros();
     fecharModalFiltros();
 }
 
 // Função para limpar filtros do modal
-function limparFiltrosModal() {
-    limparFiltros();
+async function limparFiltrosModal() {
+    await limparFiltros();
     fecharModalFiltros();
 }
 
-// Função para carregar as opções dos filtros baseado nos dados
-function carregarOpcoesDosFiltros() {
+// Função para carregar as opções dos filtros baseado no banco de dados completo
+async function carregarOpcoesDosFiltros() {
+    try {
+        console.log("🔄 Carregando opções dos filtros do banco de dados...");
+        const resultado = await eel.obter_opcoes_filtros()();
+        
+        if (resultado.sucesso) {
+            const opcoes = resultado.opcoes;
+            
+            // Povoar os selects com todas as opções do banco
+            povoarSelect('filtroTipo', opcoes.tipos);
+            povoarSelect('filtroAno', opcoes.anos);
+            povoarSelect('filtroOrigem', opcoes.origens);
+            povoarSelect('filtroEncarregado', opcoes.encarregados);
+            povoarSelect('filtroStatus', opcoes.status);
+            povoarSelect('filtroDocumento', opcoes.documentos);
+            
+            console.log("✅ Opções dos filtros carregadas:", opcoes);
+        } else {
+            console.error("❌ Erro ao carregar opções dos filtros:", resultado.mensagem);
+            // Fallback para o método antigo se houver erro
+            carregarOpcoesDosFiltrosLegacy();
+        }
+    } catch (error) {
+        console.error("❌ Erro ao carregar opções dos filtros:", error);
+        // Fallback para o método antigo se houver erro
+        carregarOpcoesDosFiltrosLegacy();
+    }
+}
+
+// Função legacy (fallback) para carregar opções dos filtros baseado apenas na página atual
+function carregarOpcoesDosFiltrosLegacy() {
     if (todosOsProcedimentos.length === 0) return;
     
     // Coletar valores únicos para cada filtro
@@ -531,7 +572,9 @@ function povoarSelect(selectId, opcoes) {
 }
 
 // Função para aplicar todos os filtros
-function aplicarFiltros() {
+async function aplicarFiltros() {
+    console.log("🔍 Aplicando filtros avançados...");
+    
     // Coletar valores dos filtros
     filtrosAtivos = {
         tipo: document.getElementById('filtroTipo').value,
@@ -542,57 +585,44 @@ function aplicarFiltros() {
         documento: document.getElementById('filtroDocumento').value
     };
     
-    // Aplicar filtros
-    procedimentosFiltrados = todosOsProcedimentos.filter(procedimento => {
-        // Filtro por tipo
-        if (filtrosAtivos.tipo && procedimento.tipo_detalhe !== filtrosAtivos.tipo) {
-            return false;
+    console.log("🏷️ Filtros coletados:", filtrosAtivos);
+    
+    // Contar filtros aplicados para exibir mensagem
+    const filtrosAplicados = [];
+    Object.keys(filtrosAtivos).forEach(key => {
+        if (filtrosAtivos[key] && filtrosAtivos[key].trim()) {
+            const nomeAmigavel = {
+                'tipo': 'Tipo',
+                'ano': 'Ano', 
+                'origem': 'Origem',
+                'encarregado': 'Responsável',
+                'status': 'Status PM',
+                'documento': 'Documento'
+            };
+            filtrosAplicados.push(`${nomeAmigavel[key]}: ${filtrosAtivos[key]}`);
         }
-        
-        // Filtro por ano
-        if (filtrosAtivos.ano && extrairAno(procedimento) !== filtrosAtivos.ano) {
-            return false;
-        }
-        
-        // Filtro por origem
-        if (filtrosAtivos.origem && procedimento.local_origem !== filtrosAtivos.origem) {
-            return false;
-        }
-        
-        // Filtro por encarregado
-        if (filtrosAtivos.encarregado && procedimento.responsavel !== filtrosAtivos.encarregado) {
-            return false;
-        }
-        
-        // Filtro por status PM
-        if (filtrosAtivos.status && procedimento.status_pm !== filtrosAtivos.status) {
-            return false;
-        }
-        
-        // Filtro por documento iniciador
-        if (filtrosAtivos.documento && procedimento.documento_iniciador !== filtrosAtivos.documento) {
-            return false;
-        }
-        
-        return true;
     });
     
-    // Aplicar também a busca de texto se houver
-    const termoBusca = document.getElementById('searchInput').value.trim();
-    if (termoBusca) {
-        buscarProcedimentos();
-    } else {
-        exibirProcedimentos();
-    }
+    // Resetar para primeira página
+    currentPage = 1;
+    
+    // Recarregar com os filtros aplicados (sem modificar o campo de busca)
+    await carregarProcedimentos();
     
     // Atualizar indicador visual
     atualizarIndicadorFiltros();
     
-    showAlert(`Filtros aplicados! ${procedimentosFiltrados.length} registro(s) encontrado(s).`, 'info');
+    if (filtrosAplicados.length > 0) {
+        showAlert(`Filtros aplicados: ${filtrosAplicados.join(', ')}`, 'success');
+    } else {
+        showAlert('Filtros limpos! Mostrando todos os registros.', 'info');
+    }
 }
 
 // Função para limpar todos os filtros
-function limparFiltros() {
+async function limparFiltros() {
+    console.log("🧹 Limpando todos os filtros...");
+    
     // Limpar valores dos selects
     document.getElementById('filtroTipo').value = '';
     document.getElementById('filtroAno').value = '';
@@ -601,21 +631,39 @@ function limparFiltros() {
     document.getElementById('filtroStatus').value = '';
     document.getElementById('filtroDocumento').value = '';
     
-    // Limpar busca de texto também
-    document.getElementById('searchInput').value = '';
-    
-    // Resetar filtros
+    // Resetar filtros (sem tocar no campo de busca)
     filtrosAtivos = {};
-    procedimentosFiltrados = [...todosOsProcedimentos];
     
-    // Atualizar exibição
-    exibirProcedimentos();
+    // Resetar para primeira página
+    currentPage = 1;
+    
+    // Recarregar dados sem filtros (mantendo busca se existir)
+    await carregarProcedimentos();
+    
+    // Atualizar indicador visual
     atualizarIndicadorFiltros();
     
-    // Ocultar botão limpar busca
-    document.getElementById('clearButton').style.display = 'none';
-    
     showAlert('Todos os filtros foram limpos!', 'success');
+}
+
+// Função para limpar busca e filtros
+function limparBusca() {
+    console.log("🧹 Limpando busca...");
+    
+    // Limpar campo de busca
+    document.getElementById('searchInput').value = '';
+    
+    // Resetar para primeira página
+    currentPage = 1;
+    
+    // Recarregar dados (mantendo filtros se existirem)
+    carregarProcedimentos();
+    
+    // Ocultar botão limpar busca
+    const clearButton = document.getElementById('clearButton');
+    if (clearButton) {
+        clearButton.style.display = 'none';
+    }
 }
 
 // Função para atualizar indicador visual de filtros ativos
@@ -645,10 +693,15 @@ function atualizarIndicadorFiltros() {
 
 // Função para limpar busca
 function limparBusca() {
-    document.getElementById('searchInput').value = '';
-    document.getElementById('clearButton').style.display = 'none';
-    procedimentosFiltrados = [...todosOsProcedimentos];
-    exibirProcedimentos();
+    const searchInput = document.getElementById('searchInput');
+    const clearButton = document.getElementById('clearButton');
+    
+    if (searchInput) {
+        searchInput.value = '';
+        currentPage = 1; // Resetar para primeira página
+        clearButton.style.display = 'none';
+        carregarProcedimentos(); // Recarregar sem filtro de busca
+    }
 }
 
 // Função para editar procedimento
@@ -759,6 +812,9 @@ document.addEventListener('DOMContentLoaded', function() {
     carregarUsuarioLogado();
     carregarProcedimentos();
     
+    // Carregar opções dos filtros do banco de dados completo
+    carregarOpcoesDosFiltros();
+    
     // Verificar estado da tabela após pequenos intervalos
     setTimeout(verificarEstadoVazioTabela, 500);
     setTimeout(verificarEstadoVazioTabela, 1000);
@@ -797,4 +853,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    
+    // Event listeners para paginação
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    
+    if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', prevPage);
+    }
+    
+    if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', nextPage);
+    }
+    
+    // Event listener para busca em tempo real com debounce
+    const searchInputElement = document.getElementById('searchInput');
+    if (searchInputElement) {
+        searchInputElement.addEventListener('input', buscarProcedimentos);
+    }
 });

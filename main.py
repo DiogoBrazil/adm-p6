@@ -1277,16 +1277,88 @@ def calcular_prazo_por_processo(processo_id):
         return {"sucesso": False, "mensagem": f"Erro ao calcular prazo: {str(e)}"}
 
 @eel.expose
-def listar_processos_com_prazos():
-    """Lista todos os processos com cálculo de prazo automatico"""
+def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=None):
+    """Lista processos com cálculo de prazo automático, paginação e filtros avançados"""
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute("""
+        # Construir a cláusula WHERE para pesquisa
+        where_clause = "WHERE p.ativo = 1"
+        search_params = []
+        
+        # Adicionar busca por texto se fornecida
+        if search_term:
+            where_clause += """ AND (
+                p.numero LIKE ? OR p.tipo_detalhe LIKE ? OR p.local_origem LIKE ? OR
+                p.processo_sei LIKE ? OR p.numero_portaria LIKE ? OR p.numero_memorando LIKE ? OR
+                p.numero_feito LIKE ? OR 
+                COALESCE(o.nome, e.nome, o_backup.nome, e_backup.nome, '') LIKE ? OR
+                COALESCE(pm_env_e.nome, pm_env_o.nome, '') LIKE ?
+            )"""
+            search_term_like = f"%{search_term}%"
+            search_params = [search_term_like] * 9
+        
+        # Adicionar filtros avançados se fornecidos
+        if filtros:
+            if filtros.get('tipo'):
+                where_clause += " AND p.tipo_detalhe = ?"
+                search_params.append(filtros['tipo'])
+            
+            if filtros.get('origem'):
+                where_clause += " AND p.local_origem = ?"
+                search_params.append(filtros['origem'])
+            
+            if filtros.get('documento'):
+                where_clause += " AND p.documento_iniciador = ?"
+                search_params.append(filtros['documento'])
+            
+            if filtros.get('status'):
+                where_clause += " AND p.status_pm = ?"
+                search_params.append(filtros['status'])
+            
+            if filtros.get('encarregado'):
+                where_clause += """ AND (
+                    TRIM(COALESCE(
+                        CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao || ' ' || o.matricula || ' ' || o.nome END,
+                        CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao || ' ' || e.matricula || ' ' || e.nome END,
+                        o_backup.posto_graduacao || ' ' || o_backup.matricula || ' ' || o_backup.nome,
+                        e_backup.posto_graduacao || ' ' || e_backup.matricula || ' ' || e_backup.nome,
+                        ''
+                    )) = ?
+                )"""
+                search_params.append(filtros['encarregado'])
+            
+            if filtros.get('ano'):
+                where_clause += """ AND (
+                    strftime('%Y', p.data_instauracao) = ? OR 
+                    strftime('%Y', p.data_recebimento) = ?
+                )"""
+                search_params.extend([filtros['ano'], filtros['ano']])
+        
+        # Contar total de registros
+        count_query = f"""
+            SELECT COUNT(*)
+            FROM processos_procedimentos p
+            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
+            LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
+            {where_clause}
+        """
+        cursor.execute(count_query, search_params)
+        total_processos = cursor.fetchone()[0]
+        
+        # Calcular offset para paginação
+        offset = (page - 1) * per_page
+        
+        # Query principal com paginação - ordenado por data_instauracao DESC (mais recente primeiro)
+        main_query = f"""
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, 
-                p.data_recebimento, p.created_at,
+                p.data_recebimento, p.created_at, p.data_instauracao,
                 COALESCE(
                     CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
                     CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
@@ -1319,9 +1391,12 @@ def listar_processos_com_prazos():
             LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
             LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
             LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
-            WHERE p.ativo = 1
-            ORDER BY p.created_at DESC
-        """)
+            {where_clause}
+            ORDER BY 
+                CASE WHEN p.data_instauracao IS NOT NULL THEN p.data_instauracao ELSE p.created_at END DESC
+            LIMIT ? OFFSET ?
+        """
+        cursor.execute(main_query, search_params + [per_page, offset])
         
         processos = cursor.fetchall()
         conn.close()
@@ -1330,7 +1405,7 @@ def listar_processos_com_prazos():
         
         for processo in processos:
             (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
-             data_recebimento, created_at, responsavel_nome, responsavel_posto, responsavel_matricula,
+             data_recebimento, created_at, data_instauracao, responsavel_nome, responsavel_posto, responsavel_matricula,
              local_origem, processo_sei, nome_pm_id, status_pm, 
              pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula) = processo
             
@@ -1355,12 +1430,13 @@ def listar_processos_com_prazos():
             
             # Formatar numero do processo
             def formatar_numero_processo():
-                data_instauracao = ""
                 ano_instauracao = ""
                 
-                if data_recebimento:
+                # Usar data_instauracao primeiro, se não existir usar data_recebimento
+                data_para_ano = data_instauracao or data_recebimento
+                if data_para_ano:
                     try:
-                        ano_instauracao = str(datetime.strptime(data_recebimento, "%Y-%m-%d").year)
+                        ano_instauracao = str(datetime.strptime(data_para_ano, "%Y-%m-%d").year)
                     except:
                         ano_instauracao = ""
                 
@@ -1377,6 +1453,8 @@ def listar_processos_com_prazos():
                 "documento_iniciador": documento_iniciador,
                 "data_recebimento": data_recebimento,
                 "data_recebimento_formatada": datetime.strptime(data_recebimento, "%Y-%m-%d").strftime("%d/%m/%Y") if data_recebimento else None,
+                "data_instauracao": data_instauracao,
+                "data_instauracao_formatada": datetime.strptime(data_instauracao, "%Y-%m-%d").strftime("%d/%m/%Y") if data_instauracao else None,
                 "responsavel": responsavel_completo,
                 "responsavel_posto": responsavel_posto,
                 "responsavel_matricula": responsavel_matricula,
@@ -1394,7 +1472,14 @@ def listar_processos_com_prazos():
             
             processos_com_prazos.append(processo_formatado)
         
-        return {"sucesso": True, "processos": processos_com_prazos}
+        return {
+            "sucesso": True, 
+            "processos": processos_com_prazos,
+            "total": total_processos,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total_processos + per_page - 1) // per_page
+        }
         
     except Exception as e:
         import traceback
@@ -1402,11 +1487,24 @@ def listar_processos_com_prazos():
         return {"sucesso": False, "mensagem": f"Erro ao listar processos com prazos: {str(e)}"}
 
 @eel.expose
+def listar_todos_processos_com_prazos():
+    """Lista todos os processos com cálculo de prazo (sem paginação) - para compatibilidade"""
+    try:
+        resultado = listar_processos_com_prazos(search_term=None, page=1, per_page=999999)
+        if resultado["sucesso"]:
+            return {"sucesso": True, "processos": resultado["processos"]}
+        return resultado
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"sucesso": False, "mensagem": f"Erro ao listar todos os processos: {str(e)}"}
+
+@eel.expose
 def obter_dashboard_prazos_simples():
     """Obtém estatísticas simples de prazos para dashboard"""
     try:
         # Buscar todos os processos ativos
-        resultado = listar_processos_com_prazos()
+        resultado = listar_todos_processos_com_prazos()
         
         if not resultado["sucesso"]:
             return resultado
@@ -1503,6 +1601,102 @@ def obter_status_processo():
         "Remetido"
     ]
     return {"sucesso": True, "status": status}
+
+@eel.expose
+def obter_opcoes_filtros():
+    """Retorna todas as opções disponíveis para os filtros (baseado em todos os processos do banco)"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar todos os valores únicos para cada campo de filtro
+        cursor.execute("""
+            SELECT DISTINCT 
+                p.tipo_detalhe,
+                p.local_origem,
+                p.documento_iniciador,
+                p.status_pm,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
+                    o_backup.nome,
+                    e_backup.nome,
+                    'Desconhecido'
+                ) as responsavel_nome,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao END,
+                    o_backup.posto_graduacao,
+                    e_backup.posto_graduacao,
+                    ''
+                ) as responsavel_posto,
+                COALESCE(
+                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.matricula END,
+                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.matricula END,
+                    o_backup.matricula,
+                    e_backup.matricula,
+                    ''
+                ) as responsavel_matricula,
+                strftime('%Y', p.data_instauracao) as ano_instauracao,
+                strftime('%Y', p.data_recebimento) as ano_recebimento
+            FROM processos_procedimentos p
+            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
+            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
+            WHERE p.ativo = 1
+        """)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        # Processar resultados
+        tipos = set()
+        origens = set()
+        documentos = set()
+        status = set()
+        encarregados = set()
+        anos = set()
+        
+        for row in resultados:
+            (tipo_detalhe, local_origem, documento_iniciador, status_pm, 
+             responsavel_nome, responsavel_posto, responsavel_matricula,
+             ano_instauracao, ano_recebimento) = row
+            
+            if tipo_detalhe:
+                tipos.add(tipo_detalhe)
+            if local_origem:
+                origens.add(local_origem)
+            if documento_iniciador:
+                documentos.add(documento_iniciador)
+            if status_pm:
+                status.add(status_pm)
+            
+            # Formatar responsável completo
+            if responsavel_nome and responsavel_nome != 'Desconhecido':
+                responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
+                encarregados.add(responsavel_completo)
+            
+            # Adicionar anos
+            if ano_instauracao:
+                anos.add(ano_instauracao)
+            if ano_recebimento:
+                anos.add(ano_recebimento)
+        
+        return {
+            "sucesso": True,
+            "opcoes": {
+                "tipos": sorted(list(tipos)),
+                "origens": sorted(list(origens)),
+                "documentos": sorted(list(documentos)),
+                "status": sorted(list(status)),
+                "encarregados": sorted(list(encarregados)),
+                "anos": sorted(list(anos), reverse=True)  # Anos mais recentes primeiro
+            }
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter opções de filtros: {str(e)}"}
 
 def main():
     """Função principal"""
