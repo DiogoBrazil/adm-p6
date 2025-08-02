@@ -18,10 +18,10 @@ try:
         # Verifica se o sistema está executando em desenvolvimento ou como app
         if getattr(sys, 'frozen', False):
             # Executável PyInstaller
-            main.start_app(sys.argv[0])
+            main.main()
         else:
             # Ambiente de desenvolvimento
-            main.start_app(os.path.dirname(os.path.abspath(__file__)))
+            main.main()
             
 except Exception as e:
     print(f"Erro ao iniciar aplicação: {e}")
