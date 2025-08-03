@@ -40,6 +40,7 @@ function aplicarMascaraSEI(input) {
 
 // Função para validar formato RGF
 function validarRGF(value) {
+    if (!value || value.trim() === '') return true; // Campo opcional
     const regex = /^\d{2}\.\d{2}\.\d{4}$/;
     return regex.test(value);
 }
@@ -672,8 +673,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     
     let isValid = true;
     
-    // Validar RGF
-    if (!validarRGF(rgfInput.value)) {
+    // Validar RGF (se preenchido)
+    if (rgfInput.value && !validarRGF(rgfInput.value)) {
         exibirErroValidacao(rgfInput, 'Formato inválido. Use: XX.XX.XXXX (ex: 25.08.8415)');
         isValid = false;
     }
@@ -746,7 +747,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     }
 
     // Validação básica
-    if (!numero_rgf || !tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento || !numero_controle) {
+    if (!tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento || !numero_controle) {
         showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
         return;
     }
