@@ -613,7 +613,8 @@ async function aplicarFiltros() {
         status: document.getElementById('filtroStatus').value,
         pm_envolvido: getDatalistValue('filtroPmEnvolvido'),
         vitima: getDatalistValue('filtroVitima'),
-        documento: document.getElementById('filtroDocumento').value
+        documento: document.getElementById('filtroDocumento').value,
+        situacao: document.getElementById('filtroSituacao').value
     };
     
     console.log("🏷️ Filtros coletados:", filtrosAtivos);
@@ -630,7 +631,8 @@ async function aplicarFiltros() {
                 'status': 'Status PM',
                 'pm_envolvido': 'PM Envolvido',
                 'vitima': 'Vítima/Ofendido',
-                'documento': 'Documento'
+                'documento': 'Documento',
+                'situacao': 'Situação'
             };
             filtrosAplicados.push(`${nomeAmigavel[key]}: ${filtrosAtivos[key]}`);
         }
@@ -663,6 +665,7 @@ async function limparFiltros() {
     document.getElementById('filtroOrigem').value = '';
     document.getElementById('filtroStatus').value = '';
     document.getElementById('filtroDocumento').value = '';
+    document.getElementById('filtroSituacao').value = '';
     
     // Limpar campos de datalist
     limparCampoDatalist('filtroEncarregado');

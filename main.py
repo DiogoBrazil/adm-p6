@@ -1365,6 +1365,12 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             if filtros.get('vitima'):
                 where_clause += " AND p.nome_vitima = ?"
                 search_params.append(filtros['vitima'])
+            
+            if filtros.get('situacao'):
+                if filtros['situacao'] == 'concluido':
+                    where_clause += " AND p.concluido = 1"
+                elif filtros['situacao'] == 'em_andamento':
+                    where_clause += " AND (p.concluido = 0 OR p.concluido IS NULL)"
         
         # Contar total de registros
         count_query = f"""
