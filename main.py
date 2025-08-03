@@ -1371,6 +1371,38 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     where_clause += " AND p.concluido = 1"
                 elif filtros['situacao'] == 'em_andamento':
                     where_clause += " AND (p.concluido = 0 OR p.concluido IS NULL)"
+                elif filtros['situacao'] == 'em_andamento_no_prazo':
+                    # Em andamento e com prazo não vencido
+                    where_clause += """ AND (p.concluido = 0 OR p.concluido IS NULL) 
+                                      AND p.data_recebimento IS NOT NULL 
+                                      AND (
+                                          CASE 
+                                              WHEN p.documento_iniciador = 'Feito Preliminar' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 15
+                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%IPM%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 40
+                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%SR%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 30
+                                              ELSE
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 30
+                                          END
+                                      )"""
+                elif filtros['situacao'] == 'em_andamento_vencido':
+                    # Em andamento e com prazo vencido
+                    where_clause += """ AND (p.concluido = 0 OR p.concluido IS NULL) 
+                                      AND p.data_recebimento IS NOT NULL 
+                                      AND (
+                                          CASE 
+                                              WHEN p.documento_iniciador = 'Feito Preliminar' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 15
+                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%IPM%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 40
+                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%SR%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 30
+                                              ELSE
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 30
+                                          END
+                                      )"""
         
         # Contar total de registros
         count_query = f"""
