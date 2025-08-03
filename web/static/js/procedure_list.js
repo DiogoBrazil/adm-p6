@@ -329,7 +329,10 @@ function extrairAno(procedimento) {
 }
 
 function obterNumeroDocumento(procedimento) {
-    // Usar diretamente o campo "numero" da tabela
+    // Priorizar numero_controle, depois fallback para numero
+    if (procedimento.numero_controle) {
+        return procedimento.numero_controle;
+    }
     return procedimento.numero || 'S/N';
 }
 

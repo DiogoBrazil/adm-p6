@@ -48,3 +48,24 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     color: #dc3545;
     font-size: 0.875rem;
 }
+
+/* Estilo para checkbox */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    transform: scale(1.2);
+}
+
+.checkbox-container label {
+    margin: 0;
+    font-weight: 500;
+    cursor: pointer;
+    color: #555;
+}

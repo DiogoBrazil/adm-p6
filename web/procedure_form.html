@@ -105,6 +105,23 @@
                     <input type="text" id="numero_feito" required>
                 </div>
 
+                <!-- Checkbox para número de controle diferente -->
+                <div class="form-group" id="group_checkbox_controle" style="display: none;">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="numero_controle_diferente">
+                        <label for="numero_controle_diferente" id="label_controle_diferente">
+                            Número de controle é diferente do número da portaria
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Campo de número de controle (condicional) -->
+                <div class="form-group" id="group_numero_controle" style="display: none;">
+                    <label for="numero_controle" id="label_numero_controle">Número de Controle *</label>
+                    <input type="text" id="numero_controle" required>
+                    <small class="form-help" id="help_numero_controle">Número de controle do IPM</small>
+                </div>
+
                 <!-- RGF e SEI -->
                 <div class="form-group">
                     <label for="numero_rgf">Número do RGF *</label>

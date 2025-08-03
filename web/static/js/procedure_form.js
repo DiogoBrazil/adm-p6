@@ -297,6 +297,29 @@ async function preencherFormularioEdicao(procedimento) {
     if (document.getElementById('numero_memorando')) document.getElementById('numero_memorando').value = procedimento.numero_memorando || '';
     if (document.getElementById('numero_feito')) document.getElementById('numero_feito').value = procedimento.numero_feito || '';
     
+    // Lógica do número de controle na edição
+    if (procedimento.numero_controle) {
+        // Verificar se numero_controle é diferente do número do documento
+        let numeroDocumento = '';
+        if (procedimento.documento_iniciador === 'Portaria') {
+            numeroDocumento = procedimento.numero_portaria;
+        } else if (procedimento.documento_iniciador === 'Memorando Disciplinar') {
+            numeroDocumento = procedimento.numero_memorando;
+        } else if (procedimento.documento_iniciador === 'Feito Preliminar') {
+            numeroDocumento = procedimento.numero_feito;
+        }
+        
+        if (procedimento.numero_controle !== numeroDocumento) {
+            // Número de controle é diferente, marcar checkbox e preencher campo
+            if (document.getElementById('numero_controle_diferente')) {
+                document.getElementById('numero_controle_diferente').checked = true;
+            }
+            if (document.getElementById('numero_controle')) {
+                document.getElementById('numero_controle').value = procedimento.numero_controle;
+            }
+        }
+    }
+    
     // Preencher campos de responsável
     if (procedimento.responsavel_id) {
         document.getElementById('responsavel_id').value = procedimento.responsavel_id || '';
@@ -365,6 +388,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         numeroPortaria: document.getElementById('group_numero_portaria'),
         numeroMemorando: document.getElementById('group_numero_memorando'),
         numeroFeito: document.getElementById('group_numero_feito'),
+        checkboxControle: document.getElementById('group_checkbox_controle'),
+        numeroControle: document.getElementById('group_numero_controle'),
         nomePm: document.getElementById('group_nome_pm'),
         nomeVitima: document.getElementById('group_nome_vitima'),
         naturezaProcesso: document.getElementById('group_natureza_processo'),
@@ -379,6 +404,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         documentoIniciador: document.getElementById('documento_iniciador'),
         statusPm: document.getElementById('status_pm'),
         labelNomePm: document.getElementById('label_nome_pm'),
+        numeroControleDiferente: document.getElementById('numero_controle_diferente'),
+        labelControleDiferente: document.getElementById('label_controle_diferente'),
+        numeroControle: document.getElementById('numero_controle'),
+        labelNumeroControle: document.getElementById('label_numero_controle'),
+        helpNumeroControle: document.getElementById('help_numero_controle'),
     };
 
     // Função para mostrar/ocultar um grupo e gerenciar o atributo 'required'
@@ -430,12 +460,96 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleGroup(fieldGroups.numeroMemorando, documentoIniciador === 'Memorando Disciplinar');
         toggleGroup(fieldGroups.numeroFeito, documentoIniciador === 'Feito Preliminar');
 
-        // 4. Lógica para Status do PM Envolvido
+        // 4. Lógica para checkbox e campo de número de controle
+        updateNumeroControleLogic();
+
+        // 5. Lógica para Status do PM Envolvido
         const showNomePm = statusPm !== '';
         toggleGroup(fieldGroups.nomePm, showNomePm);
         if (showNomePm) {
             fields.labelNomePm.textContent = `Nome do ${statusPm} *`;
         }
+    }
+
+    // Função específica para controlar a lógica do número de controle
+    function updateNumeroControleLogic() {
+        const tipoGeral = fields.tipoGeral.value;
+        const tipoProcedimento = fields.tipoProcedimento ? fields.tipoProcedimento.value : '';
+        const tipoProcesso = fields.tipoProcesso ? fields.tipoProcesso.value : '';
+        const documentoIniciador = fields.documentoIniciador.value;
+        
+        // Determinar se precisa mostrar checkbox (não é FP)
+        const isFP = tipoGeral === 'procedimento' && tipoProcedimento === 'FP';
+        const showCheckbox = documentoIniciador !== '' && !isFP;
+        
+        toggleGroup(fieldGroups.checkboxControle, showCheckbox);
+        
+        if (showCheckbox) {
+            // Atualizar texto do checkbox baseado no documento
+            if (documentoIniciador === 'Portaria') {
+                fields.labelControleDiferente.textContent = 'Número de controle é diferente do número da portaria';
+            } else if (documentoIniciador === 'Memorando Disciplinar') {
+                fields.labelControleDiferente.textContent = 'Número de controle é diferente do número do memorando';
+            }
+            
+            // Atualizar label e help do campo de controle baseado no tipo
+            updateNumeroControleLabels(tipoGeral, tipoProcedimento, tipoProcesso);
+        }
+        
+        // Mostrar campo de controle se checkbox marcado
+        const showControle = showCheckbox && fields.numeroControleDiferente && fields.numeroControleDiferente.checked;
+        toggleGroup(fieldGroups.numeroControle, showControle);
+    }
+
+    // Função para atualizar labels do campo número de controle
+    function updateNumeroControleLabels(tipoGeral, tipoProcedimento, tipoProcesso) {
+        if (!fields.labelNumeroControle || !fields.helpNumeroControle) return;
+        
+        let label = 'Número de Controle *';
+        let help = '';
+        
+        if (tipoGeral === 'procedimento') {
+            switch (tipoProcedimento) {
+                case 'IPM':
+                    label = 'Número do IPM *';
+                    help = 'Número de controle do IPM';
+                    break;
+                case 'SR':
+                    label = 'Número da SR *';
+                    help = 'Número de controle da SR';
+                    break;
+                case 'ISO':
+                    label = 'Número da ISO *';
+                    help = 'Número de controle da ISO';
+                    break;
+                case 'CP':
+                    label = 'Número da CP *';
+                    help = 'Número de controle da CP';
+                    break;
+            }
+        } else if (tipoGeral === 'processo') {
+            switch (tipoProcesso) {
+                case 'PADS':
+                    label = 'Número do PADS *';
+                    help = 'Número de controle do PADS';
+                    break;
+                case 'PAD':
+                    label = 'Número do PAD *';
+                    help = 'Número de controle do PAD';
+                    break;
+                case 'CD':
+                    label = 'Número do CD *';
+                    help = 'Número de controle do CD';
+                    break;
+                case 'CJ':
+                    label = 'Número do CJ *';
+                    help = 'Número de controle do CJ';
+                    break;
+            }
+        }
+        
+        fields.labelNumeroControle.textContent = label;
+        fields.helpNumeroControle.textContent = help;
     }
 
     // Adiciona 'data-required' aos campos que são obrigatórios condicionalmente
@@ -451,6 +565,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (fields.tipoProcesso) fields.tipoProcesso.addEventListener('change', updateFormVisibility);
     if (fields.documentoIniciador) fields.documentoIniciador.addEventListener('change', updateFormVisibility);
     if (fields.statusPm) fields.statusPm.addEventListener('change', updateFormVisibility);
+    if (fields.numeroControleDiferente) fields.numeroControleDiferente.addEventListener('change', updateNumeroControleLogic);
 
     // Chamar a função uma vez no início para configurar o estado inicial do formulário
     updateFormVisibility();
@@ -618,8 +733,20 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         numero_documento = numero_feito.trim();
     }
 
+    // Determinar o número de controle
+    let numero_controle = '';
+    const numeroControleDiferente = document.getElementById('numero_controle_diferente')?.checked || false;
+    
+    if (numeroControleDiferente) {
+        // Se marcou checkbox, usa o valor do campo específico
+        numero_controle = document.getElementById('numero_controle')?.value?.trim() || '';
+    } else {
+        // Se não marcou checkbox, usa o número do documento iniciador
+        numero_controle = numero_documento;
+    }
+
     // Validação básica
-    if (!numero_rgf || !tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento) {
+    if (!numero_rgf || !tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento || !numero_controle) {
         showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
         return;
     }
@@ -650,7 +777,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_portaria,
                 numero_memorando,
                 numero_feito,
-                numero_rgf
+                numero_rgf,
+                numero_controle
             )();
         } else {
             // Modo criação
@@ -675,7 +803,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_portaria,
                 numero_memorando,
                 numero_feito,
-                numero_rgf
+                numero_rgf,
+                numero_controle
             )();
         }
 

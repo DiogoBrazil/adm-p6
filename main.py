@@ -695,7 +695,7 @@ def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
-    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -710,7 +710,7 @@ def registrar_processo(
         "nome_vitima": nome_vitima, "natureza_processo": natureza_processo,
         "natureza_procedimento": natureza_procedimento, "resumo_fatos": resumo_fatos,
         "numero_portaria": numero_portaria, "numero_memorando": numero_memorando,
-        "numero_feito": numero_feito, "numero_rgf": numero_rgf
+        "numero_feito": numero_feito, "numero_rgf": numero_rgf, "numero_controle": numero_controle
     }
     for key, value in params.items():
         print(f"  - {key}: {value}")
@@ -730,13 +730,13 @@ def registrar_processo(
                 id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-                numero_portaria, numero_memorando, numero_feito, numero_rgf
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(uuid.uuid4()), numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-            numero_portaria, numero_memorando, numero_feito, numero_rgf
+            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle
         ))
 
         conn.commit()
@@ -792,7 +792,8 @@ def listar_processos():
                 (SELECT matricula FROM encarregados WHERE id = p.nome_pm_id),
                 ''
             ) as nome_pm_matricula,
-            p.numero_rgf
+            p.numero_rgf,
+            p.numero_controle
         FROM processos_procedimentos p
         LEFT JOIN operadores o ON p.responsavel_id = o.id
         LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -803,9 +804,9 @@ def listar_processos():
     processos = cursor.fetchall()
     conn.close()
     
-    # Formatar o número do procedimento baseado no tipo de documento iniciador
+    # Formatar o número do procedimento baseado no numero_controle
     def formatar_numero_processo(processo):
-        numero_documento = processo[1]  # Número do documento (portaria, memorando, feito)
+        numero_controle = processo[22]  # numero_controle é o índice 22 agora
         tipo_detalhe = processo[3]
         documento = processo[4]
         local_origem = processo[8] or ""
@@ -819,23 +820,21 @@ def listar_processos():
             except:
                 ano_instauracao = ""
         
-        # Criar um número formatado baseado no tipo de documento
-        if numero_documento:
-            return f"{tipo_detalhe} nº {numero_documento}/{local_origem}/{ano_instauracao}"
+        # Usar numero_controle para formatação
+        if numero_controle:
+            return f"{tipo_detalhe} nº {numero_controle}/{local_origem}/{ano_instauracao}"
         else:
-            # Fallback para campos específicos se numero estiver vazio
-            if documento == 'Portaria' and processo[13]:  # numero_portaria
-                return f"{tipo_detalhe} nº {processo[13]}/{local_origem}/{ano_instauracao}"
-            elif documento == 'Memorando Disciplinar' and processo[14]:  # numero_memorando
-                return f"{tipo_detalhe} nº {processo[14]}/{local_origem}/{ano_instauracao}"
-            elif documento == 'Feito Preliminar' and processo[15]:  # numero_feito
-                return f"{tipo_detalhe} nº {processo[15]}/{local_origem}/{ano_instauracao}"
+            # Fallback para o número do documento se numero_controle estiver vazio
+            numero_documento = processo[1]
+            if numero_documento:
+                return f"{tipo_detalhe} nº {numero_documento}/{local_origem}/{ano_instauracao}"
         
-        return numero_documento or "S/N"
+        return "S/N"
 
     return [{
         "id": processo[0],
         "numero": processo[1],
+        "numero_controle": processo[22],  # Incluir numero_controle
         "numero_formatado": formatar_numero_processo(processo),
         "tipo_geral": processo[2],
         "tipo_detalhe": processo[3],
@@ -890,7 +889,7 @@ def obter_processo(processo_id):
                 COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome,
                 p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
-                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf
+                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -924,7 +923,8 @@ def obter_processo(processo_id):
                 "numero_portaria": processo[19],
                 "numero_memorando": processo[20],
                 "numero_feito": processo[21],
-                "numero_rgf": processo[22]
+                "numero_rgf": processo[22],
+                "numero_controle": processo[23]
             }
         else:
             return None
@@ -937,7 +937,7 @@ def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
-    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -950,14 +950,14 @@ def atualizar_processo(
                 processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?,
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
-                numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?,
+                numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-            numero_portaria, numero_memorando, numero_feito, numero_rgf,
+            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             processo_id
         ))
         
@@ -1401,7 +1401,8 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 p.local_origem, p.processo_sei, p.nome_pm_id, p.status_pm,
                 COALESCE(pm_env_e.nome, pm_env_o.nome, 'Não informado') as pm_envolvido_nome,
                 COALESCE(pm_env_e.posto_graduacao, pm_env_o.posto_graduacao, '') as pm_envolvido_posto,
-                COALESCE(pm_env_e.matricula, pm_env_o.matricula, '') as pm_envolvido_matricula
+                COALESCE(pm_env_e.matricula, pm_env_o.matricula, '') as pm_envolvido_matricula,
+                p.numero_controle
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
@@ -1425,7 +1426,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
              data_recebimento, created_at, data_instauracao, responsavel_nome, responsavel_posto, responsavel_matricula,
              local_origem, processo_sei, nome_pm_id, status_pm, 
-             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula) = processo
+             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula, numero_controle) = processo
             
             # Formatar responsável completo: "posto/grad + matrícula + nome"
             responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
@@ -1446,7 +1447,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 prorrogacoes_dias=0  # Por enquanto sem prorrogações, será implementado depois
             )
             
-            # Formatar numero do processo
+            # Formatar numero do processo usando numero_controle
             def formatar_numero_processo():
                 ano_instauracao = ""
                 
@@ -1458,13 +1459,16 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     except:
                         ano_instauracao = ""
                 
-                if numero:
-                    return f"{tipo_detalhe} nº {numero}/{local_origem or ''}/{ano_instauracao}"
-                return numero or "S/N"
+                # Usar numero_controle primeiro, depois fallback para numero
+                numero_para_formatacao = numero_controle or numero
+                if numero_para_formatacao:
+                    return f"{tipo_detalhe} nº {numero_para_formatacao}/{local_origem or ''}/{ano_instauracao}"
+                return "S/N"
             
             processo_formatado = {
                 "id": processo_id,
                 "numero": numero,
+                "numero_controle": numero_controle,
                 "numero_formatado": formatar_numero_processo(),
                 "tipo_geral": tipo_geral,
                 "tipo_detalhe": tipo_detalhe,
