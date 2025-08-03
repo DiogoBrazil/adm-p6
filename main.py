@@ -695,7 +695,8 @@ def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
-    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
+    concluido=False, data_conclusao=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -710,7 +711,8 @@ def registrar_processo(
         "nome_vitima": nome_vitima, "natureza_processo": natureza_processo,
         "natureza_procedimento": natureza_procedimento, "resumo_fatos": resumo_fatos,
         "numero_portaria": numero_portaria, "numero_memorando": numero_memorando,
-        "numero_feito": numero_feito, "numero_rgf": numero_rgf, "numero_controle": numero_controle
+        "numero_feito": numero_feito, "numero_rgf": numero_rgf, "numero_controle": numero_controle,
+        "concluido": concluido, "data_conclusao": data_conclusao
     }
     for key, value in params.items():
         print(f"  - {key}: {value}")
@@ -730,13 +732,15 @@ def registrar_processo(
                 id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-                numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
+                concluido, data_conclusao
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(uuid.uuid4()), numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle
+            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
+            concluido, data_conclusao
         ))
 
         conn.commit()
@@ -889,7 +893,8 @@ def obter_processo(processo_id):
                 COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome,
                 p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
-                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle
+                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
+                p.concluido, p.data_conclusao
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -924,7 +929,9 @@ def obter_processo(processo_id):
                 "numero_memorando": processo[20],
                 "numero_feito": processo[21],
                 "numero_rgf": processo[22],
-                "numero_controle": processo[23]
+                "numero_controle": processo[23],
+                "concluido": processo[24],
+                "data_conclusao": processo[25]
             }
         else:
             return None
@@ -937,7 +944,8 @@ def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
-    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None
+    numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
+    concluido=False, data_conclusao=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -951,14 +959,14 @@ def atualizar_processo(
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            processo_id
+            concluido, data_conclusao, processo_id
         ))
         
         conn.commit()

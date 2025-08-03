@@ -253,6 +253,22 @@
                     <textarea id="resumo_fatos" rows="4"></textarea>
                 </div>
 
+                <!-- Conclusão -->
+                <div class="form-group">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="concluido">
+                        <label for="concluido" id="label_concluido">
+                            Procedimento concluído
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Campo de data de conclusão (condicional) -->
+                <div class="form-group" id="group_data_conclusao" style="display: none;">
+                    <label for="data_conclusao">Data de Conclusão *</label>
+                    <input type="date" id="data_conclusao" required>
+                </div>
+
                 <button type="submit" class="btn-primary" id="btnCadastrar">
                     <i class="fas fa-folder-plus"></i>
                     Registrar

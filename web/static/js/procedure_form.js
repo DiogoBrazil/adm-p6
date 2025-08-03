@@ -321,6 +321,21 @@ async function preencherFormularioEdicao(procedimento) {
         }
     }
     
+    // Lógica dos campos de conclusão na edição
+    if (procedimento.concluido !== undefined) {
+        const concluidoCheckbox = document.getElementById('concluido');
+        if (concluidoCheckbox) {
+            concluidoCheckbox.checked = procedimento.concluido === 1 || procedimento.concluido === true;
+        }
+    }
+    
+    if (procedimento.data_conclusao) {
+        const dataConclusao = document.getElementById('data_conclusao');
+        if (dataConclusao) {
+            dataConclusao.value = procedimento.data_conclusao;
+        }
+    }
+    
     // Preencher campos de responsável
     if (procedimento.responsavel_id) {
         document.getElementById('responsavel_id').value = procedimento.responsavel_id || '';
@@ -553,6 +568,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         fields.helpNumeroControle.textContent = help;
     }
 
+    // Função para controlar a lógica da conclusão
+    function updateConclusaoLogic() {
+        const tipoGeral = fields.tipoGeral.value;
+        const concluidoChecked = document.getElementById('concluido') && document.getElementById('concluido').checked;
+        
+        // Atualizar texto do label baseado no tipo
+        const labelConcluido = document.getElementById('label_concluido');
+        if (labelConcluido) {
+            if (tipoGeral === 'processo') {
+                labelConcluido.textContent = 'Processo concluído';
+            } else if (tipoGeral === 'procedimento') {
+                labelConcluido.textContent = 'Procedimento concluído';
+            } else {
+                labelConcluido.textContent = 'Processo/Procedimento concluído';
+            }
+        }
+        
+        // Mostrar campo de data se checkbox marcado
+        const groupDataConclusao = document.getElementById('group_data_conclusao');
+        const dataConclusao = document.getElementById('data_conclusao');
+        
+        if (groupDataConclusao && dataConclusao) {
+            if (concluidoChecked) {
+                groupDataConclusao.style.display = 'block';
+                dataConclusao.setAttribute('required', 'required');
+            } else {
+                groupDataConclusao.style.display = 'none';
+                dataConclusao.removeAttribute('required');
+                dataConclusao.value = ''; // Limpar o valor
+            }
+        }
+    }
+
     // Adiciona 'data-required' aos campos que são obrigatórios condicionalmente
     // para que a função toggleGroup saiba quando aplicar 'required'
     document.querySelectorAll('#group_tipo_procedimento select, #group_tipo_processo select, #group_escrivao select, #group_numero_portaria input, #group_numero_memorando input, #group_numero_feito input, #group_nome_pm input, #group_natureza_processo select, #group_natureza_procedimento select').forEach(el => {
@@ -567,9 +615,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (fields.documentoIniciador) fields.documentoIniciador.addEventListener('change', updateFormVisibility);
     if (fields.statusPm) fields.statusPm.addEventListener('change', updateFormVisibility);
     if (fields.numeroControleDiferente) fields.numeroControleDiferente.addEventListener('change', updateNumeroControleLogic);
+    
+    // Event listener para checkbox de conclusão
+    const concluidoCheckbox = document.getElementById('concluido');
+    if (concluidoCheckbox) {
+        concluidoCheckbox.addEventListener('change', updateConclusaoLogic);
+    }
+    
+    // Event listener para tipo geral (para atualizar texto da conclusão)
+    if (fields.tipoGeral) {
+        fields.tipoGeral.addEventListener('change', updateConclusaoLogic);
+    }
 
     // Chamar a função uma vez no início para configurar o estado inicial do formulário
     updateFormVisibility();
+    updateConclusaoLogic(); // Configurar estado inicial da conclusão
 
     // --- MODAL DE BUSCA DE USUÁRIO ---
     let campoBuscaUsuario = null; // Qual campo está buscando (encarregado, escrivao, pm)
@@ -723,6 +783,10 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const numero_portaria = document.getElementById('numero_portaria')?.value || null;
     const numero_memorando = document.getElementById('numero_memorando')?.value || null;
     const numero_feito = document.getElementById('numero_feito')?.value || null;
+    
+    // Campos de conclusão
+    const concluido = document.getElementById('concluido')?.checked || false;
+    const data_conclusao = document.getElementById('data_conclusao')?.value || null;
 
     // Determinar o número do documento baseado no tipo de documento iniciador
     let numero_documento = '';
@@ -779,7 +843,9 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_memorando,
                 numero_feito,
                 numero_rgf,
-                numero_controle
+                numero_controle,
+                concluido,
+                data_conclusao
             )();
         } else {
             // Modo criação
@@ -805,7 +871,9 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_memorando,
                 numero_feito,
                 numero_rgf,
-                numero_controle
+                numero_controle,
+                concluido,
+                data_conclusao
             )();
         }
 
