@@ -249,6 +249,15 @@ function mostrarMensagemErro(titulo, mensagem) {
 
 // Função para gerar o HTML do status de prazo com cores
 function gerarStatusPrazoHTML(procedimento) {
+    // Verificar se o processo/procedimento está concluído
+    if (procedimento.concluido === true || procedimento.concluido === 1) {
+        const dataFormatada = procedimento.data_conclusao ? 
+            new Date(procedimento.data_conclusao).toLocaleDateString('pt-BR') : 'Data não informada';
+        return `<span class="status-prazo concluido" title="Processo/Procedimento concluído em ${dataFormatada}">
+                    <i class="fas fa-check-circle"></i> Concluído
+                </span>`;
+    }
+    
     const prazo = procedimento.prazo;
     
     if (!prazo) {

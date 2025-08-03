@@ -70,8 +70,9 @@
 
 /* Status: Concluído */
 .status-prazo.concluido {
-    background: linear-gradient(135deg, #17a2b8, #138496);
+    background: linear-gradient(135deg, #007bff, #0056b3);
     color: white;
+    border: 1px solid #0056b3;
 }
 
 /* Animações para chamar atenção */

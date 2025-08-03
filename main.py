@@ -797,7 +797,9 @@ def listar_processos():
                 ''
             ) as nome_pm_matricula,
             p.numero_rgf,
-            p.numero_controle
+            p.numero_controle,
+            p.concluido,
+            p.data_conclusao
         FROM processos_procedimentos p
         LEFT JOIN operadores o ON p.responsavel_id = o.id
         LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -810,7 +812,7 @@ def listar_processos():
     
     # Formatar o número do procedimento baseado no numero_controle
     def formatar_numero_processo(processo):
-        numero_controle = processo[22]  # numero_controle é o índice 22 agora
+        numero_controle = processo[22]  # numero_controle é o índice 22
         tipo_detalhe = processo[3]
         documento = processo[4]
         local_origem = processo[8] or ""
@@ -855,6 +857,8 @@ def listar_processos():
         "nome_pm_posto_grad": processo[19] or "",  # Posto/graduação do PM envolvido (índice 19)
         "nome_pm_matricula": processo[20] or "",  # Matrícula do PM envolvido (índice 20)
         "numero_rgf": processo[21] or "",  # Número do RGF (índice 21)
+        "concluido": bool(processo[23]) if processo[23] is not None else False,  # Campo concluído (índice 23)
+        "data_conclusao": processo[24] if len(processo) > 24 else None,  # Data de conclusão (índice 24)
         "responsavel_completo": f"{processo[17] or ''} {processo[18] or ''} {processo[6]}".strip(),  # Posto/graduação + matrícula + nome
         "nome_pm_completo": f"{processo[19] or ''} {processo[20] or ''} {processo[11] or ''}".strip() if processo[11] else None  # Posto/graduação + matrícula + nome PM
     } for processo in processos]
@@ -1410,7 +1414,9 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 COALESCE(pm_env_e.nome, pm_env_o.nome, 'Não informado') as pm_envolvido_nome,
                 COALESCE(pm_env_e.posto_graduacao, pm_env_o.posto_graduacao, '') as pm_envolvido_posto,
                 COALESCE(pm_env_e.matricula, pm_env_o.matricula, '') as pm_envolvido_matricula,
-                p.numero_controle
+                p.numero_controle,
+                p.concluido,
+                p.data_conclusao
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
@@ -1434,7 +1440,8 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
              data_recebimento, created_at, data_instauracao, responsavel_nome, responsavel_posto, responsavel_matricula,
              local_origem, processo_sei, nome_pm_id, status_pm, 
-             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula, numero_controle) = processo
+             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula, numero_controle, 
+             concluido, data_conclusao) = processo
             
             # Formatar responsável completo: "posto/grad + matrícula + nome"
             responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
@@ -1497,6 +1504,8 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 "pm_envolvido_matricula": pm_envolvido_matricula,
                 "status_pm": status_pm,
                 "data_criacao": created_at,
+                "concluido": bool(concluido) if concluido is not None else False,
+                "data_conclusao": data_conclusao,
                 "prazo": calculo_prazo
             }
             
