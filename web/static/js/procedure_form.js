@@ -242,10 +242,16 @@ async function verificarEdicao() {
     const urlParams = new URLSearchParams(window.location.search);
     const procedimentoId = urlParams.get('id');
     
+    console.log('🔍 Verificando edição. ID:', procedimentoId);
+    
     if (procedimentoId) {
         try {
+            console.log('📞 Chamando eel.obter_processo...');
             const procedimento = await eel.obter_processo(procedimentoId)();
+            console.log('📋 Resultado da chamada:', procedimento);
+            
             if (procedimento) {
+                console.log('✅ Procedimento carregado, iniciando preenchimento...');
                 editandoProcedimento = procedimento;
                 await preencherFormularioEdicao(procedimento);
                 
@@ -260,14 +266,18 @@ async function verificarEdicao() {
                 if (submitBtn) {
                     submitBtn.innerHTML = '<i class="fas fa-save"></i> Atualizar';
                 }
+                
+                console.log('✅ Edição configurada com sucesso!');
             } else {
+                console.log('❌ Procedimento não encontrado');
                 showAlert('Procedimento não encontrado!', 'error');
                 setTimeout(() => {
                     window.location.href = 'procedure_list.html';
                 }, 2000);
             }
         } catch (error) {
-            console.error('Erro ao carregar procedimento:', error);
+            console.error('❌ Erro ao carregar procedimento:', error);
+            console.error('❌ Stack trace:', error.stack);
             showAlert('Erro ao carregar dados do procedimento!', 'error');
         }
     }
@@ -275,94 +285,119 @@ async function verificarEdicao() {
 
 // Função para preencher formulário com dados do procedimento
 async function preencherFormularioEdicao(procedimento) {
-    // Preencher campos básicos
-    document.getElementById('numero_rgf').value = procedimento.numero_rgf || '';
-    document.getElementById('tipo_geral').value = procedimento.tipo_geral || '';
-    document.getElementById('documento_iniciador').value = procedimento.documento_iniciador || '';
-    document.getElementById('processo_sei').value = procedimento.processo_sei || '';
-
-    // Novos campos
-    if (document.getElementById('local_origem')) document.getElementById('local_origem').value = procedimento.local_origem || '';
-    if (document.getElementById('data_instauracao')) document.getElementById('data_instauracao').value = procedimento.data_instauracao || '';
-    if (document.getElementById('data_recebimento')) document.getElementById('data_recebimento').value = procedimento.data_recebimento || '';
-    if (document.getElementById('escrivao_id')) document.getElementById('escrivao_id').value = procedimento.escrivao_id || '';
-    if (document.getElementById('escrivao_nome')) document.getElementById('escrivao_nome').value = procedimento.escrivao_nome || '';
-    if (document.getElementById('status_pm')) document.getElementById('status_pm').value = procedimento.status_pm || '';
-    if (document.getElementById('nome_pm')) document.getElementById('nome_pm').value = procedimento.nome_pm_id || '';
-    if (document.getElementById('nome_pm_nome')) document.getElementById('nome_pm_nome').value = procedimento.nome_pm_nome || '';
-    if (document.getElementById('nome_vitima')) document.getElementById('nome_vitima').value = procedimento.nome_vitima || '';
-    if (document.getElementById('natureza_processo')) document.getElementById('natureza_processo').value = procedimento.natureza_processo || '';
-    if (document.getElementById('natureza_procedimento')) document.getElementById('natureza_procedimento').value = procedimento.natureza_procedimento || '';
-    if (document.getElementById('resumo_fatos')) document.getElementById('resumo_fatos').value = procedimento.resumo_fatos || '';
-    if (document.getElementById('numero_portaria')) document.getElementById('numero_portaria').value = procedimento.numero_portaria || '';
-    if (document.getElementById('numero_memorando')) document.getElementById('numero_memorando').value = procedimento.numero_memorando || '';
-    if (document.getElementById('numero_feito')) document.getElementById('numero_feito').value = procedimento.numero_feito || '';
+    console.log('🔍 Iniciando preenchimento do formulário de edição...');
+    console.log('📋 Dados do procedimento:', procedimento);
     
-    // Lógica do número de controle na edição
-    if (procedimento.numero_controle) {
-        // Verificar se numero_controle é diferente do número do documento
-        let numeroDocumento = '';
-        if (procedimento.documento_iniciador === 'Portaria') {
-            numeroDocumento = procedimento.numero_portaria;
-        } else if (procedimento.documento_iniciador === 'Memorando Disciplinar') {
-            numeroDocumento = procedimento.numero_memorando;
-        } else if (procedimento.documento_iniciador === 'Feito Preliminar') {
-            numeroDocumento = procedimento.numero_feito;
+    try {
+        // Preencher campos básicos
+        document.getElementById('numero_rgf').value = procedimento.numero_rgf || '';
+        document.getElementById('tipo_geral').value = procedimento.tipo_geral || '';
+        document.getElementById('documento_iniciador').value = procedimento.documento_iniciador || '';
+        document.getElementById('processo_sei').value = procedimento.processo_sei || '';
+
+        // Novos campos
+        if (document.getElementById('local_origem')) document.getElementById('local_origem').value = procedimento.local_origem || '';
+        if (document.getElementById('data_instauracao')) document.getElementById('data_instauracao').value = procedimento.data_instauracao || '';
+        if (document.getElementById('data_recebimento')) document.getElementById('data_recebimento').value = procedimento.data_recebimento || '';
+        if (document.getElementById('status_pm')) document.getElementById('status_pm').value = procedimento.status_pm || '';
+        if (document.getElementById('nome_vitima')) document.getElementById('nome_vitima').value = procedimento.nome_vitima || '';
+        if (document.getElementById('natureza_processo')) document.getElementById('natureza_processo').value = procedimento.natureza_processo || '';
+        if (document.getElementById('natureza_procedimento')) document.getElementById('natureza_procedimento').value = procedimento.natureza_procedimento || '';
+        if (document.getElementById('resumo_fatos')) document.getElementById('resumo_fatos').value = procedimento.resumo_fatos || '';
+        if (document.getElementById('numero_portaria')) document.getElementById('numero_portaria').value = procedimento.numero_portaria || '';
+        if (document.getElementById('numero_memorando')) document.getElementById('numero_memorando').value = procedimento.numero_memorando || '';
+        if (document.getElementById('numero_feito')) document.getElementById('numero_feito').value = procedimento.numero_feito || '';
+        
+        console.log('✅ Campos básicos preenchidos');
+        
+        // Lógica do número de controle na edição
+        if (procedimento.numero_controle) {
+            // Verificar se numero_controle é diferente do número do documento
+            let numeroDocumento = '';
+            if (procedimento.documento_iniciador === 'Portaria') {
+                numeroDocumento = procedimento.numero_portaria;
+            } else if (procedimento.documento_iniciador === 'Memorando Disciplinar') {
+                numeroDocumento = procedimento.numero_memorando;
+            } else if (procedimento.documento_iniciador === 'Feito Preliminar') {
+                numeroDocumento = procedimento.numero_feito;
+            }
+            
+            if (procedimento.numero_controle !== numeroDocumento) {
+                // Número de controle é diferente, marcar checkbox e preencher campo
+                if (document.getElementById('numero_controle_diferente')) {
+                    document.getElementById('numero_controle_diferente').checked = true;
+                }
+                if (document.getElementById('numero_controle')) {
+                    document.getElementById('numero_controle').value = procedimento.numero_controle;
+                }
+            }
         }
         
-        if (procedimento.numero_controle !== numeroDocumento) {
-            // Número de controle é diferente, marcar checkbox e preencher campo
-            if (document.getElementById('numero_controle_diferente')) {
-                document.getElementById('numero_controle_diferente').checked = true;
+        console.log('✅ Lógica de número de controle processada');
+        
+        // Lógica dos campos de conclusão na edição
+        if (procedimento.concluido !== undefined) {
+            const concluidoCheckbox = document.getElementById('concluido');
+            if (concluidoCheckbox) {
+                concluidoCheckbox.checked = procedimento.concluido === 1 || procedimento.concluido === true;
             }
-            if (document.getElementById('numero_controle')) {
-                document.getElementById('numero_controle').value = procedimento.numero_controle;
+        }
+        
+        if (procedimento.data_conclusao) {
+            const dataConclusao = document.getElementById('data_conclusao');
+            if (dataConclusao) {
+                dataConclusao.value = procedimento.data_conclusao;
             }
         }
-    }
-    
-    // Lógica dos campos de conclusão na edição
-    if (procedimento.concluido !== undefined) {
-        const concluidoCheckbox = document.getElementById('concluido');
-        if (concluidoCheckbox) {
-            concluidoCheckbox.checked = procedimento.concluido === 1 || procedimento.concluido === true;
+        
+        console.log('✅ Campos de conclusão processados');
+        
+        // Preencher campos de responsável com formato completo
+        if (procedimento.responsavel_id) {
+            document.getElementById('responsavel_id').value = procedimento.responsavel_id || '';
+            // Usar o formato completo se disponível, senão apenas o nome
+            const responsavelTexto = procedimento.responsavel_completo || procedimento.responsavel_nome || '';
+            document.getElementById('responsavel_nome').value = responsavelTexto;
         }
-    }
-    
-    if (procedimento.data_conclusao) {
-        const dataConclusao = document.getElementById('data_conclusao');
-        if (dataConclusao) {
-            dataConclusao.value = procedimento.data_conclusao;
+
+        // Preencher campos de escrivão com formato completo
+        if (procedimento.escrivao_id) {
+            document.getElementById('escrivao_id').value = procedimento.escrivao_id || '';
+            document.getElementById('escrivao_nome').value = procedimento.escrivao_completo || '';
         }
-    }
-    
-    // Preencher campos de responsável
-    if (procedimento.responsavel_id) {
-        document.getElementById('responsavel_id').value = procedimento.responsavel_id || '';
-        document.getElementById('responsavel_nome').value = procedimento.responsavel || '';
-    }
 
-    // Aguardar um pouco para garantir que os campos estejam carregados
-    await new Promise(resolve => setTimeout(resolve, 100));
+        // Preencher campos de PM envolvido com formato completo
+        if (procedimento.nome_pm_id) {
+            document.getElementById('nome_pm').value = procedimento.nome_pm_id || '';
+            document.getElementById('nome_pm_nome').value = procedimento.pm_completo || '';
+        }
+        
+        console.log('✅ Campos de usuários preenchidos');
 
-    // Disparar evento change para mostrar campos condicionais
-    const tipoGeralSelect = document.getElementById('tipo_geral');
-    tipoGeralSelect.dispatchEvent(new Event('change'));
+        // Aguardar um pouco para garantir que os campos estejam carregados
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Aguardar mais um pouco para os campos condicionais aparecerem
-    await new Promise(resolve => setTimeout(resolve, 100));
+        // Disparar evento change para mostrar campos condicionais
+        const tipoGeralSelect = document.getElementById('tipo_geral');
+        tipoGeralSelect.dispatchEvent(new Event('change'));
 
-    // Preencher tipo específico baseado no tipo_geral
-    if (procedimento.tipo_geral === 'processo') {
-        document.getElementById('tipo_processo').value = procedimento.tipo_detalhe || '';
-    } else if (procedimento.tipo_geral === 'procedimento') {
-        document.getElementById('tipo_procedimento').value = procedimento.tipo_detalhe || '';
-    }
+        // Aguardar mais um pouco para os campos condicionais aparecerem
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Preencher responsável
-    if (procedimento.responsavel_id && procedimento.responsavel_tipo) {
-        if (document.getElementById('responsavel')) document.getElementById('responsavel').value = procedimento.responsavel_id;
-        if (document.getElementById('responsavel_nome')) document.getElementById('responsavel_nome').value = procedimento.responsavel_nome || '';
+        // Preencher tipo específico baseado no tipo_geral
+        if (procedimento.tipo_geral === 'processo') {
+            document.getElementById('tipo_processo').value = procedimento.tipo_detalhe || '';
+        } else if (procedimento.tipo_geral === 'procedimento') {
+            document.getElementById('tipo_procedimento').value = procedimento.tipo_detalhe || '';
+        }
+
+        // Remover a chamada para updateFormVisibility que estava causando erro
+        // A visibilidade dos campos já foi configurada pelos eventos change acima
+        
+        console.log('✅ Preenchimento do formulário concluído com sucesso');
+    } catch (error) {
+        console.error('❌ Erro durante o preenchimento do formulário:', error);
+        throw error; // Re-lançar o erro para que seja capturado pelo try-catch da função verificarEdicao
     }
 }
 

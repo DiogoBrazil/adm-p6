@@ -898,10 +898,27 @@ def obter_processo(processo_id):
                 p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
-                p.concluido, p.data_conclusao
+                p.concluido, p.data_conclusao,
+                -- Dados completos do responsável
+                COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
+                COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
+                -- Dados completos do escrivão
+                COALESCE(esc_o.nome, esc_e.nome, '') as escrivao_nome,
+                COALESCE(esc_o.posto_graduacao, esc_e.posto_graduacao, '') as escrivao_posto,
+                COALESCE(esc_o.matricula, esc_e.matricula, '') as escrivao_matricula,
+                -- Dados completos do PM envolvido
+                COALESCE(pm_o.nome, pm_e.nome, '') as pm_nome,
+                COALESCE(pm_o.posto_graduacao, pm_e.posto_graduacao, '') as pm_posto,
+                COALESCE(pm_o.matricula, pm_e.matricula, '') as pm_matricula
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
+            -- JOINs para escrivão
+            LEFT JOIN operadores esc_o ON p.escrivao_id = esc_o.id
+            LEFT JOIN encarregados esc_e ON p.escrivao_id = esc_e.id AND esc_o.id IS NULL
+            -- JOINs para PM envolvido
+            LEFT JOIN operadores pm_o ON p.nome_pm_id = pm_o.id
+            LEFT JOIN encarregados pm_e ON p.nome_pm_id = pm_e.id AND pm_o.id IS NULL
             WHERE p.id = ? AND p.ativo = 1
         """, (processo_id,))
         
@@ -909,6 +926,21 @@ def obter_processo(processo_id):
         conn.close()
         
         if processo:
+            # Formatar dados completos dos usuários
+            responsavel_completo = ""
+            if processo[26] and processo[27] and processo[8]:  # posto, matricula, nome
+                responsavel_completo = f"{processo[26]} {processo[27]} {processo[8]}".strip()
+            elif processo[8]:
+                responsavel_completo = processo[8]
+            
+            escrivao_completo = ""
+            if processo[28] and processo[29] and processo[30]:  # nome, posto, matricula
+                escrivao_completo = f"{processo[29]} {processo[30]} {processo[28]}".strip()
+            
+            pm_completo = ""
+            if processo[31] and processo[32] and processo[33]:  # nome, posto, matricula
+                pm_completo = f"{processo[32]} {processo[33]} {processo[31]}".strip()
+            
             return {
                 "id": processo[0],
                 "numero": processo[1],
@@ -919,12 +951,15 @@ def obter_processo(processo_id):
                 "responsavel_id": processo[6],
                 "responsavel_tipo": processo[7],
                 "responsavel_nome": processo[8],
+                "responsavel_completo": responsavel_completo,
                 "local_origem": processo[9],
                 "data_instauracao": processo[10],
                 "data_recebimento": processo[11],
                 "escrivao_id": processo[12],
+                "escrivao_completo": escrivao_completo,
                 "status_pm": processo[13],
                 "nome_pm_id": processo[14],
+                "pm_completo": pm_completo,
                 "nome_vitima": processo[15],
                 "natureza_processo": processo[16],
                 "natureza_procedimento": processo[17],
