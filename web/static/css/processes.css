@@ -26,3 +26,25 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     color: #333; 
     font-weight: 600; 
 }
+
+/* Texto de ajuda para campos com máscara */
+.form-help {
+    display: block;
+    margin-top: 5px;
+    color: #6c757d;
+    font-size: 0.875rem;
+    font-style: italic;
+}
+
+/* Estilo para campos com erro de validação */
+.form-group input.error {
+    border-color: #dc3545;
+    background-color: #fff5f5;
+}
+
+.form-group .error-message {
+    display: block;
+    margin-top: 5px;
+    color: #dc3545;
+    font-size: 0.875rem;
+}

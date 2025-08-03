@@ -2,6 +2,83 @@
 let usuarioLogado = null;
 let editandoProcedimento = null;
 
+// ============================================
+// FUNÇÕES DE MÁSCARA E VALIDAÇÃO
+// ============================================
+
+// Função para aplicar máscara do RGF (XX.XX.XXXX)
+function aplicarMascaraRGF(input) {
+    let value = input.value.replace(/\D/g, ''); // Remove não-dígitos
+    
+    if (value.length <= 2) {
+        value = value;
+    } else if (value.length <= 4) {
+        value = value.substring(0, 2) + '.' + value.substring(2);
+    } else {
+        value = value.substring(0, 2) + '.' + value.substring(2, 4) + '.' + value.substring(4, 8);
+    }
+    
+    input.value = value;
+}
+
+// Função para aplicar máscara do SEI (XXXX.XXXXXX/XXXX-XX)
+function aplicarMascaraSEI(input) {
+    let value = input.value.replace(/\D/g, ''); // Remove não-dígitos
+    
+    if (value.length <= 4) {
+        value = value;
+    } else if (value.length <= 10) {
+        value = value.substring(0, 4) + '.' + value.substring(4);
+    } else if (value.length <= 14) {
+        value = value.substring(0, 4) + '.' + value.substring(4, 10) + '/' + value.substring(10);
+    } else {
+        value = value.substring(0, 4) + '.' + value.substring(4, 10) + '/' + value.substring(10, 14) + '-' + value.substring(14, 16);
+    }
+    
+    input.value = value;
+}
+
+// Função para validar formato RGF
+function validarRGF(value) {
+    const regex = /^\d{2}\.\d{2}\.\d{4}$/;
+    return regex.test(value);
+}
+
+// Função para validar formato SEI
+function validarSEI(value) {
+    if (!value || value.trim() === '') return true; // Campo opcional
+    const regex = /^\d{4}\.\d{6}\/\d{4}-\d{2}$/;
+    return regex.test(value);
+}
+
+// Função para exibir erro de validação
+function exibirErroValidacao(input, mensagem) {
+    // Remove erro anterior se existir
+    removerErroValidacao(input);
+    
+    input.classList.add('error');
+    
+    const errorSpan = document.createElement('span');
+    errorSpan.className = 'error-message';
+    errorSpan.textContent = mensagem;
+    
+    input.parentNode.appendChild(errorSpan);
+}
+
+// Função para remover erro de validação
+function removerErroValidacao(input) {
+    input.classList.remove('error');
+    
+    const errorSpan = input.parentNode.querySelector('.error-message');
+    if (errorSpan) {
+        errorSpan.remove();
+    }
+}
+
+// ============================================
+// OUTRAS FUNÇÕES
+// ============================================
+
 // Função para voltar à página anterior
 function voltarParaListagem() {
     window.location.href = 'procedure_list.html';
@@ -474,6 +551,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 document.getElementById('processForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
+    // Validar campos com máscara antes de submeter
+    const rgfInput = document.getElementById('numero_rgf');
+    const seiInput = document.getElementById('processo_sei');
+    
+    let isValid = true;
+    
+    // Validar RGF
+    if (!validarRGF(rgfInput.value)) {
+        exibirErroValidacao(rgfInput, 'Formato inválido. Use: XX.XX.XXXX (ex: 25.08.8415)');
+        isValid = false;
+    }
+    
+    // Validar SEI (se preenchido)
+    if (seiInput.value && !validarSEI(seiInput.value)) {
+        exibirErroValidacao(seiInput, 'Formato inválido. Use: XXXX.XXXXXX/XXXX-XX (ex: 0021.033044/2025-34)');
+        isValid = false;
+    }
+    
+    if (!isValid) {
+        showAlert('Por favor, corrija os erros nos campos destacados.', 'error');
+        return;
+    }
+    
     // Coleta todos os campos do formulário
     const numero_rgf = document.getElementById('numero_rgf').value.trim();
     const tipo_geral = document.getElementById('tipo_geral').value;
@@ -610,3 +710,42 @@ async function safeListarTodosUsuarios() {
         return [];
     }
 }
+
+// ============================================
+// INICIALIZAÇÃO
+// ============================================
+
+// Inicialização quando a página carrega
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar máscaras para os campos
+    const rgfInput = document.getElementById('numero_rgf');
+    const seiInput = document.getElementById('processo_sei');
+    
+    // Event listeners para aplicar máscaras
+    rgfInput.addEventListener('input', function() {
+        aplicarMascaraRGF(this);
+        removerErroValidacao(this);
+    });
+    
+    seiInput.addEventListener('input', function() {
+        aplicarMascaraSEI(this);
+        removerErroValidacao(this);
+    });
+    
+    // Event listeners para validação ao sair do campo
+    rgfInput.addEventListener('blur', function() {
+        if (this.value && !validarRGF(this.value)) {
+            exibirErroValidacao(this, 'Formato inválido. Use: XX.XX.XXXX (ex: 25.08.8415)');
+        } else {
+            removerErroValidacao(this);
+        }
+    });
+    
+    seiInput.addEventListener('blur', function() {
+        if (this.value && !validarSEI(this.value)) {
+            exibirErroValidacao(this, 'Formato inválido. Use: XXXX.XXXXXX/XXXX-XX (ex: 0021.033044/2025-34)');
+        } else {
+            removerErroValidacao(this);
+        }
+    });
+});
