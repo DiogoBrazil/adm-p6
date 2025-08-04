@@ -558,7 +558,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 1. Lógica para Tipo de Cadastro (Processo vs Procedimento)
         toggleGroup(fieldGroups.tipoProcesso, tipoGeral === 'processo');
         toggleGroup(fieldGroups.tipoProcedimento, tipoGeral === 'procedimento');
-        toggleGroup(fieldGroups.nomeVitima, tipoGeral === 'procedimento');
+        
+        // Lógica para Nome da Vítima/Ofendido (procedimento, mas não AO)
+        const showNomeVitima = tipoGeral === 'procedimento' && tipoProcedimento !== 'AO';
+        toggleGroup(fieldGroups.nomeVitima, showNomeVitima);
 
         // Lógica para Escrivão (se Procedimento for IPM)
         toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');

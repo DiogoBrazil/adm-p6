@@ -1360,25 +1360,34 @@ def calcular_prazo_processo(tipo_detalhe, documento_iniciador, data_recebimento,
     
     # Definir prazos base conforme regras
     prazos_base = {
+        # Procedimentos com 15 dias
+        'AO': 15,
+        'SV': 15,
+        # Procedimentos com 30 dias (mantidos)
         'SR': 30,
-        'PADS': 30, 
-        'IPM': 40,
-        'Feito Preliminar': 15  # Baseado no documento iniciador
+        'IPM': 40,  # Mantido conforme regra específica
+        'FP': 30,
+        'CP': 30,
+        # Processos com 30 dias
+        'PAD': 30,
+        'PADE': 30,
+        'CD': 30,
+        'CJ': 30,
+        'PADS': 30,
+        # Baseado no documento iniciador
+        'Feito Preliminar': 15
     }
     
     # Determinar prazo base
     prazo_dias = 30  # Padrão
     
+    # Primeiro verificar documento iniciador
     if documento_iniciador == 'Feito Preliminar':
         prazo_dias = prazos_base['Feito Preliminar']
+    # Depois verificar tipo específico
     elif tipo_detalhe in prazos_base:
         prazo_dias = prazos_base[tipo_detalhe]
-    elif 'SR' in tipo_detalhe.upper():
-        prazo_dias = prazos_base['SR']
-    elif 'PADS' in tipo_detalhe.upper():
-        prazo_dias = prazos_base['PADS']
-    elif 'IPM' in tipo_detalhe.upper():
-        prazo_dias = prazos_base['IPM']
+    # Se não encontrar, manter padrão de 30 dias
     
     # Calcular prazo total com prorrogações
     prazo_total_dias = prazo_dias + prorrogacoes_dias
