@@ -69,3 +69,121 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     cursor: pointer;
     color: #555;
 }
+
+/* Estilo para dropdown de infrações */
+.dropdown-infracao {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #e1e8ed;
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-option {
+    padding: 10px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.dropdown-option:last-child {
+    border-bottom: none;
+}
+
+.dropdown-option:hover {
+    background-color: #f8f9ff;
+    color: #667eea;
+}
+
+.dropdown-option:active {
+    background-color: #667eea;
+    color: white;
+}
+
+/* Estilo especial para o campo de busca de infrações */
+#infracao_search {
+    padding-right: 30px; /* Espaço para ícone de busca */
+}
+
+#infracao_search::placeholder {
+    color: #999;
+    font-style: italic;
+}
+
+/* Container para transgressões selecionadas */
+.transgressoes-container {
+    border: 1px solid #e1e8ed;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 15px;
+    background-color: #f8f9ff;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.transgressao-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.transgressao-item:last-child {
+    margin-bottom: 0;
+}
+
+.transgressao-texto {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.transgressao-inciso {
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 4px;
+}
+
+.transgressao-descricao {
+    color: #555;
+}
+
+.btn-remover-transgressao {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+.btn-remover-transgressao:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Botão secundário para adicionar */
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}

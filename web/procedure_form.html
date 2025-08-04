@@ -256,15 +256,30 @@
                 
                 <!-- Campo de Infração (para PADS) -->
                 <div class="form-group" id="group_infracao" style="display: none;">
-                    <label for="infracao_search">Inciso da Infração Praticada *</label>
-                    <div style="position: relative;">
-                        <input type="text" id="infracao_search" placeholder="Digite para filtrar infrações..." autocomplete="off">
-                        <input type="hidden" id="infracao_id" name="infracao_id">
+                    <label for="infracao_search">Transgressões Praticadas *</label>
+                    
+                    <!-- Lista de transgressões selecionadas -->
+                    <div id="transgressoes_selecionadas" class="transgressoes-container" style="display: none;">
+                        <!-- Transgressões serão adicionadas aqui dinamicamente -->
+                    </div>
+                    
+                    <!-- Campo de busca para nova transgressão -->
+                    <div id="campo_busca_transgressao" style="position: relative;">
+                        <input type="text" id="infracao_search" placeholder="Digite para filtrar transgressões..." autocomplete="off">
+                        <input type="hidden" id="transgressoes_ids" name="transgressoes_ids">
                         <div id="infracao_dropdown" class="dropdown-infracao" style="display: none;">
                             <!-- Opções serão carregadas via JavaScript -->
                         </div>
                     </div>
-                    <small class="form-help">Digite parte do texto do inciso para filtrar</small>
+                    
+                    <!-- Botão para adicionar nova transgressão -->
+                    <div id="botao_adicionar_transgressao" style="display: none; margin-top: 10px;">
+                        <button type="button" id="btnAdicionarTransgressao" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
+                            <i class="fas fa-plus"></i> Adicionar outra transgressão
+                        </button>
+                    </div>
+                    
+                    <small class="form-help">Digite parte do texto da transgressão para filtrar</small>
                 </div>
                 
                 <div class="form-group" id="group_natureza_procedimento" style="display: none;">

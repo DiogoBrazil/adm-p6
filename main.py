@@ -7,6 +7,8 @@ import sys
 from datetime import datetime, timedelta
 import uuid
 import time
+import json
+from bottle import route, request, response
 from prazos_andamentos_manager import PrazosAndamentosManager
 
 class DatabaseManager:
@@ -466,6 +468,50 @@ prazos_manager = PrazosAndamentosManager(db_manager.db_path)
 # Inicializar Eel
 eel.init('web')
 
+# Adicionar rota HTTP para buscar transgressões
+@route('/buscar_transgressoes')
+def api_buscar_transgressoes():
+    """Endpoint HTTP para buscar transgressões por gravidade"""
+    response.content_type = 'application/json'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    try:
+        gravidade = request.query.get('gravidade', '')
+        
+        if not gravidade:
+            return json.dumps({"erro": "Parâmetro gravidade é obrigatório"})
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, inciso, texto 
+            FROM transgressoes 
+            WHERE gravidade = ? AND ativo = 1
+            ORDER BY 
+                CASE 
+                    WHEN inciso GLOB '[IVX]*' THEN LENGTH(inciso)
+                    ELSE 999
+                END,
+                inciso
+        """, (gravidade,))
+        
+        transgressoes = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for t in transgressoes:
+            resultado.append({
+                "id": t[0],
+                "inciso": t[1],
+                "texto": t[2]
+            })
+        
+        return json.dumps(resultado)
+        
+    except Exception as e:
+        return json.dumps({"erro": f"Erro ao buscar transgressões: {str(e)}"})
+
 # Variável para usuário logado
 usuario_logado = None
 
@@ -767,7 +813,7 @@ def registrar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None, infracao_id=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None, transgressoes_ids=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -807,14 +853,14 @@ def registrar_processo(
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-                concluido, data_conclusao, infracao_id
+                concluido, data_conclusao, transgressoes_ids
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, infracao_id
+            concluido, data_conclusao, transgressoes_ids
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -1144,7 +1190,7 @@ def atualizar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None, infracao_id=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None, transgressoes_ids=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -1158,14 +1204,14 @@ def atualizar_processo(
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                concluido = ?, data_conclusao = ?, infracao_id = ?, updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, transgressoes_ids = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, infracao_id, processo_id
+            concluido, data_conclusao, transgressoes_ids, processo_id
         ))
         
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela

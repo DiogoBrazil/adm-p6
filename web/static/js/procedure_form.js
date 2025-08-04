@@ -5,6 +5,9 @@ let editandoProcedimento = null;
 // Array para armazenar PMs adicionais (além do primeiro)
 let pmsAdicionais = [];
 
+// Array para armazenar transgressões selecionadas
+let transgressoesSelecionadas = [];
+
 function obterTodosPmsEnvolvidos() {
     const pms = [];
     
@@ -566,6 +569,11 @@ function updateFormVisibility() {
     if (showInfracao) {
         console.log('Carregando infrações para natureza:', fields.naturezaProcesso.value);
         carregarInfracoesPorNatureza(fields.naturezaProcesso.value);
+    } else {
+        // Se não mostrar infração, cancelar adição e limpar transgressões selecionadas
+        cancelarAdicaoTransgressao();
+        transgressoesSelecionadas = [];
+        atualizarTransgressoesSelecionadas();
     }
 
     // 3. Lógica para Documento que Iniciou
@@ -1068,6 +1076,18 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         return;
     }
     
+    // Validação específica para PADS - deve ter pelo menos uma transgressão
+    const tipoGeral = document.getElementById('tipo_geral')?.value;
+    const tipoProcesso = document.getElementById('tipo_processo')?.value;
+    
+    if (tipoGeral === 'processo' && tipoProcesso === 'PADS') {
+        if (transgressoesSelecionadas.length === 0) {
+            showAlert('Para um PADS, é obrigatório selecionar pelo menos uma transgressão.', 'error');
+            return;
+        }
+        console.log(`Validação PADS: ${transgressoesSelecionadas.length} transgressões selecionadas`);
+    }
+
     // Coleta todos os campos do formulário
     const numero_rgf = document.getElementById('numero_rgf').value.trim();
     const tipo_geral = document.getElementById('tipo_geral').value;
@@ -1097,7 +1117,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const nome_vitima = document.getElementById('nome_vitima')?.value || null;
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
-    const infracao_id = document.getElementById('infracao_id')?.value || null;
+    const transgressoes_ids = document.getElementById('transgressoes_ids')?.value || null;
     const resumo_fatos = document.getElementById('resumo_fatos')?.value || null;
     const numero_portaria = document.getElementById('numero_portaria')?.value || null;
     const numero_memorando = document.getElementById('numero_memorando')?.value || null;
@@ -1175,7 +1195,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 concluido,
                 data_conclusao,
                 pmsParaEnvio,
-                infracao_id
+                transgressoes_ids
             )();
         } else {
             // Modo criação
@@ -1205,7 +1225,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 concluido,
                 data_conclusao,
                 pmsParaEnvio,
-                infracao_id
+                transgressoes_ids
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');
@@ -1445,62 +1465,282 @@ async function safeListarTodosUsuarios() {
 
 // Função para carregar infrações baseadas na natureza selecionada
 function carregarInfracoesPorNatureza(natureza) {
+    console.log('Carregando infrações para natureza:', natureza);
+    
     // Mapear natureza para gravidade
     const naturezaParaGravidade = {
-        'leve': 'leve',
-        'média': 'media',
-        'grave': 'grave'
+        'Leve': 'leve',
+        'Média': 'media', 
+        'Grave': 'grave'
     };
     
     const gravidade = naturezaParaGravidade[natureza];
-    if (!gravidade) return;
+    if (!gravidade) {
+        console.log('Gravidade não encontrada para natureza:', natureza);
+        return;
+    }
     
-    fetch(`/buscar_transgressoes?gravidade=${gravidade}`)
-        .then(response => response.json())
+    console.log('Buscando transgressões para gravidade:', gravidade);
+    
+    fetch(`/buscar_transgressoes?gravidade=${encodeURIComponent(gravidade)}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('Dados recebidos:', data);
+            
+            if (data.erro) {
+                console.error('Erro do servidor:', data.erro);
+                showAlert('Erro ao carregar infrações: ' + data.erro, 'error');
+                return;
+            }
+            
             const searchInput = document.getElementById('infracao_search');
             const dropdownContent = document.getElementById('infracao_dropdown');
-            const hiddenInput = document.getElementById('infracao_id');
+            const hiddenInput = document.getElementById('transgressoes_ids');
+            
+            if (!searchInput || !dropdownContent || !hiddenInput) {
+                console.error('Elementos não encontrados no DOM:', {
+                    searchInput: !!searchInput,
+                    dropdownContent: !!dropdownContent,
+                    hiddenInput: !!hiddenInput
+                });
+                
+                // Tentar encontrar os elementos novamente após um pequeno delay
+                setTimeout(() => {
+                    const searchInputRetry = document.getElementById('infracao_search');
+                    const dropdownContentRetry = document.getElementById('infracao_dropdown');
+                    const hiddenInputRetry = document.getElementById('transgressoes_ids');
+                    
+                    console.log('Retry - Elementos encontrados:', {
+                        searchInput: !!searchInputRetry,
+                        dropdownContent: !!dropdownContentRetry,
+                        hiddenInput: !!hiddenInputRetry
+                    });
+                }, 100);
+                
+                return;
+            }
             
             // Limpar dropdown anterior
             dropdownContent.innerHTML = '';
             searchInput.value = '';
-            hiddenInput.value = '';
+            // Não limpar hiddenInput aqui, pois é gerenciado por atualizarTransgressoesSelecionadas()
+            
+            // Verificar se há dados
+            if (!Array.isArray(data) || data.length === 0) {
+                console.log('Nenhuma transgressão encontrada');
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = 'Nenhuma transgressão encontrada';
+                option.style.color = '#999';
+                option.style.fontStyle = 'italic';
+                dropdownContent.appendChild(option);
+                return;
+            }
+            
+            console.log(`Adicionando ${data.length} infrações ao dropdown`);
             
             // Adicionar infrações ao dropdown
             data.forEach(infracao => {
                 const option = document.createElement('div');
                 option.className = 'dropdown-option';
-                option.textContent = `Art. ${infracao.inciso} - ${infracao.texto}`;
+                option.textContent = `${infracao.inciso} - ${infracao.texto}`;
+                option.title = infracao.texto; // Tooltip com texto completo
                 option.onclick = () => selecionarInfracao(infracao);
                 dropdownContent.appendChild(option);
             });
+            
+            console.log('Dropdown populado com sucesso');
         })
         .catch(error => {
             console.error('Erro ao carregar infrações:', error);
+            showAlert('Erro ao carregar infrações. Verifique a conexão.', 'error');
         });
 }
 
 // Função para selecionar uma infração
 function selecionarInfracao(infracao) {
+    console.log('Selecionando infração:', infracao);
+    
+    // Verificar se a transgressão já foi selecionada
+    const jaExiste = transgressoesSelecionadas.find(t => t.id === infracao.id);
+    if (jaExiste) {
+        showAlert('Esta transgressão já foi selecionada!', 'warning');
+        return;
+    }
+    
+    // Adicionar à lista de selecionadas
+    transgressoesSelecionadas.push(infracao);
+    
+    // Atualizar interface
+    atualizarTransgressoesSelecionadas();
+    
+    // Limpar campo de busca
     const searchInput = document.getElementById('infracao_search');
-    const hiddenInput = document.getElementById('infracao_id');
     const dropdownContent = document.getElementById('infracao_dropdown');
     
-    searchInput.value = `Art. ${infracao.inciso} - ${infracao.texto}`;
-    hiddenInput.value = infracao.id;
-    dropdownContent.style.display = 'none';
+    if (searchInput && dropdownContent) {
+        searchInput.value = '';
+        dropdownContent.style.display = 'none';
+    }
+    
+    console.log('Transgressão adicionada. Total:', transgressoesSelecionadas.length);
+}
+
+// Função para atualizar a lista de transgressões selecionadas
+function atualizarTransgressoesSelecionadas() {
+    const container = document.getElementById('transgressoes_selecionadas');
+    const hiddenInput = document.getElementById('transgressoes_ids');
+    const botaoAdicionar = document.getElementById('botao_adicionar_transgressao');
+    const campoBusca = document.getElementById('campo_busca_transgressao');
+    
+    if (!container || !hiddenInput) return;
+    
+    // Limpar container
+    container.innerHTML = '';
+    
+    if (transgressoesSelecionadas.length === 0) {
+        // Nenhuma transgressão selecionada
+        container.style.display = 'none';
+        if (botaoAdicionar) botaoAdicionar.style.display = 'none';
+        if (campoBusca) campoBusca.style.display = 'block';
+        hiddenInput.value = '';
+        return;
+    }
+    
+    // Mostrar container
+    container.style.display = 'block';
+    
+    // Adicionar cada transgressão
+    transgressoesSelecionadas.forEach((transgressao, index) => {
+        const item = document.createElement('div');
+        item.className = 'transgressao-item';
+        item.innerHTML = `
+            <div class="transgressao-texto">
+                <div class="transgressao-inciso">Inciso ${transgressao.inciso}</div>
+                <div class="transgressao-descricao">${transgressao.texto}</div>
+            </div>
+            <button type="button" class="btn-remover-transgressao" onclick="removerTransgressao(${index})" title="Remover transgressão">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(item);
+    });
+    
+    // Atualizar campo hidden com IDs das transgressões
+    const ids = transgressoesSelecionadas.map(t => t.id);
+    hiddenInput.value = JSON.stringify(ids);
+    
+    // Controlar visibilidade dos botões e campo de busca
+    if (botaoAdicionar) botaoAdicionar.style.display = 'block';
+    if (campoBusca) campoBusca.style.display = 'none';
+    
+    console.log('Interface atualizada. Transgressões:', ids);
+}
+
+// Função para remover uma transgressão
+function removerTransgressao(index) {
+    console.log('Removendo transgressão no índice:', index);
+    
+    if (index >= 0 && index < transgressoesSelecionadas.length) {
+        transgressoesSelecionadas.splice(index, 1);
+        atualizarTransgressoesSelecionadas();
+        
+        // Se não há mais transgressões, mostrar campo de busca novamente
+        if (transgressoesSelecionadas.length === 0) {
+            const campoBusca = document.getElementById('campo_busca_transgressao');
+            if (campoBusca) campoBusca.style.display = 'block';
+        }
+    }
+}
+
+// Função para mostrar campo de busca para adicionar nova transgressão
+function mostrarCampoBuscaTransgressao() {
+    console.log('Mostrando campo de busca para nova transgressão');
+    
+    const campoBusca = document.getElementById('campo_busca_transgressao');
+    const botaoAdicionar = document.getElementById('botao_adicionar_transgressao');
+    
+    console.log('campoBusca element:', campoBusca);
+    console.log('botaoAdicionar element:', botaoAdicionar);
+    
+    if (campoBusca) {
+        campoBusca.style.display = 'block';
+        console.log('Campo de busca exibido');
+        
+        const searchInput = document.getElementById('infracao_search');
+        console.log('searchInput element:', searchInput);
+        
+        if (searchInput) {
+            searchInput.focus();
+            console.log('Focus definido no input de busca');
+        } else {
+            console.log('Input infracao_search não encontrado');
+        }
+    } else {
+        console.log('Elemento campo_busca_transgressao não encontrado');
+    }
+    
+    if (botaoAdicionar) {
+        botaoAdicionar.style.display = 'none';
+    }
+}
+
+// Função para cancelar adição de nova transgressão
+function cancelarAdicaoTransgressao() {
+    const campoBusca = document.getElementById('campo_busca_transgressao');
+    const botaoAdicionar = document.getElementById('botao_adicionar_transgressao');
+    const searchInput = document.getElementById('infracao_search');
+    const dropdown = document.getElementById('infracao_dropdown');
+    
+    if (campoBusca && transgressoesSelecionadas.length > 0) {
+        campoBusca.style.display = 'none';
+    }
+    
+    if (botaoAdicionar && transgressoesSelecionadas.length > 0) {
+        botaoAdicionar.style.display = 'block';
+    }
+    
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
 }
 
 // Função para filtrar infrações durante a busca
 function filtrarInfracoes() {
     const searchTerm = document.getElementById('infracao_search').value.toLowerCase();
+    const dropdownContent = document.getElementById('infracao_dropdown');
     const options = document.querySelectorAll('#infracao_dropdown .dropdown-option');
+    
+    console.log('Filtrando infrações com termo:', searchTerm);
+    
+    let visibleCount = 0;
     
     options.forEach(option => {
         const text = option.textContent.toLowerCase();
-        option.style.display = text.includes(searchTerm) ? 'block' : 'none';
+        const isVisible = text.includes(searchTerm);
+        option.style.display = isVisible ? 'block' : 'none';
+        if (isVisible) visibleCount++;
     });
+    
+    // Mostrar dropdown se houver texto e opções visíveis
+    if (searchTerm && visibleCount > 0) {
+        dropdownContent.style.display = 'block';
+    } else if (!searchTerm) {
+        dropdownContent.style.display = 'block'; // Mostrar todas quando vazio
+    } else {
+        dropdownContent.style.display = 'none'; // Ocultar se não houver resultados
+    }
+    
+    console.log('Opções visíveis:', visibleCount);
 }
 
 // ============================================
@@ -1544,22 +1784,81 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event listeners para o dropdown de infrações
     const infracaoSearch = document.getElementById('infracao_search');
     const infracaoDropdown = document.getElementById('infracao_dropdown');
+    const btnAdicionarTransgressao = document.getElementById('btnAdicionarTransgressao');
     
     if (infracaoSearch && infracaoDropdown) {
+        console.log('Configurando event listeners para dropdown de infrações');
+        
+        // Mostrar dropdown ao focar no campo de busca
+        infracaoSearch.addEventListener('focus', function() {
+            console.log('Campo de infração focado');
+            if (infracaoDropdown.children.length > 0) {
+                infracaoDropdown.style.display = 'block';
+            }
+        });
+        
         // Mostrar dropdown ao clicar no campo de busca
         infracaoSearch.addEventListener('click', function() {
-            infracaoDropdown.style.display = 'block';
+            console.log('Campo de infração clicado');
+            if (infracaoDropdown.children.length > 0) {
+                infracaoDropdown.style.display = 'block';
+            }
         });
         
         // Filtrar infrações enquanto digita
-        infracaoSearch.addEventListener('input', filtrarInfracoes);
+        infracaoSearch.addEventListener('input', function() {
+            console.log('Input mudou, filtrando infrações');
+            filtrarInfracoes();
+        });
+        
+        // Ocultar dropdown ao pressionar Escape
+        infracaoSearch.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                infracaoDropdown.style.display = 'none';
+                // Se há transgressões selecionadas, cancelar adição
+                if (transgressoesSelecionadas.length > 0) {
+                    cancelarAdicaoTransgressao();
+                }
+            }
+        });
         
         // Ocultar dropdown ao clicar fora
         document.addEventListener('click', function(event) {
             if (!infracaoSearch.contains(event.target) && !infracaoDropdown.contains(event.target)) {
+                console.log('Clique fora do dropdown, ocultando');
                 infracaoDropdown.style.display = 'none';
+                // Se há transgressões selecionadas, cancelar adição
+                if (transgressoesSelecionadas.length > 0) {
+                    cancelarAdicaoTransgressao();
+                }
             }
         });
+        
+        // Prevenir que cliques no dropdown fechem o dropdown
+        infracaoDropdown.addEventListener('click', function(event) {
+            event.stopPropagation();
+        });
+    } else {
+        console.log('Elementos do dropdown de infrações não encontrados');
+    }
+    
+    // Event listener para botão de adicionar transgressão (usando delegação de eventos)
+    document.addEventListener('click', function(event) {
+        if (event.target && event.target.id === 'btnAdicionarTransgressao') {
+            console.log('Botão adicionar transgressão clicado!');
+            mostrarCampoBuscaTransgressao();
+        }
+    });
+    
+    // Também tentar adicionar diretamente ao botão se ele existir
+    if (btnAdicionarTransgressao) {
+        console.log('Adicionando event listener direto ao botão');
+        btnAdicionarTransgressao.addEventListener('click', function(e) {
+            console.log('Event listener direto: Botão adicionar transgressão clicado!');
+            mostrarCampoBuscaTransgressao();
+        });
+    } else {
+        console.log('Botão btnAdicionarTransgressao não encontrado no DOM');
     }
     
     // Event listener para mudança na natureza do processo (PADS)
