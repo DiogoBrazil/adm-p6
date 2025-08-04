@@ -460,6 +460,28 @@ async function preencherFormularioEdicao(procedimento) {
         // Remover a chamada para updateFormVisibility que estava causando erro
         // A visibilidade dos campos já foi configurada pelos eventos change acima
         
+        // Carregar transgressões selecionadas para edição
+        if (procedimento.transgressoes_selecionadas && procedimento.transgressoes_selecionadas.length > 0) {
+            console.log('🏷️ Carregando transgressões para edição:', procedimento.transgressoes_selecionadas);
+            
+            // Limpar array global e resetar interface
+            transgressoesSelecionadas = [];
+            
+            // Adicionar cada transgressão ao array global
+            procedimento.transgressoes_selecionadas.forEach(transgressao => {
+                transgressoesSelecionadas.push({
+                    id: transgressao.id,
+                    inciso: transgressao.inciso,
+                    texto: transgressao.texto
+                });
+            });
+            
+            // Atualizar a interface
+            atualizarTransgressoesSelecionadas();
+            
+            console.log('✅ Transgressões carregadas na edição:', transgressoesSelecionadas);
+        }
+        
         console.log('✅ Preenchimento do formulário concluído com sucesso');
     } catch (error) {
         console.error('❌ Erro durante o preenchimento do formulário:', error);

@@ -1098,7 +1098,7 @@ def obter_processo(processo_id):
                 p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
-                p.concluido, p.data_conclusao,
+                p.concluido, p.data_conclusao, p.transgressoes_ids,
                 -- Dados completos do responsável
                 COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
                 COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
@@ -1128,23 +1128,46 @@ def obter_processo(processo_id):
         if processo:
             # Formatar dados completos dos usuários
             responsavel_completo = ""
-            if processo[26] and processo[27] and processo[8]:  # posto, matricula, nome
-                responsavel_completo = f"{processo[26]} {processo[27]} {processo[8]}".strip()
+            if processo[27] and processo[28] and processo[8]:  # posto, matricula, nome
+                responsavel_completo = f"{processo[27]} {processo[28]} {processo[8]}".strip()
             elif processo[8]:
                 responsavel_completo = processo[8]
             
             escrivao_completo = ""
-            if processo[28] and processo[29] and processo[30]:  # nome, posto, matricula
-                escrivao_completo = f"{processo[29]} {processo[30]} {processo[28]}".strip()
+            if processo[29] and processo[30] and processo[31]:  # nome, posto, matricula
+                escrivao_completo = f"{processo[30]} {processo[31]} {processo[29]}".strip()
             
             pm_completo = ""
-            if processo[31] and processo[32] and processo[33]:  # nome, posto, matricula
-                pm_completo = f"{processo[32]} {processo[33]} {processo[31]}".strip()
+            if processo[32] and processo[33] and processo[34]:  # nome, posto, matricula
+                pm_completo = f"{processo[33]} {processo[34]} {processo[32]}".strip()
             
             # Para procedimentos, buscar múltiplos PMs envolvidos
             pms_envolvidos = []
             if processo[2] == 'procedimento':  # tipo_geral
                 pms_envolvidos = buscar_pms_envolvidos(processo_id)
+            
+            # Processar transgressões (campo JSON)
+            transgressoes_selecionadas = []
+            if processo[26]:  # transgressoes_ids
+                try:
+                    import json
+                    transgressoes_ids = json.loads(processo[26])
+                    if isinstance(transgressoes_ids, list):
+                        # Buscar detalhes das transgressões
+                        conn2 = db_manager.get_connection()
+                        cursor2 = conn2.cursor()
+                        for trans_id in transgressoes_ids:
+                            cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                            trans = cursor2.fetchone()
+                            if trans:
+                                transgressoes_selecionadas.append({
+                                    'id': trans[0],
+                                    'inciso': trans[1],
+                                    'texto': trans[2]
+                                })
+                        conn2.close()
+                except (json.JSONDecodeError, TypeError):
+                    transgressoes_selecionadas = []
             
             return {
                 "id": processo[0],
@@ -1176,7 +1199,9 @@ def obter_processo(processo_id):
                 "numero_rgf": processo[22],
                 "numero_controle": processo[23],
                 "concluido": processo[24],
-                "data_conclusao": processo[25]
+                "data_conclusao": processo[25],
+                "transgressoes_ids": processo[26],
+                "transgressoes_selecionadas": transgressoes_selecionadas
             }
         else:
             return None
