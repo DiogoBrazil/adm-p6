@@ -45,6 +45,6 @@ BEGIN
     SELECT RAISE(ABORT, 'numero_controle não pode ser nulo ou vazio');
 END;
 
--- Atualizar timestamp da migração
-UPDATE schema_migrations SET executed_at = CURRENT_TIMESTAMP WHERE version = '006';
-INSERT OR IGNORE INTO schema_migrations (version, executed_at) VALUES ('006', CURRENT_TIMESTAMP);
+-- Atualizar timestamp da migração (gerenciado automaticamente pelo migration_runner)
+-- UPDATE schema_migrations SET executed_at = CURRENT_TIMESTAMP WHERE migration_name = '006_add_numero_controle.sql';
+-- INSERT OR IGNORE INTO schema_migrations (migration_name, executed_at) VALUES ('006_add_numero_controle.sql', CURRENT_TIMESTAMP);

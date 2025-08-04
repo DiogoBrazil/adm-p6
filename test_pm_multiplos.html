@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste PM Múltiplos</title>
+</head>
+<body>
+    <h1>Teste simples para debug</h1>
+    
+    <div id="container_pms_envolvidos">
+        <!-- Container vazio -->
+    </div>
+    
+    <button onclick="testarAdicionarPm()">Adicionar PM</button>
+    <button onclick="testarObterPms()">Obter PMs</button>
+    
+    <script>
+        let contadorPms = 0;
+        let currentPmField = null;
+        
+        function testarAdicionarPm() {
+            contadorPms++;
+            const container = document.getElementById('container_pms_envolvidos');
+            
+            const pmItem = document.createElement('div');
+            pmItem.className = 'pm-item';
+            pmItem.setAttribute('data-pm-index', contadorPms);
+            
+            pmItem.innerHTML = `
+                <input type="text" data-field="nome" value="" readonly placeholder="Selecione o PM..." required>
+                <input type="hidden" data-field="pm_id" value="">
+                <button type="button" onclick="testarPreenchimento(this)">Preencher Teste</button>
+            `;
+            
+            container.appendChild(pmItem);
+            
+            console.log('PM item adicionado:', pmItem);
+        }
+        
+        function testarPreenchimento(button) {
+            const pmItem = button.closest('.pm-item');
+            const pmIdField = pmItem.querySelector('[data-field="pm_id"]');
+            const pmNameField = pmItem.querySelector('[data-field="nome"]');
+            
+            console.log('Campos encontrados:', { pmIdField, pmNameField });
+            
+            // Simular preenchimento
+            pmIdField.value = 'teste-id-123';
+            pmNameField.value = 'TESTE NOME COMPLETO';
+            
+            console.log('Valores após preenchimento:', {
+                pmId: pmIdField.value,
+                pmName: pmNameField.value
+            });
+        }
+        
+        function testarObterPms() {
+            const container = document.getElementById('container_pms_envolvidos');
+            const pmsItems = container.querySelectorAll('.pm-item');
+            
+            console.log('Total de items:', pmsItems.length);
+            
+            pmsItems.forEach((item, index) => {
+                const pmIdField = item.querySelector('[data-field="pm_id"]');
+                const nomeField = item.querySelector('[data-field="nome"]');
+                
+                console.log(`PM ${index + 1}:`, {
+                    pmIdField: pmIdField ? 'found' : 'not found',
+                    nomeField: nomeField ? 'found' : 'not found',
+                    pmIdValue: pmIdField ? pmIdField.value : 'no field',
+                    nomeValue: nomeField ? nomeField.value : 'no field'
+                });
+            });
+        }
+    </script>
+</body>
+</html>
