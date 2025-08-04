@@ -767,7 +767,7 @@ def registrar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None, infracao_id=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -807,14 +807,14 @@ def registrar_processo(
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-                concluido, data_conclusao
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                concluido, data_conclusao, infracao_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao
+            concluido, data_conclusao, infracao_id
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -1144,7 +1144,7 @@ def atualizar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None, infracao_id=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -1158,14 +1158,14 @@ def atualizar_processo(
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                concluido = ?, data_conclusao = ?, updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, infracao_id = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, processo_id
+            concluido, data_conclusao, infracao_id, processo_id
         ))
         
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela
@@ -2027,6 +2027,108 @@ def obter_opcoes_filtros():
         
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter opções de filtros: {str(e)}"}
+
+# ======== FUNÇÕES DE TRANSGRESSÕES ========
+
+@eel.expose
+def listar_transgressoes(gravidade=None):
+    """Lista transgressões por gravidade"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if gravidade:
+            cursor.execute("""
+                SELECT id, inciso, texto 
+                FROM transgressoes 
+                WHERE gravidade = ? AND ativo = 1
+                ORDER BY inciso
+            """, (gravidade,))
+        else:
+            cursor.execute("""
+                SELECT id, gravidade, inciso, texto 
+                FROM transgressoes 
+                WHERE ativo = 1
+                ORDER BY gravidade, inciso
+            """)
+        
+        transgressoes = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for t in transgressoes:
+            if gravidade:
+                resultado.append({
+                    "id": t[0],
+                    "inciso": t[1],
+                    "texto": t[2],
+                    "display": f"{t[1]} - {t[2]}"
+                })
+            else:
+                resultado.append({
+                    "id": t[0],
+                    "gravidade": t[1],
+                    "inciso": t[2],
+                    "texto": t[3],
+                    "display": f"{t[2]} - {t[3]}"
+                })
+        
+        return {"sucesso": True, "transgressoes": resultado}
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao listar transgressões: {str(e)}"}
+
+@eel.expose
+def buscar_transgressoes(termo, gravidade=None):
+    """Busca transgressões por termo"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        termo_like = f"%{termo}%"
+        
+        if gravidade:
+            cursor.execute("""
+                SELECT id, inciso, texto 
+                FROM transgressoes 
+                WHERE gravidade = ? AND ativo = 1 
+                AND (inciso LIKE ? OR texto LIKE ?)
+                ORDER BY inciso
+            """, (gravidade, termo_like, termo_like))
+        else:
+            cursor.execute("""
+                SELECT id, gravidade, inciso, texto 
+                FROM transgressoes 
+                WHERE ativo = 1 
+                AND (inciso LIKE ? OR texto LIKE ?)
+                ORDER BY gravidade, inciso
+            """, (termo_like, termo_like))
+        
+        transgressoes = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for t in transgressoes:
+            if gravidade:
+                resultado.append({
+                    "id": t[0],
+                    "inciso": t[1],
+                    "texto": t[2],
+                    "display": f"{t[1]} - {t[2]}"
+                })
+            else:
+                resultado.append({
+                    "id": t[0],
+                    "gravidade": t[1],
+                    "inciso": t[2],
+                    "texto": t[3],
+                    "display": f"{t[2]} - {t[3]}"
+                })
+        
+        return {"sucesso": True, "transgressoes": resultado}
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao buscar transgressões: {str(e)}"}
 
 def main():
     """Função principal"""

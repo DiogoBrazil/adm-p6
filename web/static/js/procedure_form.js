@@ -464,6 +464,252 @@ async function preencherFormularioEdicao(procedimento) {
     }
 }
 
+// ============================================
+// FUNÇÕES DE VISIBILIDADE DO FORMULÁRIO (ESCOPO GLOBAL)
+// ============================================
+
+// Mapeamento de todos os grupos de campos que podem ser ocultados/exibidos
+const fieldGroups = {
+    tipoProcedimento: document.getElementById('group_tipo_procedimento'),
+    tipoProcesso: document.getElementById('group_tipo_processo'),
+    escrivao: document.getElementById('group_escrivao'),
+    numeroPortaria: document.getElementById('group_numero_portaria'),
+    numeroMemorando: document.getElementById('group_numero_memorando'),
+    numeroFeito: document.getElementById('group_numero_feito'),
+    checkboxControle: document.getElementById('group_checkbox_controle'),
+    numeroControle: document.getElementById('group_numero_controle'),
+    nomePm: document.getElementById('group_nome_pm'),
+    nomeVitima: document.getElementById('group_nome_vitima'),
+    naturezaProcesso: document.getElementById('group_natureza_processo'),
+    naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+    infracao: document.getElementById('group_infracao'),
+};
+
+// Mapeamento dos campos de input/select
+const fields = {
+    tipoGeral: document.getElementById('tipo_geral'),
+    tipoProcedimento: document.getElementById('tipo_procedimento'),
+    tipoProcesso: document.getElementById('tipo_processo'),
+    documentoIniciador: document.getElementById('documento_iniciador'),
+    statusPm: document.getElementById('status_pm'),
+    labelNomePm: document.getElementById('label_nome_pm'),
+    naturezaProcesso: document.getElementById('natureza_processo'),
+    numeroControleDiferente: document.getElementById('numero_controle_diferente'),
+    labelControleDiferente: document.getElementById('label_controle_diferente'),
+    numeroControle: document.getElementById('numero_controle'),
+    labelNumeroControle: document.getElementById('label_numero_controle'),
+    helpNumeroControle: document.getElementById('help_numero_controle'),
+};
+
+// Função para mostrar/ocultar um grupo e gerenciar o atributo 'required'
+function toggleGroup(group, show) {
+    if (group) {
+        group.style.display = show ? 'block' : 'none';
+        const inputs = group.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            if (show) {
+                // Apenas adiciona required se o campo já o tiver no HTML
+                if (input.hasAttribute('data-required')) {
+                   input.setAttribute('required', 'required');
+                }
+            } else {
+                input.removeAttribute('required');
+                // Opcional: limpar valor ao ocultar para evitar envio de dados ocultos
+                if (input.type !== 'checkbox' && input.type !== 'radio') {
+                    input.value = '';
+                }
+            }
+        });
+    }
+}
+
+// Função principal que atualiza a visibilidade de todo o formulário
+function updateFormVisibility() {
+    const tipoGeral = fields.tipoGeral.value;
+    const tipoProcedimento = fields.tipoProcedimento ? fields.tipoProcedimento.value : '';
+    const tipoProcesso = fields.tipoProcesso ? fields.tipoProcesso.value : '';
+    const documentoIniciador = fields.documentoIniciador.value;
+    const statusPm = fields.statusPm.value;
+
+    // 1. Lógica para Tipo de Cadastro (Processo vs Procedimento)
+    toggleGroup(fieldGroups.tipoProcesso, tipoGeral === 'processo');
+    toggleGroup(fieldGroups.tipoProcedimento, tipoGeral === 'procedimento');
+    
+    // Lógica para Nome da Vítima/Ofendido (procedimento, mas não AO)
+    const showNomeVitima = tipoGeral === 'procedimento' && tipoProcedimento !== 'AO';
+    toggleGroup(fieldGroups.nomeVitima, showNomeVitima);
+
+    // Lógica para Escrivão (se Procedimento for IPM)
+    toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');
+
+    // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
+    const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS';
+    const showNaturezaProcedimento = tipoGeral === 'procedimento';
+    toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
+    toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
+    
+    // Lógica para Infração (apenas para PADS)
+    const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS' && fields.naturezaProcesso.value !== '';
+    
+    // Debug logs temporários
+    console.log('Debug Infração:', {
+        tipoGeral,
+        tipoProcesso,
+        naturezaProcesso: fields.naturezaProcesso.value,
+        showInfracao,
+        fieldExists: !!fieldGroups.infracao
+    });
+    
+    toggleGroup(fieldGroups.infracao, showInfracao);
+    
+    // Se mostrar infração, carregar as infrações baseadas na natureza
+    if (showInfracao) {
+        console.log('Carregando infrações para natureza:', fields.naturezaProcesso.value);
+        carregarInfracoesPorNatureza(fields.naturezaProcesso.value);
+    }
+
+    // 3. Lógica para Documento que Iniciou
+    toggleGroup(fieldGroups.numeroPortaria, documentoIniciador === 'Portaria');
+    toggleGroup(fieldGroups.numeroMemorando, documentoIniciador === 'Memorando Disciplinar');
+    toggleGroup(fieldGroups.numeroFeito, documentoIniciador === 'Feito Preliminar');
+
+    // 4. Lógica para Nome do PM (depende do Status do PM)
+    const showNomePm = statusPm && statusPm !== 'indiciado';
+    toggleGroup(fieldGroups.nomePm, showNomePm);
+
+    // Atualizar label do Nome do PM baseado no status
+    if (fields.labelNomePm) {
+        switch (statusPm) {
+            case 'testemunha':
+                fields.labelNomePm.textContent = 'Nome do PM (Testemunha) *';
+                break;
+            case 'acidentado':
+                fields.labelNomePm.textContent = 'Nome do PM (Acidentado) *';
+                break;
+            default:
+                fields.labelNomePm.textContent = 'Nome do PM *';
+        }
+    }
+
+    // 5. Lógica para Número de Controle
+    updateNumeroControleLogic();
+}
+
+// Função para controlar a lógica do número de controle
+function updateNumeroControleLogic() {
+    const tipoGeral = fields.tipoGeral.value;
+    const tipoProcedimento = fields.tipoProcedimento ? fields.tipoProcedimento.value : '';
+    const tipoProcesso = fields.tipoProcesso ? fields.tipoProcesso.value : '';
+    
+    // Mostrar checkbox apenas se tipo for selecionado
+    const showCheckbox = tipoGeral && (
+        (tipoGeral === 'processo' && tipoProcesso) ||
+        (tipoGeral === 'procedimento' && tipoProcedimento)
+    );
+    toggleGroup(fieldGroups.checkboxControle, showCheckbox);
+    
+    // Atualizar textos do checkbox baseado no tipo
+    if (showCheckbox) {
+        updateNumeroControleLabels(tipoGeral, tipoProcedimento, tipoProcesso);
+    }
+    
+    // Mostrar campo de controle se checkbox marcado
+    const showControle = showCheckbox && fields.numeroControleDiferente && fields.numeroControleDiferente.checked;
+    toggleGroup(fieldGroups.numeroControle, showControle);
+}
+
+// Função para atualizar labels do campo número de controle
+function updateNumeroControleLabels(tipoGeral, tipoProcedimento, tipoProcesso) {
+    if (!fields.labelNumeroControle || !fields.helpNumeroControle) return;
+    
+    let label = 'Número de Controle *';
+    let help = '';
+    
+    if (tipoGeral === 'procedimento') {
+        switch (tipoProcedimento) {
+            case 'IPM':
+                label = 'Número do IPM *';
+                help = 'Número de controle do IPM';
+                break;
+            case 'SR':
+                label = 'Número da SR *';
+                help = 'Número de controle da SR';
+                break;
+            case 'ISO':
+                label = 'Número da ISO *';
+                help = 'Número de controle da ISO';
+                break;
+            case 'CP':
+                label = 'Número da CP *';
+                help = 'Número de controle da CP';
+                break;
+            case 'AO':
+                label = 'Número da AO *';
+                help = 'Número de controle da AO';
+                break;
+        }
+    } else if (tipoGeral === 'processo') {
+        switch (tipoProcesso) {
+            case 'PAD':
+                label = 'Número do PAD *';
+                help = 'Número de controle do PAD';
+                break;
+            case 'PADS':
+                label = 'Número do PADS *';
+                help = 'Número de controle do PADS';
+                break;
+            default:
+                label = 'Número do PAD *';
+                help = 'Número de controle do PAD';
+                break;
+            case 'CD':
+                label = 'Número do CD *';
+                help = 'Número de controle do CD';
+                break;
+            case 'CJ':
+                label = 'Número do CJ *';
+                help = 'Número de controle do CJ';
+                break;
+        }
+    }
+    
+    fields.labelNumeroControle.textContent = label;
+    fields.helpNumeroControle.textContent = help;
+}
+
+// Função para controlar a lógica da conclusão
+function updateConclusaoLogic() {
+    const tipoGeral = fields.tipoGeral.value;
+    const concluidoChecked = document.getElementById('concluido') && document.getElementById('concluido').checked;
+    
+    // Atualizar texto do label baseado no tipo
+    const labelConcluido = document.getElementById('label_concluido');
+    if (labelConcluido) {
+        if (tipoGeral === 'processo') {
+            labelConcluido.textContent = 'Processo concluído';
+        } else if (tipoGeral === 'procedimento') {
+            labelConcluido.textContent = 'Procedimento concluído';
+        } else {
+            labelConcluido.textContent = 'Processo/Procedimento concluído';
+        }
+    }
+    
+    // Mostrar campo de data se checkbox marcado
+    const groupDataConclusao = document.getElementById('group_data_conclusao');
+    const dataConclusao = document.getElementById('data_conclusao');
+    
+    if (groupDataConclusao && dataConclusao) {
+        if (concluidoChecked) {
+            groupDataConclusao.style.display = 'block';
+            dataConclusao.setAttribute('required', 'required');
+        } else {
+            groupDataConclusao.style.display = 'none';
+            dataConclusao.removeAttribute('required');
+            dataConclusao.value = ''; // Limpar o valor
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Carrega dados do usuário logado primeiro
     const loginOk = await carregarUsuarioLogado();
@@ -508,6 +754,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         nomeVitima: document.getElementById('group_nome_vitima'),
         naturezaProcesso: document.getElementById('group_natureza_processo'),
         naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+        infracao: document.getElementById('group_infracao'),
     };
 
     // Mapeamento dos campos de input/select
@@ -518,6 +765,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         documentoIniciador: document.getElementById('documento_iniciador'),
         statusPm: document.getElementById('status_pm'),
         labelNomePm: document.getElementById('label_nome_pm'),
+        naturezaProcesso: document.getElementById('natureza_processo'),
         numeroControleDiferente: document.getElementById('numero_controle_diferente'),
         labelControleDiferente: document.getElementById('label_controle_diferente'),
         numeroControle: document.getElementById('numero_controle'),
@@ -571,6 +819,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         const showNaturezaProcedimento = tipoGeral === 'procedimento';
         toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
         toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
+        
+        // Lógica para Infração (apenas para PADS)
+        const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS' && fields.naturezaProcesso.value !== '';
+        
+        // Debug logs temporários
+        console.log('Debug Infração:', {
+            tipoGeral,
+            tipoProcesso,
+            naturezaProcesso: fields.naturezaProcesso.value,
+            showInfracao,
+            fieldExists: !!fieldGroups.infracao
+        });
+        
+        toggleGroup(fieldGroups.infracao, showInfracao);
+        
+        // Se mostrar infração, carregar as infrações baseadas na natureza
+        if (showInfracao) {
+            console.log('Carregando infrações para natureza:', fields.naturezaProcesso.value);
+            carregarInfracoesPorNatureza(fields.naturezaProcesso.value);
+        }
 
         // 3. Lógica para Documento que Iniciou
         toggleGroup(fieldGroups.numeroPortaria, documentoIniciador === 'Portaria');
@@ -829,6 +1097,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const nome_vitima = document.getElementById('nome_vitima')?.value || null;
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
+    const infracao_id = document.getElementById('infracao_id')?.value || null;
     const resumo_fatos = document.getElementById('resumo_fatos')?.value || null;
     const numero_portaria = document.getElementById('numero_portaria')?.value || null;
     const numero_memorando = document.getElementById('numero_memorando')?.value || null;
@@ -905,7 +1174,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_controle,
                 concluido,
                 data_conclusao,
-                pmsParaEnvio
+                pmsParaEnvio,
+                infracao_id
             )();
         } else {
             // Modo criação
@@ -934,7 +1204,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_controle,
                 concluido,
                 data_conclusao,
-                pmsParaEnvio
+                pmsParaEnvio,
+                infracao_id
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');
@@ -1169,6 +1440,70 @@ async function safeListarTodosUsuarios() {
 }
 
 // ============================================
+// FUNÇÕES PARA INFRAÇÕES
+// ============================================
+
+// Função para carregar infrações baseadas na natureza selecionada
+function carregarInfracoesPorNatureza(natureza) {
+    // Mapear natureza para gravidade
+    const naturezaParaGravidade = {
+        'leve': 'leve',
+        'média': 'media',
+        'grave': 'grave'
+    };
+    
+    const gravidade = naturezaParaGravidade[natureza];
+    if (!gravidade) return;
+    
+    fetch(`/buscar_transgressoes?gravidade=${gravidade}`)
+        .then(response => response.json())
+        .then(data => {
+            const searchInput = document.getElementById('infracao_search');
+            const dropdownContent = document.getElementById('infracao_dropdown');
+            const hiddenInput = document.getElementById('infracao_id');
+            
+            // Limpar dropdown anterior
+            dropdownContent.innerHTML = '';
+            searchInput.value = '';
+            hiddenInput.value = '';
+            
+            // Adicionar infrações ao dropdown
+            data.forEach(infracao => {
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = `Art. ${infracao.inciso} - ${infracao.texto}`;
+                option.onclick = () => selecionarInfracao(infracao);
+                dropdownContent.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Erro ao carregar infrações:', error);
+        });
+}
+
+// Função para selecionar uma infração
+function selecionarInfracao(infracao) {
+    const searchInput = document.getElementById('infracao_search');
+    const hiddenInput = document.getElementById('infracao_id');
+    const dropdownContent = document.getElementById('infracao_dropdown');
+    
+    searchInput.value = `Art. ${infracao.inciso} - ${infracao.texto}`;
+    hiddenInput.value = infracao.id;
+    dropdownContent.style.display = 'none';
+}
+
+// Função para filtrar infrações durante a busca
+function filtrarInfracoes() {
+    const searchTerm = document.getElementById('infracao_search').value.toLowerCase();
+    const options = document.querySelectorAll('#infracao_dropdown .dropdown-option');
+    
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        option.style.display = text.includes(searchTerm) ? 'block' : 'none';
+    });
+}
+
+// ============================================
 // INICIALIZAÇÃO
 // ============================================
 
@@ -1205,4 +1540,33 @@ document.addEventListener('DOMContentLoaded', function() {
             removerErroValidacao(this);
         }
     });
+    
+    // Event listeners para o dropdown de infrações
+    const infracaoSearch = document.getElementById('infracao_search');
+    const infracaoDropdown = document.getElementById('infracao_dropdown');
+    
+    if (infracaoSearch && infracaoDropdown) {
+        // Mostrar dropdown ao clicar no campo de busca
+        infracaoSearch.addEventListener('click', function() {
+            infracaoDropdown.style.display = 'block';
+        });
+        
+        // Filtrar infrações enquanto digita
+        infracaoSearch.addEventListener('input', filtrarInfracoes);
+        
+        // Ocultar dropdown ao clicar fora
+        document.addEventListener('click', function(event) {
+            if (!infracaoSearch.contains(event.target) && !infracaoDropdown.contains(event.target)) {
+                infracaoDropdown.style.display = 'none';
+            }
+        });
+    }
+    
+    // Event listener para mudança na natureza do processo (PADS)
+    const naturezaProcesso = document.getElementById('natureza_processo');
+    if (naturezaProcesso) {
+        naturezaProcesso.addEventListener('change', function() {
+            updateFormVisibility(); // Isso já vai chamar carregarInfracoesPorNatureza
+        });
+    }
 });
