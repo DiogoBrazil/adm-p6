@@ -2,6 +2,40 @@
 let usuarioLogado = null;
 let editandoProcedimento = null;
 
+// Array para armazenar PMs adicionais (além do primeiro)
+let pmsAdicionais = [];
+
+function obterTodosPmsEnvolvidos() {
+    const pms = [];
+    
+    // PM principal (sempre obrigatório)
+    const pmPrincipalId = document.getElementById('nome_pm').value;
+    const pmPrincipalNome = document.getElementById('nome_pm_nome').value;
+    
+    if (pmPrincipalId && pmPrincipalNome) {
+        pms.push({
+            id: pmPrincipalId,
+            nome_completo: pmPrincipalNome,
+            tipo: 'operador', // Será determinado no backend
+            ordem: 1
+        });
+    }
+    
+    // PMs adicionais
+    pmsAdicionais.forEach((pm, index) => {
+        if (pm.id) {
+            pms.push({
+                id: pm.id,
+                nome_completo: pm.nome,
+                tipo: 'operador', // Será determinado no backend
+                ordem: index + 2
+            });
+        }
+    });
+    
+    return pms;
+}
+
 // ============================================
 // FUNÇÕES DE MÁSCARA E VALIDAÇÃO
 // ============================================
@@ -367,7 +401,30 @@ async function preencherFormularioEdicao(procedimento) {
         }
 
         // Preencher campos de PM envolvido com formato completo
-        if (procedimento.nome_pm_id) {
+        if (procedimento.tipo_geral === 'procedimento' && procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
+            // Para procedimentos com múltiplos PMs
+            const primeiroP = procedimento.pms_envolvidos[0];
+            document.getElementById('nome_pm').value = primeiroP.id || '';
+            document.getElementById('nome_pm_nome').value = primeiroP.nome_completo || '';
+            
+            // Limpar PMs adicionais existentes
+            pmsAdicionais = [];
+            document.getElementById('pms_adicionais_container').innerHTML = '';
+            
+            // Adicionar PMs a partir do segundo (o primeiro já está no campo principal)
+            for (let i = 1; i < procedimento.pms_envolvidos.length; i++) {
+                const pm = procedimento.pms_envolvidos[i];
+                adicionarPmAdicional();
+                
+                // Preencher o campo recém-criado
+                const index = pmsAdicionais.length - 1;
+                document.getElementById(`pm_adicional_nome_${index}`).value = pm.nome_completo;
+                document.getElementById(`pm_adicional_id_${index}`).value = pm.id;
+                pmsAdicionais[index].id = pm.id;
+                pmsAdicionais[index].nome = pm.nome_completo;
+            }
+        } else if (procedimento.nome_pm_id) {
+            // Para processos com PM único
             document.getElementById('nome_pm').value = procedimento.nome_pm_id || '';
             document.getElementById('nome_pm_nome').value = procedimento.pm_completo || '';
         }
@@ -389,6 +446,12 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('tipo_processo').value = procedimento.tipo_detalhe || '';
         } else if (procedimento.tipo_geral === 'procedimento') {
             document.getElementById('tipo_procedimento').value = procedimento.tipo_detalhe || '';
+        }
+        
+        // Aguardar mais um pouco e disparar change nos status para mostrar botões corretos
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (document.getElementById('status_pm')) {
+            document.getElementById('status_pm').dispatchEvent(new Event('change'));
         }
 
         // Remover a chamada para updateFormVisibility que estava causando erro
@@ -519,6 +582,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleGroup(fieldGroups.nomePm, showNomePm);
         if (showNomePm) {
             fields.labelNomePm.textContent = `Nome do ${statusPm} *`;
+            
+            // Para procedimentos, mostrar botão de adicionar mais PMs após selecionar o primeiro
+            const isProcedimento = tipoGeral === 'procedimento';
+            const botaoAdicionarPm = document.getElementById('botao_adicionar_pm');
+            
+            if (isProcedimento) {
+                // Verificar se já tem um PM principal selecionado
+                const pmPrincipalSelecionado = document.getElementById('nome_pm').value !== '';
+                botaoAdicionarPm.style.display = pmPrincipalSelecionado ? 'block' : 'none';
+            } else {
+                botaoAdicionarPm.style.display = 'none';
+                // Para processos, limpar PMs adicionais se existirem
+                document.getElementById('pms_adicionais_container').style.display = 'none';
+                pmsAdicionais = [];
+            }
         }
     }
 
@@ -667,21 +745,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateConclusaoLogic(); // Configurar estado inicial da conclusão
 
     // --- MODAL DE BUSCA DE USUÁRIO ---
-    let campoBuscaUsuario = null; // Qual campo está buscando (encarregado, escrivao, pm)
-
-    function abrirModalBuscaUsuario(campo) {
-        campoBuscaUsuario = campo;
-        document.getElementById('modalBuscaUsuario').style.display = 'flex';
-        document.getElementById('inputBuscaUsuario').value = '';
-        document.getElementById('resultadosBuscaUsuario').innerHTML = '';
-        document.getElementById('inputBuscaUsuario').focus();
-    }
-
-    function fecharModalBuscaUsuario() {
-        document.getElementById('modalBuscaUsuario').style.display = 'none';
-        campoBuscaUsuario = null;
-    }
-
+    
     document.getElementById('btnFecharModalBusca').onclick = fecharModalBuscaUsuario;
 
     document.getElementById('btnBuscarEncarregado').onclick = function() {
@@ -693,68 +757,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnBuscarPm').onclick = function() {
         abrirModalBuscaUsuario('pm');
     };
+    
+    // Botão para adicionar mais PMs (procedimentos)
+    document.getElementById('btnAdicionarMaisPm').onclick = function() {
+        adicionarPmAdicional();
+    };
 
     document.getElementById('btnExecutarBuscaUsuario').onclick = buscarUsuariosModal;
     document.getElementById('inputBuscaUsuario').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') buscarUsuariosModal();
     });
-
-    async function buscarUsuariosModal() {
-        const termo = document.getElementById('inputBuscaUsuario').value.trim();
-        const resultadosDiv = document.getElementById('resultadosBuscaUsuario');
-        resultadosDiv.innerHTML = '<div style="padding:10px; color:#888;">Buscando...</div>';
-        let usuarios = [];
-        try {
-            // Busca todos os usuários ativos
-            usuarios = await safeListarTodosUsuarios();
-            if (termo) {
-                const termoLower = termo.toLowerCase();
-                usuarios = usuarios.filter(u =>
-                    (u.nome && u.nome.toLowerCase().includes(termoLower)) ||
-                    (u.matricula && u.matricula.toLowerCase().includes(termoLower))
-                );
-            }
-        } catch (err) {
-            resultadosDiv.innerHTML = '<div style="padding:10px; color:#c00;">Erro ao buscar usuários.</div>';
-            return;
-        }
-        if (!usuarios.length) {
-            resultadosDiv.innerHTML = '<div style="padding:10px; color:#888;">Nenhum usuário encontrado.</div>';
-            return;
-        }
-        resultadosDiv.innerHTML = usuarios.map(u => `
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
-                <div>
-                    <span style="font-weight:500;">${u.posto_graduacao || ''}</span>
-                    <span style="margin-left:8px; color:#555;">${u.matricula || ''}</span>
-                    <span style="margin-left:8px; color:#222;">${u.nome}</span>
-                    <span style="margin-left:8px; font-size:12px; color:#888;">(${u.tipo})</span>
-                </div>
-                <button class="btnEscolherUsuario" data-id="${u.id}" data-nome="${u.nome}" data-matricula="${u.matricula}" data-pg="${u.posto_graduacao}" style="background:none; border:none; color:#28a745; font-size:20px; cursor:pointer;" title="Escolher"><i class="fas fa-check-circle"></i></button>
-            </div>
-        `).join('');
-        // Adiciona evento aos botões de escolha
-        document.querySelectorAll('.btnEscolherUsuario').forEach(btn => {
-            btn.onclick = function() {
-                const id = this.getAttribute('data-id');
-                const nome = this.getAttribute('data-nome');
-                const matricula = this.getAttribute('data-matricula');
-                const pg = this.getAttribute('data-pg');
-                const texto = `${pg ? pg + ' ' : ''}${matricula ? matricula + ' ' : ''}${nome}`;
-                if (campoBuscaUsuario === 'encarregado') {
-                    document.getElementById('responsavel_nome').value = texto;
-                    document.getElementById('responsavel_id').value = id;
-                } else if (campoBuscaUsuario === 'escrivao') {
-                    document.getElementById('escrivao_nome').value = texto;
-                    document.getElementById('escrivao_id').value = id;
-                } else if (campoBuscaUsuario === 'pm') {
-                    document.getElementById('nome_pm_nome').value = texto;
-                    document.getElementById('nome_pm').value = id;
-                }
-                fecharModalBuscaUsuario();
-            };
-        });
-    }
 });
 
 // --- FIM MODAL DE BUSCA DE USUÁRIO ---
@@ -850,8 +862,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
         return;
     }
+    
+    // Validação de PM principal obrigatório quando há status_pm
+    if (status_pm && !nome_pm_id) {
+        showAlert('É obrigatório selecionar o PM envolvido!', 'error');
+        return;
+    }
 
     try {
+        // Coletar PMs envolvidos para procedimentos
+        const pmsParaEnvio = tipo_geral === 'procedimento' ? obterTodosPmsEnvolvidos() : null;
+        
         let result;
         if (editandoProcedimento) {
             // Modo edição
@@ -880,7 +901,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_rgf,
                 numero_controle,
                 concluido,
-                data_conclusao
+                data_conclusao,
+                pmsParaEnvio
             )();
         } else {
             // Modo criação
@@ -908,11 +930,10 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_rgf,
                 numero_controle,
                 concluido,
-                data_conclusao
+                data_conclusao,
+                pmsParaEnvio
             )();
-        }
-
-        if (result.sucesso) {
+        }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');
             // Redireciona para listagem tanto no cadastro quanto na edição após sucesso
             setTimeout(() => {
@@ -931,6 +952,206 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         showAlert('Erro ao conectar com o servidor!', 'error');
     }
 });
+
+// ============================================
+// FUNÇÕES DE GERENCIAMENTO DE MÚLTIPLOS PMS (ESCOPO GLOBAL)
+// ============================================
+
+function adicionarPmAdicional() {
+    const container = document.getElementById('pms_adicionais_container');
+    const index = pmsAdicionais.length;
+    
+    // Criar novo campo para PM adicional
+    const novoField = document.createElement('div');
+    novoField.className = 'pm-adicional-field';
+    novoField.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;';
+    
+    novoField.innerHTML = `
+        <input type="text" id="pm_adicional_nome_${index}" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione outro PM...">
+        <input type="hidden" id="pm_adicional_id_${index}">
+        <button type="button" class="btn-lupa-adicional" data-index="${index}" title="Buscar PM" style="background: none; border: none; cursor: pointer;">
+            <i class="fas fa-search"></i>
+        </button>
+        <button type="button" class="btn-remover-pm" data-index="${index}" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(novoField);
+    container.style.display = 'block';
+    
+    // Adicionar event listeners aos novos botões
+    const btnBuscar = novoField.querySelector('.btn-lupa-adicional');
+    const btnRemover = novoField.querySelector('.btn-remover-pm');
+    
+    btnBuscar.addEventListener('click', function() {
+        buscarPmAdicional(index);
+    });
+    
+    btnRemover.addEventListener('click', function() {
+        removerPmAdicional(index);
+    });
+    
+    // Adicionar placeholder no array
+    pmsAdicionais.push({ id: null, nome: '', campo: novoField });
+}
+
+function buscarPmAdicional(index) {
+    // Definir qual campo está sendo buscado
+    window.campoPmAdicionalIndex = index;
+    abrirModalBuscaUsuario('pm_adicional');
+}
+
+function removerPmAdicional(index) {
+    const campo = pmsAdicionais[index].campo;
+    campo.remove();
+    pmsAdicionais.splice(index, 1);
+    
+    // Se não há mais PMs adicionais, esconder o container
+    if (pmsAdicionais.length === 0) {
+        document.getElementById('pms_adicionais_container').style.display = 'none';
+    }
+    
+    // Reindexar os campos restantes
+    reindexarPmsAdicionais();
+}
+
+function reindexarPmsAdicionais() {
+    const container = document.getElementById('pms_adicionais_container');
+    const campos = container.querySelectorAll('.pm-adicional-field');
+    
+    // Limpar array e reconstruir
+    pmsAdicionais = [];
+    
+    campos.forEach((campo, novoIndex) => {
+        // Atualizar IDs dos inputs
+        const inputNome = campo.querySelector('input[type="text"]');
+        const inputId = campo.querySelector('input[type="hidden"]');
+        const btnBuscar = campo.querySelector('.btn-lupa-adicional');
+        const btnRemover = campo.querySelector('.btn-remover-pm');
+        
+        inputNome.id = `pm_adicional_nome_${novoIndex}`;
+        inputId.id = `pm_adicional_id_${novoIndex}`;
+        
+        // Limpar event listeners anteriores
+        const novoBtnBuscar = btnBuscar.cloneNode(true);
+        const novoBtnRemover = btnRemover.cloneNode(true);
+        
+        btnBuscar.parentNode.replaceChild(novoBtnBuscar, btnBuscar);
+        btnRemover.parentNode.replaceChild(novoBtnRemover, btnRemover);
+        
+        // Adicionar novos event listeners
+        novoBtnBuscar.addEventListener('click', function() {
+            buscarPmAdicional(novoIndex);
+        });
+        
+        novoBtnRemover.addEventListener('click', function() {
+            removerPmAdicional(novoIndex);
+        });
+        
+        // Reconstruir array
+        pmsAdicionais.push({
+            id: inputId.value || null,
+            nome: inputNome.value || '',
+            campo: campo
+        });
+    });
+}
+
+// ============================================
+// FUNÇÕES DE MODAL DE BUSCA DE USUÁRIO (ESCOPO GLOBAL)
+// ============================================
+
+let campoBuscaUsuario = null; // Qual campo está buscando (encarregado, escrivao, pm)
+
+function abrirModalBuscaUsuario(campo) {
+    campoBuscaUsuario = campo;
+    document.getElementById('modalBuscaUsuario').style.display = 'flex';
+    document.getElementById('inputBuscaUsuario').value = '';
+    document.getElementById('resultadosBuscaUsuario').innerHTML = '';
+    document.getElementById('inputBuscaUsuario').focus();
+}
+
+function fecharModalBuscaUsuario() {
+    document.getElementById('modalBuscaUsuario').style.display = 'none';
+    campoBuscaUsuario = null;
+}
+
+async function buscarUsuariosModal() {
+    const termo = document.getElementById('inputBuscaUsuario').value.trim();
+    const resultadosDiv = document.getElementById('resultadosBuscaUsuario');
+    resultadosDiv.innerHTML = '<div style="padding:10px; color:#888;">Buscando...</div>';
+    let usuarios = [];
+    try {
+        // Busca todos os usuários ativos
+        usuarios = await safeListarTodosUsuarios();
+        if (termo) {
+            const termoLower = termo.toLowerCase();
+            usuarios = usuarios.filter(u =>
+                (u.nome && u.nome.toLowerCase().includes(termoLower)) ||
+                (u.matricula && u.matricula.toLowerCase().includes(termoLower))
+            );
+        }
+    } catch (err) {
+        resultadosDiv.innerHTML = '<div style="padding:10px; color:#c00;">Erro ao buscar usuários.</div>';
+        return;
+    }
+    if (!usuarios.length) {
+        resultadosDiv.innerHTML = '<div style="padding:10px; color:#888;">Nenhum usuário encontrado.</div>';
+        return;
+    }
+    resultadosDiv.innerHTML = usuarios.map(u => `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;">
+            <div>
+                <span style="font-weight:500;">${u.posto_graduacao || ''}</span>
+                <span style="margin-left:8px; color:#555;">${u.matricula || ''}</span>
+                <span style="margin-left:8px; color:#222;">${u.nome}</span>
+                <span style="margin-left:8px; font-size:12px; color:#888;">(${u.tipo})</span>
+            </div>
+            <button class="btnEscolherUsuario" data-id="${u.id}" data-nome="${u.nome}" data-matricula="${u.matricula}" data-pg="${u.posto_graduacao}" style="background:none; border:none; color:#28a745; font-size:20px; cursor:pointer;" title="Escolher"><i class="fas fa-check-circle"></i></button>
+        </div>
+    `).join('');
+    // Adiciona evento aos botões de escolha
+    document.querySelectorAll('.btnEscolherUsuario').forEach(btn => {
+        btn.onclick = function() {
+            const id = this.getAttribute('data-id');
+            const nome = this.getAttribute('data-nome');
+            const matricula = this.getAttribute('data-matricula');
+            const pg = this.getAttribute('data-pg');
+            const texto = `${pg ? pg + ' ' : ''}${matricula ? matricula + ' ' : ''}${nome}`;
+            
+            if (campoBuscaUsuario === 'encarregado') {
+                document.getElementById('responsavel_nome').value = texto;
+                document.getElementById('responsavel_id').value = id;
+            } else if (campoBuscaUsuario === 'escrivao') {
+                document.getElementById('escrivao_nome').value = texto;
+                document.getElementById('escrivao_id').value = id;
+            } else if (campoBuscaUsuario === 'pm') {
+                // PM principal
+                document.getElementById('nome_pm_nome').value = texto;
+                document.getElementById('nome_pm').value = id;
+                
+                // Se for procedimento, mostrar botão para adicionar mais PMs
+                const tipoGeral = document.getElementById('tipo_geral').value;
+                if (tipoGeral === 'procedimento') {
+                    document.getElementById('botao_adicionar_pm').style.display = 'block';
+                }
+            } else if (campoBuscaUsuario === 'pm_adicional') {
+                // PM adicional
+                const index = window.campoPmAdicionalIndex;
+                document.getElementById(`pm_adicional_nome_${index}`).value = texto;
+                document.getElementById(`pm_adicional_id_${index}`).value = id;
+                
+                // Atualizar array de PMs adicionais
+                if (pmsAdicionais[index]) {
+                    pmsAdicionais[index].id = id;
+                    pmsAdicionais[index].nome = texto;
+                }
+            }
+            fecharModalBuscaUsuario();
+        };
+    });
+}
 
 // Função para listar todos os usuários de forma segura
 async function safeListarTodosUsuarios() {

@@ -211,11 +211,25 @@
                 <!-- Campo dependente do status do PM -->
                 <div class="form-group" id="group_nome_pm" style="display: none;">
                     <label for="nome_pm_nome" id="label_nome_pm">Nome do PM *</label>
-                    <div style="display: flex; gap: 8px; align-items: center;">
+                    
+                    <!-- Campo principal (sempre visível quando o grupo estiver ativo) -->
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
                         <input type="text" id="nome_pm_nome" name="nome_pm_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o PM...">
                         <input type="hidden" id="nome_pm" name="nome_pm">
                         <button type="button" id="btnBuscarPm" class="btn-lupa" title="Buscar PM" style="background: none; border: none; cursor: pointer;">
                             <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Lista de PMs adicionais (apenas para procedimentos) -->
+                    <div id="pms_adicionais_container" style="display: none;">
+                        <!-- PMs adicionais serão adicionados aqui dinamicamente -->
+                    </div>
+                    
+                    <!-- Botão para adicionar mais PMs (apenas para procedimentos) -->
+                    <div id="botao_adicionar_pm" style="display: none; margin-top: 10px;">
+                        <button type="button" id="btnAdicionarMaisPm" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
+                            <i class="fas fa-plus"></i> Adicionar mais PM
                         </button>
                     </div>
                 </div>

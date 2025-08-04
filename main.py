@@ -585,6 +585,77 @@ def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, sen
     else:
         return {"sucesso": False, "mensagem": "Tipo de usuário inválido!"}
 
+# ======== FUNÇÕES AUXILIARES ========
+
+def buscar_pms_envolvidos(procedimento_id):
+    """Busca todos os PMs envolvidos em um procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Busca primeiro os dados da tabela de relacionamento
+        cursor.execute("""
+            SELECT pm_id, pm_tipo, ordem
+            FROM procedimento_pms_envolvidos 
+            WHERE procedimento_id = ?
+            ORDER BY ordem
+        """, (procedimento_id,))
+        
+        pms_relacionamento = cursor.fetchall()
+        
+        resultado = []
+        for pm_rel in pms_relacionamento:
+            pm_id, pm_tipo_tabela, ordem = pm_rel
+            
+            # Busca primeiro na tabela operadores
+            cursor.execute("""
+                SELECT nome, posto_graduacao, matricula 
+                FROM operadores 
+                WHERE id = ?
+            """, (pm_id,))
+            
+            pm_data = cursor.fetchone()
+            
+            # Se não encontrou em operadores, busca em encarregados
+            if not pm_data:
+                cursor.execute("""
+                    SELECT nome, posto_graduacao, matricula 
+                    FROM encarregados 
+                    WHERE id = ?
+                """, (pm_id,))
+                
+                pm_data = cursor.fetchone()
+            
+            if pm_data:
+                nome = pm_data[0] or ""
+                posto = pm_data[1] or ""
+                matricula = pm_data[2] or ""
+                
+                # Montar nome completo removendo espaços extras
+                nome_completo = f"{posto} {matricula} {nome}".strip()
+                # Remover espaços duplos
+                nome_completo = " ".join(nome_completo.split())
+                
+                resultado.append({
+                    'id': pm_id,
+                    'tipo': pm_tipo_tabela,
+                    'ordem': ordem,
+                    'nome': nome,
+                    'posto_graduacao': posto,
+                    'matricula': matricula,
+                    'nome_completo': nome_completo
+                })
+        
+        conn.close()
+        print(f"🔍 Buscar PMs para procedimento {procedimento_id}: encontrou {len(resultado)} PMs")
+        for pm in resultado:
+            print(f"  - PM: {pm['nome_completo']}")
+        
+        return resultado
+    except Exception as e:
+        print(f"Erro ao buscar PMs envolvidos: {e}")
+        return []
+
 @eel.expose
 def listar_usuarios(search_term=None, page=1, per_page=10):
     """Lista todos os usuários cadastrados com paginação e pesquisa"""
@@ -696,7 +767,7 @@ def registrar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -712,7 +783,7 @@ def registrar_processo(
         "natureza_procedimento": natureza_procedimento, "resumo_fatos": resumo_fatos,
         "numero_portaria": numero_portaria, "numero_memorando": numero_memorando,
         "numero_feito": numero_feito, "numero_rgf": numero_rgf, "numero_controle": numero_controle,
-        "concluido": concluido, "data_conclusao": data_conclusao
+        "concluido": concluido, "data_conclusao": data_conclusao, "pms_envolvidos": pms_envolvidos
     }
     for key, value in params.items():
         print(f"  - {key}: {value}")
@@ -727,6 +798,9 @@ def registrar_processo(
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Gerar ID único para o processo/procedimento
+        processo_id = str(uuid.uuid4())
+
         cursor.execute("""
             INSERT INTO processos_procedimentos (
                 id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
@@ -736,12 +810,23 @@ def registrar_processo(
                 concluido, data_conclusao
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(uuid.uuid4()), numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+            processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao
         ))
+
+        # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
+        if tipo_geral == 'procedimento' and pms_envolvidos:
+            print(f"📝 Salvando PMs envolvidos para procedimento: {pms_envolvidos}")
+            for i, pm in enumerate(pms_envolvidos):
+                if pm.get('id'):  # Verifica se o PM tem ID válido
+                    pm_tipo = 'operador' if pm.get('tipo') == 'operador' else 'encarregado'
+                    cursor.execute("""
+                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1))
 
         conn.commit()
         conn.close()
@@ -837,31 +922,100 @@ def listar_processos():
         
         return "S/N"
 
-    return [{
-        "id": processo[0],
-        "numero": processo[1],
-        "numero_controle": processo[22],  # Incluir numero_controle
-        "numero_formatado": formatar_numero_processo(processo),
-        "tipo_geral": processo[2],
-        "tipo_detalhe": processo[3],
-        "documento_iniciador": processo[4],
-        "processo_sei": processo[5],
-        "responsavel": processo[6],
-        "responsavel_posto_grad": processo[17] or "",  # Posto/graduação do responsável (índice 17)
-        "responsavel_matricula": processo[18] or "",  # Matrícula do responsável (índice 18)
-        "data_criacao": processo[7],
-        "local_origem": processo[8],
-        "data_instauracao": processo[9],
-        "status_pm": processo[10],
-        "nome_pm": processo[11],
-        "nome_pm_posto_grad": processo[19] or "",  # Posto/graduação do PM envolvido (índice 19)
-        "nome_pm_matricula": processo[20] or "",  # Matrícula do PM envolvido (índice 20)
-        "numero_rgf": processo[21] or "",  # Número do RGF (índice 21)
-        "concluido": bool(processo[23]) if processo[23] is not None else False,  # Campo concluído (índice 23)
-        "data_conclusao": processo[24] if len(processo) > 24 else None,  # Data de conclusão (índice 24)
-        "responsavel_completo": f"{processo[17] or ''} {processo[18] or ''} {processo[6]}".strip(),  # Posto/graduação + matrícula + nome
-        "nome_pm_completo": f"{processo[19] or ''} {processo[20] or ''} {processo[11] or ''}".strip() if processo[11] else None  # Posto/graduação + matrícula + nome PM
-    } for processo in processos]
+    def formatar_pms_envolvidos(processo):
+        """Formata a exibição dos PMs envolvidos considerando múltiplos PMs para procedimentos"""
+        tipo_geral = processo[2]  # tipo_geral
+        processo_id = processo[0]  # id
+        
+        # Se for procedimento, buscar múltiplos PMs
+        if tipo_geral == 'procedimento':
+            pms_envolvidos = buscar_pms_envolvidos(processo_id)
+            
+            if pms_envolvidos:
+                # Se há múltiplos PMs, mostrar primeiro + "e outros"
+                primeiro_pm = pms_envolvidos[0]['nome_completo']
+                
+                if len(pms_envolvidos) > 1:
+                    pm_display = f"{primeiro_pm} e outros"
+                    # Criar tooltip com todos os nomes
+                    todos_nomes = [pm['nome_completo'] for pm in pms_envolvidos]
+                    tooltip = ", ".join(todos_nomes)
+                else:
+                    pm_display = primeiro_pm
+                    tooltip = primeiro_pm
+                
+                return {
+                    'display': pm_display,
+                    'tooltip': tooltip
+                }
+            else:
+                # Fallback para PM único se não há múltiplos
+                pm_nome = processo[11]  # nome_pm
+                pm_posto = processo[19] or ""  # nome_pm_pg
+                pm_matricula = processo[20] or ""  # nome_pm_matricula
+                
+                if pm_nome:
+                    pm_completo = f"{pm_posto} {pm_matricula} {pm_nome}".strip()
+                    return {
+                        'display': pm_completo,
+                        'tooltip': pm_completo
+                    }
+                else:
+                    return {
+                        'display': 'Não informado',
+                        'tooltip': 'Não informado'
+                    }
+        else:
+            # Para processos, usar PM único
+            pm_nome = processo[11]  # nome_pm
+            pm_posto = processo[19] or ""  # nome_pm_pg
+            pm_matricula = processo[20] or ""  # nome_pm_matricula
+            
+            if pm_nome:
+                pm_completo = f"{pm_posto} {pm_matricula} {pm_nome}".strip()
+                return {
+                    'display': pm_completo,
+                    'tooltip': pm_completo
+                }
+            else:
+                return {
+                    'display': 'Não informado',
+                    'tooltip': 'Não informado'
+                }
+
+    resultado = []
+    for processo in processos:
+        pms_info = formatar_pms_envolvidos(processo)
+        
+        resultado.append({
+            "id": processo[0],
+            "numero": processo[1],
+            "numero_controle": processo[22],  # Incluir numero_controle
+            "numero_formatado": formatar_numero_processo(processo),
+            "tipo_geral": processo[2],
+            "tipo_detalhe": processo[3],
+            "documento_iniciador": processo[4],
+            "processo_sei": processo[5],
+            "responsavel": processo[6],
+            "responsavel_posto_grad": processo[17] or "",  # Posto/graduação do responsável (índice 17)
+            "responsavel_matricula": processo[18] or "",  # Matrícula do responsável (índice 18)
+            "data_criacao": processo[7],
+            "local_origem": processo[8],
+            "data_instauracao": processo[9],
+            "status_pm": processo[10],
+            "nome_pm": processo[11],
+            "nome_pm_posto_grad": processo[19] or "",  # Posto/graduação do PM envolvido (índice 19)
+            "nome_pm_matricula": processo[20] or "",  # Matrícula do PM envolvido (índice 20)
+            "numero_rgf": processo[21] or "",  # Número do RGF (índice 21)
+            "concluido": bool(processo[23]) if processo[23] is not None else False,  # Campo concluído (índice 23)
+            "data_conclusao": processo[24] if len(processo) > 24 else None,  # Data de conclusão (índice 24)
+            "responsavel_completo": f"{processo[17] or ''} {processo[18] or ''} {processo[6]}".strip(),  # Posto/graduação + matrícula + nome
+            "nome_pm_completo": f"{processo[19] or ''} {processo[20] or ''} {processo[11] or ''}".strip() if processo[11] else None,  # Posto/graduação + matrícula + nome PM
+            "pm_envolvido_nome": pms_info['display'],  # Campo para exibição na tabela
+            "pm_envolvido_tooltip": pms_info['tooltip']  # Campo para tooltip
+        })
+    
+    return resultado
 
 @eel.expose
 def excluir_processo(processo_id):
@@ -941,6 +1095,11 @@ def obter_processo(processo_id):
             if processo[31] and processo[32] and processo[33]:  # nome, posto, matricula
                 pm_completo = f"{processo[32]} {processo[33]} {processo[31]}".strip()
             
+            # Para procedimentos, buscar múltiplos PMs envolvidos
+            pms_envolvidos = []
+            if processo[2] == 'procedimento':  # tipo_geral
+                pms_envolvidos = buscar_pms_envolvidos(processo_id)
+            
             return {
                 "id": processo[0],
                 "numero": processo[1],
@@ -960,6 +1119,7 @@ def obter_processo(processo_id):
                 "status_pm": processo[13],
                 "nome_pm_id": processo[14],
                 "pm_completo": pm_completo,
+                "pms_envolvidos": pms_envolvidos,
                 "nome_vitima": processo[15],
                 "natureza_processo": processo[16],
                 "natureza_procedimento": processo[17],
@@ -984,7 +1144,7 @@ def atualizar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None
+    concluido=False, data_conclusao=None, pms_envolvidos=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -1007,6 +1167,22 @@ def atualizar_processo(
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, processo_id
         ))
+        
+        # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela
+        if tipo_geral == 'procedimento' and pms_envolvidos is not None:
+            print(f"📝 Atualizando PMs envolvidos para procedimento: {pms_envolvidos}")
+            
+            # Remover PMs antigos
+            cursor.execute("DELETE FROM procedimento_pms_envolvidos WHERE procedimento_id = ?", (processo_id,))
+            
+            # Inserir novos PMs
+            for i, pm in enumerate(pms_envolvidos):
+                if pm.get('id'):  # Verifica se o PM tem ID válido
+                    pm_tipo = 'operador' if pm.get('tipo') == 'operador' else 'encarregado'
+                    cursor.execute("""
+                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1))
         
         conn.commit()
         conn.close()
@@ -1521,11 +1697,29 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             if responsavel_completo == "Desconhecido":
                 responsavel_completo = "Desconhecido"
             
-            # Formatar PM envolvido completo: "posto/grad + matrícula + nome"
-            if pm_envolvido_nome != "Não informado":
-                pm_envolvido_completo = f"{pm_envolvido_posto} {pm_envolvido_matricula} {pm_envolvido_nome}".strip()
+            # Formatar PM envolvido - para procedimentos, buscar múltiplos PMs
+            if tipo_geral == 'procedimento':
+                pms_envolvidos = buscar_pms_envolvidos(processo_id)
+                if pms_envolvidos:
+                    primeiro_pm = pms_envolvidos[0]['nome_completo']
+                    if len(pms_envolvidos) > 1:
+                        pm_envolvido_completo = f"{primeiro_pm} e outros"
+                        # Criar lista de todos os PMs para tooltip
+                        todos_pms = [pm['nome_completo'] for pm in pms_envolvidos]
+                        pm_envolvido_tooltip = '; '.join(todos_pms)
+                    else:
+                        pm_envolvido_completo = primeiro_pm
+                        pm_envolvido_tooltip = primeiro_pm
+                else:
+                    pm_envolvido_completo = "Não informado"
+                    pm_envolvido_tooltip = "Não informado"
             else:
-                pm_envolvido_completo = "Não informado"
+                # Para processos, usar o sistema antigo (um único PM)
+                if pm_envolvido_nome != "Não informado":
+                    pm_envolvido_completo = f"{pm_envolvido_posto} {pm_envolvido_matricula} {pm_envolvido_nome}".strip()
+                else:
+                    pm_envolvido_completo = "Não informado"
+                pm_envolvido_tooltip = pm_envolvido_completo
             
             # Calcular prazo para cada processo
             calculo_prazo = calcular_prazo_processo(
@@ -1573,6 +1767,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 "processo_sei": processo_sei,
                 "nome_pm_id": nome_pm_id,
                 "pm_envolvido_nome": pm_envolvido_completo,
+                "pm_envolvido_tooltip": pm_envolvido_tooltip,
                 "pm_envolvido_posto": pm_envolvido_posto,
                 "pm_envolvido_matricula": pm_envolvido_matricula,
                 "status_pm": status_pm,

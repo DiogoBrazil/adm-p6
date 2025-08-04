@@ -412,6 +412,7 @@ function exibirProcedimentos() {
             
             // Backend já retorna formatado: "posto/grad + matrícula + nome"
             const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
+            const pmEnvolvidoTooltip = procedimento.pm_envolvido_tooltip || pmEnvolvido;
             
             // Obter tipo de envolvimento
             const tipoEnvolvimento = procedimento.status_pm || 'Não informado';
@@ -433,7 +434,7 @@ function exibirProcedimentos() {
                         ${procedimento.processo_sei ? procedimento.processo_sei : '<em style="color:#999;">Não informado</em>'}
                     </td>
                     <td>${encarregadoCompleto}</td>
-                    <td>${pmEnvolvido}</td>
+                    <td title="${pmEnvolvidoTooltip}">${pmEnvolvido}</td>
                     <td>${tipoEnvolvimento}</td>
                     <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
