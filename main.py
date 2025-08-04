@@ -813,7 +813,7 @@ def registrar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None, transgressoes_ids=None
+    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -853,14 +853,14 @@ def registrar_processo(
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-                concluido, data_conclusao, transgressoes_ids
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                concluido, data_conclusao, solucao_final, transgressoes_ids
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, transgressoes_ids
+            concluido, data_conclusao, solucao_final, transgressoes_ids
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -1098,7 +1098,7 @@ def obter_processo(processo_id):
                 p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
-                p.concluido, p.data_conclusao, p.transgressoes_ids,
+                p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
                 -- Dados completos do responsável
                 COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
                 COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
@@ -1128,18 +1128,18 @@ def obter_processo(processo_id):
         if processo:
             # Formatar dados completos dos usuários
             responsavel_completo = ""
-            if processo[27] and processo[28] and processo[8]:  # posto, matricula, nome
-                responsavel_completo = f"{processo[27]} {processo[28]} {processo[8]}".strip()
+            if processo[28] and processo[29] and processo[8]:  # posto, matricula, nome
+                responsavel_completo = f"{processo[28]} {processo[29]} {processo[8]}".strip()
             elif processo[8]:
                 responsavel_completo = processo[8]
             
             escrivao_completo = ""
-            if processo[29] and processo[30] and processo[31]:  # nome, posto, matricula
-                escrivao_completo = f"{processo[30]} {processo[31]} {processo[29]}".strip()
+            if processo[30] and processo[31] and processo[32]:  # nome, posto, matricula
+                escrivao_completo = f"{processo[31]} {processo[32]} {processo[30]}".strip()
             
             pm_completo = ""
-            if processo[32] and processo[33] and processo[34]:  # nome, posto, matricula
-                pm_completo = f"{processo[33]} {processo[34]} {processo[32]}".strip()
+            if processo[33] and processo[34] and processo[35]:  # nome, posto, matricula
+                pm_completo = f"{processo[34]} {processo[35]} {processo[33]}".strip()
             
             # Para procedimentos, buscar múltiplos PMs envolvidos
             pms_envolvidos = []
@@ -1148,10 +1148,10 @@ def obter_processo(processo_id):
             
             # Processar transgressões (campo JSON)
             transgressoes_selecionadas = []
-            if processo[26]:  # transgressoes_ids
+            if processo[27]:  # transgressoes_ids
                 try:
                     import json
-                    transgressoes_ids = json.loads(processo[26])
+                    transgressoes_ids = json.loads(processo[27])
                     if isinstance(transgressoes_ids, list):
                         # Buscar detalhes das transgressões
                         conn2 = db_manager.get_connection()
@@ -1200,7 +1200,8 @@ def obter_processo(processo_id):
                 "numero_controle": processo[23],
                 "concluido": processo[24],
                 "data_conclusao": processo[25],
-                "transgressoes_ids": processo[26],
+                "solucao_final": processo[26],
+                "transgressoes_ids": processo[27],
                 "transgressoes_selecionadas": transgressoes_selecionadas
             }
         else:
@@ -1215,7 +1216,7 @@ def atualizar_processo(
     local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, pms_envolvidos=None, transgressoes_ids=None
+    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -1229,14 +1230,14 @@ def atualizar_processo(
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                concluido = ?, data_conclusao = ?, transgressoes_ids = ?, updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, transgressoes_ids, processo_id
+            concluido, data_conclusao, solucao_final, transgressoes_ids, processo_id
         ))
         
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela

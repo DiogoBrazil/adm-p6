@@ -387,6 +387,13 @@ async function preencherFormularioEdicao(procedimento) {
             }
         }
         
+        if (procedimento.solucao_final) {
+            const solucaoFinal = document.getElementById('solucao_final');
+            if (solucaoFinal) {
+                solucaoFinal.value = procedimento.solucao_final;
+            }
+        }
+        
         console.log('✅ Campos de conclusão processados');
         
         // Preencher campos de responsável com formato completo
@@ -728,6 +735,10 @@ function updateConclusaoLogic() {
     const groupDataConclusao = document.getElementById('group_data_conclusao');
     const dataConclusao = document.getElementById('data_conclusao');
     
+    // Mostrar campo de solução final se checkbox marcado
+    const groupSolucaoFinal = document.getElementById('group_solucao_final');
+    const solucaoFinal = document.getElementById('solucao_final');
+    
     if (groupDataConclusao && dataConclusao) {
         if (concluidoChecked) {
             groupDataConclusao.style.display = 'block';
@@ -736,6 +747,17 @@ function updateConclusaoLogic() {
             groupDataConclusao.style.display = 'none';
             dataConclusao.removeAttribute('required');
             dataConclusao.value = ''; // Limpar o valor
+        }
+    }
+    
+    if (groupSolucaoFinal && solucaoFinal) {
+        if (concluidoChecked) {
+            groupSolucaoFinal.style.display = 'block';
+            solucaoFinal.setAttribute('required', 'required');
+        } else {
+            groupSolucaoFinal.style.display = 'none';
+            solucaoFinal.removeAttribute('required');
+            solucaoFinal.value = ''; // Limpar o valor
         }
     }
 }
@@ -1003,6 +1025,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const groupDataConclusao = document.getElementById('group_data_conclusao');
         const dataConclusao = document.getElementById('data_conclusao');
         
+        // Mostrar campo de solução final se checkbox marcado
+        const groupSolucaoFinal = document.getElementById('group_solucao_final');
+        const solucaoFinal = document.getElementById('solucao_final');
+        
         if (groupDataConclusao && dataConclusao) {
             if (concluidoChecked) {
                 groupDataConclusao.style.display = 'block';
@@ -1011,6 +1037,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 groupDataConclusao.style.display = 'none';
                 dataConclusao.removeAttribute('required');
                 dataConclusao.value = ''; // Limpar o valor
+            }
+        }
+        
+        if (groupSolucaoFinal && solucaoFinal) {
+            if (concluidoChecked) {
+                groupSolucaoFinal.style.display = 'block';
+                solucaoFinal.setAttribute('required', 'required');
+            } else {
+                groupSolucaoFinal.style.display = 'none';
+                solucaoFinal.removeAttribute('required');
+                solucaoFinal.value = ''; // Limpar o valor
             }
         }
     }
@@ -1148,6 +1185,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     // Campos de conclusão
     const concluido = document.getElementById('concluido')?.checked || false;
     const data_conclusao = document.getElementById('data_conclusao')?.value || null;
+    const solucao_final = document.getElementById('solucao_final')?.value || null;
 
     // Determinar o número do documento baseado no tipo de documento iniciador
     let numero_documento = '';
@@ -1216,6 +1254,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_controle,
                 concluido,
                 data_conclusao,
+                solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids
             )();
@@ -1246,6 +1285,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 numero_controle,
                 concluido,
                 data_conclusao,
+                solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids
             )();
