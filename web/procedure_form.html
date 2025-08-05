@@ -243,17 +243,6 @@
                     <input type="text" id="nome_vitima">
                 </div>
 
-                <!-- Natureza Principal -->
-                <div class="form-group" id="group_natureza_processo" style="display: none;">
-                    <label for="natureza_processo">Natureza Principal Apurada (Processo) *</label>
-                    <select id="natureza_processo" required>
-                        <option value="">Selecione...</option>
-                        <option value="Grave">Grave</option>
-                        <option value="Leve">Leve</option>
-                        <option value="Média">Média</option>
-                    </select>
-                </div>
-                
                 <!-- Campo de Infração (para PADS) -->
                 <div class="form-group" id="group_infracao" style="display: none;">
                     <label for="infracao_search">Transgressões Praticadas *</label>
@@ -265,7 +254,18 @@
                     
                     <!-- Campo de busca para nova transgressão -->
                     <div id="campo_busca_transgressao" style="position: relative;">
-                        <input type="text" id="infracao_search" placeholder="Digite para filtrar transgressões..." autocomplete="off">
+                        <!-- Seletor de natureza da nova transgressão -->
+                        <div class="form-group mb-2">
+                            <label for="natureza_nova_transgressao" style="font-size: 0.9rem; margin-bottom: 5px;">Natureza da Transgressão:</label>
+                            <select id="natureza_nova_transgressao" class="form-control" style="font-size: 0.9rem;">
+                                <option value="">Selecione a natureza...</option>
+                                <option value="Leve">Leve</option>
+                                <option value="Média">Média</option>
+                                <option value="Grave">Grave</option>
+                            </select>
+                        </div>
+                        
+                        <input type="text" id="infracao_search" placeholder="Primeiro selecione a natureza..." autocomplete="off" disabled>
                         <input type="hidden" id="transgressoes_ids" name="transgressoes_ids">
                         <div id="infracao_dropdown" class="dropdown-infracao" style="display: none;">
                             <!-- Opções serão carregadas via JavaScript -->

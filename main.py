@@ -1063,6 +1063,35 @@ def listar_processos():
     
     return resultado
 
+def _determinar_natureza_processo(natureza_original, transgressoes_selecionadas):
+    """Determina a natureza do processo baseado nas transgressões selecionadas"""
+    if not transgressoes_selecionadas:
+        return natureza_original
+    
+    # Coletar todas as naturezas das transgressões
+    naturezas_unicas = set()
+    for trans in transgressoes_selecionadas:
+        natureza = trans.get('natureza', 'leve')
+        # Normalizar mapeamento
+        if natureza == 'media':
+            natureza = 'Média'
+        elif natureza == 'leve':
+            natureza = 'Leve'
+        elif natureza == 'grave':
+            natureza = 'Grave'
+        naturezas_unicas.add(natureza)
+    
+    # Se há mais de uma natureza, retornar "Múltiplas"
+    if len(naturezas_unicas) > 1:
+        return "Múltiplas"
+    
+    # Se há apenas uma natureza, retornar ela
+    if len(naturezas_unicas) == 1:
+        return list(naturezas_unicas)[0]
+    
+    # Fallback para valor original
+    return natureza_original
+
 @eel.expose
 def excluir_processo(processo_id):
     """Exclui um processo/procedimento (soft delete)"""
@@ -1146,27 +1175,51 @@ def obter_processo(processo_id):
             if processo[2] == 'procedimento':  # tipo_geral
                 pms_envolvidos = buscar_pms_envolvidos(processo_id)
             
-            # Processar transgressões (campo JSON)
+            # Processar transgressões (campo JSON) - suporta formato antigo e novo
             transgressoes_selecionadas = []
             if processo[27]:  # transgressoes_ids
                 try:
                     import json
-                    transgressoes_ids = json.loads(processo[27])
-                    if isinstance(transgressoes_ids, list):
-                        # Buscar detalhes das transgressões
+                    transgressoes_data = json.loads(processo[27])
+                    
+                    if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
                         conn2 = db_manager.get_connection()
                         cursor2 = conn2.cursor()
-                        for trans_id in transgressoes_ids:
-                            cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
-                            trans = cursor2.fetchone()
-                            if trans:
-                                transgressoes_selecionadas.append({
-                                    'id': trans[0],
-                                    'inciso': trans[1],
-                                    'texto': trans[2]
-                                })
+                        
+                        # Verificar se é formato novo (com natureza) ou antigo (só IDs)
+                        primeiro_item = transgressoes_data[0]
+                        
+                        if isinstance(primeiro_item, dict) and 'natureza' in primeiro_item:
+                            # Formato novo: [{"id": "8", "natureza": "leve"}, ...]
+                            for trans_data in transgressoes_data:
+                                trans_id = trans_data.get('id')
+                                natureza = trans_data.get('natureza', 'leve')
+                                
+                                cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                                trans = cursor2.fetchone()
+                                if trans:
+                                    transgressoes_selecionadas.append({
+                                        'id': trans[0],
+                                        'inciso': trans[1],
+                                        'texto': trans[2],
+                                        'natureza': natureza
+                                    })
+                        else:
+                            # Formato antigo: ["8", "21", "31"] - buscar natureza na tabela
+                            for trans_id in transgressoes_data:
+                                cursor2.execute("SELECT id, inciso, texto, gravidade FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                                trans = cursor2.fetchone()
+                                if trans:
+                                    transgressoes_selecionadas.append({
+                                        'id': trans[0],
+                                        'inciso': trans[1],
+                                        'texto': trans[2],
+                                        'natureza': trans[3]  # gravidade da tabela
+                                    })
+                        
                         conn2.close()
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Erro ao processar transgressões do processo {processo_id}: {e}")
                     transgressoes_selecionadas = []
             
             return {
@@ -1190,7 +1243,7 @@ def obter_processo(processo_id):
                 "pm_completo": pm_completo,
                 "pms_envolvidos": pms_envolvidos,
                 "nome_vitima": processo[15],
-                "natureza_processo": processo[16],
+                "natureza_processo": _determinar_natureza_processo(processo[16], transgressoes_selecionadas),
                 "natureza_procedimento": processo[17],
                 "resumo_fatos": processo[18],
                 "numero_portaria": processo[19],

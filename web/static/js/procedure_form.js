@@ -6,6 +6,7 @@ let editandoProcedimento = null;
 let pmsAdicionais = [];
 
 // Array para armazenar transgressões selecionadas
+// Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
 
 function obterTodosPmsEnvolvidos() {
@@ -474,12 +475,13 @@ async function preencherFormularioEdicao(procedimento) {
             // Limpar array global e resetar interface
             transgressoesSelecionadas = [];
             
-            // Adicionar cada transgressão ao array global
+            // Adicionar cada transgressão ao array global (novo formato com natureza)
             procedimento.transgressoes_selecionadas.forEach(transgressao => {
                 transgressoesSelecionadas.push({
                     id: transgressao.id,
                     inciso: transgressao.inciso,
-                    texto: transgressao.texto
+                    texto: transgressao.texto,
+                    natureza: transgressao.natureza || 'leve' // fallback para dados antigos
                 });
             });
             
@@ -512,7 +514,7 @@ const fieldGroups = {
     numeroControle: document.getElementById('group_numero_controle'),
     nomePm: document.getElementById('group_nome_pm'),
     nomeVitima: document.getElementById('group_nome_vitima'),
-    naturezaProcesso: document.getElementById('group_natureza_processo'),
+    // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
     naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
     infracao: document.getElementById('group_infracao'),
 };
@@ -525,7 +527,7 @@ const fields = {
     documentoIniciador: document.getElementById('documento_iniciador'),
     statusPm: document.getElementById('status_pm'),
     labelNomePm: document.getElementById('label_nome_pm'),
-    naturezaProcesso: document.getElementById('natureza_processo'),
+    // naturezaProcesso: document.getElementById('natureza_processo'), // Removido
     numeroControleDiferente: document.getElementById('numero_controle_diferente'),
     labelControleDiferente: document.getElementById('label_controle_diferente'),
     numeroControle: document.getElementById('numero_controle'),
@@ -575,29 +577,42 @@ function updateFormVisibility() {
     toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');
 
     // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
-    const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS';
+    // Não mostrar mais o campo de natureza processo para PADS
+    // const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS';
     const showNaturezaProcedimento = tipoGeral === 'procedimento';
-    toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
+    // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
     toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
     
-    // Lógica para Infração (apenas para PADS)
-    const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS' && fields.naturezaProcesso.value !== '';
+    // Lógica para Infração (apenas para PADS) - sem depender da natureza principal
+    const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS';
     
     // Debug logs temporários
     console.log('Debug Infração:', {
         tipoGeral,
         tipoProcesso,
-        naturezaProcesso: fields.naturezaProcesso.value,
         showInfracao,
         fieldExists: !!fieldGroups.infracao
     });
     
     toggleGroup(fieldGroups.infracao, showInfracao);
     
-    // Se mostrar infração, carregar as infrações baseadas na natureza
+    // Se mostrar infração, apenas preparar a interface
     if (showInfracao) {
-        console.log('Carregando infrações para natureza:', fields.naturezaProcesso.value);
-        carregarInfracoesPorNatureza(fields.naturezaProcesso.value);
+        console.log('Campo de transgressões mostrado');
+        // Não carregar automaticamente - aguardar seleção do usuário no seletor de natureza
+        
+        // Resetar o seletor de natureza se estiver oculto
+        const seletorNatureza = document.getElementById('natureza_nova_transgressao');
+        if (seletorNatureza) {
+            seletorNatureza.value = '';
+        }
+        
+        // Desabilitar campo de busca até selecionar natureza
+        const campoBusca = document.getElementById('infracao_search');
+        if (campoBusca) {
+            campoBusca.disabled = true;
+            campoBusca.placeholder = 'Primeiro selecione a natureza...';
+        }
     } else {
         // Se não mostrar infração, cancelar adição e limpar transgressões selecionadas
         cancelarAdicaoTransgressao();
@@ -804,7 +819,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         numeroControle: document.getElementById('group_numero_controle'),
         nomePm: document.getElementById('group_nome_pm'),
         nomeVitima: document.getElementById('group_nome_vitima'),
-        naturezaProcesso: document.getElementById('group_natureza_processo'),
+        // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
         naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
         infracao: document.getElementById('group_infracao'),
     };
@@ -817,7 +832,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         documentoIniciador: document.getElementById('documento_iniciador'),
         statusPm: document.getElementById('status_pm'),
         labelNomePm: document.getElementById('label_nome_pm'),
-        naturezaProcesso: document.getElementById('natureza_processo'),
+        // naturezaProcesso: document.getElementById('natureza_processo'), // Removido
         numeroControleDiferente: document.getElementById('numero_controle_diferente'),
         labelControleDiferente: document.getElementById('label_controle_diferente'),
         numeroControle: document.getElementById('numero_controle'),
@@ -867,29 +882,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');
 
         // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
-        const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS';
+        // const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS'; // Removido
         const showNaturezaProcedimento = tipoGeral === 'procedimento';
-        toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
+        // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso); // Removido
         toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
         
-        // Lógica para Infração (apenas para PADS)
-        const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS' && fields.naturezaProcesso.value !== '';
+        // Lógica para Infração (apenas para PADS) - sem depender da natureza principal
+        const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS';
         
         // Debug logs temporários
         console.log('Debug Infração:', {
             tipoGeral,
             tipoProcesso,
-            naturezaProcesso: fields.naturezaProcesso.value,
             showInfracao,
             fieldExists: !!fieldGroups.infracao
         });
         
         toggleGroup(fieldGroups.infracao, showInfracao);
         
-        // Se mostrar infração, carregar as infrações baseadas na natureza
+        // Se mostrar infração, apenas preparar a interface
         if (showInfracao) {
-            console.log('Carregando infrações para natureza:', fields.naturezaProcesso.value);
-            carregarInfracoesPorNatureza(fields.naturezaProcesso.value);
+            console.log('Campo de transgressões mostrado');
+            // Não carregar automaticamente - aguardar seleção do usuário no seletor de natureza
+            
+            // Resetar o seletor de natureza se estiver oculto
+            const seletorNatureza = document.getElementById('natureza_nova_transgressao');
+            if (seletorNatureza) {
+                seletorNatureza.value = '';
+            }
+            
+            // Desabilitar campo de busca até selecionar natureza
+            const campoBusca = document.getElementById('infracao_search');
+            if (campoBusca) {
+                campoBusca.disabled = true;
+                campoBusca.placeholder = 'Primeiro selecione a natureza...';
+            }
         }
 
         // 3. Lógica para Documento que Iniciou
@@ -1054,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Adiciona 'data-required' aos campos que são obrigatórios condicionalmente
     // para que a função toggleGroup saiba quando aplicar 'required'
-    document.querySelectorAll('#group_tipo_procedimento select, #group_tipo_processo select, #group_escrivao select, #group_numero_portaria input, #group_numero_memorando input, #group_numero_feito input, #group_nome_pm input, #group_natureza_processo select, #group_natureza_procedimento select').forEach(el => {
+    document.querySelectorAll('#group_tipo_procedimento select, #group_tipo_processo select, #group_escrivao select, #group_numero_portaria input, #group_numero_memorando input, #group_numero_feito input, #group_nome_pm input, #group_natureza_procedimento select').forEach(el => {
         el.setAttribute('data-required', 'true');
     });
 
@@ -1527,9 +1554,9 @@ async function safeListarTodosUsuarios() {
 
 // Função para carregar infrações baseadas na natureza selecionada
 function carregarInfracoesPorNatureza(natureza) {
-    console.log('Carregando infrações para natureza:', natureza);
+    console.log('🔍 Carregando infrações para natureza:', natureza);
     
-    // Mapear natureza para gravidade
+    // Mapear natureza para gravidade (valores recebidos do select)
     const naturezaParaGravidade = {
         'Leve': 'leve',
         'Média': 'media', 
@@ -1537,12 +1564,15 @@ function carregarInfracoesPorNatureza(natureza) {
     };
     
     const gravidade = naturezaParaGravidade[natureza];
+    console.log('📊 Mapeamento:', { natureza, gravidade, mapeamentos: naturezaParaGravidade });
+    
     if (!gravidade) {
-        console.log('Gravidade não encontrada para natureza:', natureza);
+        console.error('❌ Gravidade não encontrada para natureza:', natureza);
+        console.log('Naturezas disponíveis:', Object.keys(naturezaParaGravidade));
         return;
     }
     
-    console.log('Buscando transgressões para gravidade:', gravidade);
+    console.log('🔍 Buscando transgressões para gravidade:', gravidade);
     
     fetch(`/buscar_transgressoes?gravidade=${encodeURIComponent(gravidade)}`)
         .then(response => {
@@ -1562,35 +1592,27 @@ function carregarInfracoesPorNatureza(natureza) {
             
             const searchInput = document.getElementById('infracao_search');
             const dropdownContent = document.getElementById('infracao_dropdown');
-            const hiddenInput = document.getElementById('transgressoes_ids');
             
-            if (!searchInput || !dropdownContent || !hiddenInput) {
+            if (!searchInput || !dropdownContent) {
                 console.error('Elementos não encontrados no DOM:', {
                     searchInput: !!searchInput,
-                    dropdownContent: !!dropdownContent,
-                    hiddenInput: !!hiddenInput
+                    dropdownContent: !!dropdownContent
                 });
-                
-                // Tentar encontrar os elementos novamente após um pequeno delay
-                setTimeout(() => {
-                    const searchInputRetry = document.getElementById('infracao_search');
-                    const dropdownContentRetry = document.getElementById('infracao_dropdown');
-                    const hiddenInputRetry = document.getElementById('transgressoes_ids');
-                    
-                    console.log('Retry - Elementos encontrados:', {
-                        searchInput: !!searchInputRetry,
-                        dropdownContent: !!dropdownContentRetry,
-                        hiddenInput: !!hiddenInputRetry
-                    });
-                }, 100);
-                
                 return;
             }
             
             // Limpar dropdown anterior
             dropdownContent.innerHTML = '';
             searchInput.value = '';
-            // Não limpar hiddenInput aqui, pois é gerenciado por atualizarTransgressoesSelecionadas()
+            
+            // Habilitar campo de busca
+            console.log('🔓 Habilitando campo de busca...');
+            searchInput.disabled = false;
+            searchInput.placeholder = 'Digite para filtrar transgressões...';
+            console.log('✅ Campo de busca habilitado:', {
+                disabled: searchInput.disabled,
+                placeholder: searchInput.placeholder
+            });
             
             // Verificar se há dados
             if (!Array.isArray(data) || data.length === 0) {
@@ -1612,11 +1634,22 @@ function carregarInfracoesPorNatureza(natureza) {
                 option.className = 'dropdown-option';
                 option.textContent = `${infracao.inciso} - ${infracao.texto}`;
                 option.title = infracao.texto; // Tooltip com texto completo
-                option.onclick = () => selecionarInfracao(infracao);
+                option.onclick = () => selecionarInfracao({
+                    ...infracao,
+                    natureza: gravidade // Adicionar natureza selecionada
+                });
                 dropdownContent.appendChild(option);
             });
             
             console.log('Dropdown populado com sucesso');
+            
+            // Mostrar o dropdown após populá-lo
+            dropdownContent.style.display = 'block';
+            console.log('📋 Dropdown exibido');
+            
+            // Focar no campo de busca
+            searchInput.focus();
+            console.log('🎯 Campo de busca focado');
         })
         .catch(error => {
             console.error('Erro ao carregar infrações:', error);
@@ -1635,19 +1668,32 @@ function selecionarInfracao(infracao) {
         return;
     }
     
-    // Adicionar à lista de selecionadas
-    transgressoesSelecionadas.push(infracao);
+    // Adicionar à lista de selecionadas com natureza
+    transgressoesSelecionadas.push({
+        id: infracao.id,
+        inciso: infracao.inciso,
+        texto: infracao.texto,
+        natureza: infracao.natureza
+    });
     
     // Atualizar interface
     atualizarTransgressoesSelecionadas();
     
-    // Limpar campo de busca
+    // Limpar campo de busca e ocultar dropdown
     const searchInput = document.getElementById('infracao_search');
     const dropdownContent = document.getElementById('infracao_dropdown');
+    const seletorNatureza = document.getElementById('natureza_nova_transgressao');
     
     if (searchInput && dropdownContent) {
         searchInput.value = '';
+        searchInput.disabled = true;
+        searchInput.placeholder = 'Primeiro selecione a natureza...';
         dropdownContent.style.display = 'none';
+    }
+    
+    // Resetar seletor de natureza
+    if (seletorNatureza) {
+        seletorNatureza.value = '';
     }
     
     console.log('Transgressão adicionada. Total:', transgressoesSelecionadas.length);
@@ -1681,9 +1727,16 @@ function atualizarTransgressoesSelecionadas() {
     transgressoesSelecionadas.forEach((transgressao, index) => {
         const item = document.createElement('div');
         item.className = 'transgressao-item';
+        
+        // Mapear natureza para classe CSS
+        const naturezaClass = transgressao.natureza === 'media' ? 'media' : transgressao.natureza;
+        
         item.innerHTML = `
             <div class="transgressao-texto">
-                <div class="transgressao-inciso">Inciso ${transgressao.inciso}</div>
+                <div class="transgressao-inciso">
+                    Inciso ${transgressao.inciso}
+                    <span class="natureza-tag ${naturezaClass}">${transgressao.natureza}</span>
+                </div>
                 <div class="transgressao-descricao">${transgressao.texto}</div>
             </div>
             <button type="button" class="btn-remover-transgressao" onclick="removerTransgressao(${index})" title="Remover transgressão">
@@ -1693,15 +1746,18 @@ function atualizarTransgressoesSelecionadas() {
         container.appendChild(item);
     });
     
-    // Atualizar campo hidden com IDs das transgressões
-    const ids = transgressoesSelecionadas.map(t => t.id);
-    hiddenInput.value = JSON.stringify(ids);
+    // Atualizar campo hidden com novo formato que inclui natureza
+    const dadosTransgressoes = transgressoesSelecionadas.map(t => ({
+        id: t.id,
+        natureza: t.natureza
+    }));
+    hiddenInput.value = JSON.stringify(dadosTransgressoes);
     
     // Controlar visibilidade dos botões e campo de busca
     if (botaoAdicionar) botaoAdicionar.style.display = 'block';
     if (campoBusca) campoBusca.style.display = 'none';
     
-    console.log('Interface atualizada. Transgressões:', ids);
+    console.log('Interface atualizada. Transgressões:', dadosTransgressoes);
 }
 
 // Função para remover uma transgressão
@@ -1734,14 +1790,24 @@ function mostrarCampoBuscaTransgressao() {
         campoBusca.style.display = 'block';
         console.log('Campo de busca exibido');
         
-        const searchInput = document.getElementById('infracao_search');
-        console.log('searchInput element:', searchInput);
+        // Resetar seletor de natureza
+        const seletorNatureza = document.getElementById('natureza_nova_transgressao');
+        if (seletorNatureza) {
+            seletorNatureza.value = '';
+        }
         
+        // Desabilitar campo de busca até selecionar natureza
+        const searchInput = document.getElementById('infracao_search');
         if (searchInput) {
-            searchInput.focus();
-            console.log('Focus definido no input de busca');
-        } else {
-            console.log('Input infracao_search não encontrado');
+            searchInput.disabled = true;
+            searchInput.placeholder = 'Primeiro selecione a natureza...';
+            searchInput.value = '';
+        }
+        
+        // Focar no seletor de natureza
+        if (seletorNatureza) {
+            seletorNatureza.focus();
+            console.log('Focus definido no seletor de natureza');
         }
     } else {
         console.log('Elemento campo_busca_transgressao não encontrado');
@@ -1854,16 +1920,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mostrar dropdown ao focar no campo de busca
         infracaoSearch.addEventListener('focus', function() {
             console.log('Campo de infração focado');
-            if (infracaoDropdown.children.length > 0) {
-                infracaoDropdown.style.display = 'block';
+            const dropdown = document.getElementById('infracao_dropdown');
+            if (dropdown && dropdown.children.length > 0) {
+                dropdown.style.display = 'block';
+                console.log('🔍 Dropdown mostrado no foco');
             }
         });
         
         // Mostrar dropdown ao clicar no campo de busca
         infracaoSearch.addEventListener('click', function() {
             console.log('Campo de infração clicado');
-            if (infracaoDropdown.children.length > 0) {
-                infracaoDropdown.style.display = 'block';
+            const dropdown = document.getElementById('infracao_dropdown');
+            if (dropdown && dropdown.children.length > 0) {
+                dropdown.style.display = 'block';
+                console.log('🔍 Dropdown mostrado no clique');
             }
         });
         
@@ -1884,15 +1954,30 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Ocultar dropdown ao clicar fora
+        // Ocultar dropdown ao clicar fora - mas não se estivermos no processo de adição
         document.addEventListener('click', function(event) {
-            if (!infracaoSearch.contains(event.target) && !infracaoDropdown.contains(event.target)) {
-                console.log('Clique fora do dropdown, ocultando');
-                infracaoDropdown.style.display = 'none';
-                // Se há transgressões selecionadas, cancelar adição
-                if (transgressoesSelecionadas.length > 0) {
-                    cancelarAdicaoTransgressao();
-                }
+            const dropdown = document.getElementById('infracao_dropdown');
+            const searchField = document.getElementById('infracao_search');
+            const naturezaSelector = document.getElementById('natureza_nova_transgressao');
+            const campoBusca = document.getElementById('campo_busca_transgressao');
+            
+            // Não fechar se estamos clicando dentro da área de adição de transgressão
+            if (campoBusca && campoBusca.contains(event.target)) {
+                console.log('Clique dentro da área de adição, mantendo dropdown');
+                return;
+            }
+            
+            // Não fechar se clicar no dropdown ou campo de busca
+            if ((searchField && searchField.contains(event.target)) || 
+                (dropdown && dropdown.contains(event.target)) ||
+                (naturezaSelector && naturezaSelector.contains(event.target))) {
+                console.log('Clique dentro do dropdown/busca, mantendo dropdown');
+                return;
+            }
+            
+            console.log('Clique fora do dropdown, ocultando');
+            if (dropdown) {
+                dropdown.style.display = 'none';
             }
         });
         
@@ -1923,11 +2008,38 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Botão btnAdicionarTransgressao não encontrado no DOM');
     }
     
-    // Event listener para mudança na natureza do processo (PADS)
-    const naturezaProcesso = document.getElementById('natureza_processo');
-    if (naturezaProcesso) {
-        naturezaProcesso.addEventListener('change', function() {
-            updateFormVisibility(); // Isso já vai chamar carregarInfracoesPorNatureza
-        });
-    }
+    // Event listener para mudança na natureza do processo (PADS) - REMOVIDO
+    // const naturezaProcesso = document.getElementById('natureza_processo');
+    // if (naturezaProcesso) {
+    //     naturezaProcesso.addEventListener('change', function() {
+    //         updateFormVisibility(); // Isso já vai chamar carregarInfracoesPorNatureza
+    //     });
+    // }
+    
+    // Event listener para seletor de natureza da nova transgressão
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.id === 'natureza_nova_transgressao') {
+            const naturezaSelecionada = event.target.value;
+            console.log('Natureza selecionada para nova transgressão:', naturezaSelecionada);
+            
+            if (naturezaSelecionada) {
+                // Carregar transgressões da natureza selecionada
+                carregarInfracoesPorNatureza(naturezaSelecionada);
+            } else {
+                // Desabilitar campo de busca se não há natureza selecionada
+                const searchInput = document.getElementById('infracao_search');
+                if (searchInput) {
+                    searchInput.disabled = true;
+                    searchInput.placeholder = 'Primeiro selecione a natureza...';
+                    searchInput.value = '';
+                }
+                
+                // Ocultar dropdown
+                const dropdown = document.getElementById('infracao_dropdown');
+                if (dropdown) {
+                    dropdown.style.display = 'none';
+                }
+            }
+        }
+    });
 });
