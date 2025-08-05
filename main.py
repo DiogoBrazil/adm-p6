@@ -117,7 +117,7 @@ class DatabaseManager:
             cursor.execute('''
                 INSERT INTO operadores (id, posto_graduacao, matricula, nome, email, senha, profile) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (admin_id, 'CEL PM', '000000', 'Administrador', 'admin', senha_hash, 'admin'))
+            ''', (admin_id, 'CEL PM', '000000', 'ADMINISTRADOR', 'admin', senha_hash, 'admin'))
             print("👤 Usuário admin criado: admin / 123456\n   ID: " + admin_id)
     
     def hash_password(self, password):
@@ -186,6 +186,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
+            # Converter nome para maiúsculas
+            nome = nome.strip().upper()
+            
             # Verifica se email já existe em operadores
             cursor.execute("SELECT id FROM operadores WHERE email = ?", (email,))
             if cursor.fetchone():
@@ -221,6 +224,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
+            # Converter nome para maiúsculas
+            nome = nome.strip().upper()
+            
             # Converter email vazio para None (NULL no banco)
             email = email.strip() if email and email.strip() else None
             
@@ -259,6 +265,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
+            # Converter nome para maiúsculas
+            nome = nome.strip().upper()
+            
             if user_type == 'operador':
                 # Verifica se email já existe para outro operador
                 cursor.execute("SELECT id FROM operadores WHERE email = ? AND id != ?", (email, user_id))
@@ -375,8 +384,8 @@ class DatabaseManager:
         cursor.execute(f"SELECT COUNT(*) FROM encarregados {where_clause}", search_params)
         total_encarregados = cursor.fetchone()[0]
 
-        # Contar total de operadores (incluindo admin, mas excluindo o usuário padrão "Administrador")
-        operador_where = where_clause + " AND nome != 'Administrador'"
+        # Contar total de operadores (incluindo admin, mas excluindo o usuário padrão "ADMINISTRADOR")
+        operador_where = where_clause + " AND nome != 'ADMINISTRADOR'"
         cursor.execute(f"SELECT COUNT(*) FROM operadores {operador_where}", search_params)
         total_operadores = cursor.fetchone()[0]
 
@@ -393,7 +402,7 @@ class DatabaseManager:
             UNION ALL
             SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, 'operador' as tipo, profile
             FROM operadores 
-            {where_clause} AND nome != 'Administrador'
+            {where_clause} AND nome != 'ADMINISTRADOR'
             ORDER BY nome ASC
             LIMIT ? OFFSET ?
         '''
@@ -675,15 +684,15 @@ def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, sen
             return {"sucesso": False, "mensagem": "Senha deve ter pelo menos 4 caracteres!"}
         if not profile or profile not in ['admin', 'comum']:
             return {"sucesso": False, "mensagem": "Perfil inválido para operador!"}
-        return db_manager.add_operador(posto_graduacao, matricula.strip(), nome.strip(), email.strip().lower(), senha, profile)
+        return db_manager.add_operador(posto_graduacao, matricula.strip(), nome, email.strip().lower(), senha, profile)
     elif tipo_usuario == 'encarregado':
         # Email é opcional para encarregado, mas se preenchido, deve ser válido
         if email:
             if "@" not in email or "." not in email:
                 return {"sucesso": False, "mensagem": "Email inválido!"}
-            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome.strip(), email.strip().lower())
+            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome, email.strip().lower())
         else:
-            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome.strip(), None)
+            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome, None)
     else:
         return {"sucesso": False, "mensagem": "Tipo de usuário inválido!"}
 
@@ -873,6 +882,11 @@ def registrar_processo(
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
+    
+    # Converter nome_vitima para maiúsculas se fornecido
+    if nome_vitima:
+        nome_vitima = nome_vitima.strip().upper()
+    
     print(f"Parâmetros recebidos:")
     params = {
         "numero": numero, "tipo_geral": tipo_geral, "tipo_detalhe": tipo_detalhe,
@@ -1363,6 +1377,10 @@ def atualizar_processo(
 ):
     """Atualiza um processo/procedimento existente"""
     try:
+        # Converter nome_vitima para maiúsculas se fornecido
+        if nome_vitima:
+            nome_vitima = nome_vitima.strip().upper()
+            
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         

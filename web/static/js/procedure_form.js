@@ -797,6 +797,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         await verificarEdicao();
     }
 
+    // Converter nome da vítima para maiúsculas automaticamente enquanto digita
+    const nomeVitimaInput = document.getElementById('nome_vitima');
+    if (nomeVitimaInput) {
+        nomeVitimaInput.addEventListener('input', function(e) {
+            const cursorPosition = e.target.selectionStart;
+            const value = e.target.value.toUpperCase();
+            e.target.value = value;
+            e.target.setSelectionRange(cursorPosition, cursorPosition);
+        });
+    }
+
     // Função para popular o select de Nome do PM
     async function loadPmOptions() {
         try {
@@ -1213,7 +1224,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const escrivao_id = document.getElementById('escrivao_id')?.value || null;
     const status_pm = document.getElementById('status_pm')?.value || null;
     const nome_pm_id = document.getElementById('nome_pm')?.value || null;
-    const nome_vitima = document.getElementById('nome_vitima')?.value || null;
+    const nome_vitima = document.getElementById('nome_vitima')?.value?.toUpperCase() || null;
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
     const transgressoes_ids = document.getElementById('transgressoes_ids')?.value || null;

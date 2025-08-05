@@ -246,6 +246,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tipoUsuarioSelect.addEventListener('change', toggleOperatorFields);
     
+    // Converter nome para maiúsculas automaticamente enquanto digita
+    const nomeInput = document.getElementById('nome');
+    nomeInput.addEventListener('input', function(e) {
+        const cursorPosition = e.target.selectionStart;
+        const value = e.target.value.toUpperCase();
+        e.target.value = value;
+        e.target.setSelectionRange(cursorPosition, cursorPosition);
+    });
+    
     // Chamar no carregamento inicial para garantir o estado correto
     toggleOperatorFields();
     
@@ -258,7 +267,7 @@ document.getElementById('userForm').addEventListener('submit', async (e) => {
     const tipo_usuario = document.getElementById('tipo_usuario').value;
     const posto_graduacao = document.getElementById('posto_graduacao').value;
     const matricula = document.getElementById('matricula').value.trim();
-    const nome = document.getElementById('nome').value.trim();
+    const nome = document.getElementById('nome').value.trim().toUpperCase();
     const email = document.getElementById('email').value.trim();
     let senha = null;
     let profile = null;
