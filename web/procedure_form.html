@@ -254,8 +254,18 @@
                     
                     <!-- Campo de busca para nova transgressão -->
                     <div id="campo_busca_transgressao" style="position: relative;">
-                        <!-- Seletor de natureza da nova transgressão -->
+                        <!-- Seletor de tipo de infração -->
                         <div class="form-group mb-2">
+                            <label for="tipo_infracao" style="font-size: 0.9rem; margin-bottom: 5px;">Tipo de Infração:</label>
+                            <select id="tipo_infracao" class="form-control" style="font-size: 0.9rem;">
+                                <option value="">Selecione o tipo...</option>
+                                <option value="rdpm">RDPM (Regulamento Disciplinar da Polícia Militar)</option>
+                                <option value="estatuto">Art. 29 do Decreto Lei 09-A (Estatuto)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Seletor de natureza da nova transgressão (só para RDPM) -->
+                        <div id="grupo_natureza_rdpm" class="form-group mb-2" style="display: none;">
                             <label for="natureza_nova_transgressao" style="font-size: 0.9rem; margin-bottom: 5px;">Natureza da Transgressão:</label>
                             <select id="natureza_nova_transgressao" class="form-control" style="font-size: 0.9rem;">
                                 <option value="">Selecione a natureza...</option>
@@ -265,10 +275,29 @@
                             </select>
                         </div>
                         
-                        <input type="text" id="infracao_search" placeholder="Primeiro selecione a natureza..." autocomplete="off" disabled>
+                        <!-- Campo de busca para infrações -->
+                        <input type="text" id="infracao_search" placeholder="Primeiro selecione o tipo de infração..." autocomplete="off" disabled>
                         <input type="hidden" id="transgressoes_ids" name="transgressoes_ids">
                         <div id="infracao_dropdown" class="dropdown-infracao" style="display: none;">
                             <!-- Opções serão carregadas via JavaScript -->
+                        </div>
+                        
+                        <!-- Seleção de analogia RDPM (só para Art. 29) -->
+                        <div id="grupo_analogia_rdpm" style="display: none; margin-top: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">
+                            <h6 style="color: #333; margin-bottom: 10px;">Analogia com RDPM:</h6>
+                            <div class="form-group mb-2">
+                                <label for="analogia_natureza" style="font-size: 0.9rem; margin-bottom: 5px;">Natureza da Analogia:</label>
+                                <select id="analogia_natureza" class="form-control" style="font-size: 0.9rem;">
+                                    <option value="">Selecione a natureza...</option>
+                                    <option value="Leve">Leve</option>
+                                    <option value="Média">Média</option>
+                                    <option value="Grave">Grave</option>
+                                </select>
+                            </div>
+                            <input type="text" id="analogia_search" placeholder="Primeiro selecione a natureza da analogia..." autocomplete="off" disabled>
+                            <div id="analogia_dropdown" class="dropdown-infracao" style="display: none;">
+                                <!-- Opções serão carregadas via JavaScript -->
+                            </div>
                         </div>
                     </div>
                     

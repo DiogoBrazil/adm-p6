@@ -193,6 +193,20 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     border: 1px solid #f5c6cb;
 }
 
+.natureza-tag.estatuto {
+    background-color: #e2e3e5;
+    color: #383d41;
+    border: 1px solid #d6d8db;
+}
+
+.analogia-info {
+    font-size: 0.85em !important;
+    background-color: #f8f9fa !important;
+    border-left: 3px solid #6c757d !important;
+    padding: 8px !important;
+    margin-top: 8px !important;
+}
+
 .btn-remover-transgressao {
     background: none;
     border: none;

@@ -512,6 +512,62 @@ def api_buscar_transgressoes():
     except Exception as e:
         return json.dumps({"erro": f"Erro ao buscar transgressões: {str(e)}"})
 
+# Adicionar rota HTTP para buscar infrações do Art. 29
+@route('/buscar_infracoes_art29')
+def api_buscar_infracoes_art29():
+    """Endpoint HTTP para buscar infrações do Art. 29 do Decreto Lei 09-A"""
+    response.content_type = 'application/json'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    try:
+        termo = request.query.get('termo', '').strip()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if termo:
+            # Busca com filtro por termo
+            cursor.execute("""
+                SELECT id, inciso, texto 
+                FROM infracoes_estatuto_art29 
+                WHERE (inciso LIKE ? OR texto LIKE ?) AND ativo = 1
+                ORDER BY 
+                    CASE 
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
+                        ELSE 999
+                    END,
+                    inciso
+            """, (f'%{termo}%', f'%{termo}%'))
+        else:
+            # Busca todos os incisos
+            cursor.execute("""
+                SELECT id, inciso, texto 
+                FROM infracoes_estatuto_art29 
+                WHERE ativo = 1
+                ORDER BY 
+                    CASE 
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
+                        ELSE 999
+                    END,
+                    inciso
+            """)
+        
+        infracoes = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for i in infracoes:
+            resultado.append({
+                "id": i[0],
+                "inciso": i[1],
+                "texto": i[2]
+            })
+        
+        return json.dumps(resultado)
+        
+    except Exception as e:
+        return json.dumps({"erro": f"Erro ao buscar infrações do Art. 29: {str(e)}"})
+
 # Variável para usuário logado
 usuario_logado = None
 
@@ -1189,23 +1245,56 @@ def obter_processo(processo_id):
                         # Verificar se é formato novo (com natureza) ou antigo (só IDs)
                         primeiro_item = transgressoes_data[0]
                         
-                        if isinstance(primeiro_item, dict) and 'natureza' in primeiro_item:
-                            # Formato novo: [{"id": "8", "natureza": "leve"}, ...]
+                        if isinstance(primeiro_item, dict):
+                            # Formato novo: pode ser RDPM ou Art. 29
                             for trans_data in transgressoes_data:
-                                trans_id = trans_data.get('id')
-                                natureza = trans_data.get('natureza', 'leve')
+                                tipo = trans_data.get('tipo', 'rdpm')  # padrão RDPM para compatibilidade
                                 
-                                cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
-                                trans = cursor2.fetchone()
-                                if trans:
-                                    transgressoes_selecionadas.append({
-                                        'id': trans[0],
-                                        'inciso': trans[1],
-                                        'texto': trans[2],
-                                        'natureza': natureza
-                                    })
+                                if tipo == 'estatuto':
+                                    # Infração do Art. 29 com analogia RDPM
+                                    art29_id = trans_data.get('id')
+                                    analogia_data = trans_data.get('rdmp_analogia', {})
+                                    
+                                    # Buscar dados do Art. 29
+                                    cursor2.execute("SELECT id, inciso, texto FROM infracoes_estatuto_art29 WHERE id = ? AND ativo = 1", (art29_id,))
+                                    art29_trans = cursor2.fetchone()
+                                    
+                                    if art29_trans:
+                                        # Buscar dados completos da analogia RDPM
+                                        analogia_completa = analogia_data.copy()
+                                        if analogia_data.get('id'):
+                                            cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (analogia_data.get('id'),))
+                                            rdpm_trans = cursor2.fetchone()
+                                            if rdpm_trans:
+                                                analogia_completa.update({
+                                                    'inciso': rdpm_trans[1],
+                                                    'texto': rdpm_trans[2]
+                                                })
+                                        
+                                        transgressoes_selecionadas.append({
+                                            'id': art29_trans[0],
+                                            'inciso': art29_trans[1],
+                                            'texto': art29_trans[2],
+                                            'tipo': 'estatuto',
+                                            'rdmp_analogia': analogia_completa
+                                        })
+                                else:
+                                    # Infração do RDPM (formato novo)
+                                    trans_id = trans_data.get('id')
+                                    natureza = trans_data.get('natureza', 'leve')
+                                    
+                                    cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                                    trans = cursor2.fetchone()
+                                    if trans:
+                                        transgressoes_selecionadas.append({
+                                            'id': trans[0],
+                                            'inciso': trans[1],
+                                            'texto': trans[2],
+                                            'natureza': natureza,
+                                            'tipo': 'rdpm'
+                                        })
                         else:
-                            # Formato antigo: ["8", "21", "31"] - buscar natureza na tabela
+                            # Formato antigo: ["8", "21", "31"] - buscar natureza na tabela (só RDPM)
                             for trans_id in transgressoes_data:
                                 cursor2.execute("SELECT id, inciso, texto, gravidade FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
                                 trans = cursor2.fetchone()
@@ -1214,7 +1303,8 @@ def obter_processo(processo_id):
                                         'id': trans[0],
                                         'inciso': trans[1],
                                         'texto': trans[2],
-                                        'natureza': trans[3]  # gravidade da tabela
+                                        'natureza': trans[3],  # gravidade da tabela
+                                        'tipo': 'rdpm'
                                     })
                         
                         conn2.close()

@@ -475,14 +475,27 @@ async function preencherFormularioEdicao(procedimento) {
             // Limpar array global e resetar interface
             transgressoesSelecionadas = [];
             
-            // Adicionar cada transgressão ao array global (novo formato com natureza)
+            // Adicionar cada transgressão ao array global (novo formato com suporte a Art. 29)
             procedimento.transgressoes_selecionadas.forEach(transgressao => {
-                transgressoesSelecionadas.push({
-                    id: transgressao.id,
-                    inciso: transgressao.inciso,
-                    texto: transgressao.texto,
-                    natureza: transgressao.natureza || 'leve' // fallback para dados antigos
-                });
+                if (transgressao.tipo === 'estatuto') {
+                    // Infração Art. 29 com analogia RDPM
+                    transgressoesSelecionadas.push({
+                        id: transgressao.id,
+                        inciso: transgressao.inciso,
+                        texto: transgressao.texto,
+                        tipo: 'estatuto',
+                        rdmp_analogia: transgressao.rdmp_analogia || {}
+                    });
+                } else {
+                    // Infração RDPM (formato novo com natureza ou formato antigo)
+                    transgressoesSelecionadas.push({
+                        id: transgressao.id,
+                        inciso: transgressao.inciso,
+                        texto: transgressao.texto,
+                        natureza: transgressao.natureza || 'leve', // fallback para dados antigos
+                        tipo: 'rdpm'
+                    });
+                }
             });
             
             // Atualizar a interface
@@ -1657,23 +1670,24 @@ function carregarInfracoesPorNatureza(natureza) {
         });
 }
 
-// Função para selecionar uma infração
+// Função para selecionar uma infração do RDPM
 function selecionarInfracao(infracao) {
-    console.log('Selecionando infração:', infracao);
+    console.log('Selecionando infração RDPM:', infracao);
     
     // Verificar se a transgressão já foi selecionada
-    const jaExiste = transgressoesSelecionadas.find(t => t.id === infracao.id);
+    const jaExiste = transgressoesSelecionadas.find(t => t.id === infracao.id && t.tipo === 'rdpm');
     if (jaExiste) {
         showAlert('Esta transgressão já foi selecionada!', 'warning');
         return;
     }
     
-    // Adicionar à lista de selecionadas com natureza
+    // Adicionar à lista de selecionadas com natureza e tipo
     transgressoesSelecionadas.push({
         id: infracao.id,
         inciso: infracao.inciso,
         texto: infracao.texto,
-        natureza: infracao.natureza
+        natureza: infracao.natureza,
+        tipo: 'rdpm'
     });
     
     // Atualizar interface
@@ -1728,16 +1742,34 @@ function atualizarTransgressoesSelecionadas() {
         const item = document.createElement('div');
         item.className = 'transgressao-item';
         
-        // Mapear natureza para classe CSS
-        const naturezaClass = transgressao.natureza === 'media' ? 'media' : transgressao.natureza;
+        // Determinar classe CSS baseada no tipo e natureza
+        let naturezaClass = '';
+        let prefixo = '';
+        let naturezaTexto = '';
+        
+        if (transgressao.tipo === 'estatuto') {
+            naturezaClass = 'estatuto';
+            prefixo = 'Art. 29';
+            naturezaTexto = `Analogia: ${transgressao.rdmp_analogia.natureza}`;
+        } else {
+            // RDPM
+            naturezaClass = transgressao.natureza === 'media' ? 'media' : transgressao.natureza;
+            prefixo = 'RDPM';
+            naturezaTexto = transgressao.natureza;
+        }
         
         item.innerHTML = `
             <div class="transgressao-texto">
                 <div class="transgressao-inciso">
-                    Inciso ${transgressao.inciso}
-                    <span class="natureza-tag ${naturezaClass}">${transgressao.natureza}</span>
+                    ${prefixo} ${transgressao.inciso}
+                    <span class="natureza-tag ${naturezaClass}">${naturezaTexto}</span>
                 </div>
                 <div class="transgressao-descricao">${transgressao.texto}</div>
+                ${transgressao.tipo === 'estatuto' ? `
+                    <div class="analogia-info" style="margin-top: 5px; padding: 5px; background-color: #f0f0f0; border-radius: 3px; font-size: 0.85em;">
+                        <strong>Analogia RDPM:</strong> ${transgressao.rdmp_analogia.inciso} - ${transgressao.rdmp_analogia.texto}
+                    </div>
+                ` : ''}
             </div>
             <button type="button" class="btn-remover-transgressao" onclick="removerTransgressao(${index})" title="Remover transgressão">
                 <i class="fas fa-times"></i>
@@ -1746,11 +1778,25 @@ function atualizarTransgressoesSelecionadas() {
         container.appendChild(item);
     });
     
-    // Atualizar campo hidden com novo formato que inclui natureza
-    const dadosTransgressoes = transgressoesSelecionadas.map(t => ({
-        id: t.id,
-        natureza: t.natureza
-    }));
+    // Atualizar campo hidden com novo formato que inclui tipo, natureza e analogia
+    const dadosTransgressoes = transgressoesSelecionadas.map(t => {
+        if (t.tipo === 'estatuto') {
+            return {
+                id: t.id,
+                tipo: 'estatuto',
+                rdmp_analogia: {
+                    id: t.rdmp_analogia.id,
+                    natureza: t.rdmp_analogia.natureza
+                }
+            };
+        } else {
+            return {
+                id: t.id,
+                natureza: t.natureza,
+                tipo: 'rdpm'
+            };
+        }
+    });
     hiddenInput.value = JSON.stringify(dadosTransgressoes);
     
     // Controlar visibilidade dos botões e campo de busca
@@ -1825,6 +1871,15 @@ function cancelarAdicaoTransgressao() {
     const searchInput = document.getElementById('infracao_search');
     const dropdown = document.getElementById('infracao_dropdown');
     
+    // Novos campos
+    const tipoInfracao = document.getElementById('tipo_infracao');
+    const naturezaSelect = document.getElementById('natureza_nova_transgressao');
+    const grupoNaturezaRdpm = document.getElementById('grupo_natureza_rdpm');
+    const grupoAnalogiaRdpm = document.getElementById('grupo_analogia_rdpm');
+    const analogiaNatureza = document.getElementById('analogia_natureza');
+    const analogiaSearch = document.getElementById('analogia_search');
+    const analogiaDropdown = document.getElementById('analogia_dropdown');
+    
     if (campoBusca && transgressoesSelecionadas.length > 0) {
         campoBusca.style.display = 'none';
     }
@@ -1833,13 +1888,32 @@ function cancelarAdicaoTransgressao() {
         botaoAdicionar.style.display = 'block';
     }
     
+    // Resetar campos principais
     if (searchInput) {
         searchInput.value = '';
+        searchInput.disabled = true;
+        searchInput.placeholder = 'Primeiro selecione o tipo de infração...';
     }
     
     if (dropdown) {
         dropdown.style.display = 'none';
     }
+    
+    // Resetar novos campos
+    if (tipoInfracao) tipoInfracao.value = '';
+    if (naturezaSelect) naturezaSelect.value = '';
+    if (grupoNaturezaRdpm) grupoNaturezaRdpm.style.display = 'none';
+    if (grupoAnalogiaRdpm) grupoAnalogiaRdpm.style.display = 'none';
+    if (analogiaNatureza) analogiaNatureza.value = '';
+    if (analogiaSearch) {
+        analogiaSearch.value = '';
+        analogiaSearch.disabled = true;
+        analogiaSearch.placeholder = 'Primeiro selecione a natureza da analogia...';
+    }
+    if (analogiaDropdown) analogiaDropdown.style.display = 'none';
+    
+    // Limpar variável temporária
+    infracaoArt29Temporaria = null;
 }
 
 // Função para filtrar infrações durante a busca
@@ -2016,7 +2090,51 @@ document.addEventListener('DOMContentLoaded', function() {
     //     });
     // }
     
-    // Event listener para seletor de natureza da nova transgressão
+    // Event listener para seletor de tipo de infração
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.id === 'tipo_infracao') {
+            const tipoSelecionado = event.target.value;
+            console.log('Tipo de infração selecionado:', tipoSelecionado);
+            
+            const grupoNaturezaRdpm = document.getElementById('grupo_natureza_rdpm');
+            const grupoAnalogiaRdpm = document.getElementById('grupo_analogia_rdpm');
+            const infracaoSearch = document.getElementById('infracao_search');
+            const naturezaSelect = document.getElementById('natureza_nova_transgressao');
+            
+            if (tipoSelecionado === 'rdpm') {
+                // Mostrar seletor de natureza RDPM
+                grupoNaturezaRdpm.style.display = 'block';
+                grupoAnalogiaRdpm.style.display = 'none';
+                infracaoSearch.placeholder = 'Primeiro selecione a natureza...';
+                infracaoSearch.disabled = true;
+                
+                // Resetar campos
+                naturezaSelect.value = '';
+                infracaoSearch.value = '';
+                
+            } else if (tipoSelecionado === 'estatuto') {
+                // Mostrar campo de busca diretamente para Art. 29
+                grupoNaturezaRdpm.style.display = 'none';
+                grupoAnalogiaRdpm.style.display = 'none';
+                infracaoSearch.placeholder = 'Digite para buscar incisos do Art. 29...';
+                infracaoSearch.disabled = false;
+                infracaoSearch.focus();
+                
+                // Carregar todos os incisos do Art. 29
+                carregarInfracoesArt29();
+                
+            } else {
+                // Ocultar tudo
+                grupoNaturezaRdpm.style.display = 'none';
+                grupoAnalogiaRdpm.style.display = 'none';
+                infracaoSearch.placeholder = 'Primeiro selecione o tipo de infração...';
+                infracaoSearch.disabled = true;
+                infracaoSearch.value = '';
+            }
+        }
+    });
+    
+    // Event listener para seletor de natureza da nova transgressão (RDPM)
     document.addEventListener('change', function(event) {
         if (event.target && event.target.id === 'natureza_nova_transgressao') {
             const naturezaSelecionada = event.target.value;
@@ -2042,4 +2160,258 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    
+    // Event listener para seletor de natureza da analogia RDPM
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.id === 'analogia_natureza') {
+            const naturezaSelecionada = event.target.value;
+            console.log('Natureza da analogia RDPM selecionada:', naturezaSelecionada);
+            
+            if (naturezaSelecionada) {
+                // Carregar transgressões RDPM para analogia
+                carregarTransgressoesParaAnalogia(naturezaSelecionada);
+            } else {
+                // Desabilitar campo de busca de analogia
+                const analogiaSearch = document.getElementById('analogia_search');
+                if (analogiaSearch) {
+                    analogiaSearch.disabled = true;
+                    analogiaSearch.placeholder = 'Primeiro selecione a natureza da analogia...';
+                    analogiaSearch.value = '';
+                }
+                
+                // Ocultar dropdown de analogia
+                const analogiaDropdown = document.getElementById('analogia_dropdown');
+                if (analogiaDropdown) {
+                    analogiaDropdown.style.display = 'none';
+                }
+            }
+        }
+    });
 });
+
+// Função para carregar infrações do Art. 29
+function carregarInfracoesArt29(termo = '') {
+    console.log('🔍 Carregando infrações do Art. 29...');
+    
+    fetch(`/buscar_infracoes_art29?termo=${encodeURIComponent(termo)}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados do Art. 29 recebidos:', data);
+            
+            if (data.erro) {
+                console.error('Erro do servidor:', data.erro);
+                showAlert('Erro ao carregar infrações do Art. 29: ' + data.erro, 'error');
+                return;
+            }
+            
+            const searchInput = document.getElementById('infracao_search');
+            const dropdownContent = document.getElementById('infracao_dropdown');
+            
+            if (!searchInput || !dropdownContent) {
+                console.error('Elementos não encontrados no DOM');
+                return;
+            }
+            
+            // Limpar dropdown anterior
+            dropdownContent.innerHTML = '';
+            
+            // Habilitar campo de busca
+            searchInput.disabled = false;
+            searchInput.placeholder = 'Digite para buscar incisos do Art. 29...';
+            
+            // Verificar se há dados
+            if (!Array.isArray(data) || data.length === 0) {
+                console.log('Nenhuma infração do Art. 29 encontrada');
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = 'Nenhuma infração encontrada';
+                option.style.color = '#999';
+                option.style.fontStyle = 'italic';
+                dropdownContent.appendChild(option);
+                return;
+            }
+            
+            console.log(`Adicionando ${data.length} infrações do Art. 29 ao dropdown`);
+            
+            // Adicionar infrações ao dropdown
+            data.forEach(infracao => {
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = `Art. 29, ${infracao.inciso} - ${infracao.texto}`;
+                option.title = infracao.texto; // Tooltip com texto completo
+                option.onclick = () => selecionarInfracaoArt29(infracao);
+                dropdownContent.appendChild(option);
+            });
+            
+            // Mostrar o dropdown após populá-lo
+            dropdownContent.style.display = 'block';
+            console.log('📋 Dropdown do Art. 29 exibido');
+            
+            // Focar no campo de busca
+            searchInput.focus();
+        })
+        .catch(error => {
+            console.error('Erro ao carregar infrações do Art. 29:', error);
+            showAlert('Erro ao carregar infrações do Art. 29. Verifique a conexão.', 'error');
+        });
+}
+
+// Função para carregar transgressões RDPM para analogia
+function carregarTransgressoesParaAnalogia(natureza) {
+    console.log('🔍 Carregando transgressões RDPM para analogia:', natureza);
+    
+    // Mapear natureza para gravidade
+    const naturezaParaGravidade = {
+        'Leve': 'leve',
+        'Média': 'media', 
+        'Grave': 'grave'
+    };
+    
+    const gravidade = naturezaParaGravidade[natureza];
+    if (!gravidade) {
+        console.error('❌ Gravidade não encontrada para analogia:', natureza);
+        return;
+    }
+    
+    fetch(`/buscar_transgressoes?gravidade=${encodeURIComponent(gravidade)}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Dados RDPM para analogia recebidos:', data);
+            
+            if (data.erro) {
+                console.error('Erro do servidor:', data.erro);
+                showAlert('Erro ao carregar transgressões RDPM: ' + data.erro, 'error');
+                return;
+            }
+            
+            const analogiaSearch = document.getElementById('analogia_search');
+            const analogiaDropdown = document.getElementById('analogia_dropdown');
+            
+            if (!analogiaSearch || !analogiaDropdown) {
+                console.error('Elementos de analogia não encontrados no DOM');
+                return;
+            }
+            
+            // Limpar dropdown anterior
+            analogiaDropdown.innerHTML = '';
+            
+            // Habilitar campo de busca
+            analogiaSearch.disabled = false;
+            analogiaSearch.placeholder = 'Digite para filtrar transgressões RDPM...';
+            
+            // Verificar se há dados
+            if (!Array.isArray(data) || data.length === 0) {
+                console.log('Nenhuma transgressão RDPM encontrada para analogia');
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = 'Nenhuma transgressão encontrada';
+                option.style.color = '#999';
+                option.style.fontStyle = 'italic';
+                analogiaDropdown.appendChild(option);
+                return;
+            }
+            
+            console.log(`Adicionando ${data.length} transgressões RDPM ao dropdown de analogia`);
+            
+            // Adicionar transgressões ao dropdown
+            data.forEach(transgressao => {
+                const option = document.createElement('div');
+                option.className = 'dropdown-option';
+                option.textContent = `RDPM ${transgressao.inciso} - ${transgressao.texto}`;
+                option.title = transgressao.texto; // Tooltip com texto completo
+                option.onclick = () => confirmarAnalogiaRdpm(transgressao, gravidade);
+                analogiaDropdown.appendChild(option);
+            });
+            
+            // Mostrar o dropdown após populá-lo
+            analogiaDropdown.style.display = 'block';
+            console.log('📋 Dropdown de analogia RDMP exibido');
+            
+            // Focar no campo de busca
+            analogiaSearch.focus();
+        })
+        .catch(error => {
+            console.error('Erro ao carregar transgressões RDPM para analogia:', error);
+            showAlert('Erro ao carregar transgressões RDPM. Verifique a conexão.', 'error');
+        });
+}
+
+// Variável global para armazenar infração do Art. 29 temporariamente
+let infracaoArt29Temporaria = null;
+
+// Função para selecionar uma infração do Art. 29
+function selecionarInfracaoArt29(infracao) {
+    console.log('Selecionando infração do Art. 29:', infracao);
+    
+    // Armazenar temporariamente
+    infracaoArt29Temporaria = infracao;
+    
+    // Ocultar dropdown principal
+    const dropdown = document.getElementById('infracao_dropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    
+    // Mostrar seção de analogia
+    const grupoAnalogia = document.getElementById('grupo_analogia_rdpm');
+    if (grupoAnalogia) {
+        grupoAnalogia.style.display = 'block';
+    }
+    
+    // Atualizar campo de busca para mostrar seleção
+    const searchInput = document.getElementById('infracao_search');
+    if (searchInput) {
+        searchInput.value = `Art. 29, ${infracao.inciso} - ${infracao.texto}`;
+        searchInput.disabled = true;
+    }
+    
+    console.log('Aguardando seleção de analogia RDPM...');
+}
+
+// Função para confirmar analogia com RDPM
+function confirmarAnalogiaRdpm(transgressaoRdpm, naturezaRdpm) {
+    console.log('Confirmando analogia:', { art29: infracaoArt29Temporaria, rdpm: transgressaoRdpm });
+    
+    if (!infracaoArt29Temporaria) {
+        console.error('Nenhuma infração do Art. 29 selecionada');
+        return;
+    }
+    
+    // Criar objeto de transgressão completo
+    const transgressaoCompleta = {
+        id: infracaoArt29Temporaria.id,
+        inciso: infracaoArt29Temporaria.inciso,
+        texto: infracaoArt29Temporaria.texto,
+        tipo: 'estatuto',
+        rdmp_analogia: {
+            id: transgressaoRdpm.id,
+            inciso: transgressaoRdpm.inciso,
+            texto: transgressaoRdpm.texto,
+            natureza: naturezaRdpm
+        }
+    };
+    
+    // Adicionar à lista de transgressões selecionadas
+    transgressoesSelecionadas.push(transgressaoCompleta);
+    
+    // Atualizar interface
+    atualizarTransgressoesSelecionadas();
+    
+    // Limpar campos temporários
+    infracaoArt29Temporaria = null;
+    
+    // Ocultar campo de busca e mostrar botão adicionar
+    cancelarAdicaoTransgressao();
+    
+    console.log('Infração do Art. 29 com analogia RDPM adicionada:', transgressaoCompleta);
+}
