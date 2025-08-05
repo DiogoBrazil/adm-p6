@@ -9,6 +9,53 @@ let pmsAdicionais = [];
 // Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
 
+// ============================================
+// FUNÇÕES DE VALIDAÇÃO DE DUPLICATAS
+// ============================================
+
+async function validarNumeroDuplicado(numero, documentoIniciador, localOrigem, dataInstauracao, processoIdAtual = null) {
+    /*
+    Valida se já existe um processo/procedimento com o mesmo número, documento iniciador, local e ano
+    
+    Args:
+        numero: Número do processo/procedimento
+        documentoIniciador: Tipo do documento (Portaria, Memorando Disciplinar, Feito Preliminar)
+        localOrigem: Local de origem (7ºBPM, 8ºBPM, etc)
+        dataInstauracao: Data de instauração (YYYY-MM-DD)
+        processoIdAtual: ID do processo atual (para edição)
+    
+    Returns:
+        boolean: true se duplicado, false se válido
+    */
+    
+    if (!numero || !documentoIniciador || !localOrigem || !dataInstauracao) {
+        return false; // Campos obrigatórios serão validados em outro lugar
+    }
+    
+    try {
+        // Extrair ano da data
+        const ano = dataInstauracao.substring(0, 4);
+        
+        // Buscar processos existentes com mesmo número, documento, local e ano
+        const processos = await eel.listar_processos()();
+        
+        const duplicata = processos.find(processo => 
+            processo.numero === numero &&
+            processo.documento_iniciador === documentoIniciador &&
+            processo.local_origem === localOrigem &&
+            processo.data_instauracao && 
+            processo.data_instauracao.substring(0, 4) === ano &&
+            processo.id !== processoIdAtual // Excluir o próprio processo na edição
+        );
+        
+        return !!duplicata;
+        
+    } catch (error) {
+        console.error('Erro ao validar número duplicado:', error);
+        return false; // Em caso de erro, assumir que não há duplicata
+    }
+}
+
 function obterTodosPmsEnvolvidos() {
     const pms = [];
     
@@ -1270,6 +1317,21 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     if (status_pm && !nome_pm_id) {
         showAlert('É obrigatório selecionar o PM envolvido!', 'error');
         return;
+    }
+
+    // Validação de número duplicado (apenas para cadastro novo)
+    if (!editandoProcedimento) {
+        const anoInstauracao = data_instauracao ? new Date(data_instauracao).getFullYear().toString() : new Date().getFullYear().toString();
+        const isDuplicado = await validarNumeroDuplicado(numero_documento, documento_iniciador, local_origem, data_instauracao);
+        
+        if (isDuplicado) {
+            showAlert(
+                `Já existe um ${documento_iniciador.toLowerCase()} com o número ${numero_documento} para o ano ${anoInstauracao} no ${local_origem}. ` +
+                'Verifique se o número está correto ou se o processo já foi cadastrado.',
+                'error'
+            );
+            return;
+        }
     }
 
     try {

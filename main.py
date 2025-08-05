@@ -73,7 +73,7 @@ class DatabaseManager:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS processos_procedimentos (
                 id TEXT PRIMARY KEY,
-                numero TEXT UNIQUE NOT NULL,
+                numero TEXT NOT NULL,
                 tipo_geral TEXT NOT NULL CHECK (tipo_geral IN ('processo', 'procedimento')),
                 tipo_detalhe TEXT NOT NULL,
                 documento_iniciador TEXT NOT NULL CHECK (documento_iniciador IN ('Portaria', 'Memorando Disciplinar', 'Feito Preliminar')),
@@ -96,7 +96,15 @@ class DatabaseManager:
                 numero_rgf TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo BOOLEAN DEFAULT 1
+                ativo BOOLEAN DEFAULT 1,
+                numero_controle TEXT,
+                concluido BOOLEAN,
+                data_conclusao DATE,
+                infracao_id INTEGER,
+                transgressoes_ids TEXT,
+                solucao_final TEXT,
+                ano_instauracao TEXT,
+                UNIQUE(numero, documento_iniciador, ano_instauracao)
             )
         ''')
         
@@ -887,6 +895,15 @@ def registrar_processo(
     if nome_vitima:
         nome_vitima = nome_vitima.strip().upper()
     
+    # Extrair ano da data de instauração se fornecida
+    ano_instauracao = None
+    if data_instauracao:
+        try:
+            # data_instauracao está no formato YYYY-MM-DD
+            ano_instauracao = str(data_instauracao)[:4]
+        except:
+            ano_instauracao = None
+    
     print(f"Parâmetros recebidos:")
     params = {
         "numero": numero, "tipo_geral": tipo_geral, "tipo_detalhe": tipo_detalhe,
@@ -914,6 +931,41 @@ def registrar_processo(
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Verificações específicas antes da inserção para mensagens de erro mais precisas
+        print(f"🔍 Verificando conflitos para: número={numero}, controle={numero_controle}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
+        print(f"📅 Data instauração recebida: {data_instauracao}")
+        
+        # Verificar conflito no número principal
+        cursor.execute("""
+            SELECT id, numero FROM processos_procedimentos
+            WHERE numero = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
+        """, (numero, documento_iniciador, local_origem, ano_instauracao))
+        conflito_numero = cursor.fetchone()
+        
+        print(f"🔍 Verificação número principal - conflito encontrado: {conflito_numero is not None}")
+        
+        if conflito_numero:
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        
+        # Verificar conflito no número de controle (se fornecido)
+        if numero_controle:
+            cursor.execute("""
+                SELECT id, numero, numero_controle FROM processos_procedimentos
+                WHERE numero_controle = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
+            """, (numero_controle, documento_iniciador, local_origem, ano_instauracao))
+            conflito_controle = cursor.fetchone()
+            
+            print(f"🔍 Verificação controle - conflito encontrado: {conflito_controle is not None}")
+            if conflito_controle:
+                print(f"   Controle {numero_controle} já usado na {documento_iniciador} {conflito_controle[1]}")
+            
+            if conflito_controle:
+                local_msg = f" no {local_origem}" if local_origem else ""
+                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado na {documento_iniciador} {conflito_controle[1]})"}
+
+        print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
+
         # Gerar ID único para o processo/procedimento
         processo_id = str(uuid.uuid4())
 
@@ -923,14 +975,14 @@ def registrar_processo(
                 local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-                concluido, data_conclusao, solucao_final, transgressoes_ids
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, solucao_final, transgressoes_ids
+            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -951,7 +1003,14 @@ def registrar_processo(
 
     except sqlite3.IntegrityError as e:
         print(f"❌ Erro de integridade no banco de dados: {str(e)}")
-        return {"sucesso": False, "mensagem": "Número de processo já existe."}
+        if "numero, documento_iniciador, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        elif "numero_controle, documento_iniciador, ano_instauracao, local_origem" in str(e).lower():
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        else:
+            return {"sucesso": False, "mensagem": "Erro de integridade no banco de dados."}
     except Exception as e:
         print(f"❌ Erro ao registrar processo: {str(e)}")
         import traceback
@@ -1380,9 +1439,44 @@ def atualizar_processo(
         # Converter nome_vitima para maiúsculas se fornecido
         if nome_vitima:
             nome_vitima = nome_vitima.strip().upper()
+        
+        # Extrair ano da data de instauração se fornecida
+        ano_instauracao = None
+        if data_instauracao:
+            try:
+                # data_instauracao está no formato YYYY-MM-DD
+                ano_instauracao = str(data_instauracao)[:4]
+            except:
+                ano_instauracao = None
             
         conn = db_manager.get_connection()
         cursor = conn.cursor()
+        
+        # Verificações específicas antes da atualização para mensagens de erro mais precisas
+        print(f"🔍 Verificando conflitos na atualização: número={numero}, controle={numero_controle}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
+        
+        # Verificar conflito no número principal (excluindo o próprio registro)
+        cursor.execute("""
+            SELECT id, numero FROM processos_procedimentos
+            WHERE numero = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
+        """, (numero, documento_iniciador, local_origem, ano_instauracao, processo_id))
+        conflito_numero = cursor.fetchone()
+        
+        if conflito_numero:
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        
+        # Verificar conflito no número de controle (se fornecido, excluindo o próprio registro)
+        if numero_controle:
+            cursor.execute("""
+                SELECT id, numero, numero_controle FROM processos_procedimentos
+                WHERE numero_controle = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
+            """, (numero_controle, documento_iniciador, local_origem, ano_instauracao, processo_id))
+            conflito_controle = cursor.fetchone()
+            
+            if conflito_controle:
+                local_msg = f" no {local_origem}" if local_origem else ""
+                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado na {documento_iniciador} {conflito_controle[1]})"}
         
         cursor.execute("""
             UPDATE processos_procedimentos 
@@ -1391,14 +1485,14 @@ def atualizar_processo(
                 local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, solucao_final, transgressoes_ids, processo_id
+            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao, processo_id
         ))
         
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela
@@ -1422,7 +1516,14 @@ def atualizar_processo(
         
         return {"sucesso": True, "mensagem": "Processo/Procedimento atualizado com sucesso!"}
     except sqlite3.IntegrityError as e:
-        return {"sucesso": False, "mensagem": "Número de processo já existe."}
+        if "numero, documento_iniciador, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        elif "numero_controle, documento_iniciador, ano_instauracao, local_origem" in str(e).lower():
+            local_msg = f" no {local_origem}" if local_origem else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        else:
+            return {"sucesso": False, "mensagem": "Erro de integridade no banco de dados."}
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao atualizar processo/procedimento: {str(e)}"}
 
