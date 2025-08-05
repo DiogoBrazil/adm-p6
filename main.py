@@ -932,37 +932,39 @@ def registrar_processo(
         cursor = conn.cursor()
 
         # Verificações específicas antes da inserção para mensagens de erro mais precisas
-        print(f"🔍 Verificando conflitos para: número={numero}, controle={numero_controle}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
+        print(f"🔍 Verificando conflitos para: número={numero}, tipo={tipo_detalhe}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
         print(f"📅 Data instauração recebida: {data_instauracao}")
         
-        # Verificar conflito no número principal
+        # Verificar conflito no número principal (agora incluindo tipo_detalhe)
         cursor.execute("""
-            SELECT id, numero FROM processos_procedimentos
-            WHERE numero = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
-        """, (numero, documento_iniciador, local_origem, ano_instauracao))
+            SELECT id, numero, tipo_detalhe FROM processos_procedimentos
+            WHERE numero = ? AND documento_iniciador = ? AND tipo_detalhe = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
+        """, (numero, documento_iniciador, tipo_detalhe, local_origem, ano_instauracao))
         conflito_numero = cursor.fetchone()
         
         print(f"🔍 Verificação número principal - conflito encontrado: {conflito_numero is not None}")
         
         if conflito_numero:
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
         
-        # Verificar conflito no número de controle (se fornecido)
+        # Verificar conflito no número de controle (se fornecido, agora incluindo tipo_detalhe)
         if numero_controle:
             cursor.execute("""
-                SELECT id, numero, numero_controle FROM processos_procedimentos
-                WHERE numero_controle = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
-            """, (numero_controle, documento_iniciador, local_origem, ano_instauracao))
+                SELECT id, numero, numero_controle, tipo_detalhe FROM processos_procedimentos
+                WHERE numero_controle = ? AND documento_iniciador = ? AND tipo_detalhe = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1
+            """, (numero_controle, documento_iniciador, tipo_detalhe, local_origem, ano_instauracao))
             conflito_controle = cursor.fetchone()
             
             print(f"🔍 Verificação controle - conflito encontrado: {conflito_controle is not None}")
             if conflito_controle:
-                print(f"   Controle {numero_controle} já usado na {documento_iniciador} {conflito_controle[1]}")
+                print(f"   Controle {numero_controle} já usado no {tipo_detalhe} {conflito_controle[1]}")
             
             if conflito_controle:
                 local_msg = f" no {local_origem}" if local_origem else ""
-                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado na {documento_iniciador} {conflito_controle[1]})"}
+                tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
 
         print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
 
@@ -1003,12 +1005,14 @@ def registrar_processo(
 
     except sqlite3.IntegrityError as e:
         print(f"❌ Erro de integridade no banco de dados: {str(e)}")
-        if "numero, documento_iniciador, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
+        if "numero, documento_iniciador, tipo_detalhe, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
-        elif "numero_controle, documento_iniciador, ano_instauracao, local_origem" in str(e).lower():
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        elif "numero_controle, documento_iniciador, tipo_detalhe, ano_instauracao, local_origem" in str(e).lower():
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
         else:
             return {"sucesso": False, "mensagem": "Erro de integridade no banco de dados."}
     except Exception as e:
@@ -1453,30 +1457,32 @@ def atualizar_processo(
         cursor = conn.cursor()
         
         # Verificações específicas antes da atualização para mensagens de erro mais precisas
-        print(f"🔍 Verificando conflitos na atualização: número={numero}, controle={numero_controle}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
+        print(f"🔍 Verificando conflitos na atualização: número={numero}, tipo={tipo_detalhe}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
         
-        # Verificar conflito no número principal (excluindo o próprio registro)
+        # Verificar conflito no número principal (excluindo o próprio registro, agora incluindo tipo_detalhe)
         cursor.execute("""
-            SELECT id, numero FROM processos_procedimentos
-            WHERE numero = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
-        """, (numero, documento_iniciador, local_origem, ano_instauracao, processo_id))
+            SELECT id, numero, tipo_detalhe FROM processos_procedimentos
+            WHERE numero = ? AND documento_iniciador = ? AND tipo_detalhe = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
+        """, (numero, documento_iniciador, tipo_detalhe, local_origem, ano_instauracao, processo_id))
         conflito_numero = cursor.fetchone()
         
         if conflito_numero:
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
         
-        # Verificar conflito no número de controle (se fornecido, excluindo o próprio registro)
+        # Verificar conflito no número de controle (se fornecido, excluindo o próprio registro, agora incluindo tipo_detalhe)
         if numero_controle:
             cursor.execute("""
-                SELECT id, numero, numero_controle FROM processos_procedimentos
-                WHERE numero_controle = ? AND documento_iniciador = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
-            """, (numero_controle, documento_iniciador, local_origem, ano_instauracao, processo_id))
+                SELECT id, numero, numero_controle, tipo_detalhe FROM processos_procedimentos
+                WHERE numero_controle = ? AND documento_iniciador = ? AND tipo_detalhe = ? AND local_origem = ? AND ano_instauracao = ? AND ativo = 1 AND id != ?
+            """, (numero_controle, documento_iniciador, tipo_detalhe, local_origem, ano_instauracao, processo_id))
             conflito_controle = cursor.fetchone()
             
             if conflito_controle:
                 local_msg = f" no {local_origem}" if local_origem else ""
-                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado na {documento_iniciador} {conflito_controle[1]})"}
+                tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+                return {"sucesso": False, "mensagem": f"Já existe um(a) {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no(a) {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
         
         cursor.execute("""
             UPDATE processos_procedimentos 
@@ -1516,12 +1522,14 @@ def atualizar_processo(
         
         return {"sucesso": True, "mensagem": "Processo/Procedimento atualizado com sucesso!"}
     except sqlite3.IntegrityError as e:
-        if "numero, documento_iniciador, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
+        if "numero, documento_iniciador, tipo_detalhe, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero} para o ano {ano_instauracao or 'informado'}{local_msg}."}
-        elif "numero_controle, documento_iniciador, ano_instauracao, local_origem" in str(e).lower():
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} número {numero}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+        elif "numero_controle, documento_iniciador, tipo_detalhe, ano_instauracao, local_origem" in str(e).lower():
             local_msg = f" no {local_origem}" if local_origem else ""
-            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle} para o ano {ano_instauracao or 'informado'}{local_msg}."}
+            tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
+            return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}."}
         else:
             return {"sucesso": False, "mensagem": "Erro de integridade no banco de dados."}
     except Exception as e:

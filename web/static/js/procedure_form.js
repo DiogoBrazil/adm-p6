@@ -15,7 +15,7 @@ let transgressoesSelecionadas = [];
 
 async function validarNumeroDuplicado(numero, documentoIniciador, localOrigem, dataInstauracao, processoIdAtual = null) {
     /*
-    Valida se já existe um processo/procedimento com o mesmo número, documento iniciador, local e ano
+    Valida se já existe um processo/procedimento com o mesmo número, documento iniciador, tipo, local e ano
     
     Args:
         numero: Número do processo/procedimento
@@ -36,12 +36,27 @@ async function validarNumeroDuplicado(numero, documentoIniciador, localOrigem, d
         // Extrair ano da data
         const ano = dataInstauracao.substring(0, 4);
         
-        // Buscar processos existentes com mesmo número, documento, local e ano
+        // Obter tipo_detalhe atual do formulário
+        const tipoGeral = document.getElementById('tipo_geral')?.value;
+        let tipoDetalhe = '';
+        
+        if (tipoGeral === 'processo') {
+            tipoDetalhe = document.getElementById('tipo_processo')?.value || '';
+        } else if (tipoGeral === 'procedimento') {
+            tipoDetalhe = document.getElementById('tipo_procedimento')?.value || '';
+        }
+        
+        if (!tipoDetalhe) {
+            return false; // Tipo não selecionado ainda
+        }
+        
+        // Buscar processos existentes com mesmo número, documento, tipo, local e ano
         const processos = await eel.listar_processos()();
         
         const duplicata = processos.find(processo => 
             processo.numero === numero &&
             processo.documento_iniciador === documentoIniciador &&
+            processo.tipo_detalhe === tipoDetalhe &&
             processo.local_origem === localOrigem &&
             processo.data_instauracao && 
             processo.data_instauracao.substring(0, 4) === ano &&
@@ -1325,8 +1340,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         const isDuplicado = await validarNumeroDuplicado(numero_documento, documento_iniciador, local_origem, data_instauracao);
         
         if (isDuplicado) {
+            const tipoGeral = document.getElementById('tipo_geral')?.value;
+            let tipoDetalhe = '';
+            
+            if (tipoGeral === 'processo') {
+                tipoDetalhe = document.getElementById('tipo_processo')?.value || '';
+            } else if (tipoGeral === 'procedimento') {
+                tipoDetalhe = document.getElementById('tipo_procedimento')?.value || '';
+            }
+            
             showAlert(
-                `Já existe um ${documento_iniciador.toLowerCase()} com o número ${numero_documento} para o ano ${anoInstauracao} no ${local_origem}. ` +
+                `Já existe um(a) ${documento_iniciador.toLowerCase()} ${tipoDetalhe} com o número ${numero_documento} para o ano ${anoInstauracao} no ${local_origem}. ` +
                 'Verifique se o número está correto ou se o processo já foi cadastrado.',
                 'error'
             );
