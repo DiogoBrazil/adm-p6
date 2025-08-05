@@ -136,9 +136,9 @@
                     <small class="form-help">Formato: 0021.033044/2025-34</small>
                 </div>
 
-                <!-- Local de Origem -->
+                <!-- Unidade onde foi instaurado -->
                 <div class="form-group">
-                    <label for="local_origem">Local de Origem *</label>
+                    <label for="local_origem">Unidade onde foi instaurado *</label>
                     <select id="local_origem" required>
                         <option value="">Selecione...</option>
                         <option value="1ºBPM">1ºBPM</option>
@@ -172,6 +172,18 @@
                 <div class="form-group">
                     <label for="data_recebimento">Data de Recebimento pelo Encarregado *</label>
                     <input type="date" id="data_recebimento" required>
+                </div>
+
+                <!-- Local onde ocorreram os fatos -->
+                <div class="form-group">
+                    <label for="local_fatos">Local onde ocorreram os fatos *</label>
+                    <div style="position: relative;">
+                        <input type="text" id="local_fatos" name="local_fatos" required style="width: 100%;" placeholder="Digite o município ou distrito..." autocomplete="off">
+                        <div id="local_fatos_dropdown" class="dropdown-infracao" style="display: none;">
+                            <!-- Opções serão carregadas via JavaScript -->
+                        </div>
+                    </div>
+                    <small class="form-help">Município ou distrito onde os fatos ocorreram</small>
                 </div>
 
                 <!-- Encarregado -->

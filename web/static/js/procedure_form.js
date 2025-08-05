@@ -9,6 +9,121 @@ let pmsAdicionais = [];
 // Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
 
+// Array para armazenar municípios/distritos
+let municipiosDisponiveis = [];
+
+// ============================================
+// FUNÇÕES DE BUSCA DE MUNICÍPIOS
+// ============================================
+
+async function carregarMunicipios() {
+    try {
+        console.log('Carregando municípios/distritos...');
+        const response = await eel.buscar_municipios_distritos('')();
+        
+        if (response && response.sucesso && response.municipios) {
+            municipiosDisponiveis = response.municipios;
+            console.log(`Carregados ${municipiosDisponiveis.length} municípios/distritos`);
+            preencherDropdownMunicipios();
+        } else {
+            console.error('Resposta inválida ao carregar municípios:', response);
+            if (response && response.erro) {
+                console.error('Erro do servidor:', response.erro);
+            }
+        }
+    } catch (error) {
+        console.error('Erro ao carregar municípios:', error);
+    }
+}
+
+function preencherDropdownMunicipios() {
+    const dropdown = document.getElementById('local_fatos_dropdown');
+    if (!dropdown) return;
+    
+    dropdown.innerHTML = '';
+    
+    municipiosDisponiveis.forEach(municipio => {
+        const option = document.createElement('div');
+        option.className = 'dropdown-option';
+        option.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f3f4f6; font-size: 14px; line-height: 1.3;';
+        
+        const tipoIcon = municipio.tipo === 'municipio' ? '🏢' : '🏘️';
+        const tipoBadge = municipio.tipo === 'municipio' ? 
+            '<span style="background:#28a745;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">MUNICÍPIO</span>' : 
+            '<span style="background:#007bff;color:white;padding:2px 6px;border-radius:3px;font-size:11px;">DISTRITO</span>';
+        
+        option.innerHTML = `
+            <div style="font-weight: bold; color: #1976d2; display: flex; align-items: center; gap: 5px;">
+                ${tipoIcon} ${municipio.nome_display}
+            </div>
+            <div style="color: #666; margin-top: 2px; font-size: 12px;">${tipoBadge}</div>
+        `;
+        
+        option.addEventListener('click', function() {
+            selecionarMunicipio(municipio.nome_display);
+        });
+        
+        option.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f8f9fa';
+        });
+        
+        option.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+        
+        dropdown.appendChild(option);
+    });
+}
+
+function selecionarMunicipio(nomeMunicipio) {
+    const input = document.getElementById('local_fatos');
+    const dropdown = document.getElementById('local_fatos_dropdown');
+    
+    if (input) {
+        input.value = nomeMunicipio;
+        // Remover erro de validação se houver
+        const errorElement = input.parentElement.querySelector('.error-message');
+        if (errorElement) {
+            errorElement.remove();
+        }
+        input.classList.remove('error');
+    }
+    
+    if (dropdown) {
+        dropdown.style.display = 'none';
+    }
+    
+    console.log('Município selecionado:', nomeMunicipio);
+}
+
+function filtrarMunicipios() {
+    const searchTerm = document.getElementById('local_fatos').value.toLowerCase();
+    const dropdown = document.getElementById('local_fatos_dropdown');
+    const options = dropdown.querySelectorAll('.dropdown-option');
+    
+    console.log('Filtrando municípios com termo:', searchTerm);
+    
+    let visibleCount = 0;
+    
+    options.forEach(option => {
+        const text = option.textContent.toLowerCase();
+        const isVisible = text.includes(searchTerm);
+        option.style.display = isVisible ? 'block' : 'none';
+        if (isVisible) visibleCount++;
+    });
+    
+    // Mostrar dropdown se houver texto e opções visíveis
+    if (searchTerm && visibleCount > 0) {
+        dropdown.style.display = 'block';
+    } else if (!searchTerm) {
+        dropdown.style.display = 'block'; // Mostrar todas quando vazio
+    } else {
+        dropdown.style.display = 'none'; // Ocultar se não houver resultados
+    }
+    
+    console.log('Municípios visíveis:', visibleCount);
+}
+
 // ============================================
 // FUNÇÕES DE VALIDAÇÃO DE DUPLICATAS
 // ============================================
@@ -20,7 +135,7 @@ async function validarNumeroDuplicado(numero, documentoIniciador, localOrigem, d
     Args:
         numero: Número do processo/procedimento
         documentoIniciador: Tipo do documento (Portaria, Memorando Disciplinar, Feito Preliminar)
-        localOrigem: Local de origem (7ºBPM, 8ºBPM, etc)
+        localOrigem: Unidade onde foi instaurado (7ºBPM, 8ºBPM, etc)
         dataInstauracao: Data de instauração (YYYY-MM-DD)
         processoIdAtual: ID do processo atual (para edição)
     
@@ -397,6 +512,7 @@ async function preencherFormularioEdicao(procedimento) {
 
         // Novos campos
         if (document.getElementById('local_origem')) document.getElementById('local_origem').value = procedimento.local_origem || '';
+        if (document.getElementById('local_fatos')) document.getElementById('local_fatos').value = procedimento.local_fatos || '';
         if (document.getElementById('data_instauracao')) document.getElementById('data_instauracao').value = procedimento.data_instauracao || '';
         if (document.getElementById('data_recebimento')) document.getElementById('data_recebimento').value = procedimento.data_recebimento || '';
         if (document.getElementById('status_pm')) document.getElementById('status_pm').value = procedimento.status_pm || '';
@@ -1281,6 +1397,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
 
     // Novos campos
     const local_origem = document.getElementById('local_origem')?.value || null;
+    const local_fatos = document.getElementById('local_fatos')?.value || null;
     const data_instauracao = document.getElementById('data_instauracao')?.value || null;
     const data_recebimento = document.getElementById('data_recebimento')?.value || null;
     const escrivao_id = document.getElementById('escrivao_id')?.value || null;
@@ -1320,6 +1437,13 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     } else {
         // Se não marcou checkbox, usa o número do documento iniciador
         numero_controle = numero_documento;
+    }
+
+    // Validação do campo obrigatório local_fatos
+    if (!local_fatos) {
+        showAlert('É obrigatório informar o local onde ocorreram os fatos!', 'error');
+        document.getElementById('local_fatos')?.focus();
+        return;
     }
 
     // Validação básica
@@ -1375,6 +1499,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 responsavel_id,
                 responsavel_tipo,
                 local_origem,
+                local_fatos,
                 data_instauracao,
                 data_recebimento,
                 escrivao_id,
@@ -1406,6 +1531,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 responsavel_id,
                 responsavel_tipo,
                 local_origem,
+                local_fatos,
                 data_instauracao,
                 data_recebimento,
                 escrivao_id,
@@ -2512,3 +2638,67 @@ function confirmarAnalogiaRdpm(transgressaoRdpm, naturezaRdpm) {
     
     console.log('Infração do Art. 29 com analogia RDPM adicionada:', transgressaoCompleta);
 }
+
+// ============================================
+// FUNCIONALIDADE BUSCA LOCAL DOS FATOS
+// ============================================
+
+// Event listeners para o dropdown de busca de local dos fatos
+document.addEventListener('DOMContentLoaded', function() {
+    const localFatosInput = document.getElementById('local_fatos');
+    const localFatosDropdown = document.getElementById('local_fatos_dropdown');
+    
+    if (localFatosInput && localFatosDropdown) {
+        console.log('Configurando event listeners para dropdown de municípios');
+        
+        // Carregar municípios quando a página carrega
+        carregarMunicipios();
+        
+        // Mostrar dropdown ao focar no campo de busca
+        localFatosInput.addEventListener('focus', function() {
+            console.log('Campo de município focado');
+            if (localFatosDropdown.children.length > 0) {
+                localFatosDropdown.style.display = 'block';
+                console.log('🔍 Dropdown de municípios mostrado no foco');
+            }
+        });
+        
+        // Mostrar dropdown ao clicar no campo de busca
+        localFatosInput.addEventListener('click', function() {
+            console.log('Campo de município clicado');
+            if (localFatosDropdown.children.length > 0) {
+                localFatosDropdown.style.display = 'block';
+                console.log('🔍 Dropdown de municípios mostrado no clique');
+            }
+        });
+        
+        // Filtrar municípios enquanto digita
+        localFatosInput.addEventListener('input', function() {
+            console.log('Input de município mudou, filtrando');
+            filtrarMunicipios();
+        });
+        
+        // Ocultar dropdown ao pressionar Escape
+        localFatosInput.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                localFatosDropdown.style.display = 'none';
+                console.log('Dropdown de municípios ocultado com Escape');
+            }
+        });
+        
+        // Ocultar dropdown ao clicar fora
+        document.addEventListener('click', function(event) {
+            // Não fechar se clicar no dropdown ou campo de busca
+            if ((localFatosInput && localFatosInput.contains(event.target)) || 
+                (localFatosDropdown && localFatosDropdown.contains(event.target))) {
+                console.log('Clique dentro do dropdown/busca de municípios, mantendo dropdown');
+                return;
+            }
+            
+            console.log('Clique fora do dropdown de municípios, ocultando');
+            if (localFatosDropdown) {
+                localFatosDropdown.style.display = 'none';
+            }
+        });
+    }
+});

@@ -585,6 +585,127 @@ def api_buscar_infracoes_art29():
     except Exception as e:
         return json.dumps({"erro": f"Erro ao buscar infrações do Art. 29: {str(e)}"})
 
+# Adicionar rota HTTP para buscar municípios e distritos
+@route('/buscar_municipios_distritos')
+def api_buscar_municipios_distritos():
+    """Endpoint HTTP para buscar municípios e distritos de Rondônia"""
+    response.content_type = 'application/json'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    
+    try:
+        termo = request.query.get('termo', '').strip()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if termo:
+            # Busca com filtro por termo
+            cursor.execute("""
+                SELECT id, nome, tipo, municipio_pai 
+                FROM municipios_distritos 
+                WHERE nome LIKE ? AND ativo = 1
+                ORDER BY 
+                    CASE tipo 
+                        WHEN 'municipio' THEN 1 
+                        WHEN 'distrito' THEN 2 
+                    END,
+                    nome
+            """, (f'%{termo}%',))
+        else:
+            # Busca todos os municípios e distritos
+            cursor.execute("""
+                SELECT id, nome, tipo, municipio_pai 
+                FROM municipios_distritos 
+                WHERE ativo = 1
+                ORDER BY 
+                    CASE tipo 
+                        WHEN 'municipio' THEN 1 
+                        WHEN 'distrito' THEN 2 
+                    END,
+                    nome
+            """)
+        
+        municipios_distritos = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for m in municipios_distritos:
+            # Formatar nome para exibição (distrito + município pai)
+            nome_display = m[1]  # nome
+            if m[2] == 'distrito' and m[3]:  # se é distrito e tem município pai
+                nome_display = f"{m[1]} ({m[3]})"
+            
+            resultado.append({
+                "id": m[0],
+                "nome": m[1],
+                "nome_display": nome_display,
+                "tipo": m[2],
+                "municipio_pai": m[3]
+            })
+        
+        return json.dumps(resultado)
+        
+    except Exception as e:
+        return json.dumps({"erro": f"Erro ao buscar municípios/distritos: {str(e)}"})
+
+@eel.expose
+def buscar_municipios_distritos(termo=''):
+    """Função EEL para buscar municípios e distritos de Rondônia"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if termo:
+            # Busca com filtro por termo
+            cursor.execute("""
+                SELECT id, nome, tipo, municipio_pai 
+                FROM municipios_distritos 
+                WHERE nome LIKE ? AND ativo = 1
+                ORDER BY 
+                    CASE tipo 
+                        WHEN 'municipio' THEN 1 
+                        WHEN 'distrito' THEN 2 
+                    END,
+                    nome
+            """, (f'%{termo}%',))
+        else:
+            # Busca todos os municípios e distritos
+            cursor.execute("""
+                SELECT id, nome, tipo, municipio_pai 
+                FROM municipios_distritos 
+                WHERE ativo = 1
+                ORDER BY 
+                    CASE tipo 
+                        WHEN 'municipio' THEN 1 
+                        WHEN 'distrito' THEN 2 
+                    END,
+                    nome
+            """)
+        
+        municipios_distritos = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for m in municipios_distritos:
+            # Formatar nome para exibição (distrito + município pai)
+            nome_display = m[1]  # nome
+            if m[2] == 'distrito' and m[3]:  # se é distrito e tem município pai
+                nome_display = f"{m[1]} ({m[3]})"
+            
+            resultado.append({
+                "id": m[0],
+                "nome": m[1],
+                "nome_display": nome_display,
+                "tipo": m[2],
+                "municipio_pai": m[3]
+            })
+        
+        return {"sucesso": True, "municipios": resultado}
+        
+    except Exception as e:
+        print(f"Erro ao buscar municípios/distritos: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
 # Variável para usuário logado
 usuario_logado = None
 
@@ -883,7 +1004,7 @@ def obter_estatisticas():
 @eel.expose
 def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-    local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
+    local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
     concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
@@ -894,6 +1015,10 @@ def registrar_processo(
     # Converter nome_vitima para maiúsculas se fornecido
     if nome_vitima:
         nome_vitima = nome_vitima.strip().upper()
+    
+    # Validação do local_fatos (obrigatório)
+    if not local_fatos:
+        return {"sucesso": False, "mensagem": "Local onde ocorreram os fatos é obrigatório!"}
     
     # Extrair ano da data de instauração se fornecida
     ano_instauracao = None
@@ -909,7 +1034,7 @@ def registrar_processo(
         "numero": numero, "tipo_geral": tipo_geral, "tipo_detalhe": tipo_detalhe,
         "documento_iniciador": documento_iniciador, "processo_sei": processo_sei,
         "responsavel_id": responsavel_id, "responsavel_tipo": responsavel_tipo,
-        "local_origem": local_origem, "data_instauracao": data_instauracao,
+        "local_origem": local_origem, "local_fatos": local_fatos, "data_instauracao": data_instauracao,
         "data_recebimento": data_recebimento, "escrivao_id": escrivao_id,
         "status_pm": status_pm, "nome_pm_id": nome_pm_id,
         "nome_vitima": nome_vitima, "natureza_processo": natureza_processo,
@@ -974,14 +1099,14 @@ def registrar_processo(
         cursor.execute("""
             INSERT INTO processos_procedimentos (
                 id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-                local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+                local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-            local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+            local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
@@ -1257,7 +1382,7 @@ def obter_processo(processo_id):
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
                 p.responsavel_id, p.responsavel_tipo,
                 COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome,
-                p.local_origem, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
+                p.local_origem, p.local_fatos, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
                 p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
@@ -1290,18 +1415,18 @@ def obter_processo(processo_id):
         if processo:
             # Formatar dados completos dos usuários
             responsavel_completo = ""
-            if processo[28] and processo[29] and processo[8]:  # posto, matricula, nome
-                responsavel_completo = f"{processo[28]} {processo[29]} {processo[8]}".strip()
+            if processo[29] and processo[30] and processo[8]:  # posto, matricula, nome
+                responsavel_completo = f"{processo[29]} {processo[30]} {processo[8]}".strip()
             elif processo[8]:
                 responsavel_completo = processo[8]
             
             escrivao_completo = ""
-            if processo[30] and processo[31] and processo[32]:  # nome, posto, matricula
-                escrivao_completo = f"{processo[31]} {processo[32]} {processo[30]}".strip()
+            if processo[31] and processo[32] and processo[33]:  # nome, posto, matricula
+                escrivao_completo = f"{processo[32]} {processo[33]} {processo[31]}".strip()
             
             pm_completo = ""
-            if processo[33] and processo[34] and processo[35]:  # nome, posto, matricula
-                pm_completo = f"{processo[34]} {processo[35]} {processo[33]}".strip()
+            if processo[34] and processo[35] and processo[36]:  # nome, posto, matricula
+                pm_completo = f"{processo[35]} {processo[36]} {processo[34]}".strip()
             
             # Para procedimentos, buscar múltiplos PMs envolvidos
             pms_envolvidos = []
@@ -1310,10 +1435,10 @@ def obter_processo(processo_id):
             
             # Processar transgressões (campo JSON) - suporta formato antigo e novo
             transgressoes_selecionadas = []
-            if processo[27]:  # transgressoes_ids
+            if processo[28]:  # transgressoes_ids
                 try:
                     import json
-                    transgressoes_data = json.loads(processo[27])
+                    transgressoes_data = json.loads(processo[28])
                     
                     if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
                         conn2 = db_manager.get_connection()
@@ -1401,27 +1526,28 @@ def obter_processo(processo_id):
                 "responsavel_nome": processo[8],
                 "responsavel_completo": responsavel_completo,
                 "local_origem": processo[9],
-                "data_instauracao": processo[10],
-                "data_recebimento": processo[11],
-                "escrivao_id": processo[12],
+                "local_fatos": processo[10],
+                "data_instauracao": processo[11],
+                "data_recebimento": processo[12],
+                "escrivao_id": processo[13],
                 "escrivao_completo": escrivao_completo,
-                "status_pm": processo[13],
-                "nome_pm_id": processo[14],
+                "status_pm": processo[14],
+                "nome_pm_id": processo[15],
                 "pm_completo": pm_completo,
                 "pms_envolvidos": pms_envolvidos,
-                "nome_vitima": processo[15],
-                "natureza_processo": _determinar_natureza_processo(processo[16], transgressoes_selecionadas),
-                "natureza_procedimento": processo[17],
-                "resumo_fatos": processo[18],
-                "numero_portaria": processo[19],
-                "numero_memorando": processo[20],
-                "numero_feito": processo[21],
-                "numero_rgf": processo[22],
-                "numero_controle": processo[23],
-                "concluido": processo[24],
-                "data_conclusao": processo[25],
-                "solucao_final": processo[26],
-                "transgressoes_ids": processo[27],
+                "nome_vitima": processo[16],
+                "natureza_processo": _determinar_natureza_processo(processo[17], transgressoes_selecionadas),
+                "natureza_procedimento": processo[18],
+                "resumo_fatos": processo[19],
+                "numero_portaria": processo[20],
+                "numero_memorando": processo[21],
+                "numero_feito": processo[22],
+                "numero_rgf": processo[23],
+                "numero_controle": processo[24],
+                "concluido": processo[25],
+                "data_conclusao": processo[26],
+                "solucao_final": processo[27],
+                "transgressoes_ids": processo[28],
                 "transgressoes_selecionadas": transgressoes_selecionadas
             }
         else:
@@ -1433,13 +1559,17 @@ def obter_processo(processo_id):
 @eel.expose
 def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-    local_origem=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
+    local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
     concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
+        # Validação do local_fatos (obrigatório)
+        if not local_fatos:
+            return {"sucesso": False, "mensagem": "O campo 'Local onde ocorreram os fatos' é obrigatório."}
+        
         # Converter nome_vitima para maiúsculas se fornecido
         if nome_vitima:
             nome_vitima = nome_vitima.strip().upper()
@@ -1488,14 +1618,14 @@ def atualizar_processo(
             UPDATE processos_procedimentos 
             SET numero = ?, tipo_geral = ?, tipo_detalhe = ?, documento_iniciador = ?, 
                 processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?,
-                local_origem = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
+                local_origem = ?, local_fatos = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
                 concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-            local_origem, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+            local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao, processo_id
