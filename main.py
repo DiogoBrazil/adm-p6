@@ -2628,5 +2628,194 @@ def main():
             print(f"❌ Erro crítico: {e2}")
             input("Pressione Enter para sair...")
 
+# ========== CRIMES E CONTRAVENÇÕES - EEL FUNCTIONS ==========
+
+@eel.expose
+def listar_crimes_contravencoes():
+    """Lista todos os crimes e contravenções cadastrados"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                id,
+                tipo,
+                dispositivo_legal,
+                artigo,
+                descricao_artigo,
+                paragrafo,
+                inciso,
+                alinea,
+                ativo
+            FROM crimes_contravencoes
+            ORDER BY tipo, dispositivo_legal, artigo
+        ''')
+        crimes = cursor.fetchall()
+        conn.close()
+        
+        # Converte em lista de dicionários
+        result = []
+        for crime in crimes:
+            result.append({
+                'id': crime[0],
+                'tipo': crime[1],
+                'dispositivo_legal': crime[2],
+                'artigo': crime[3],
+                'descricao_artigo': crime[4],
+                'paragrafo': crime[5] if crime[5] else '',
+                'inciso': crime[6] if crime[6] else '',
+                'alinea': crime[7] if crime[7] else '',
+                'ativo': bool(crime[8])
+            })
+        
+        return {'success': True, 'data': result}
+    except Exception as e:
+        print(f"Erro ao listar crimes: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def excluir_crime_contravencao(crime_id):
+    """Exclui (desativa) um crime/contravenção pelo ID"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Ao invés de excluir fisicamente, apenas desativa
+        cursor.execute('''
+            UPDATE crimes_contravencoes 
+            SET ativo = 0 
+            WHERE id = ?
+        ''', (crime_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return {'success': False, 'error': 'Crime não encontrado'}
+        
+        conn.commit()
+        conn.close()
+        
+        return {'success': True, 'message': 'Crime/contravenção desativado com sucesso'}
+    except Exception as e:
+        print(f"Erro ao excluir crime: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def cadastrar_crime(dados_crime):
+    """Cadastra um novo crime/contravenção"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Gerar ID único
+        crime_id = str(uuid.uuid4())
+        
+        # Inserir novo crime
+        cursor.execute('''
+            INSERT INTO crimes_contravencoes 
+            (id, tipo, dispositivo_legal, artigo, descricao_artigo, 
+             paragrafo, inciso, alinea, ativo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            crime_id,
+            dados_crime['tipo'],
+            dados_crime['dispositivo_legal'],
+            dados_crime['artigo'],
+            dados_crime['descricao_artigo'],
+            dados_crime.get('paragrafo', ''),
+            dados_crime.get('inciso', ''),
+            dados_crime.get('alinea', ''),
+            dados_crime.get('ativo', True)
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Crime cadastrado: {dados_crime['tipo']} - Art. {dados_crime['artigo']}")
+        return {'success': True, 'message': 'Crime/contravenção cadastrado com sucesso', 'id': crime_id}
+    except Exception as e:
+        print(f"Erro ao cadastrar crime: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def obter_crime_por_id(crime_id):
+    """Obtém um crime/contravenção específico pelo ID"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                id,
+                tipo,
+                dispositivo_legal,
+                artigo,
+                descricao_artigo,
+                paragrafo,
+                inciso,
+                alinea,
+                ativo
+            FROM crimes_contravencoes
+            WHERE id = ?
+        ''', (crime_id,))
+        crime = cursor.fetchone()
+        conn.close()
+        
+        if not crime:
+            return {'success': False, 'error': 'Crime não encontrado'}
+        
+        result = {
+            'id': crime[0],
+            'tipo': crime[1],
+            'dispositivo_legal': crime[2],
+            'artigo': crime[3],
+            'descricao_artigo': crime[4],
+            'paragrafo': crime[5] if crime[5] else '',
+            'inciso': crime[6] if crime[6] else '',
+            'alinea': crime[7] if crime[7] else '',
+            'ativo': bool(crime[8])
+        }
+        
+        return {'success': True, 'data': result}
+    except Exception as e:
+        print(f"Erro ao obter crime: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def atualizar_crime(dados_crime):
+    """Atualiza um crime/contravenção existente"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Atualizar crime
+        cursor.execute('''
+            UPDATE crimes_contravencoes 
+            SET tipo = ?, dispositivo_legal = ?, artigo = ?, descricao_artigo = ?,
+                paragrafo = ?, inciso = ?, alinea = ?, ativo = ?
+            WHERE id = ?
+        ''', (
+            dados_crime['tipo'],
+            dados_crime['dispositivo_legal'],
+            dados_crime['artigo'],
+            dados_crime['descricao_artigo'],
+            dados_crime.get('paragrafo', ''),
+            dados_crime.get('inciso', ''),
+            dados_crime.get('alinea', ''),
+            dados_crime.get('ativo', True),
+            dados_crime['id']
+        ))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return {'success': False, 'error': 'Crime não encontrado'}
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Crime atualizado: {dados_crime['tipo']} - Art. {dados_crime['artigo']}")
+        return {'success': True, 'message': 'Crime/contravenção atualizado com sucesso'}
+    except Exception as e:
+        print(f"Erro ao atualizar crime: {e}")
+        return {'success': False, 'error': str(e)}
+
 if __name__ == "__main__":
     main()

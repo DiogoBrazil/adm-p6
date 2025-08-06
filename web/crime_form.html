@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastrar Crime/Contravenção - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    <link rel="stylesheet" href="static/css/processes.css">
+    <style>
+        /* Estilos adicionais para o formulário de crimes */
+        .form-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+            
+            .form-row .form-group {
+                min-width: auto;
+            }
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-start;
+            align-items: baseline;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .form-actions button {
+            height: 44px;
+            min-height: 44px;
+            max-height: 44px;
+            padding: 0 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            vertical-align: baseline;
+            line-height: 1;
+            box-sizing: border-box;
+            margin: 0;
+        }
+        
+        .form-actions .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .form-actions .btn-primary:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+        }
+        
+        .form-actions .btn-secondary-form {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .form-actions .btn-secondary-form:hover {
+            background-color: #545b62;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+        }
+        
+        @media (max-width: 480px) {
+            .form-actions {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .form-actions button {
+                width: 100%;
+                height: 48px;
+                justify-content: center;
+            }
+        }
+        
+        /* Melhorar o visual dos campos de texto */
+        input[type="text"], select, textarea {
+            transition: all 0.2s ease;
+        }
+        
+        input[type="text"]:focus, select:focus, textarea:focus {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.15), 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        
+        /* Estilo para campos obrigatórios */
+        .form-group label::after {
+            content: "";
+        }
+        
+        .form-group label:has(+ input[required])::after,
+        .form-group label:has(+ select[required])::after,
+        .form-group label:has(+ textarea[required])::after {
+            content: " *";
+            color: #dc3545;
+        }
+        
+        /* Melhorar o visual do checkbox */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        
+        .checkbox-container input[type="checkbox"] {
+            width: auto !important;
+            margin: 0;
+            transform: scale(1.1);
+        }
+        
+        .checkbox-container label {
+            margin: 0;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        /* Visual para textarea */
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        /* Destaque para campos com erro */
+        .form-group.error input,
+        .form-group.error select,
+        .form-group.error textarea {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25);
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 0.875rem;
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .error-message::before {
+            content: "⚠";
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <div class="container">
+            <div class="form-section">
+                <h2 id="formTitle">Novo Crime/Contravenção</h2>
+                <form id="crimeForm">
+                    <input type="hidden" id="crimeId" name="crimeId">
+                    
+                    <!-- Tipo -->
+                    <div class="form-group">
+                        <label for="tipo">Tipo *</label>
+                        <select id="tipo" name="tipo" required>
+                            <option value="">Selecione...</option>
+                            <option value="Crime">Crime</option>
+                            <option value="Contravenção Penal">Contravenção Penal</option>
+                        </select>
+                    </div>
+
+                    <!-- Dispositivo Legal -->
+                    <div class="form-group">
+                        <label for="dispositivo_legal">Dispositivo Legal *</label>
+                        <select id="dispositivo_legal" name="dispositivo_legal" required>
+                            <option value="">Selecione...</option>
+                            <option value="Código Penal">Código Penal</option>
+                            <option value="Código de Trânsito Brasileiro">Código de Trânsito Brasileiro</option>
+                            <option value="Lei de Contravenções Penais">Lei de Contravenções Penais</option>
+                            <option value="Código Penal Militar">Código Penal Militar</option>
+                        </select>
+                    </div>
+
+                    <!-- Artigo -->
+                    <div class="form-group">
+                        <label for="artigo">Artigo *</label>
+                        <input type="text" id="artigo" name="artigo" required placeholder="Ex: 121, 155, 309">
+                        <small class="form-help">Número do artigo do dispositivo legal</small>
+                    </div>
+
+                    <!-- Descrição do Artigo -->
+                    <div class="form-group">
+                        <label for="descricao_artigo">Descrição do Artigo *</label>
+                        <textarea id="descricao_artigo" name="descricao_artigo" rows="4" required placeholder="Digite a descrição completa do artigo..."></textarea>
+                        <small class="form-help">Descrição completa do que constitui o crime ou contravenção</small>
+                    </div>
+
+                    <!-- Complementos do Artigo -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="paragrafo">Parágrafo (opcional)</label>
+                            <input type="text" id="paragrafo" name="paragrafo" placeholder="Ex: 1º, 2º, único">
+                            <small class="form-help">Parágrafo específico do artigo, se aplicável</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="inciso">Inciso (opcional)</label>
+                            <input type="text" id="inciso" name="inciso" placeholder="Ex: I, II, III">
+                            <small class="form-help">Inciso específico do artigo, se aplicável</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="alinea">Alínea (opcional)</label>
+                            <input type="text" id="alinea" name="alinea" placeholder="Ex: a, b, c">
+                            <small class="form-help">Alínea específica do inciso, se aplicável</small>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="form-group">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="ativo" name="ativo" checked>
+                            <label for="ativo">Ativo no sistema</label>
+                        </div>
+                        <small class="form-help">Crimes inativos não aparecem nas listagens de seleção</small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="btnSalvar">
+                            <i class="fas fa-save"></i>
+                            Salvar
+                        </button>
+                        
+                        <button type="button" onclick="voltarParaLista()" class="btn-secondary-form">
+                            <i class="fas fa-arrow-left"></i>
+                            Voltar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Feedback -->
+    <div id="modalFeedback" class="modal-feedback">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalIcon"></div>
+            </div>
+            <div class="modal-body">
+                <div id="modalMessage">Mensagem</div>
+            </div>
+            <div class="modal-actions">
+                <button id="modalCloseBtn" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/crime_form.js"></script>
+</body>
+</html>

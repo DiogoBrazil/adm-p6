@@ -46,7 +46,7 @@ async function realizarLogin(email, senha) {
             // Marca que o usuário acabou de fazer login
             sessionStorage.setItem('justLoggedIn', 'true');
             
-            // Redireciona para dashboard após 1.5 segundos
+            // Redireciona para página inicial após 1.5 segundos
             setTimeout(() => {
                 window.location.href = 'dashboard.html';
             }, 1500);
@@ -106,5 +106,7 @@ document.querySelectorAll('input').forEach(input => {
 
 // Tooltip nas credenciais
 const credentialBox = document.querySelector('.credential-box');
-credentialBox.title = 'Clique para preencher automaticamente';
-credentialBox.style.cursor = 'pointer';
+if (credentialBox) {
+    credentialBox.title = 'Clique para preencher automaticamente';
+    credentialBox.style.cursor = 'pointer';
+}

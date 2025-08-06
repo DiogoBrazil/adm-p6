@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Crimes e Contravenções - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    
+    <!-- Estilos adicionais para o modal de confirmação -->
+    <style>
+        .modal-overlay {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0, 0, 0, 0.5) !important;
+            display: none !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 10000 !important;
+        }
+        
+        .modal-overlay .modal-content {
+            background: white !important;
+            border-radius: 12px !important;
+            padding: 24px !important;
+            max-width: 500px !important;
+            width: 90% !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+            position: relative !important;
+        }
+        
+        .modal-overlay .modal-header h3 {
+            color: #dc3545 !important;
+            margin: 0 0 16px 0 !important;
+            font-size: 1.2rem !important;
+        }
+        
+        .modal-overlay .modal-body {
+            margin-bottom: 20px !important;
+        }
+        
+        .modal-overlay .crime-info {
+            background: #f8f9fa !important;
+            padding: 12px !important;
+            border-radius: 6px !important;
+            margin: 12px 0 !important;
+        }
+        
+        .modal-overlay .modal-actions {
+            display: flex !important;
+            gap: 12px !important;
+            justify-content: flex-end !important;
+        }
+        
+        /* Estilos específicos para tabela de crimes */
+        .user-table {
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .user-table th,
+        .user-table td {
+            padding: 8px 6px;
+            vertical-align: middle;
+            border: 1px solid #e9ecef;
+        }
+        
+        .user-table th:nth-child(1), /* Tipo */
+        .user-table td:nth-child(1) {
+            width: 140px;
+            min-width: 140px;
+            max-width: 140px;
+        }
+        
+        .user-table th:nth-child(2), /* Dispositivo Legal */
+        .user-table td:nth-child(2) {
+            width: 160px;
+            min-width: 160px;
+            max-width: 160px;
+            word-wrap: break-word;
+        }
+        
+        .user-table th:nth-child(3), /* Artigo */
+        .user-table td:nth-child(3) {
+            width: 80px;
+            min-width: 80px;
+            max-width: 80px;
+            text-align: center;
+        }
+        
+        .user-table th:nth-child(4), /* Descrição */
+        .user-table td:nth-child(4) {
+            width: 220px;
+            min-width: 220px;
+            max-width: 220px;
+            word-wrap: break-word;
+            overflow: hidden;
+        }
+        
+        .user-table th:nth-child(5), /* Parágrafo */
+        .user-table th:nth-child(6), /* Inciso */
+        .user-table th:nth-child(7), /* Alínea */
+        .user-table td:nth-child(5),
+        .user-table td:nth-child(6),
+        .user-table td:nth-child(7) {
+            width: 70px;
+            min-width: 70px;
+            max-width: 70px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .user-table th:nth-child(8), /* Status */
+        .user-table td:nth-child(8) {
+            width: 80px;
+            min-width: 80px;
+            max-width: 80px;
+            text-align: center;
+        }
+        
+        .user-table th:nth-child(9), /* Ações */
+        .user-table td:nth-child(9) {
+            width: 100px;
+            min-width: 100px;
+            max-width: 100px;
+            text-align: center;
+        }
+        
+        /* Responsividade para telas menores */
+        @media (max-width: 1200px) {
+            .user-table th:nth-child(1), 
+            .user-table td:nth-child(1) {
+                width: 120px;
+                min-width: 120px;
+                max-width: 120px;
+            }
+            
+            .user-table th:nth-child(2), 
+            .user-table td:nth-child(2) {
+                width: 140px;
+                min-width: 140px;
+                max-width: 140px;
+            }
+            
+            .user-table th:nth-child(4), 
+            .user-table td:nth-child(4) {
+                width: 180px;
+                min-width: 180px;
+                max-width: 180px;
+            }
+            
+            .user-table th:nth-child(5), 
+            .user-table th:nth-child(6), 
+            .user-table th:nth-child(7),
+            .user-table td:nth-child(5),
+            .user-table td:nth-child(6),
+            .user-table td:nth-child(7) {
+                width: 60px;
+                min-width: 60px;
+                max-width: 60px;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-gavel"></i>
+                <h2>Crimes e Contravenções</h2>
+            </div>
+            
+            <div class="actions">
+                <!-- Área de Busca Simples -->
+                <div class="search-area">
+                    <input type="text" id="searchInput" placeholder="Pesquisar por artigo, descrição ou dispositivo legal...">
+                    <button onclick="clearSearch()" class="btn-icon btn-clear" id="clearButton" style="display:none;"><i class="fas fa-times"></i> Limpar</button>
+                </div>
+                
+                <!-- Filtros -->
+                <div class="filter-area" style="display: none;">
+                    <select id="tipoFilter" class="filter-select">
+                        <option value="">Todos os tipos</option>
+                        <option value="Crime">Crime</option>
+                        <option value="Contravenção Penal">Contravenção Penal</option>
+                    </select>
+                    
+                    <select id="dispositivoFilter" class="filter-select">
+                        <option value="">Todos os dispositivos</option>
+                        <option value="Código Penal">Código Penal</option>
+                        <option value="Código de Trânsito Brasileiro">Código de Trânsito Brasileiro</option>
+                        <option value="Lei de Contravenções Penais">Lei de Contravenções Penais</option>
+                        <option value="Código Penal Militar">Código Penal Militar</option>
+                    </select>
+                </div>
+                
+                <!-- Área de Ações -->
+                <div class="main-actions">
+                    <button onclick="novoRegistro()" class="btn-icon btn-new"><i class="fas fa-plus"></i> Novo Crime/Contravenção</button>
+                    <button onclick="voltarParaDashboard()" class="btn-icon btn-home"><i class="fas fa-home"></i> Início</button>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="user-table" id="crimesTable">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Dispositivo Legal</th>
+                            <th>Artigo</th>
+                            <th>Descrição</th>
+                            <th>Parágrafo</th>
+                            <th>Inciso</th>
+                            <th>Alínea</th>
+                            <th style="text-align:center;">Status</th>
+                            <th style="text-align:center;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="crimesTableBody">
+                        <!-- Crimes serão carregados aqui -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination-controls">
+                <button id="prevPage" class="btn-pagination" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
+                <span id="pageInfo">Página 1 de 1</span>
+                <button id="nextPage" class="btn-pagination" disabled>Próxima <i class="fas fa-chevron-right"></i></button>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-gavel"></i>
+                <h3>Nenhum crime encontrado</h3>
+                <p>Não há crimes/contravenções cadastrados ou sua pesquisa não encontrou resultados.</p>
+                <button onclick="novoRegistro()" class="btn-primary">
+                    <i class="fas fa-plus"></i> Cadastrar Primeiro Crime
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação para Exclusão -->
+    <div id="modalConfirmacao" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão</h3>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir este registro?</p>
+                <div class="crime-info">
+                    <strong id="crimeArtigo"></strong> - <span id="crimeDescricao"></span>
+                </div>
+                <p><strong>Atenção:</strong> Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-actions">
+                <button id="btnCancelar" class="btn-secondary">Cancelar</button>
+                <button id="btnConfirmarExclusao" class="btn-danger">
+                    <i class="fas fa-trash"></i>
+                    Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Feedback -->
+    <div id="modalFeedback" class="modal-feedback">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalIcon"></div>
+            </div>
+            <div class="modal-body">
+                <div id="modalMessage">Mensagem</div>
+            </div>
+            <div class="modal-actions">
+                <button id="modalCloseBtn" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/crime_list.js"></script>
+</body>
+</html>

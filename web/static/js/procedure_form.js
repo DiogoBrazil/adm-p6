@@ -364,6 +364,19 @@ function showConfirmModal(title, message, onConfirm) {
         modal = document.createElement('div');
         modal.id = 'confirmModal';
         modal.className = 'modal-feedback';
+        // Adicionar estilos inline para garantir o posicionamento correto
+        modal.style.cssText = `
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0,0,0,0.35) !important;
+            display: none !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 10000 !important;
+        `;
         modal.innerHTML = `
             <div class="modal-content">
                 <i id="confirmIcon" class="fas fa-exclamation-triangle" style="color: #ff6b6b;"></i>
@@ -382,8 +395,16 @@ function showConfirmModal(title, message, onConfirm) {
     document.getElementById('confirmTitle').textContent = title;
     document.getElementById('confirmMessage').textContent = message;
     
-    // Mostrar modal
+    // Mostrar modal com estilos inline para garantir centralização
     modal.style.display = 'flex';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.right = '0';
+    modal.style.bottom = '0';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.zIndex = '10000';
     
     // Event listeners
     const cancelBtn = document.getElementById('confirmCancel');

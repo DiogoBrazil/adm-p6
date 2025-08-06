@@ -18,7 +18,7 @@ function showAlert(message, type = 'info') {
     }, 3000);
 }
 
-// Funções de loading e animação removidas - não são necessárias no dashboard
+// Funções de loading e animação removidas - não são necessárias na página inicial
 
 // Função para mostrar modal de confirmação
 function showConfirmModal(title, message, onConfirm) {
@@ -112,9 +112,9 @@ async function carregarUsuarioLogado() {
 
 // Função para carregar estatísticas removida - rodapé foi removido
 
-// Função para carregar lista de usuários removida - não é necessária no dashboard
+// Função para carregar lista de usuários removida - não é necessária na página inicial
 
-// Função de cadastro removida - não é necessária no dashboard
+// Função de cadastro removida - não é necessária na página inicial
 
 // Função de logout
 async function realizarLogout() {
@@ -137,7 +137,7 @@ async function realizarLogout() {
     );
 }
 
-// Função para animar números removida - não é necessária no dashboard atual
+// Função para animar números removida - não é necessária na página inicial atual
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', async () => {
@@ -146,14 +146,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (loginOk) {
         // Só mostra mensagem de boas-vindas se o usuário acabou de fazer login
         if (sessionStorage.getItem('justLoggedIn') === 'true') {
-            showAlert(`Bem-vindo, ${usuarioLogado.nome}! Dashboard carregado com sucesso.`, 'success');
+            showAlert(`Bem-vindo, ${usuarioLogado.nome}! Página inicial carregada com sucesso.`, 'success');
             // Remove a marcação para não mostrar novamente
             sessionStorage.removeItem('justLoggedIn');
         }
     }
 });
 
-// Event listener do formulário de cadastro removido - não existe no dashboard
+// Event listener do formulário de cadastro removido - não existe na página inicial
 
 // Atalho de teclado para logout (Ctrl+L)
 document.addEventListener('keydown', (e) => {
@@ -163,4 +163,4 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Auto-focus removido - não há campos de entrada no dashboard
+// Auto-focus removido - não há campos de entrada na página inicial
