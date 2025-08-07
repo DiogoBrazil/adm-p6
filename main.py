@@ -2877,5 +2877,211 @@ def atualizar_crime(dados_crime):
         print(f"Erro ao atualizar crime: {e}")
         return {'success': False, 'error': str(e)}
 
+# ====================================================================
+# FUNÇÕES DE TRANSGRESSÕES DISCIPLINARES - CRUD COMPLETO
+# ====================================================================
+
+@eel.expose
+def listar_todas_transgressoes():
+    """Lista todas as transgressões disciplinares com paginação e busca"""
+    try:
+        print("📄 Listando transgressões disciplinares...")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, gravidade, inciso, texto, ativo, created_at
+            FROM transgressoes 
+            ORDER BY gravidade, inciso
+        ''')
+        
+        transgressoes = []
+        for row in cursor.fetchall():
+            transgressoes.append({
+                'id': row[0],
+                'gravidade': row[1].title() if row[1] else '',  # Capitalizar primeira letra
+                'inciso': row[2],
+                'texto': row[3],
+                'ativo': bool(row[4]),
+                'created_at': row[5]
+            })
+        
+        conn.close()
+        
+        print(f"✅ {len(transgressoes)} transgressões encontradas")
+        return {'success': True, 'data': transgressoes}
+        
+    except Exception as e:
+        print(f"Erro ao listar transgressões: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def cadastrar_transgressao(dados_transgressao):
+    """Cadastra uma nova transgressão disciplinar"""
+    try:
+        print(f"📝 Cadastrando transgressão: {dados_transgressao['gravidade']} - {dados_transgressao['inciso']}")
+        
+        # Validação básica
+        if not dados_transgressao.get('gravidade') or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
+            return {'success': False, 'error': 'Gravidade, inciso e texto são obrigatórios'}
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se já existe uma transgressão com a mesma gravidade e inciso
+        cursor.execute('''
+            SELECT id, gravidade, inciso FROM transgressoes 
+            WHERE LOWER(gravidade) = LOWER(?) AND UPPER(inciso) = UPPER(?)
+        ''', (dados_transgressao['gravidade'], dados_transgressao['inciso']))
+        
+        duplicata = cursor.fetchone()
+        if duplicata:
+            conn.close()
+            return {'success': False, 'error': f'Já existe uma transgressão {duplicata[1]} com inciso {duplicata[2]}. Verifique os dados informados.'}
+        
+        # Inserir nova transgressão
+        cursor.execute('''
+            INSERT INTO transgressoes (gravidade, inciso, texto, ativo, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            dados_transgressao['gravidade'],
+            dados_transgressao['inciso'],
+            dados_transgressao['texto'],
+            dados_transgressao.get('ativo', True),
+            datetime.now().isoformat()
+        ))
+        
+        transgressao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Transgressão cadastrada: ID {transgressao_id}")
+        return {'success': True, 'message': 'Transgressão cadastrada com sucesso', 'id': transgressao_id}
+        
+    except Exception as e:
+        print(f"Erro ao cadastrar transgressão: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def obter_transgressao_por_id(transgressao_id):
+    """Obtém uma transgressão específica pelo ID"""
+    try:
+        print(f"🔍 Buscando transgressão ID: {transgressao_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, gravidade, inciso, texto, ativo, created_at
+            FROM transgressoes 
+            WHERE id = ?
+        ''', (transgressao_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            transgressao = {
+                'id': row[0],
+                'gravidade': row[1],
+                'inciso': row[2],
+                'texto': row[3],
+                'ativo': bool(row[4]),
+                'created_at': row[5]
+            }
+            print(f"✅ Transgressão encontrada: {transgressao['gravidade']} - {transgressao['inciso']}")
+            return {'success': True, 'data': transgressao}
+        else:
+            print(f"❌ Transgressão não encontrada: ID {transgressao_id}")
+            return {'success': False, 'error': 'Transgressão não encontrada'}
+            
+    except Exception as e:
+        print(f"Erro ao buscar transgressão: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def atualizar_transgressao(dados_transgressao):
+    """Atualiza uma transgressão existente"""
+    try:
+        print(f"📝 Atualizando transgressão ID: {dados_transgressao['id']}")
+        
+        # Validação básica
+        if not dados_transgressao.get('id'):
+            return {'success': False, 'error': 'ID da transgressão é obrigatório'}
+        
+        if not dados_transgressao.get('gravidade') or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
+            return {'success': False, 'error': 'Gravidade, inciso e texto são obrigatórios'}
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se existe outra transgressão com a mesma gravidade e inciso
+        cursor.execute('''
+            SELECT id, gravidade, inciso FROM transgressoes 
+            WHERE LOWER(gravidade) = LOWER(?) AND UPPER(inciso) = UPPER(?) AND id != ?
+        ''', (dados_transgressao['gravidade'], dados_transgressao['inciso'], dados_transgressao['id']))
+        
+        duplicata = cursor.fetchone()
+        if duplicata:
+            conn.close()
+            return {'success': False, 'error': f'Já existe outra transgressão {duplicata[1]} com inciso {duplicata[2]}. Verifique os dados informados.'}
+        
+        # Atualizar transgressão
+        cursor.execute('''
+            UPDATE transgressoes 
+            SET gravidade = ?, inciso = ?, texto = ?, ativo = ?
+            WHERE id = ?
+        ''', (
+            dados_transgressao['gravidade'],
+            dados_transgressao['inciso'],
+            dados_transgressao['texto'],
+            dados_transgressao.get('ativo', True),
+            dados_transgressao['id']
+        ))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return {'success': False, 'error': 'Transgressão não encontrada'}
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Transgressão atualizada: {dados_transgressao['gravidade']} - {dados_transgressao['inciso']}")
+        return {'success': True, 'message': 'Transgressão atualizada com sucesso'}
+        
+    except Exception as e:
+        print(f"Erro ao atualizar transgressão: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def excluir_transgressao(transgressao_id):
+    """Exclui uma transgressão pelo ID"""
+    try:
+        print(f"🗑️ Excluindo transgressão ID: {transgressao_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se a transgressão existe antes de excluir
+        cursor.execute('SELECT gravidade, inciso FROM transgressoes WHERE id = ?', (transgressao_id,))
+        transgressao = cursor.fetchone()
+        
+        if not transgressao:
+            conn.close()
+            return {'success': False, 'error': 'Transgressão não encontrada'}
+        
+        # Excluir transgressão
+        cursor.execute('DELETE FROM transgressoes WHERE id = ?', (transgressao_id,))
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Transgressão excluída: {transgressao[0]} - {transgressao[1]}")
+        return {'success': True, 'message': 'Transgressão excluída com sucesso'}
+        
+    except Exception as e:
+        print(f"Erro ao excluir transgressão: {e}")
+        return {'success': False, 'error': str(e)}
+
 if __name__ == "__main__":
     main()

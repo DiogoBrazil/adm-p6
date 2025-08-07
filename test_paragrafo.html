@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Campo Parágrafo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        input.valid {
+            border-color: #28a745;
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+        }
+        
+        input.invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+        
+        .validation-message {
+            font-size: 0.8rem;
+            margin-top: 4px;
+            display: block;
+        }
+        
+        .validation-message.valid {
+            color: #28a745;
+        }
+        
+        .validation-message.invalid {
+            color: #dc3545;
+        }
+        
+        .test-results {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste de Validação - Campo Parágrafo</h1>
+    
+    <div class="form-group">
+        <label for="paragrafo">Parágrafo (opcional)</label>
+        <input type="text" id="paragrafo" name="paragrafo" placeholder="Ex: 1º, 2º, único" maxlength="10">
+        <small>Formato ordinal (1º, 2º, 3º) ou "único"</small>
+    </div>
+    
+    <div class="test-results">
+        <h3>Comportamento esperado:</h3>
+        <ul>
+            <li>Digite "1" → ao sair do campo deve virar "1º"</li>
+            <li>Digite "único" → deve manter "único"</li>
+            <li>Digite "unico" → deve virar "único"</li>
+            <li>Digite apenas números → automaticamente adiciona "º" ao sair</li>
+            <li>Não permite letras (exceto para "único")</li>
+        </ul>
+        
+        <div id="valor-atual">Valor atual: <span id="valor"></span></div>
+    </div>
+
+    <script>
+        function setFieldValidation(field, isValid, message) {
+            // Remove classes anteriores
+            field.classList.remove('valid', 'invalid');
+            
+            // Adiciona nova classe
+            field.classList.add(isValid ? 'valid' : 'invalid');
+            
+            // Remove mensagem anterior
+            const existingMsg = field.parentNode.querySelector('.validation-message');
+            if (existingMsg) {
+                existingMsg.remove();
+            }
+            
+            // Adiciona nova mensagem
+            if (message) {
+                const msgElement = document.createElement('span');
+                msgElement.className = `validation-message ${isValid ? 'valid' : 'invalid'}`;
+                msgElement.textContent = message;
+                field.parentNode.appendChild(msgElement);
+            }
+        }
+
+        function clearFieldValidation(field) {
+            field.classList.remove('valid', 'invalid');
+            const existingMsg = field.parentNode.querySelector('.validation-message');
+            if (existingMsg) {
+                existingMsg.remove();
+            }
+        }
+
+        // Campo Parágrafo - formato ordinal (1º, 2º, 3º, único)
+        const paragrafoInput = document.getElementById('paragrafo');
+        const valorSpan = document.getElementById('valor');
+        
+        if (paragrafoInput) {
+            paragrafoInput.addEventListener('input', function(e) {
+                let value = e.target.value;
+                valorSpan.textContent = value;
+                
+                // Permite "único" (case insensitive)
+                if (value.toLowerCase() === 'unico' || value.toLowerCase() === 'único') {
+                    e.target.value = 'único';
+                    setFieldValidation(e.target, true, 'Formato válido');
+                    return;
+                }
+                
+                // Remove tudo que não for número ou º, mas mantém números para digitação
+                value = value.replace(/[^0-9º]/g, '');
+                
+                // Remove múltiplos º
+                value = value.replace(/º+/g, 'º');
+                
+                e.target.value = value;
+                
+                // Validação visual (mais flexível durante digitação)
+                if (value === '' || value === 'único' || /^[0-9]+º?$/.test(value)) {
+                    if (value) setFieldValidation(e.target, true, 'Formato válido');
+                    else clearFieldValidation(e.target);
+                } else {
+                    setFieldValidation(e.target, false, 'Use formato ordinal (1º, 2º) ou "único"');
+                }
+            });
+            
+            // Evento blur para adicionar º automaticamente quando sair do campo
+            paragrafoInput.addEventListener('blur', function(e) {
+                let value = e.target.value.trim();
+                
+                // Se é "único", mantém
+                if (value.toLowerCase() === 'unico') {
+                    e.target.value = 'único';
+                    setFieldValidation(e.target, true, 'Formato válido');
+                    return;
+                }
+                
+                // Se tem apenas números, adiciona º
+                if (/^[0-9]+$/.test(value)) {
+                    e.target.value = value + 'º';
+                    setFieldValidation(e.target, true, 'Formato válido');
+                    valorSpan.textContent = value + 'º';
+                } else if (value === '') {
+                    clearFieldValidation(e.target);
+                }
+            });
+            
+            paragrafoInput.addEventListener('keypress', function(e) {
+                const currentValue = e.target.value;
+                
+                // Permite backspace, delete, tab, enter
+                if (['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                    return;
+                }
+                
+                // Se está digitando "único"
+                if (currentValue.toLowerCase() === '' || currentValue.toLowerCase().startsWith('u')) {
+                    const allowedChars = 'únicoÚNICO';
+                    if (allowedChars.includes(e.key)) {
+                        return; // Permite caracteres de "único"
+                    } else if (/[0-9]/.test(e.key) && currentValue === '') {
+                        return; // Permite começar com número se campo vazio
+                    } else {
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                
+                // Se já tem texto que não é "único", permite apenas números
+                if (!/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
