@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Transgressões Disciplinares - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    
+    <!-- Estilos adicionais para o modal de confirmação -->
+    <style>
+        .modal-overlay {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0, 0, 0, 0.5) !important;
+            display: none !important;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 10000 !important;
+        }
+        
+        .modal-overlay .modal-content {
+            background: white !important;
+            border-radius: 12px !important;
+            padding: 24px !important;
+            max-width: 500px !important;
+            width: 90% !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+            position: relative !important;
+        }
+        
+        .modal-overlay .modal-header h3 {
+            color: #dc3545 !important;
+            margin: 0 0 16px 0 !important;
+            font-size: 1.2rem !important;
+        }
+        
+        .modal-overlay .modal-body {
+            margin-bottom: 20px !important;
+        }
+        
+        .modal-overlay .transgressao-info {
+            background: #f8f9fa !important;
+            padding: 12px !important;
+            border-radius: 6px !important;
+            margin: 12px 0 !important;
+        }
+        
+        .modal-overlay .modal-actions {
+            display: flex !important;
+            gap: 12px !important;
+            justify-content: flex-end !important;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>Teste de Exclusão de Transgressões</h1>
+        
+        <button onclick="testarFuncionalidade()" style="padding: 10px 20px; background: blue; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            🧪 Testar Exclusão
+        </button>
+        
+        <br><br>
+        
+        <!-- Simulando um botão de exclusão como na tabela real -->
+        <button onclick="confirmarExclusaoTransgressao(123, 'Grave', 'Art. 15, inciso I')" style="padding: 8px 12px; background: red; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <i class="fas fa-trash"></i> Excluir Transgressão Teste
+        </button>
+    </div>
+
+    <!-- Modal de Confirmação para Exclusão -->
+    <div id="modalConfirmacao" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão</h3>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir esta transgressão?</p>
+                <div class="transgressao-info">
+                    <strong id="transgressaoInciso">Inciso aqui</strong> - <span id="transgressaoDescricao">Descrição aqui</span>
+                </div>
+                <p><strong>Atenção:</strong> Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-actions">
+                <button id="btnCancelar" class="btn-secondary">Cancelar</button>
+                <button id="btnConfirmarExclusao" class="btn-danger">
+                    <i class="fas fa-trash"></i>
+                    Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/transgressao_list_debug.js"></script>
+</body>
+</html>

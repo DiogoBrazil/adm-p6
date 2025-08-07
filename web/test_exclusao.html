@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Exclusão Transgressão</title>
+</head>
+<body>
+    <h1>Teste de Exclusão</h1>
+    
+    <button onclick="testarExclusao()">Testar Exclusão</button>
+    
+    <!-- Modal de Confirmação para Exclusão -->
+    <div id="modalConfirmacao" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10000;">
+        <div style="background: white; margin: 50px auto; padding: 20px; max-width: 500px; border-radius: 8px;">
+            <div>
+                <h3>Confirmar Exclusão</h3>
+            </div>
+            <div>
+                <p>Tem certeza que deseja excluir esta transgressão?</p>
+                <div>
+                    <strong id="transgressaoInciso">Inciso aqui</strong> - <span id="transgressaoDescricao">Descrição aqui</span>
+                </div>
+                <p><strong>Atenção:</strong> Esta ação não pode ser desfeita.</p>
+            </div>
+            <div>
+                <button id="btnCancelar">Cancelar</button>
+                <button id="btnConfirmarExclusao">Excluir</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function testarExclusao() {
+            console.log('Teste de exclusão iniciado');
+            confirmarExclusaoTransgressao(123, 'Grave', 'Art. 15, inciso I');
+        }
+        
+        function confirmarExclusaoTransgressao(id, gravidade, inciso) {
+            console.log('🗑️ Função confirmarExclusaoTransgressao chamada com:', {id, gravidade, inciso});
+            
+            const modalConfirmacao = document.getElementById('modalConfirmacao');
+            const transgressaoInciso = document.getElementById('transgressaoInciso');
+            const transgressaoDescricao = document.getElementById('transgressaoDescricao');
+            
+            console.log('🔍 Elementos encontrados:', {
+                modalConfirmacao: !!modalConfirmacao,
+                transgressaoInciso: !!transgressaoInciso,
+                transgressaoDescricao: !!transgressaoDescricao
+            });
+            
+            if (transgressaoInciso) transgressaoInciso.textContent = inciso;
+            if (transgressaoDescricao) transgressaoDescricao.textContent = gravidade;
+            
+            if (modalConfirmacao) {
+                modalConfirmacao.style.display = 'flex';
+                modalConfirmacao.style.alignItems = 'center';
+                modalConfirmacao.style.justifyContent = 'center';
+                console.log('✅ Modal de confirmação exibido');
+            } else {
+                console.error('❌ Modal de confirmação não encontrado');
+            }
+        }
+        
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnCancelar = document.getElementById('btnCancelar');
+            const btnConfirmarExclusao = document.getElementById('btnConfirmarExclusao');
+            
+            if (btnCancelar) {
+                btnCancelar.addEventListener('click', function() {
+                    console.log('Cancelar clicado');
+                    document.getElementById('modalConfirmacao').style.display = 'none';
+                });
+            }
+            
+            if (btnConfirmarExclusao) {
+                btnConfirmarExclusao.addEventListener('click', function() {
+                    console.log('Confirmar exclusão clicado');
+                    alert('Exclusão confirmada!');
+                    document.getElementById('modalConfirmacao').style.display = 'none';
+                });
+            }
+        });
+    </script>
+</body>
+</html>
