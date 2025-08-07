@@ -62,7 +62,213 @@ function inicializarFormulario() {
         modalCloseBtn.addEventListener('click', fecharModalFeedback);
     }
     
+    // Inicializar validações de campos
+    inicializarValidacoesCampos();
+    
     console.log('✅ Formulário inicializado com sucesso');
+}
+
+function inicializarValidacoesCampos() {
+    // Campo Artigo - apenas números
+    const artigoInput = document.getElementById('artigo');
+    if (artigoInput) {
+        artigoInput.addEventListener('input', function(e) {
+            // Remove tudo que não for número
+            let value = e.target.value.replace(/[^0-9]/g, '');
+            e.target.value = value;
+            
+            // Validação visual
+            if (value && /^[0-9]+$/.test(value)) {
+                setFieldValidation(e.target, true, 'Formato válido');
+            } else if (value) {
+                setFieldValidation(e.target, false, 'Apenas números são permitidos');
+            } else {
+                clearFieldValidation(e.target);
+            }
+        });
+        
+        artigoInput.addEventListener('keypress', function(e) {
+            // Permite apenas números
+            if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+    }
+    
+    // Campo Parágrafo - formato ordinal (1º, 2º, 3º, único)
+    const paragrafoInput = document.getElementById('paragrafo');
+    if (paragrafoInput) {
+        paragrafoInput.addEventListener('input', function(e) {
+            let value = e.target.value;
+            
+            // Permite "único" (case insensitive)
+            if (value.toLowerCase() === 'unico' || value.toLowerCase() === 'único') {
+                e.target.value = 'único';
+                setFieldValidation(e.target, true, 'Formato válido');
+                return;
+            }
+            
+            // Remove tudo que não for número ou º, mas mantém números para digitação
+            value = value.replace(/[^0-9º]/g, '');
+            
+            // Remove múltiplos º
+            value = value.replace(/º+/g, 'º');
+            
+            e.target.value = value;
+            
+            // Validação visual (mais flexível durante digitação)
+            if (value === '' || value === 'único' || /^[0-9]+º?$/.test(value)) {
+                if (value) setFieldValidation(e.target, true, 'Formato válido');
+                else clearFieldValidation(e.target);
+            } else {
+                setFieldValidation(e.target, false, 'Use formato ordinal (1º, 2º) ou "único"');
+            }
+        });
+        
+        // Evento blur para adicionar º automaticamente quando sair do campo
+        paragrafoInput.addEventListener('blur', function(e) {
+            let value = e.target.value.trim();
+            
+            // Se é "único", mantém
+            if (value.toLowerCase() === 'unico') {
+                e.target.value = 'único';
+                setFieldValidation(e.target, true, 'Formato válido');
+                return;
+            }
+            
+            // Se tem apenas números, adiciona º
+            if (/^[0-9]+$/.test(value)) {
+                e.target.value = value + 'º';
+                setFieldValidation(e.target, true, 'Formato válido');
+            } else if (value === '') {
+                clearFieldValidation(e.target);
+            }
+        });
+        
+        paragrafoInput.addEventListener('keypress', function(e) {
+            const currentValue = e.target.value;
+            
+            // Permite backspace, delete, tab, enter
+            if (['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                return;
+            }
+            
+            // Se está digitando "único"
+            if (currentValue.toLowerCase() === '' || currentValue.toLowerCase().startsWith('u')) {
+                const allowedChars = 'únicoÚNICO';
+                if (allowedChars.includes(e.key)) {
+                    return; // Permite caracteres de "único"
+                } else if (/[0-9]/.test(e.key) && currentValue === '') {
+                    return; // Permite começar com número se campo vazio
+                } else {
+                    e.preventDefault();
+                    return;
+                }
+            }
+            
+            // Se já tem texto que não é "único", permite apenas números
+            if (!/[0-9]/.test(e.key)) {
+                e.preventDefault();
+            }
+        });
+    }
+    
+    // Campo Inciso - números romanos maiúsculos
+    const incisoInput = document.getElementById('inciso');
+    if (incisoInput) {
+        incisoInput.addEventListener('input', function(e) {
+            // Remove tudo que não for I, V, X, L, C, D, M
+            let value = e.target.value.replace(/[^IVXLCDMivxlcdm]/g, '');
+            // Converte para maiúscula
+            value = value.toUpperCase();
+            e.target.value = value;
+            
+            // Validação visual
+            if (value === '' || /^[IVXLCDM]+$/.test(value)) {
+                if (value) setFieldValidation(e.target, true, 'Formato válido');
+                else clearFieldValidation(e.target);
+            } else {
+                setFieldValidation(e.target, false, 'Apenas números romanos (I, V, X, L, C, D, M)');
+            }
+        });
+        
+        incisoInput.addEventListener('keypress', function(e) {
+            // Permite apenas números romanos
+            if (!/[IVXLCDMivxlcdm]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+    }
+    
+    // Campo Alínea - apenas uma letra minúscula
+    const alineaInput = document.getElementById('alinea');
+    if (alineaInput) {
+        alineaInput.addEventListener('input', function(e) {
+            // Remove tudo que não for letra
+            let value = e.target.value.replace(/[^a-zA-Z]/g, '');
+            // Pega apenas a primeira letra e converte para minúscula
+            value = value.charAt(0).toLowerCase();
+            e.target.value = value;
+            
+            // Validação visual
+            if (value === '' || /^[a-z]$/.test(value)) {
+                if (value) setFieldValidation(e.target, true, 'Formato válido');
+                else clearFieldValidation(e.target);
+            } else {
+                setFieldValidation(e.target, false, 'Apenas uma letra minúscula');
+            }
+        });
+        
+        alineaInput.addEventListener('keypress', function(e) {
+            const currentValue = e.target.value;
+            
+            // Permite backspace, delete, tab, enter
+            if (['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                return;
+            }
+            
+            // Se já tem um caractere, não permite mais
+            if (currentValue.length >= 1) {
+                e.preventDefault();
+                return;
+            }
+            
+            // Permite apenas letras
+            if (!/[a-zA-Z]/.test(e.key)) {
+                e.preventDefault();
+            }
+        });
+    }
+}
+
+function setFieldValidation(field, isValid, message) {
+    // Remove classes anteriores
+    field.classList.remove('valid', 'invalid');
+    
+    // Adiciona nova classe
+    field.classList.add(isValid ? 'valid' : 'invalid');
+    
+    // Remove mensagem anterior
+    const existingMsg = field.parentNode.querySelector('.validation-message');
+    if (existingMsg) {
+        existingMsg.remove();
+    }
+    
+    // Adiciona nova mensagem
+    if (message) {
+        const msgElement = document.createElement('span');
+        msgElement.className = `validation-message ${isValid ? 'valid' : 'invalid'}`;
+        msgElement.textContent = message;
+        field.parentNode.appendChild(msgElement);
+    }
+}
+
+function clearFieldValidation(field) {
+    field.classList.remove('valid', 'invalid');
+    const existingMsg = field.parentNode.querySelector('.validation-message');
+    if (existingMsg) {
+        existingMsg.remove();
+    }
 }
 
 function verificarModoEdicao() {

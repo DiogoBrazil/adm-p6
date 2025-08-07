@@ -2630,6 +2630,50 @@ def main():
 
 # ========== CRIMES E CONTRAVENÇÕES - EEL FUNCTIONS ==========
 
+def validar_campos_crime(dados_crime):
+    """Valida os campos do crime/contravenção conforme regras de formato"""
+    import re
+    
+    errors = []
+    
+    # Validar Artigo - apenas números
+    artigo = dados_crime.get('artigo', '').strip()
+    if artigo and not re.match(r'^[0-9]+$', artigo):
+        errors.append("Campo 'Artigo' deve conter apenas números")
+    
+    # Validar Parágrafo - formato ordinal (1º, 2º, 3º, único)
+    paragrafo = dados_crime.get('paragrafo', '').strip()
+    if paragrafo:
+        if paragrafo.lower() == 'único':
+            # Mantém "único" como está
+            dados_crime['paragrafo'] = 'único'
+        elif re.match(r'^[0-9]+$', paragrafo):
+            # Se são apenas números, adiciona º
+            dados_crime['paragrafo'] = paragrafo + 'º'
+        elif re.match(r'^[0-9]+º$', paragrafo):
+            # Se já tem º, mantém como está
+            dados_crime['paragrafo'] = paragrafo
+        else:
+            errors.append("Campo 'Parágrafo' deve estar no formato ordinal (1º, 2º, 3º) ou 'único'")
+    
+    # Validar Inciso - números romanos maiúsculos
+    inciso = dados_crime.get('inciso', '').strip()
+    if inciso:
+        if not re.match(r'^[IVXLCDM]+$', inciso):
+            errors.append("Campo 'Inciso' deve conter apenas números romanos maiúsculos (I, II, III, IV...)")
+        # Forçar maiúscula
+        dados_crime['inciso'] = inciso.upper()
+    
+    # Validar Alínea - apenas uma letra minúscula
+    alinea = dados_crime.get('alinea', '').strip()
+    if alinea:
+        if not re.match(r'^[a-z]$', alinea):
+            errors.append("Campo 'Alínea' deve conter apenas uma letra minúscula (a, b, c...)")
+        # Forçar minúscula
+        dados_crime['alinea'] = alinea.lower()
+    
+    return errors
+
 @eel.expose
 def listar_crimes_contravencoes():
     """Lista todos os crimes e contravenções cadastrados"""
@@ -2703,6 +2747,14 @@ def excluir_crime_contravencao(crime_id):
 def cadastrar_crime(dados_crime):
     """Cadastra um novo crime/contravenção"""
     try:
+        # Validar campos antes de cadastrar
+        validation_errors = validar_campos_crime(dados_crime)
+        if validation_errors:
+            return {
+                'success': False, 
+                'error': 'Erro de validação: ' + '; '.join(validation_errors)
+            }
+        
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
@@ -2783,6 +2835,14 @@ def obter_crime_por_id(crime_id):
 def atualizar_crime(dados_crime):
     """Atualiza um crime/contravenção existente"""
     try:
+        # Validar campos antes de atualizar
+        validation_errors = validar_campos_crime(dados_crime)
+        if validation_errors:
+            return {
+                'success': False, 
+                'error': 'Erro de validação: ' + '; '.join(validation_errors)
+            }
+        
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         

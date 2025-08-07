@@ -104,9 +104,17 @@
         }
         
         .user-table th:nth-child(5), /* Parágrafo */
+        .user-table td:nth-child(5) {
+            width: 85px;
+            min-width: 85px;
+            max-width: 85px;
+            text-align: center;
+            font-size: 0.9rem;
+            padding: 8px 8px; /* Aumentando o padding horizontal */
+        }
+        
         .user-table th:nth-child(6), /* Inciso */
         .user-table th:nth-child(7), /* Alínea */
-        .user-table td:nth-child(5),
         .user-table td:nth-child(6),
         .user-table td:nth-child(7) {
             width: 70px;
@@ -155,10 +163,17 @@
                 max-width: 180px;
             }
             
-            .user-table th:nth-child(5), 
-            .user-table th:nth-child(6), 
-            .user-table th:nth-child(7),
-            .user-table td:nth-child(5),
+            .user-table th:nth-child(5), /* Parágrafo */
+            .user-table td:nth-child(5) {
+                width: 75px;
+                min-width: 75px;
+                max-width: 75px;
+                font-size: 0.85rem;
+                padding: 8px 6px; /* Padding ajustado para telas menores */
+            }
+            
+            .user-table th:nth-child(6), /* Inciso */
+            .user-table th:nth-child(7), /* Alínea */
             .user-table td:nth-child(6),
             .user-table td:nth-child(7) {
                 width: 60px;
