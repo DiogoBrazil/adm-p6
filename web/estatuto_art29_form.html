@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulário - Infração Art. 29 - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/forms.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    
+    <style>
+        .form-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group label .required {
+            color: #dc3545;
+            margin-left: 4px;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+        
+        .form-group textarea {
+            min-height: 120px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .btn-save {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-save:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        .btn-save:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-cancel {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-cancel:hover {
+            background: #5a6268;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+        }
+        
+        .help-text {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 0.875rem;
+            margin-top: 4px;
+            display: none;
+        }
+        
+        .form-group.error input,
+        .form-group.error textarea {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+        }
+        
+        .form-group.error .error-message {
+            display: block;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .modal-feedback {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+        }
+        
+        .modal-feedback .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        
+        .modal-feedback .modal-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+        
+        .modal-feedback .modal-icon.success {
+            color: #28a745;
+        }
+        
+        .modal-feedback .modal-icon.error {
+            color: #dc3545;
+        }
+        
+        .modal-feedback .modal-message {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <div class="form-container">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-balance-scale"></i>
+                    <h2 id="pageTitle">Nova Infração - Art. 29</h2>
+                </div>
+                
+                <form id="infracaoForm" class="form-content">
+                    <div class="form-group">
+                        <label for="inciso">
+                            Inciso <span class="required">*</span>
+                        </label>
+                        <input 
+                            type="text" 
+                            id="inciso" 
+                            name="inciso" 
+                            placeholder="Ex: I, II, III, etc."
+                            maxlength="10"
+                            required
+                        >
+                        <div class="help-text">Informe o inciso da infração (números romanos ou arábicos)</div>
+                        <div class="error-message" id="incisoError"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="texto">
+                            Descrição da Infração <span class="required">*</span>
+                        </label>
+                        <textarea 
+                            id="texto" 
+                            name="texto" 
+                            placeholder="Descreva o preceito da ética policial-militar..."
+                            required
+                        ></textarea>
+                        <div class="help-text">Descreva de forma clara e completa o preceito ético</div>
+                        <div class="error-message" id="textoError"></div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel" onclick="voltarParaListagem()">
+                            <i class="fas fa-arrow-left"></i>
+                            Voltar
+                        </button>
+                        <button type="submit" class="btn-save" id="btnSalvar">
+                            <i class="fas fa-save"></i>
+                            <span id="btnSalvarTexto">Salvar Infração</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Modal de Feedback -->
+    <div id="modalFeedback" class="modal-feedback">
+        <div class="modal-content">
+            <div class="modal-icon" id="modalIcon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="modal-message" id="modalMessage">
+                Mensagem de feedback
+            </div>
+            <div class="modal-actions">
+                <button id="modalCloseBtn" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let usuarioLogado = null;
+        let modoEdicao = false;
+        let infracaoId = null;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🔧 Iniciando formulário de infrações...');
+            
+            const autenticado = await verificarAutenticacao();
+            if (!autenticado) {
+                return;
+            }
+            
+            // Verificar se é edição
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id');
+            
+            if (id) {
+                modoEdicao = true;
+                infracaoId = id;
+                await carregarInfracaoParaEdicao(id);
+            }
+            
+            inicializarEventos();
+        });
+
+        function inicializarEventos() {
+            const form = document.getElementById('infracaoForm');
+            const modalCloseBtn = document.getElementById('modalCloseBtn');
+            
+            if (form) {
+                form.addEventListener('submit', salvarInfracao);
+            }
+            
+            if (modalCloseBtn) {
+                modalCloseBtn.addEventListener('click', fecharModal);
+            }
+            
+            // Validação em tempo real
+            const inciso = document.getElementById('inciso');
+            const texto = document.getElementById('texto');
+            
+            if (inciso) {
+                inciso.addEventListener('blur', validarInciso);
+                inciso.addEventListener('input', limparErro);
+            }
+            
+            if (texto) {
+                texto.addEventListener('blur', validarTexto);
+                texto.addEventListener('input', limparErro);
+            }
+            
+            console.log('✅ Eventos inicializados');
+        }
+
+        async function verificarAutenticacao() {
+            try {
+                const resultado = await eel.obter_usuario_logado()();
+                
+                if (resultado.logado) {
+                    usuarioLogado = resultado.usuario;
+                    const userNameElement = document.getElementById('userName');
+                    const userEmailElement = document.getElementById('userEmail');
+                    
+                    if (userNameElement) userNameElement.textContent = usuarioLogado.nome;
+                    if (userEmailElement) userEmailElement.textContent = usuarioLogado.email;
+                    
+                    console.log('✅ Usuário autenticado:', usuarioLogado.nome);
+                    return true;
+                } else {
+                    console.log('❌ Usuário não está logado, redirecionando...');
+                    window.stop();
+                    window.location.replace('login.html');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Erro ao verificar autenticação:', error);
+                window.location.replace('login.html');
+                return false;
+            }
+        }
+
+        async function carregarInfracaoParaEdicao(id) {
+            try {
+                console.log(`📋 Carregando infração para edição: ${id}`);
+                
+                mostrarLoading(true);
+                
+                const resultado = await eel.obter_infracao_estatuto_art29(parseInt(id))();
+                
+                if (resultado.success) {
+                    const infracao = resultado.data;
+                    
+                    // Atualizar título
+                    const pageTitle = document.getElementById('pageTitle');
+                    if (pageTitle) {
+                        pageTitle.innerHTML = '<i class="fas fa-edit"></i> Editar Infração - Art. 29';
+                    }
+                    
+                    // Preencher formulário
+                    const inciso = document.getElementById('inciso');
+                    const texto = document.getElementById('texto');
+                    const btnSalvarTexto = document.getElementById('btnSalvarTexto');
+                    
+                    if (inciso) inciso.value = infracao.inciso;
+                    if (texto) texto.value = infracao.texto;
+                    if (btnSalvarTexto) btnSalvarTexto.textContent = 'Salvar Alterações';
+                    
+                    console.log('✅ Infração carregada para edição');
+                } else {
+                    throw new Error(resultado.error || 'Erro ao carregar infração');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar infração:', error);
+                showAlert('Erro ao carregar infração. Redirecionando...', 'error');
+                setTimeout(() => {
+                    window.location.href = 'estatuto_art29.html';
+                }, 2000);
+            } finally {
+                mostrarLoading(false);
+            }
+        }
+
+        async function salvarInfracao(event) {
+            event.preventDefault();
+            
+            const inciso = document.getElementById('inciso').value.trim();
+            const texto = document.getElementById('texto').value.trim();
+            
+            // Validações
+            if (!validarFormulario()) {
+                return;
+            }
+            
+            try {
+                console.log(`💾 ${modoEdicao ? 'Editando' : 'Criando'} infração...`);
+                
+                mostrarLoading(true);
+                
+                let resultado;
+                if (modoEdicao) {
+                    resultado = await eel.editar_infracao_estatuto_art29(parseInt(infracaoId), inciso, texto)();
+                } else {
+                    resultado = await eel.criar_infracao_estatuto_art29(inciso, texto)();
+                }
+                
+                if (resultado.success) {
+                    const acao = modoEdicao ? 'editada' : 'criada';
+                    mostrarModalFeedback(
+                        'success',
+                        `Infração ${acao} com sucesso!`,
+                        `A infração ${inciso} foi ${acao} com sucesso.`
+                    );
+                } else {
+                    throw new Error(resultado.error || 'Erro desconhecido');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao salvar infração:', error);
+                mostrarModalFeedback(
+                    'error',
+                    'Erro ao salvar',
+                    error.message || 'Ocorreu um erro ao salvar a infração. Tente novamente.'
+                );
+            } finally {
+                mostrarLoading(false);
+            }
+        }
+
+        function validarFormulario() {
+            let valido = true;
+            
+            valido = validarInciso() && valido;
+            valido = validarTexto() && valido;
+            
+            return valido;
+        }
+
+        function validarInciso() {
+            const inciso = document.getElementById('inciso');
+            const incisoGroup = inciso.closest('.form-group');
+            const errorElement = document.getElementById('incisoError');
+            
+            const valor = inciso.value.trim();
+            
+            if (!valor) {
+                mostrarErro(incisoGroup, errorElement, 'Inciso é obrigatório');
+                return false;
+            }
+            
+            if (valor.length > 10) {
+                mostrarErro(incisoGroup, errorElement, 'Inciso deve ter no máximo 10 caracteres');
+                return false;
+            }
+            
+            limparErroElemento(incisoGroup, errorElement);
+            return true;
+        }
+
+        function validarTexto() {
+            const texto = document.getElementById('texto');
+            const textoGroup = texto.closest('.form-group');
+            const errorElement = document.getElementById('textoError');
+            
+            const valor = texto.value.trim();
+            
+            if (!valor) {
+                mostrarErro(textoGroup, errorElement, 'Descrição da infração é obrigatória');
+                return false;
+            }
+            
+            if (valor.length < 10) {
+                mostrarErro(textoGroup, errorElement, 'Descrição deve ter pelo menos 10 caracteres');
+                return false;
+            }
+            
+            limparErroElemento(textoGroup, errorElement);
+            return true;
+        }
+
+        function mostrarErro(groupElement, errorElement, mensagem) {
+            groupElement.classList.add('error');
+            errorElement.textContent = mensagem;
+        }
+
+        function limparErroElemento(groupElement, errorElement) {
+            groupElement.classList.remove('error');
+            errorElement.textContent = '';
+        }
+
+        function limparErro(event) {
+            const element = event.target;
+            const group = element.closest('.form-group');
+            if (group) {
+                group.classList.remove('error');
+                const errorElement = group.querySelector('.error-message');
+                if (errorElement) {
+                    errorElement.textContent = '';
+                }
+            }
+        }
+
+        function mostrarLoading(show) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const btnSalvar = document.getElementById('btnSalvar');
+            
+            if (loadingOverlay) {
+                loadingOverlay.style.display = show ? 'flex' : 'none';
+            }
+            
+            if (btnSalvar) {
+                btnSalvar.disabled = show;
+            }
+        }
+
+        function fecharModal() {
+            const modal = document.getElementById('modalFeedback');
+            modal.style.display = 'none';
+            
+            // Se foi sucesso, voltar para a listagem
+            const icon = document.getElementById('modalIcon');
+            if (icon.classList.contains('success')) {
+                window.location.href = 'estatuto_art29.html';
+            }
+        }
+
+        function mostrarModalFeedback(tipo, titulo, mensagem) {
+            const modal = document.getElementById('modalFeedback');
+            const icon = document.getElementById('modalIcon');
+            const message = document.getElementById('modalMessage');
+            
+            if (tipo === 'success') {
+                icon.innerHTML = '<i class="fas fa-check-circle"></i>';
+                icon.className = 'modal-icon success';
+                
+                // Para sucesso, redirecionar automaticamente após 1 segundo
+                setTimeout(() => {
+                    window.location.href = 'estatuto_art29.html';
+                }, 1000);
+            } else {
+                icon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+                icon.className = 'modal-icon error';
+            }
+            
+            message.textContent = mensagem;
+            modal.style.display = 'flex';
+        }
+
+        function voltarParaListagem() {
+            window.location.href = 'estatuto_art29.html';
+        }
+
+        function showAlert(message, type = 'info', duration = 3000) {
+            const alertContainer = document.getElementById('alertContainer');
+            if (!alertContainer) return;
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+                <button class="alert-close" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            alertContainer.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentElement) {
+                    alertDiv.remove();
+                }
+            }, duration);
+        }
+
+        async function realizarLogout() {
+            try {
+                await eel.logout()();
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+                window.location.href = 'login.html';
+            }
+        }
+    </script>
+</body>
+</html>

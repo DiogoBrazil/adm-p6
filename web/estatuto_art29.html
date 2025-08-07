@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Infrações do Art. 29 - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    
+    <!-- Estilos adicionais para o modal de confirmação -->
+    <style>
+        .modal-overlay {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0, 0, 0, 0.5) !important;
+            display: none;
+            align-items: center !important;
+            justify-content: center !important;
+            z-index: 10000 !important;
+        }
+        
+        .modal-overlay .modal-content {
+            background: white !important;
+            border-radius: 12px !important;
+            padding: 24px !important;
+            max-width: 500px !important;
+            width: 90% !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+            position: relative !important;
+        }
+        
+        .modal-overlay .modal-header h3 {
+            color: #dc3545 !important;
+            margin: 0 0 16px 0 !important;
+            font-size: 1.2rem !important;
+        }
+        
+        .modal-overlay .modal-body {
+            margin-bottom: 20px !important;
+        }
+        
+        .modal-overlay .infracao-info {
+            background: #f8f9fa !important;
+            padding: 12px !important;
+            border-radius: 6px !important;
+            margin: 12px 0 !important;
+        }
+        
+        .modal-overlay .modal-actions {
+            display: flex !important;
+            gap: 12px !important;
+            justify-content: flex-end !important;
+        }
+        
+        /* Estilos específicos para tabela de infrações */
+        .user-table {
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .user-table th,
+        .user-table td {
+            padding: 8px 6px;
+            vertical-align: middle;
+            border: 1px solid #e9ecef;
+        }
+        
+        .user-table th:nth-child(1), /* Inciso */
+        .user-table td:nth-child(1) {
+            width: 80px;
+            min-width: 80px;
+            max-width: 80px;
+            text-align: center;
+        }
+        
+        .user-table th:nth-child(2), /* Texto */
+        .user-table td:nth-child(2) {
+            width: auto;
+            min-width: 300px;
+            word-wrap: break-word;
+        }
+        
+        .user-table th:nth-child(3), /* Status */
+        .user-table td:nth-child(3) {
+            width: 100px;
+            min-width: 100px;
+            max-width: 100px;
+            text-align: center;
+        }
+        
+        .user-table th:nth-child(4), /* Ações */
+        .user-table td:nth-child(4) {
+            width: 120px;
+            min-width: 120px;
+            max-width: 120px;
+            text-align: center;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .info-box h3 {
+            color: #1976d2;
+            margin: 0 0 12px 0;
+            font-size: 1.1rem;
+        }
+        
+        .info-box p {
+            margin: 0;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-balance-scale"></i>
+                <h2>Infrações do Art. 29 - Decreto Lei 09-A (Estatuto)</h2>
+            </div>
+            
+            <div class="actions">
+                <!-- Área de Busca Simples -->
+                <div class="search-area">
+                    <input type="text" id="searchInput" placeholder="Pesquisar por inciso ou texto...">
+                    <button onclick="clearSearch()" class="btn-icon btn-clear" id="clearButton" style="display:none;"><i class="fas fa-times"></i> Limpar</button>
+                </div>
+                
+                <!-- Área de Ações -->
+                <div class="main-actions">
+                    <button onclick="novaInfracao()" class="btn-icon btn-new"><i class="fas fa-plus"></i> Nova Infração</button>
+                    <button onclick="voltarParaDashboard()" class="btn-icon btn-home"><i class="fas fa-home"></i> Início</button>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="user-table" id="infracoesTable">
+                    <thead>
+                        <tr>
+                            <th>Inciso</th>
+                            <th>Descrição</th>
+                            <th style="text-align:center;">Status</th>
+                            <th style="text-align:center;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="infracoesTableBody">
+                        <!-- Infrações serão carregadas aqui -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination-controls">
+                <button id="prevPage" class="btn-pagination" disabled><i class="fas fa-chevron-left"></i> Anterior</button>
+                <span id="pageInfo">Página 1 de 1</span>
+                <button id="nextPage" class="btn-pagination" disabled>Próxima <i class="fas fa-chevron-right"></i></button>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-balance-scale"></i>
+                <h3>Nenhuma infração encontrada</h3>
+                <p>Não há infrações do Art. 29 cadastradas ou sua pesquisa não encontrou resultados.</p>
+                <button onclick="novaInfracao()" class="btn-primary">
+                    <i class="fas fa-plus"></i> Cadastrar Primeira Infração
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação para Exclusão -->
+    <div id="modalConfirmacao" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão</h3>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir esta infração?</p>
+                <div class="infracao-info">
+                    <strong id="infracaoInciso"></strong> - <span id="infracaoTexto"></span>
+                </div>
+                <p><strong>Atenção:</strong> Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-actions">
+                <button id="btnCancelar" class="btn-secondary">Cancelar</button>
+                <button id="btnConfirmarExclusao" class="btn-danger">
+                    <i class="fas fa-trash"></i>
+                    Excluir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Feedback -->
+    <div id="modalFeedback" class="modal-feedback">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div id="modalIcon"></div>
+            </div>
+            <div class="modal-body">
+                <div id="modalMessage">Mensagem</div>
+            </div>
+            <div class="modal-actions">
+                <button id="modalCloseBtn" class="btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let usuarioLogado = null;
+        let infracoes = [];
+        let infracoesFiltradas = [];
+        let currentPage = 1;
+        let itemsPerPage = 10;
+        let infracaoParaExcluir = null;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🔧 Iniciando sistema de infrações do Art. 29...');
+            
+            const autenticado = await verificarAutenticacao();
+            if (!autenticado) {
+                return;
+            }
+            
+            inicializarEventos();
+            await carregarInfracoes();
+        });
+
+        function inicializarEventos() {
+            // Busca em tempo real
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', realizarBusca);
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        realizarBusca();
+                    }
+                });
+            }
+            
+            // Controles de paginação
+            const prevPage = document.getElementById('prevPage');
+            const nextPage = document.getElementById('nextPage');
+            
+            if (prevPage) prevPage.addEventListener('click', paginaAnterior);
+            if (nextPage) nextPage.addEventListener('click', proximaPagina);
+            
+            // Modal de confirmação
+            const btnCancelar = document.getElementById('btnCancelar');
+            const btnConfirmarExclusao = document.getElementById('btnConfirmarExclusao');
+            const modalConfirmacao = document.getElementById('modalConfirmacao');
+            
+            if (btnCancelar) {
+                btnCancelar.addEventListener('click', () => {
+                    if (modalConfirmacao) modalConfirmacao.style.display = 'none';
+                    infracaoParaExcluir = null;
+                });
+            }
+            
+            if (btnConfirmarExclusao) {
+                btnConfirmarExclusao.addEventListener('click', confirmarExclusao);
+            }
+            
+            // Fechar modal clicando fora
+            if (modalConfirmacao) {
+                modalConfirmacao.addEventListener('click', function(e) {
+                    if (e.target === modalConfirmacao) {
+                        modalConfirmacao.style.display = 'none';
+                        infracaoParaExcluir = null;
+                    }
+                });
+            }
+            
+            console.log('✅ Eventos inicializados');
+        }
+
+        async function verificarAutenticacao() {
+            try {
+                const resultado = await eel.obter_usuario_logado()();
+                
+                if (resultado.logado) {
+                    usuarioLogado = resultado.usuario;
+                    const userNameElement = document.getElementById('userName');
+                    const userEmailElement = document.getElementById('userEmail');
+                    
+                    if (userNameElement) userNameElement.textContent = usuarioLogado.nome;
+                    if (userEmailElement) userEmailElement.textContent = usuarioLogado.email;
+                    
+                    console.log('✅ Usuário autenticado:', usuarioLogado.nome);
+                    return true;
+                } else {
+                    console.log('❌ Usuário não está logado, redirecionando...');
+                    window.stop();
+                    window.location.replace('login.html');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ Erro ao verificar autenticação:', error);
+                window.location.replace('login.html');
+                return false;
+            }
+        }
+
+        async function carregarInfracoes() {
+            try {
+                console.log('📋 Carregando infrações do Art. 29...');
+                
+                mostrarLoading(true);
+                
+                const resultado = await eel.listar_infracoes_estatuto_art29()();
+                
+                if (resultado.success) {
+                    infracoes = resultado.data || [];
+                    infracoesFiltradas = [...infracoes];
+                    
+                    console.log(`✅ ${infracoes.length} infrações carregadas`);
+                    
+                    currentPage = 1;
+                    renderizarTabela();
+                    atualizarPaginacao();
+                    
+                    if (infracoes.length === 0) {
+                        mostrarEstadoVazio();
+                    } else {
+                        ocultarEstadoVazio();
+                    }
+                } else {
+                    throw new Error(resultado.error || 'Erro desconhecido');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao carregar infrações:', error);
+                showAlert('Erro ao carregar infrações. Tente novamente.', 'error');
+                mostrarEstadoVazio();
+            } finally {
+                mostrarLoading(false);
+            }
+        }
+
+        function renderizarTabela() {
+            const tbody = document.getElementById('infracoesTableBody');
+            if (!tbody) return;
+            
+            console.log('🔄 Renderizando tabela com', infracoesFiltradas.length, 'infrações');
+            
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const itensPagina = infracoesFiltradas.slice(startIndex, endIndex);
+            
+            tbody.innerHTML = '';
+            
+            if (itensPagina.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px; color: #666;">
+                            <i class="fas fa-search"></i>
+                            Nenhuma infração encontrada
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            itensPagina.forEach(infracao => {
+                const row = document.createElement('tr');
+                
+                // Escapar aspas para evitar erros no onclick
+                const incisoEscaped = infracao.inciso.replace(/'/g, "\\'");
+                const textoEscaped = infracao.texto.replace(/'/g, "\\'").substring(0, 50);
+                
+                row.innerHTML = `
+                    <td style="text-align: center; font-weight: bold; font-size: 1.1rem;">${infracao.inciso}</td>
+                    <td>${infracao.texto}</td>
+                    <td style="text-align: center;">
+                        <span class="status-badge ${infracao.ativo ? 'status-ativo' : 'status-inativo'}">
+                            <i class="fas fa-${infracao.ativo ? 'check-circle' : 'times-circle'}"></i>
+                            ${infracao.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                    </td>
+                    <td style="text-align: center;">
+                        <div style="display: flex; gap: 5px; justify-content: center;">
+                            <button class="btn-action btn-edit" onclick="editarInfracao(${infracao.id})" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn-action btn-delete" onclick="confirmarExclusaoInfracao(${infracao.id}, '${incisoEscaped}', '${textoEscaped}')" title="Excluir">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            console.log('✅ Tabela renderizada com', itensPagina.length, 'itens');
+        }
+
+        function realizarBusca() {
+            const searchInput = document.getElementById('searchInput');
+            const clearButton = document.getElementById('clearButton');
+            
+            if (!searchInput) return;
+            
+            const termo = searchInput.value.toLowerCase().trim();
+            
+            if (termo === '') {
+                infracoesFiltradas = [...infracoes];
+                if (clearButton) clearButton.style.display = 'none';
+            } else {
+                infracoesFiltradas = infracoes.filter(infracao =>
+                    infracao.inciso.toLowerCase().includes(termo) ||
+                    infracao.texto.toLowerCase().includes(termo)
+                );
+                if (clearButton) clearButton.style.display = 'inline-block';
+            }
+            
+            console.log(`🔍 ${infracoesFiltradas.length} infrações após busca`);
+            
+            currentPage = 1;
+            renderizarTabela();
+            atualizarPaginacao();
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const clearButton = document.getElementById('clearButton');
+            
+            if (searchInput) searchInput.value = '';
+            if (clearButton) clearButton.style.display = 'none';
+            
+            infracoesFiltradas = [...infracoes];
+            currentPage = 1;
+            renderizarTabela();
+            atualizarPaginacao();
+        }
+
+        function atualizarPaginacao() {
+            const totalPages = Math.ceil(infracoesFiltradas.length / itemsPerPage);
+            const pageInfo = document.getElementById('pageInfo');
+            const prevPage = document.getElementById('prevPage');
+            const nextPage = document.getElementById('nextPage');
+            
+            if (pageInfo) {
+                pageInfo.textContent = `Página ${currentPage} de ${totalPages || 1}`;
+            }
+            
+            if (prevPage) {
+                prevPage.disabled = currentPage <= 1;
+            }
+            
+            if (nextPage) {
+                nextPage.disabled = currentPage >= totalPages;
+            }
+        }
+
+        function paginaAnterior() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderizarTabela();
+                atualizarPaginacao();
+            }
+        }
+
+        function proximaPagina() {
+            const totalPages = Math.ceil(infracoesFiltradas.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderizarTabela();
+                atualizarPaginacao();
+            }
+        }
+
+        function mostrarLoading(show) {
+            // Para compatibilidade, mas não temos mais o loadingContainer
+            console.log(show ? '⏳ Carregando...' : '✅ Carregamento concluído');
+        }
+
+        function mostrarEstadoVazio() {
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) emptyState.style.display = 'block';
+        }
+
+        function ocultarEstadoVazio() {
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) emptyState.style.display = 'none';
+        }
+
+        function novaInfracao() {
+            window.location.href = 'estatuto_art29_form.html';
+        }
+
+        function editarInfracao(id) {
+            window.location.href = `estatuto_art29_form.html?id=${id}`;
+        }
+
+        function confirmarExclusaoInfracao(id, inciso, texto) {
+            infracaoParaExcluir = id;
+            
+            const modalConfirmacao = document.getElementById('modalConfirmacao');
+            const infracaoInciso = document.getElementById('infracaoInciso');
+            const infracaoTexto = document.getElementById('infracaoTexto');
+            
+            if (infracaoInciso) infracaoInciso.textContent = inciso;
+            if (infracaoTexto) infracaoTexto.textContent = texto + '...';
+            
+            if (modalConfirmacao) {
+                modalConfirmacao.style.display = 'flex';
+            }
+        }
+
+        async function confirmarExclusao() {
+            if (!infracaoParaExcluir) return;
+            
+            try {
+                console.log(`🗑️ Excluindo infração ID: ${infracaoParaExcluir}`);
+                
+                const resultado = await eel.excluir_infracao_estatuto_art29(parseInt(infracaoParaExcluir))();
+                
+                if (resultado.success) {
+                    console.log('✅ Infração excluída com sucesso');
+                    
+                    // Fechar modal
+                    const modalConfirmacao = document.getElementById('modalConfirmacao');
+                    if (modalConfirmacao) modalConfirmacao.style.display = 'none';
+                    
+                    // Mostrar feedback de sucesso
+                    showAlert('Infração excluída com sucesso!', 'success');
+                    
+                    // Recarregar lista
+                    await carregarInfracoes();
+                } else {
+                    throw new Error(resultado.error || 'Erro ao excluir infração');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao excluir infração:', error);
+                showAlert('Erro ao excluir infração. Tente novamente.', 'error');
+            } finally {
+                infracaoParaExcluir = null;
+            }
+        }
+
+        function showAlert(message, type = 'info', duration = 3000) {
+            const alertContainer = document.getElementById('alertContainer');
+            if (!alertContainer) return;
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+                <button class="alert-close" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            
+            alertContainer.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentElement) {
+                    alertDiv.remove();
+                }
+            }, duration);
+        }
+
+        function voltarParaDashboard() {
+            window.location.href = 'dashboard.html';
+        }
+
+        async function realizarLogout() {
+            try {
+                await eel.logout()();
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+                window.location.href = 'login.html';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -3083,5 +3083,219 @@ def excluir_transgressao(transgressao_id):
         print(f"Erro ao excluir transgressão: {e}")
         return {'success': False, 'error': str(e)}
 
+@eel.expose
+def listar_infracoes_estatuto_art29():
+    """Lista todas as infrações do Art. 29 do Estatuto"""
+    try:
+        print("📋 Listando infrações do Art. 29 do Estatuto...")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, inciso, texto, ativo
+            FROM infracoes_estatuto_art29 
+            WHERE ativo = 1
+            ORDER BY 
+                CASE 
+                    WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
+                    ELSE 999
+                END,
+                inciso
+        """)
+        
+        infracoes = cursor.fetchall()
+        conn.close()
+        
+        resultado = []
+        for infracao in infracoes:
+            resultado.append({
+                'id': infracao[0],
+                'inciso': infracao[1],
+                'texto': infracao[2],
+                'ativo': bool(infracao[3])
+            })
+        
+        print(f"✅ {len(resultado)} infrações do Art. 29 encontradas")
+        return {'success': True, 'data': resultado}
+        
+    except Exception as e:
+        print(f"Erro ao listar infrações do Art. 29: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def obter_infracao_estatuto_art29(infracao_id):
+    """Obtém uma infração específica do Art. 29 por ID"""
+    try:
+        print(f"📋 Obtendo infração do Art. 29 com ID: {infracao_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, inciso, texto, ativo
+            FROM infracoes_estatuto_art29 
+            WHERE id = ?
+        """, (infracao_id,))
+        
+        infracao = cursor.fetchone()
+        conn.close()
+        
+        if infracao:
+            resultado = {
+                'id': infracao[0],
+                'inciso': infracao[1],
+                'texto': infracao[2],
+                'ativo': bool(infracao[3])
+            }
+            print(f"✅ Infração encontrada: {resultado['inciso']}")
+            return {'success': True, 'data': resultado}
+        else:
+            print("❌ Infração não encontrada")
+            return {'success': False, 'error': 'Infração não encontrada'}
+        
+    except Exception as e:
+        print(f"❌ Erro ao obter infração do Art. 29: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def criar_infracao_estatuto_art29(inciso, texto):
+    """Cria uma nova infração do Art. 29"""
+    try:
+        print(f"➕ Criando nova infração do Art. 29: {inciso}")
+        
+        # Validações
+        if not inciso or not inciso.strip():
+            return {'success': False, 'error': 'Inciso é obrigatório'}
+        
+        if not texto or not texto.strip():
+            return {'success': False, 'error': 'Texto da infração é obrigatório'}
+        
+        inciso = inciso.strip()
+        texto = texto.strip()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se o inciso já existe
+        cursor.execute("""
+            SELECT id FROM infracoes_estatuto_art29 
+            WHERE UPPER(inciso) = UPPER(?) AND ativo = 1
+        """, (inciso,))
+        
+        if cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': f'Já existe uma infração com o inciso "{inciso}"'}
+        
+        # Inserir nova infração
+        cursor.execute("""
+            INSERT INTO infracoes_estatuto_art29 (inciso, texto, ativo)
+            VALUES (?, ?, 1)
+        """, (inciso, texto))
+        
+        infracao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Infração criada com sucesso - ID: {infracao_id}")
+        return {'success': True, 'data': {'id': infracao_id, 'inciso': inciso, 'texto': texto}}
+        
+    except Exception as e:
+        print(f"❌ Erro ao criar infração do Art. 29: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def editar_infracao_estatuto_art29(infracao_id, inciso, texto):
+    """Edita uma infração do Art. 29 existente"""
+    try:
+        print(f"✏️ Editando infração do Art. 29 - ID: {infracao_id}")
+        
+        # Validações
+        if not inciso or not inciso.strip():
+            return {'success': False, 'error': 'Inciso é obrigatório'}
+        
+        if not texto or not texto.strip():
+            return {'success': False, 'error': 'Texto da infração é obrigatório'}
+        
+        inciso = inciso.strip()
+        texto = texto.strip()
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se a infração existe
+        cursor.execute("""
+            SELECT id FROM infracoes_estatuto_art29 
+            WHERE id = ?
+        """, (infracao_id,))
+        
+        if not cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Infração não encontrada'}
+        
+        # Verificar se o inciso já existe em outra infração
+        cursor.execute("""
+            SELECT id FROM infracoes_estatuto_art29 
+            WHERE UPPER(inciso) = UPPER(?) AND id != ? AND ativo = 1
+        """, (inciso, infracao_id))
+        
+        if cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': f'Já existe outra infração com o inciso "{inciso}"'}
+        
+        # Atualizar infração
+        cursor.execute("""
+            UPDATE infracoes_estatuto_art29 
+            SET inciso = ?, texto = ?
+            WHERE id = ?
+        """, (inciso, texto, infracao_id))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Infração editada com sucesso")
+        return {'success': True, 'data': {'id': infracao_id, 'inciso': inciso, 'texto': texto}}
+        
+    except Exception as e:
+        print(f"❌ Erro ao editar infração do Art. 29: {e}")
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def excluir_infracao_estatuto_art29(infracao_id):
+    """Exclui (desativa) uma infração do Art. 29"""
+    try:
+        print(f"🗑️ Excluindo infração do Art. 29 - ID: {infracao_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se a infração existe
+        cursor.execute("""
+            SELECT inciso FROM infracoes_estatuto_art29 
+            WHERE id = ? AND ativo = 1
+        """, (infracao_id,))
+        
+        infracao = cursor.fetchone()
+        if not infracao:
+            conn.close()
+            return {'success': False, 'error': 'Infração não encontrada'}
+        
+        # Desativar infração (exclusão lógica)
+        cursor.execute("""
+            UPDATE infracoes_estatuto_art29 
+            SET ativo = 0
+            WHERE id = ?
+        """, (infracao_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Infração {infracao[0]} excluída com sucesso")
+        return {'success': True, 'message': f'Infração {infracao[0]} excluída com sucesso'}
+        
+    except Exception as e:
+        print(f"❌ Erro ao excluir infração do Art. 29: {e}")
+        return {'success': False, 'error': str(e)}
+
 if __name__ == "__main__":
     main()
