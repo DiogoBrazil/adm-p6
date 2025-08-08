@@ -439,7 +439,7 @@ function exibirProcedimentos() {
                     <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
                         <div class="action-buttons-inline">
-                            <button onclick="visualizarProcedimento('${procedimento.id}')" class="btn-view" title="Visualizar">
+                            <button class="btn-action view-btn" onclick="visualizarProcedimento('${procedimento.id}')" title="Visualizar">
                                 <i class="fas fa-eye"></i>
                             </button>
                             <button onclick="editarProcedimento('${procedimento.id}')" class="btn-edit" title="Editar">
