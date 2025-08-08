@@ -214,11 +214,12 @@ function populateUserData(user) {
         badgeText.textContent = 'Inativo';
     }
     
-    // Informações básicas
+    // Informações do usuário
     document.getElementById('infoNome').textContent = user.nome;
     document.getElementById('infoPosto').textContent = user.posto_graduacao;
     document.getElementById('infoMatricula').textContent = user.matricula;
     document.getElementById('infoEmail').textContent = user.email || 'Não informado';
+    document.getElementById('infoStatus').textContent = user.ativo ? 'Ativo' : 'Inativo';
     
     // Tipo de usuário
     let tipoTexto = '';
@@ -231,41 +232,9 @@ function populateUserData(user) {
     
     // Perfil (só para operadores)
     if (user.tipo === 'operador') {
-        document.getElementById('profileItem').style.display = 'block';
+        const profileRow = document.getElementById('profileItem');
+        profileRow.style.display = 'table-row';
         document.getElementById('infoPerfil').textContent = user.profile === 'admin' ? 'Administrador' : 'Comum';
-    }
-    
-    // Informações do sistema
-    document.getElementById('infoDataCriacao').textContent = formatDate(user.created_at);
-    document.getElementById('infoUltimaAtualizacao').textContent = formatDate(user.updated_at);
-    document.getElementById('infoStatus').textContent = user.ativo ? 'Ativo' : 'Inativo';
-    document.getElementById('infoId').textContent = user.id;
-    
-    // Observações específicas
-    updateObservations(user);
-}
-
-// Função para atualizar observações
-function updateObservations(user) {
-    const observacaoAcesso = document.getElementById('observacaoAcesso');
-    const emailObservation = document.getElementById('emailObservation');
-    
-    // Observação sobre acesso
-    if (user.tipo === 'operador') {
-        if (user.profile === 'admin') {
-            observacaoAcesso.textContent = 'Este operador possui acesso administrativo completo ao sistema, incluindo gerenciamento de usuários e configurações.';
-        } else {
-            observacaoAcesso.textContent = 'Este operador possui acesso comum ao sistema para registro e consulta de processos e procedimentos.';
-        }
-    } else {
-        observacaoAcesso.textContent = 'Este encarregado pode ser responsável por processos e procedimentos, mas não possui acesso direto ao sistema.';
-    }
-    
-    // Observação sobre email
-    if (!user.email) {
-        emailObservation.style.display = 'block';
-    } else {
-        emailObservation.style.display = 'none';
     }
 }
 
@@ -281,18 +250,7 @@ async function loadUserStats() {
             const statsCard = document.getElementById('statsCard');
             statsCard.style.display = 'block';
             
-            // Atualizar os números das estatísticas
-            document.getElementById('statProcessos').textContent = 
-                stats.encarregado_sindicancia + stats.encarregado_pads + stats.encarregado_ipm + 
-                stats.encarregado_atestado_origem + stats.encarregado_feito_preliminar;
-            
-            document.getElementById('statEscrivao').textContent = stats.escrivao;
-            
-            document.getElementById('statEnvolvido').textContent = 
-                stats.envolvido_sindicado + stats.envolvido_acusado + stats.envolvido_indiciado + 
-                stats.envolvido_investigado + stats.envolvido_acidentado;
-            
-            // Criar grid detalhado sempre, independente dos valores
+            // Criar grid detalhado com todas as estatísticas
             updateDetailedStats(stats);
         } else {
             console.warn('Erro ao carregar estatísticas:', result.erro);
