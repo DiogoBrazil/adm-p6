@@ -191,12 +191,29 @@ function populateProcedureData(data) {
     // Natureza e Solução
     document.getElementById('infoNaturezaProcedimento').textContent = data.natureza_procedimento || '-';
     document.getElementById('infoSolucaoFinal').textContent = data.solucao_final || '-';
+    // Novos campos: solução/penalidade e remessa/julgamento
+    document.getElementById('infoSolucaoTipo') && (document.getElementById('infoSolucaoTipo').textContent = data.solucao_tipo || '-');
+    // Mapear enum ASCII para rótulo com acento
+    const penalLabel = (function(v){
+        if (v === 'Prisao') return 'Prisão';
+        if (v === 'Detencao') return 'Detenção';
+        if (v === 'Repreensao') return 'Repreensão';
+        return v;
+    })(data.penalidade_tipo);
+    const penalTxt = (penalLabel ? penalLabel : '-') +
+        (data.penalidade_dias ? ` (${data.penalidade_dias} dia${Number(data.penalidade_dias) === 1 ? '' : 's'})` : '');
+    document.getElementById('infoPenalidade') && (document.getElementById('infoPenalidade').textContent = penalTxt.trim() || '-');
+    document.getElementById('infoDataRemessa') && (document.getElementById('infoDataRemessa').textContent = formatDate(data.data_remessa_encarregado) || '-');
+    document.getElementById('infoDataJulgamento') && (document.getElementById('infoDataJulgamento').textContent = formatDate(data.data_julgamento) || '-');
 
     // Carregar observações
     loadObservacoes(data);
 
     // Carregar transgressões
     loadTransgressoes(data);
+
+    // Carregar indícios
+    loadIndicios(data);
 
     // Esconder Natureza (Procedimento) quando for um Tipo Geral = processo
     try {
@@ -358,6 +375,70 @@ function loadTransgressoes(data) {
         return `<li><strong>RDPM</strong> - Inciso ${t.inciso || '-'}: ${t.texto || ''}${natureza}</li>`;
     }).join('');
     container.innerHTML = `<ul class="info-list">${itens}</ul>`;
+}
+
+// Função para carregar indícios
+function loadIndicios(data) {
+    const container = document.getElementById('indiciosContainer');
+    if (!container) return;
+
+    const indicios = data.indicios || {};
+    const crimes = Array.isArray(indicios.crimes) ? indicios.crimes : [];
+    const rdpm = Array.isArray(indicios.rdpm) ? indicios.rdpm : [];
+    const art29 = Array.isArray(indicios.art29) ? indicios.art29 : [];
+
+    const total = crimes.length + rdpm.length + art29.length;
+    if (total === 0) {
+        container.innerHTML = '<p class="empty-state">Nenhum indício registrado</p>';
+        return;
+    }
+
+    const sec = [];
+    if (crimes.length) {
+        const list = crimes.map(c => `<li><strong>${c.codigo || 'N/A'}</strong> - ${c.descricao || ''}</li>`).join('');
+        sec.push(`
+        <div class="info-section">
+            <h4><i class="fas fa-scale-balanced"></i> Crimes/Contravenções</h4>
+            <ul class="info-list">${list}</ul>
+        </div>`);
+    }
+    if (rdpm.length) {
+        const list = rdpm.map(r => `<li>Inciso ${r.inciso || '-'}: ${r.texto || ''}${r.natureza ? ` [${r.natureza}]` : ''}</li>`).join('');
+        sec.push(`
+        <div class="info-section">
+            <h4><i class="fas fa-gavel"></i> RDPM</h4>
+            <ul class="info-list">${list}</ul>
+        </div>`);
+    }
+    if (art29.length) {
+        const list = art29.map(a => `<li>Art. 29 - Inciso ${a.inciso || '-'}: ${a.texto || ''}</li>`).join('');
+        sec.push(`
+        <div class="info-section">
+            <h4><i class="fas fa-book"></i> Estatuto (Art. 29)</h4>
+            <ul class="info-list">${list}</ul>
+        </div>`);
+    }
+
+    // Categorias livres (JSON texto)
+    if (data.indicios_categorias) {
+        let catText = '';
+        try {
+            const cats = JSON.parse(data.indicios_categorias);
+            if (Array.isArray(cats)) catText = cats.join(', ');
+            else if (typeof cats === 'object') catText = Object.values(cats).join(', ');
+        } catch (_) {
+            catText = data.indicios_categorias;
+        }
+        if (catText && String(catText).trim() !== '') {
+            sec.push(`
+            <div class="info-section">
+                <h4><i class="fas fa-tags"></i> Categorias</h4>
+                <p>${catText}</p>
+            </div>`);
+        }
+    }
+
+    container.innerHTML = sec.join('');
 }
 
 // Função para formatar data

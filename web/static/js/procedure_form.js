@@ -12,6 +12,14 @@ let transgressoesSelecionadas = [];
 // Array para armazenar municípios/distritos
 let municipiosDisponiveis = [];
 
+// Novos: caches de opções de indícios
+let opcoesCrimes = [];
+let opcoesRDPM = [];
+let opcoesArt29 = [];
+
+// Suporte a modo edição
+let modoEdicaoId = null;
+
 // ============================================
 // FUNÇÕES DE BUSCA DE MUNICÍPIOS
 // ============================================
@@ -333,6 +341,417 @@ function showModalFeedback(message, type = 'error') {
             modal.style.display = 'none';
         }
     };
+}
+
+// ============================
+// Inicialização da página
+// ============================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Detectar modo edição por querystring ?id=
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        if (id) {
+            editandoProcedimento = { id };
+        }
+    } catch (e) { /* noop */ }
+
+    // Carregar usuário
+    await carregarUsuarioLogado();
+    // Carregar municípios
+    await carregarMunicipios();
+    // Carregar opções de indícios
+    await carregarOpcoesIndicios();
+
+    // Ativar controles pós-resumo (remessa/julgamento/solução/indícios)
+    wireNovosControlesPosResumo();
+
+    // Se for edição, preencher formulário
+    if (editandoProcedimento && editandoProcedimento.id) {
+        await preencherFormularioEdicao(editandoProcedimento.id);
+    }
+});
+
+async function carregarOpcoesIndicios() {
+    try {
+        const crimesResp = await eel.listar_crimes_contravencoes()();
+        opcoesCrimes = (crimesResp?.crimes || crimesResp?.data || crimesResp?.dados || []).filter(c => c && (c.ativo === undefined || c.ativo === true));
+        const rdpmResp = await eel.listar_transgressoes()();
+        if (rdpmResp?.sucesso) opcoesRDPM = rdpmResp.transgressoes || rdpmResp.dados || [];
+        const artResp = await eel.listar_infracoes_estatuto_art29()();
+        opcoesArt29 = (artResp?.infracoes || artResp?.data || artResp?.dados || []).filter(a => a && (a.ativo === undefined || a.ativo === true));
+
+        // Inicializa chips/autocomplete para cada grupo
+        initChipsAutocomplete({
+            type: 'crimes',
+            inputId: 'indicios_crimes_input',
+            chipsId: 'indicios_crimes_chips',
+            dropdownId: 'indicios_crimes_dropdown',
+            options: opcoesCrimes,
+            optionText: (o) => {
+                const base = `${o.tipo || ''} ${o.dispositivo_legal || ''}${o.artigo ? ' art. ' + o.artigo : ''}`.trim();
+                const compl = [o.paragrafo, o.inciso, o.alinea].filter(Boolean).join(' ');
+                const desc = o.descricao_artigo ? ` - ${o.descricao_artigo}` : '';
+                return [base, compl].filter(Boolean).join(' ') + desc;
+            },
+            optionId: (o) => String(o.id)
+        });
+        initChipsAutocomplete({
+            type: 'rdpm',
+            inputId: 'indicios_rdpm_input',
+            chipsId: 'indicios_rdpm_chips',
+            dropdownId: 'indicios_rdpm_dropdown',
+            options: opcoesRDPM,
+            optionText: (o) => `Inciso ${o.inciso} - ${o.texto}`,
+            optionId: (o) => String(o.id)
+        });
+        initChipsAutocomplete({
+            type: 'art29',
+            inputId: 'indicios_art29_input',
+            chipsId: 'indicios_art29_chips',
+            dropdownId: 'indicios_art29_dropdown',
+            options: opcoesArt29,
+            optionText: (o) => `Inciso ${o.inciso} - ${o.texto}`,
+            optionId: (o) => String(o.id)
+        });
+    } catch (e) {
+        console.error('Erro ao carregar opções de indícios:', e);
+    }
+}
+// Helper para renderizar chips após prefill
+function renderSelectedChips(type, chipsId) {
+    const chips = document.getElementById(chipsId);
+    if (!chips) return;
+    chips.innerHTML = '';
+    for (const [id, label] of selectedChips[type]) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = label;
+        const rm = document.createElement('span');
+        rm.className = 'remove';
+        rm.textContent = '×';
+        rm.onclick = () => {
+            selectedChips[type].delete(id);
+            renderSelectedChips(type, chipsId);
+        };
+        chip.appendChild(rm);
+        chips.appendChild(chip);
+    }
+}
+
+
+// Estado dos chips selecionados
+const selectedChips = {
+    crimes: new Map(), // id -> label
+    rdpm: new Map(),
+    art29: new Map(),
+};
+
+function initChipsAutocomplete({ type, inputId, chipsId, dropdownId, options, optionText, optionId }) {
+    const input = document.getElementById(inputId);
+    const chips = document.getElementById(chipsId);
+    const dropdown = document.getElementById(dropdownId);
+    if (!input || !chips || !dropdown) return;
+
+    function renderChips() {
+        chips.innerHTML = '';
+        for (const [id, label] of selectedChips[type]) {
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.textContent = label;
+            const rm = document.createElement('span');
+            rm.className = 'remove';
+            rm.textContent = '×';
+            rm.onclick = () => {
+                selectedChips[type].delete(id);
+                renderChips();
+            };
+            chip.appendChild(rm);
+            chips.appendChild(chip);
+        }
+    }
+
+    function openDropdown() {
+        const q = (input.value || '').toLowerCase();
+        const filtered = (options || []).filter(o => optionText(o).toLowerCase().includes(q));
+        dropdown.innerHTML = '';
+        if (filtered.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        filtered.slice(0, 100).forEach(o => {
+            const id = optionId(o);
+            const label = optionText(o);
+            // Skip if already selected
+            if (selectedChips[type].has(id)) return;
+            const item = document.createElement('div');
+            item.className = 'chips-item';
+            item.textContent = label;
+            item.onclick = () => {
+                selectedChips[type].set(id, label);
+                input.value = '';
+                dropdown.style.display = 'none';
+                renderChips();
+                input.focus();
+            };
+            dropdown.appendChild(item);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    // Events
+    input.addEventListener('focus', openDropdown);
+    input.addEventListener('input', openDropdown);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dropdown.style.display = 'none';
+        if (e.key === 'Backspace' && input.value === '' && selectedChips[type].size > 0) {
+            // Remove last chip
+            const lastKey = Array.from(selectedChips[type].keys()).pop();
+            selectedChips[type].delete(lastKey);
+            renderChips();
+        }
+    });
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && e.target !== input) dropdown.style.display = 'none';
+    });
+
+    renderChips();
+}
+
+// Ligações e lógica dos novos controles após o resumo dos fatos
+function wireNovosControlesPosResumo() {
+    const chkRemessa = document.getElementById('chk_remessa');
+    const groupRemessa = document.getElementById('group_remessa');
+    const tipoGeral = document.getElementById('tipo_geral');
+    const chkJulgado = document.getElementById('chk_julgado');
+    const groupChkJulgado = document.getElementById('group_chk_julgado');
+    const groupJulgamento = document.getElementById('group_julgamento');
+    const chkSolucao = document.getElementById('chk_solucao');
+    const groupSolucaoSelect = document.getElementById('group_solucao_select');
+    const selSolucao = document.getElementById('solucao_tipo');
+    const groupIndCats = document.getElementById('group_indicios_categorias');
+    const selIndCats = document.getElementById('indicios_categorias_select');
+    const hiddenIndCats = document.getElementById('indicios_categorias');
+    const groupIndCrimes = document.getElementById('group_indicios_crimes');
+    const groupIndTransgTipo = document.getElementById('group_indicios_transg_tipo');
+    const groupIndRDPM = document.getElementById('group_indicios_rdpm');
+    const groupIndArt29 = document.getElementById('group_indicios_art29');
+    const selIndTransgTipo = document.getElementById('indicios_transg_tipo');
+    const penalGroup = document.getElementById('group_penalidade');
+    const penalDiasGroup = document.getElementById('group_penalidade_dias');
+
+    const isProcesso = () => (tipoGeral?.value || '').toLowerCase() === 'processo';
+    const isProcedimento = () => (tipoGeral?.value || '').toLowerCase() === 'procedimento';
+
+    function popularOpcoesSolucao() {
+        if (!selSolucao) return;
+        const prev = selSolucao.value;
+        selSolucao.innerHTML = '';
+        const base = [{ v: '', t: 'Selecione...' }];
+        const optsProc = [ { v: 'Punido', t: 'Punido' }, { v: 'Absolvido', t: 'Absolvido' }, { v: 'Arquivado', t: 'Arquivado' } ];
+        const optsProced = [ { v: 'Homologado', t: 'Homologado' }, { v: 'Avocado', t: 'Avocado' }, { v: 'Arquivado', t: 'Arquivado' } ];
+        const arr = isProcesso() ? optsProc : optsProced;
+        [...base, ...arr].forEach(o => {
+            const op = document.createElement('option');
+            op.value = o.v; op.textContent = o.t; selSolucao.appendChild(op);
+        });
+        if ([...selSolucao.options].some(o => o.value === prev)) selSolucao.value = prev;
+    }
+
+    function refreshJulgamentoVisibility() {
+        if (isProcesso() && chkRemessa?.checked) {
+            groupChkJulgado.style.display = '';
+            groupJulgamento.style.display = chkJulgado?.checked ? '' : 'none';
+        } else {
+            groupChkJulgado.style.display = 'none';
+            groupJulgamento.style.display = 'none';
+            if (chkJulgado) chkJulgado.checked = false;
+        }
+    }
+
+    function refreshSolucaoVisibility() {
+        const active = chkSolucao?.checked;
+        groupSolucaoSelect.style.display = active ? '' : 'none';
+        popularOpcoesSolucao();
+
+        const sol = selSolucao.value;
+        const showIndCats = active && isProcedimento() && (sol === 'Homologado' || sol === 'Avocado');
+        groupIndCats.style.display = showIndCats ? '' : 'none';
+
+        const cats = Array.from(document.getElementById('indicios_categorias_select')?.selectedOptions || []).map(o => o.value);
+        const hasCrime = cats.includes('Indícios de crime comum') || cats.includes('Indícios de crime militar');
+        const hasTransg = cats.includes('Indícios de transgressão disciplinar');
+        groupIndCrimes.style.display = showIndCats && hasCrime ? '' : 'none';
+        groupIndTransgTipo.style.display = showIndCats && hasTransg ? '' : 'none';
+        const t = selIndTransgTipo?.value || 'rdpm';
+        groupIndRDPM.style.display = showIndCats && hasTransg && t === 'rdpm' ? '' : 'none';
+        groupIndArt29.style.display = showIndCats && hasTransg && t === 'art29' ? '' : 'none';
+
+        // Processo Punido => penalidade
+        const showPenal = active && isProcesso() && sol === 'Punido';
+        penalGroup.style.display = showPenal ? '' : 'none';
+    const pSel = document.getElementById('penalidade_tipo')?.value || '';
+    // Dias apenas para Prisao/Detencao
+    penalDiasGroup.style.display = showPenal && (pSel === 'Prisao' || pSel === 'Detencao') ? '' : 'none';
+    }
+
+    // Eventos
+    tipoGeral?.addEventListener('change', () => {
+        popularOpcoesSolucao();
+        refreshJulgamentoVisibility();
+        refreshSolucaoVisibility();
+    }, { passive: true });
+    chkRemessa?.addEventListener('change', () => {
+        groupRemessa.style.display = chkRemessa.checked ? '' : 'none';
+        refreshJulgamentoVisibility();
+    });
+    chkJulgado?.addEventListener('change', refreshJulgamentoVisibility);
+    chkSolucao?.addEventListener('change', refreshSolucaoVisibility);
+    selSolucao?.addEventListener('change', refreshSolucaoVisibility);
+    selIndTransgTipo?.addEventListener('change', refreshSolucaoVisibility);
+    document.getElementById('penalidade_tipo')?.addEventListener('change', refreshSolucaoVisibility);
+    // sincronizar categorias selecionadas no hidden
+    document.getElementById('indicios_categorias_select')?.addEventListener('change', () => {
+        const vals = Array.from(document.getElementById('indicios_categorias_select').selectedOptions).map(o => o.value);
+        hiddenIndCats.value = JSON.stringify(vals);
+        refreshSolucaoVisibility();
+    });
+
+    // Remove antiga lógica de filtro de selects
+
+    // Estado inicial
+    groupRemessa.style.display = chkRemessa?.checked ? '' : 'none';
+    refreshJulgamentoVisibility();
+    popularOpcoesSolucao();
+    groupSolucaoSelect.style.display = chkSolucao?.checked ? '' : 'none';
+    refreshSolucaoVisibility();
+}
+
+function popularSelect(selectId, lista, mapFn) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '';
+    (lista || []).forEach((item) => {
+        const mapped = mapFn(item);
+        const opt = document.createElement('option');
+        opt.value = String(mapped.value);
+        opt.textContent = mapped.text;
+        sel.appendChild(opt);
+    });
+}
+
+async function preencherFormularioEdicao(id) {
+    try {
+        const data = await eel.obter_processo(id)();
+        if (!data) return;
+        // Preencher campos básicos já existentes
+        document.getElementById('tipo_geral').value = data.tipo_geral || '';
+        if (data.tipo_geral === 'processo') {
+            document.getElementById('group_tipo_processo').style.display = '';
+            document.getElementById('tipo_processo').value = data.tipo_detalhe || '';
+        } else if (data.tipo_geral === 'procedimento') {
+            document.getElementById('group_tipo_procedimento').style.display = '';
+            document.getElementById('tipo_procedimento').value = data.tipo_detalhe || '';
+        }
+        document.getElementById('documento_iniciador').value = data.documento_iniciador || '';
+        document.getElementById('processo_sei').value = data.processo_sei || '';
+        document.getElementById('local_origem').value = data.local_origem || '';
+        document.getElementById('local_fatos').value = data.local_fatos || '';
+        document.getElementById('data_instauracao').value = data.data_instauracao || '';
+        document.getElementById('data_recebimento').value = data.data_recebimento || '';
+        document.getElementById('escrivao_id').value = data.escrivao_id || '';
+        document.getElementById('status_pm').value = data.status_pm || '';
+        document.getElementById('nome_pm').value = data.nome_pm_id || '';
+        document.getElementById('nome_vitima').value = data.nome_vitima || '';
+        document.getElementById('natureza_procedimento').value = data.natureza_procedimento || '';
+        document.getElementById('resumo_fatos').value = data.resumo_fatos || '';
+        document.getElementById('numero_portaria').value = data.numero_portaria || '';
+        document.getElementById('numero_memorando').value = data.numero_memorando || '';
+        document.getElementById('numero_feito').value = data.numero_feito || '';
+        document.getElementById('numero_rgf').value = data.numero_rgf || '';
+        document.getElementById('numero_controle').value = data.numero_controle || '';
+        document.getElementById('concluido').checked = !!data.concluido;
+        document.getElementById('data_conclusao').value = data.data_conclusao || '';
+        document.getElementById('solucao_final').value = data.solucao_final || '';
+
+        // Novos campos (UI pós-resumo)
+        if (data.data_remessa_encarregado) {
+            const chk = document.getElementById('chk_remessa');
+            if (chk) chk.checked = true;
+            const dt = document.getElementById('data_remessa_encarregado');
+            if (dt) dt.value = data.data_remessa_encarregado;
+        }
+        if (data.data_julgamento) {
+            const reveal = document.getElementById('group_chk_julgado');
+            if (reveal) reveal.style.display = '';
+            const chk = document.getElementById('chk_julgado');
+            if (chk) chk.checked = true;
+            const dt = document.getElementById('data_julgamento');
+            if (dt) dt.value = data.data_julgamento;
+        }
+        const solSel = document.getElementById('solucao_tipo');
+        if (solSel) solSel.value = data.solucao_tipo || '';
+        const penSel = document.getElementById('penalidade_tipo');
+        if (penSel) {
+            let val = data.penalidade_tipo || '';
+            // Normalizar valores legados com acento para os valores do enum do banco
+            if (val === 'Prisão') val = 'Prisao';
+            if (val === 'Detenção') val = 'Detencao';
+            if (val === 'Repreensão') val = 'Repreensao';
+            penSel.value = val;
+        }
+        if (document.getElementById('penalidade_dias')) {
+            document.getElementById('penalidade_dias').value = (data.penalidade_dias != null ? String(data.penalidade_dias) : '');
+        }
+        if (data.solucao_tipo) {
+            const chkSol = document.getElementById('chk_solucao');
+            if (chkSol) chkSol.checked = true;
+        }
+        // categorias: aceitar array JSON ou string
+        const hid = document.getElementById('indicios_categorias');
+        const selCats = document.getElementById('indicios_categorias_select');
+        if (hid && selCats && data.indicios_categorias) {
+            let arr = null;
+            try { const parsed = JSON.parse(data.indicios_categorias); if (Array.isArray(parsed)) arr = parsed; } catch {}
+            if (!arr) {
+                // tentar mapear single string para seleção
+                arr = [data.indicios_categorias].filter(Boolean);
+            }
+            if (arr) {
+                Array.from(selCats.options).forEach(o => { o.selected = arr.includes(o.value); });
+                hid.value = JSON.stringify(arr);
+            }
+        }
+
+        // Prefill chips selecionados
+            if (data.indicios) {
+                (data.indicios.crimes || []).forEach(it => {
+                    const base = `${it.tipo || ''} ${it.dispositivo_legal || ''}${it.artigo ? ' art. ' + it.artigo : ''}`.trim();
+                    const compl = [it.paragrafo, it.inciso, it.alinea].filter(Boolean).join(' ');
+                    const desc = it.descricao_artigo ? ` - ${it.descricao_artigo}` : '';
+                    selectedChips.crimes.set(String(it.id), ([base, compl].filter(Boolean).join(' ') + desc));
+                });
+                (data.indicios.rdpm || []).forEach(it => selectedChips.rdpm.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`));
+                (data.indicios.art29 || []).forEach(it => selectedChips.art29.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`));
+                // Renderizar chips agora
+                renderSelectedChips('crimes', 'indicios_crimes_chips');
+                renderSelectedChips('rdpm', 'indicios_rdpm_chips');
+                renderSelectedChips('art29', 'indicios_art29_chips');
+            }
+    // Atualizar visibilidades recém-incluídas
+    wireNovosControlesPosResumo();
+    } catch (e) {
+        console.error('Erro ao preencher formulário de edição:', e);
+    }
+}
+
+function marcarSelecoesIndicios(selectId, itens, getId) {
+    const sel = document.getElementById(selectId);
+    if (!sel || !itens) return;
+    const ids = new Set((itens || []).map(getId));
+    Array.from(sel.options).forEach(opt => {
+        opt.selected = ids.has(String(opt.value));
+    });
 }
 
 // Função para carregar dados do usuário logado
@@ -975,7 +1394,7 @@ function updateConclusaoLogic() {
     const groupDataConclusao = document.getElementById('group_data_conclusao');
     const dataConclusao = document.getElementById('data_conclusao');
     
-    // Mostrar campo de solução final se checkbox marcado
+    // Não exibir/obrigar solução final no concluído (apenas data)
     const groupSolucaoFinal = document.getElementById('group_solucao_final');
     const solucaoFinal = document.getElementById('solucao_final');
     
@@ -991,14 +1410,9 @@ function updateConclusaoLogic() {
     }
     
     if (groupSolucaoFinal && solucaoFinal) {
-        if (concluidoChecked) {
-            groupSolucaoFinal.style.display = 'block';
-            solucaoFinal.setAttribute('required', 'required');
-        } else {
-            groupSolucaoFinal.style.display = 'none';
-            solucaoFinal.removeAttribute('required');
-            solucaoFinal.value = ''; // Limpar o valor
-        }
+        // Sempre oculto e não obrigatório
+        groupSolucaoFinal.style.display = 'none';
+        solucaoFinal.removeAttribute('required');
     }
 }
 
@@ -1291,7 +1705,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const groupDataConclusao = document.getElementById('group_data_conclusao');
         const dataConclusao = document.getElementById('data_conclusao');
         
-        // Mostrar campo de solução final se checkbox marcado
+        // Não exibir/obrigar solução final no concluído (apenas data)
         const groupSolucaoFinal = document.getElementById('group_solucao_final');
         const solucaoFinal = document.getElementById('solucao_final');
         
@@ -1307,14 +1721,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         if (groupSolucaoFinal && solucaoFinal) {
-            if (concluidoChecked) {
-                groupSolucaoFinal.style.display = 'block';
-                solucaoFinal.setAttribute('required', 'required');
-            } else {
-                groupSolucaoFinal.style.display = 'none';
-                solucaoFinal.removeAttribute('required');
-                solucaoFinal.value = ''; // Limpar o valor
-            }
+            groupSolucaoFinal.style.display = 'none';
+            solucaoFinal.removeAttribute('required');
         }
     }
 
@@ -1523,6 +1931,21 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         // Coletar PMs envolvidos para procedimentos
         const pmsParaEnvio = tipo_geral === 'procedimento' ? obterTodosPmsEnvolvidos() : null;
         
+        // Coletar novos campos (migração 014)
+        const data_remessa_encarregado = document.getElementById('data_remessa_encarregado')?.value || null;
+        const data_julgamento = document.getElementById('data_julgamento')?.value || null;
+        const solucao_tipo = document.getElementById('solucao_tipo')?.value || null;
+        const penalidade_tipo = document.getElementById('penalidade_tipo')?.value || null;
+        const penalidade_dias_raw = document.getElementById('penalidade_dias')?.value || null;
+        const penalidade_dias = penalidade_dias_raw && penalidade_dias_raw !== '' ? parseInt(penalidade_dias_raw, 10) : null;
+        const indicios_categorias = document.getElementById('indicios_categorias')?.value || null;
+
+        // Ler seleções múltiplas
+    // Coletar IDs dos chips selecionados
+    const indicios_crimes = Array.from(selectedChips.crimes.keys());
+    const indicios_rdpm = Array.from(selectedChips.rdpm.keys());
+    const indicios_art29 = Array.from(selectedChips.art29.keys());
+
         let result;
         if (editandoProcedimento) {
             // Modo edição
@@ -1555,7 +1978,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 data_conclusao,
                 solucao_final,
                 pmsParaEnvio,
-                transgressoes_ids
+                transgressoes_ids,
+                // novos campos
+                data_remessa_encarregado,
+                data_julgamento,
+                solucao_tipo,
+                penalidade_tipo,
+                penalidade_dias,
+                indicios_categorias,
+                indicios_crimes,
+                indicios_rdpm,
+                indicios_art29
             )();
         } else {
             // Modo criação
@@ -1587,7 +2020,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 data_conclusao,
                 solucao_final,
                 pmsParaEnvio,
-                transgressoes_ids
+                transgressoes_ids,
+                // novos campos
+                data_remessa_encarregado,
+                data_julgamento,
+                solucao_tipo,
+                penalidade_tipo,
+                penalidade_dias,
+                indicios_categorias,
+                indicios_crimes,
+                indicios_rdpm,
+                indicios_art29
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');

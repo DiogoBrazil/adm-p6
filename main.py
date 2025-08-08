@@ -1008,7 +1008,11 @@ def registrar_processo(
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
+    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None,
+    # Novos campos (Migração 014)
+    data_remessa_encarregado=None, data_julgamento=None, solucao_tipo=None,
+    penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
+    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -1057,6 +1061,57 @@ def registrar_processo(
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Garantir existência das novas colunas/tabelas (idempotente)
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN data_remessa_encarregado DATE")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN data_julgamento DATE")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN solucao_tipo TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN penalidade_tipo TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN penalidade_dias INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN indicios_categorias TEXT")
+        except Exception:
+            pass
+        # Tabelas de associação para indícios
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS procedimentos_indicios_crimes (
+                id TEXT PRIMARY KEY,
+                procedimento_id TEXT NOT NULL,
+                crime_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS procedimentos_indicios_rdpm (
+                id TEXT PRIMARY KEY,
+                procedimento_id TEXT NOT NULL,
+                transgressao_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS procedimentos_indicios_art29 (
+                id TEXT PRIMARY KEY,
+                procedimento_id TEXT NOT NULL,
+                infracao_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Verificações específicas antes da inserção para mensagens de erro mais precisas
         print(f"🔍 Verificando conflitos para: número={numero}, tipo={tipo_detalhe}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
         print(f"📅 Data instauração recebida: {data_instauracao}")
@@ -1094,6 +1149,23 @@ def registrar_processo(
 
         print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
 
+        # Normalização defensiva de penalidade_tipo para atender o CHECK do banco
+        if penalidade_tipo:
+            mapping = {
+                'Prisão': 'Prisao', 'Prisao': 'Prisao',
+                'Detenção': 'Detencao', 'Detencao': 'Detencao',
+                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao'
+            }
+            penalidade_tipo = mapping.get(penalidade_tipo, penalidade_tipo)
+        # Se a solução não for Punido, limpar campos de penalidade
+        if (solucao_tipo or '').strip() != 'Punido':
+            penalidade_tipo = None
+            penalidade_dias = None
+        else:
+            # Se penalidade não exigir dias, garante None
+            if penalidade_tipo not in ('Prisao', 'Detencao'):
+                penalidade_dias = None
+
         # Gerar ID único para o processo/procedimento
         processo_id = str(uuid.uuid4())
 
@@ -1103,14 +1175,24 @@ def registrar_processo(
                 local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-                concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
+                data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?
+            )
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
             local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao
+            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
+            data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -1124,6 +1206,33 @@ def registrar_processo(
                         INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1, status_pm_env))
+
+        # Persistir indícios (se fornecidos)
+        def _insert_indicios(lista_ids, table_name, col_name):
+            if not lista_ids:
+                return
+            # aceitar string JSON também
+            ids = lista_ids
+            if isinstance(lista_ids, str):
+                try:
+                    ids = json.loads(lista_ids)
+                except Exception:
+                    ids = []
+            # normalizar para lista simples
+            if isinstance(ids, dict):
+                ids = list(ids.values())
+            for raw_id in ids:
+                if raw_id is None:
+                    continue
+                val = str(raw_id)
+                cursor.execute(
+                    f"INSERT INTO {table_name} (id, procedimento_id, {col_name}) VALUES (?, ?, ?)",
+                    (str(uuid.uuid4()), processo_id, val)
+                )
+
+        _insert_indicios(indicios_crimes, 'procedimentos_indicios_crimes', 'crime_id')
+        _insert_indicios(indicios_rdpm, 'procedimentos_indicios_rdpm', 'transgressao_id')
+        _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', 'infracao_id')
 
         conn.commit()
         conn.close()
@@ -1375,11 +1484,13 @@ def excluir_processo(processo_id):
 @eel.expose
 def obter_processo(processo_id):
     """Obtém dados de um processo específico para edição"""
+    import json
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
+
+        cursor.execute(
+            """
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
                 p.responsavel_id, p.responsavel_tipo,
@@ -1388,6 +1499,7 @@ def obter_processo(processo_id):
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
                 p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
                 -- Dados completos do responsável
                 COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
                 COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
@@ -1409,151 +1521,236 @@ def obter_processo(processo_id):
             LEFT JOIN operadores pm_o ON p.nome_pm_id = pm_o.id
             LEFT JOIN encarregados pm_e ON p.nome_pm_id = pm_e.id AND pm_o.id IS NULL
             WHERE p.id = ? AND p.ativo = 1
-        """, (processo_id,))
-        
+            """,
+            (processo_id,)
+        )
+
         processo = cursor.fetchone()
         conn.close()
-        
-        if processo:
-            # Formatar dados completos dos usuários
-            responsavel_completo = ""
-            if processo[29] and processo[30] and processo[8]:  # posto, matricula, nome
-                responsavel_completo = f"{processo[29]} {processo[30]} {processo[8]}".strip()
-            elif processo[8]:
-                responsavel_completo = processo[8]
-            
-            escrivao_completo = ""
-            if processo[31] and processo[32] and processo[33]:  # nome, posto, matricula
-                escrivao_completo = f"{processo[32]} {processo[33]} {processo[31]}".strip()
-            
-            pm_completo = ""
-            if processo[34] and processo[35] and processo[36]:  # nome, posto, matricula
-                pm_completo = f"{processo[35]} {processo[36]} {processo[34]}".strip()
-            
-            # Para procedimentos, buscar múltiplos PMs envolvidos
-            pms_envolvidos = []
-            if processo[2] == 'procedimento':  # tipo_geral
-                pms_envolvidos = buscar_pms_envolvidos(processo_id)
-            
-            # Processar transgressões (campo JSON) - suporta formato antigo e novo
-            transgressoes_selecionadas = []
-            if processo[28]:  # transgressoes_ids
-                try:
-                    import json
-                    transgressoes_data = json.loads(processo[28])
-                    
-                    if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
-                        conn2 = db_manager.get_connection()
-                        cursor2 = conn2.cursor()
-                        
-                        # Verificar se é formato novo (com natureza) ou antigo (só IDs)
-                        primeiro_item = transgressoes_data[0]
-                        
-                        if isinstance(primeiro_item, dict):
-                            # Formato novo: pode ser RDPM ou Art. 29
-                            for trans_data in transgressoes_data:
-                                tipo = trans_data.get('tipo', 'rdpm')  # padrão RDPM para compatibilidade
-                                
-                                if tipo == 'estatuto':
-                                    # Infração do Art. 29 com analogia RDPM
-                                    art29_id = trans_data.get('id')
-                                    analogia_data = trans_data.get('rdmp_analogia', {})
-                                    
-                                    # Buscar dados do Art. 29
-                                    cursor2.execute("SELECT id, inciso, texto FROM infracoes_estatuto_art29 WHERE id = ? AND ativo = 1", (art29_id,))
-                                    art29_trans = cursor2.fetchone()
-                                    
-                                    if art29_trans:
-                                        # Buscar dados completos da analogia RDPM
-                                        analogia_completa = analogia_data.copy()
-                                        if analogia_data.get('id'):
-                                            cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (analogia_data.get('id'),))
-                                            rdpm_trans = cursor2.fetchone()
-                                            if rdpm_trans:
-                                                analogia_completa.update({
-                                                    'inciso': rdpm_trans[1],
-                                                    'texto': rdpm_trans[2]
-                                                })
-                                        
-                                        transgressoes_selecionadas.append({
-                                            'id': art29_trans[0],
-                                            'inciso': art29_trans[1],
-                                            'texto': art29_trans[2],
-                                            'tipo': 'estatuto',
-                                            'rdmp_analogia': analogia_completa
-                                        })
-                                else:
-                                    # Infração do RDPM (formato novo)
-                                    trans_id = trans_data.get('id')
-                                    natureza = trans_data.get('natureza', 'leve')
-                                    
-                                    cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
-                                    trans = cursor2.fetchone()
-                                    if trans:
-                                        transgressoes_selecionadas.append({
-                                            'id': trans[0],
-                                            'inciso': trans[1],
-                                            'texto': trans[2],
-                                            'natureza': natureza,
-                                            'tipo': 'rdpm'
-                                        })
-                        else:
-                            # Formato antigo: ["8", "21", "31"] - buscar natureza na tabela (só RDPM)
-                            for trans_id in transgressoes_data:
-                                cursor2.execute("SELECT id, inciso, texto, gravidade FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+
+        if not processo:
+            return None
+
+        # Formatar dados completos dos usuários
+        responsavel_completo = ""
+        # indices: 35=resp_posto, 36=resp_matricula, 8=resp_nome
+        if processo[35] and processo[36] and processo[8]:
+            responsavel_completo = f"{processo[35]} {processo[36]} {processo[8]}".strip()
+        elif processo[8]:
+            responsavel_completo = processo[8]
+
+        escrivao_completo = ""
+        # indices: 38=esc_posto, 39=esc_matricula, 37=esc_nome
+        if processo[38] and processo[39] and processo[37]:
+            escrivao_completo = f"{processo[38]} {processo[39]} {processo[37]}".strip()
+
+        pm_completo = ""
+        # indices: 41=pm_posto, 42=pm_matricula, 40=pm_nome
+        if processo[41] and processo[42] and processo[40]:
+            pm_completo = f"{processo[41]} {processo[42]} {processo[40]}".strip()
+
+        # Para procedimentos, buscar múltiplos PMs envolvidos
+        pms_envolvidos = []
+        if processo[2] == 'procedimento':  # tipo_geral
+            pms_envolvidos = buscar_pms_envolvidos(processo_id)
+
+        # Processar transgressões (campo JSON) - suporta formato antigo e novo
+        transgressoes_selecionadas = []
+        if processo[28]:  # transgressoes_ids
+            try:
+                transgressoes_data = json.loads(processo[28])
+
+                if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
+                    conn2 = db_manager.get_connection()
+                    cursor2 = conn2.cursor()
+
+                    # Verificar se é formato novo (com natureza) ou antigo (só IDs)
+                    primeiro_item = transgressoes_data[0]
+
+                    if isinstance(primeiro_item, dict):
+                        # Formato novo: pode ser RDPM ou Art. 29
+                        for trans_data in transgressoes_data:
+                            tipo = trans_data.get('tipo', 'rdpm')  # padrão RDPM para compatibilidade
+
+                            if tipo == 'estatuto':
+                                # Infração do Art. 29 com analogia RDPM
+                                art29_id = trans_data.get('id')
+                                analogia_data = trans_data.get('rdmp_analogia', {})
+
+                                # Buscar dados do Art. 29
+                                cursor2.execute("SELECT id, inciso, texto FROM infracoes_estatuto_art29 WHERE id = ? AND ativo = 1", (art29_id,))
+                                art29_trans = cursor2.fetchone()
+
+                                if art29_trans:
+                                    # Buscar dados completos da analogia RDPM
+                                    analogia_completa = analogia_data.copy()
+                                    if analogia_data.get('id'):
+                                        cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (analogia_data.get('id'),))
+                                        rdpm_trans = cursor2.fetchone()
+                                        if rdpm_trans:
+                                            analogia_completa.update({
+                                                'inciso': rdpm_trans[1],
+                                                'texto': rdpm_trans[2]
+                                            })
+
+                                    transgressoes_selecionadas.append({
+                                        'id': art29_trans[0],
+                                        'inciso': art29_trans[1],
+                                        'texto': art29_trans[2],
+                                        'tipo': 'estatuto',
+                                        'rdmp_analogia': analogia_completa
+                                    })
+                            else:
+                                # Infração do RDPM (formato novo)
+                                trans_id = trans_data.get('id')
+                                natureza = trans_data.get('natureza', 'leve')
+
+                                cursor2.execute("SELECT id, inciso, texto FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
                                 trans = cursor2.fetchone()
                                 if trans:
                                     transgressoes_selecionadas.append({
                                         'id': trans[0],
                                         'inciso': trans[1],
                                         'texto': trans[2],
-                                        'natureza': trans[3],  # gravidade da tabela
+                                        'natureza': natureza,
                                         'tipo': 'rdpm'
                                     })
-                        
-                        conn2.close()
-                except (json.JSONDecodeError, TypeError) as e:
-                    print(f"Erro ao processar transgressões do processo {processo_id}: {e}")
-                    transgressoes_selecionadas = []
-            
-            return {
-                "id": processo[0],
-                "numero": processo[1],
-                "tipo_geral": processo[2],
-                "tipo_detalhe": processo[3],
-                "documento_iniciador": processo[4],
-                "processo_sei": processo[5],
-                "responsavel_id": processo[6],
-                "responsavel_tipo": processo[7],
-                "responsavel_nome": processo[8],
-                "responsavel_completo": responsavel_completo,
-                "local_origem": processo[9],
-                "local_fatos": processo[10],
-                "data_instauracao": processo[11],
-                "data_recebimento": processo[12],
-                "escrivao_id": processo[13],
-                "escrivao_completo": escrivao_completo,
-                "status_pm": processo[14],
-                "nome_pm_id": processo[15],
-                "pm_completo": pm_completo,
-                "pms_envolvidos": pms_envolvidos,
-                "nome_vitima": processo[16],
-                "natureza_processo": _determinar_natureza_processo(processo[17], transgressoes_selecionadas),
-                "natureza_procedimento": processo[18],
-                "resumo_fatos": processo[19],
-                "numero_portaria": processo[20],
-                "numero_memorando": processo[21],
-                "numero_feito": processo[22],
-                "numero_rgf": processo[23],
-                "numero_controle": processo[24],
-                "concluido": processo[25],
-                "data_conclusao": processo[26],
-                "solucao_final": processo[27],
-                "transgressoes_ids": processo[28],
-                "transgressoes_selecionadas": transgressoes_selecionadas
-            }
-        else:
-            return None
+                    else:
+                        # Formato antigo: ["8", "21", "31"] - buscar natureza na tabela (só RDPM)
+                        for trans_id in transgressoes_data:
+                            cursor2.execute("SELECT id, inciso, texto, gravidade FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                            trans = cursor2.fetchone()
+                            if trans:
+                                transgressoes_selecionadas.append({
+                                    'id': trans[0],
+                                    'inciso': trans[1],
+                                    'texto': trans[2],
+                                    'natureza': trans[3],  # gravidade da tabela
+                                    'tipo': 'rdpm'
+                                })
+
+                    conn2.close()
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Erro ao processar transgressões do processo {processo_id}: {e}")
+                transgressoes_selecionadas = []
+
+        # Carregar indícios associados
+        def _carregar_indicios(pid):
+            ind = {"crimes": [], "rdpm": [], "art29": []}
+            conn_i = db_manager.get_connection()
+            cur_i = conn_i.cursor()
+            # crimes_contravencoes
+            try:
+                cur_i.execute(
+                    """
+                    SELECT c.id, c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea
+                    FROM procedimentos_indicios_crimes pic
+                    JOIN crimes_contravencoes c ON c.id = pic.crime_id
+                    WHERE pic.procedimento_id = ?
+                    """,
+                    (pid,)
+                )
+                for row in cur_i.fetchall():
+                    ind["crimes"].append({
+                        "id": row[0],
+                        "tipo": row[1],
+                        "dispositivo_legal": row[2],
+                        "artigo": row[3],
+                        "descricao_artigo": row[4],
+                        "paragrafo": row[5] or "",
+                        "inciso": row[6] or "",
+                        "alinea": row[7] or ""
+                    })
+            except Exception:
+                pass
+            # rdpm
+            try:
+                cur_i.execute(
+                    """
+                    SELECT t.id, t.gravidade, t.inciso, t.texto
+                    FROM procedimentos_indicios_rdpm pir
+                    JOIN transgressoes t ON t.id = pir.transgressao_id
+                    WHERE pir.procedimento_id = ?
+                    """,
+                    (pid,)
+                )
+                for row in cur_i.fetchall():
+                    ind["rdpm"].append({
+                        "id": row[0],
+                        "gravidade": row[1],
+                        "inciso": row[2],
+                        "texto": row[3]
+                    })
+            except Exception:
+                pass
+            # art29
+            try:
+                cur_i.execute(
+                    """
+                    SELECT a.id, a.inciso, a.texto
+                    FROM procedimentos_indicios_art29 pia
+                    JOIN infracoes_estatuto_art29 a ON a.id = pia.infracao_id
+                    WHERE pia.procedimento_id = ?
+                    """,
+                    (pid,)
+                )
+                for row in cur_i.fetchall():
+                    ind["art29"].append({
+                        "id": row[0],
+                        "inciso": row[1],
+                        "texto": row[2]
+                    })
+            except Exception:
+                pass
+            conn_i.close()
+            return ind
+
+        indicios = _carregar_indicios(processo_id)
+
+        return {
+            "id": processo[0],
+            "numero": processo[1],
+            "tipo_geral": processo[2],
+            "tipo_detalhe": processo[3],
+            "documento_iniciador": processo[4],
+            "processo_sei": processo[5],
+            "responsavel_id": processo[6],
+            "responsavel_tipo": processo[7],
+            "responsavel_nome": processo[8],
+            "responsavel_completo": responsavel_completo,
+            "local_origem": processo[9],
+            "local_fatos": processo[10],
+            "data_instauracao": processo[11],
+            "data_recebimento": processo[12],
+            "escrivao_id": processo[13],
+            "escrivao_completo": escrivao_completo,
+            "status_pm": processo[14],
+            "nome_pm_id": processo[15],
+            "pm_completo": pm_completo,
+            "pms_envolvidos": pms_envolvidos,
+            "nome_vitima": processo[16],
+            "natureza_processo": _determinar_natureza_processo(processo[17], transgressoes_selecionadas),
+            "natureza_procedimento": processo[18],
+            "resumo_fatos": processo[19],
+            "numero_portaria": processo[20],
+            "numero_memorando": processo[21],
+            "numero_feito": processo[22],
+            "numero_rgf": processo[23],
+            "numero_controle": processo[24],
+            "concluido": processo[25],
+            "data_conclusao": processo[26],
+            "solucao_final": processo[27],
+            "transgressoes_ids": processo[28],
+            "transgressoes_selecionadas": transgressoes_selecionadas,
+            # Novos campos
+            "data_remessa_encarregado": processo[29],
+            "data_julgamento": processo[30],
+            "solucao_tipo": processo[31],
+            "penalidade_tipo": processo[32],
+            "penalidade_dias": processo[33],
+            "indicios_categorias": processo[34],
+            "indicios": indicios
+        }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
         return None
@@ -1575,7 +1772,8 @@ def obter_procedimento_completo(procedimento_id):
                 p.responsavel_id, p.escrivao_id, p.resumo_fatos,
                 p.numero_controle, p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
                 p.natureza_processo, p.natureza_procedimento, p.solucao_final,
-                p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids
+                p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias
             FROM processos_procedimentos p
             WHERE p.id = ? AND p.ativo = 1
             """,
@@ -1597,6 +1795,10 @@ def obter_procedimento_completo(procedimento_id):
         trans_sel = []
         if isinstance(trans_info, dict) and trans_info.get('transgressoes_selecionadas') is not None:
             trans_sel = trans_info.get('transgressoes_selecionadas')
+
+        # Carregar indícios já usando a função obter_processo para consolidar
+        proc_edicao = obter_processo(procedimento_id) or {}
+        indicios = proc_edicao.get('indicios') if isinstance(proc_edicao, dict) else None
 
         procedimento = {
             "id": row[0],
@@ -1628,7 +1830,15 @@ def obter_procedimento_completo(procedimento_id):
             "updated_at": row[26],
             "ano_instauracao": row[27],
             "transgressoes_ids": row[28],
-            "transgressoes_selecionadas": trans_sel
+            "transgressoes_selecionadas": trans_sel,
+            # Novos campos (Migração 014)
+            "data_remessa_encarregado": row[29],
+            "data_julgamento": row[30],
+            "solucao_tipo": row[31],
+            "penalidade_tipo": row[32],
+            "penalidade_dias": row[33],
+            "indicios_categorias": row[34],
+            "indicios": indicios
         }
 
         return {"sucesso": True, "procedimento": procedimento}
@@ -1780,7 +1990,11 @@ def atualizar_processo(
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
     nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
-    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None
+    concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None,
+    # Novos campos (Migração 014)
+    data_remessa_encarregado=None, data_julgamento=None, solucao_tipo=None,
+    penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
+    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -1800,7 +2014,7 @@ def atualizar_processo(
                 ano_instauracao = str(data_instauracao)[:4]
             except:
                 ano_instauracao = None
-            
+        
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
@@ -1832,22 +2046,44 @@ def atualizar_processo(
                 tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
                 return {"sucesso": False, "mensagem": f"Já existe um(a) {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no(a) {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
         
-        cursor.execute("""
+        # Normalização defensiva antes do UPDATE
+        if penalidade_tipo:
+            mapping = {
+                'Prisão': 'Prisao', 'Prisao': 'Prisao',
+                'Detenção': 'Detencao', 'Detencao': 'Detencao',
+                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao'
+            }
+            penalidade_tipo = mapping.get(penalidade_tipo, penalidade_tipo)
+        if (solucao_tipo or '').strip() != 'Punido':
+            penalidade_tipo = None
+            penalidade_dias = None
+        else:
+            if penalidade_tipo not in ('Prisao', 'Detencao'):
+                penalidade_dias = None
+
+        cursor.execute(
+            """
             UPDATE processos_procedimentos 
             SET numero = ?, tipo_geral = ?, tipo_detalhe = ?, documento_iniciador = ?, 
                 processo_sei = ?, responsavel_id = ?, responsavel_tipo = ?,
                 local_origem = ?, local_fatos = ?, data_instauracao = ?, data_recebimento = ?, escrivao_id = ?, status_pm = ?, nome_pm_id = ?,
                 nome_vitima = ?, natureza_processo = ?, natureza_procedimento = ?, resumo_fatos = ?,
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
-                concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?, updated_at = CURRENT_TIMESTAMP
+                concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?,
+                data_remessa_encarregado = ?, data_julgamento = ?, solucao_tipo = ?, penalidade_tipo = ?, penalidade_dias = ?, indicios_categorias = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (
-            numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
-            local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
-            nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
-            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
-            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao, processo_id
-        ))
+            """,
+            (
+                numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+                local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+                nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
+                numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
+                concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
+                data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
+                processo_id
+            )
+        )
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela
         if tipo_geral == 'procedimento' and pms_envolvidos is not None:
@@ -1865,6 +2101,50 @@ def atualizar_processo(
                         INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1, status_pm_env))
+
+        # Substituir indícios (se fornecidos)
+        def _parse_ids(lista_ids):
+            if not lista_ids:
+                return []
+            ids = lista_ids
+            if isinstance(lista_ids, str):
+                try:
+                    import json as _json
+                    ids = _json.loads(lista_ids)
+                except Exception:
+                    ids = []
+            if isinstance(ids, dict):
+                ids = list(ids.values())
+            return [str(x) for x in ids if x is not None]
+
+        try:
+            # Limpar associações existentes
+            cursor.execute("DELETE FROM procedimentos_indicios_crimes WHERE procedimento_id = ?", (processo_id,))
+            cursor.execute("DELETE FROM procedimentos_indicios_rdpm WHERE procedimento_id = ?", (processo_id,))
+            cursor.execute("DELETE FROM procedimentos_indicios_art29 WHERE procedimento_id = ?", (processo_id,))
+
+            crimes_ids = _parse_ids(indicios_crimes)
+            rdpm_ids = _parse_ids(indicios_rdpm)
+            art29_ids = _parse_ids(indicios_art29)
+
+            for cid in crimes_ids:
+                cursor.execute(
+                    "INSERT INTO procedimentos_indicios_crimes (id, procedimento_id, crime_id) VALUES (?, ?, ?)",
+                    (str(uuid.uuid4()), processo_id, cid)
+                )
+            for tid in rdpm_ids:
+                cursor.execute(
+                    "INSERT INTO procedimentos_indicios_rdpm (id, procedimento_id, transgressao_id) VALUES (?, ?, ?)",
+                    (str(uuid.uuid4()), processo_id, tid)
+                )
+            for aid in art29_ids:
+                cursor.execute(
+                    "INSERT INTO procedimentos_indicios_art29 (id, procedimento_id, infracao_id) VALUES (?, ?, ?)",
+                    (str(uuid.uuid4()), processo_id, aid)
+                )
+        except Exception as _e:
+            # Não bloquear a atualização toda por falha de indícios; apenas logar
+            print(f"Aviso: falha ao atualizar indícios do procedimento {processo_id}: {_e}")
 
         conn.commit()
         conn.close()

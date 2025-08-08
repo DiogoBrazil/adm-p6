@@ -185,6 +185,7 @@
                     <label for="data_recebimento">Data de Recebimento pelo Encarregado *</label>
                     <input type="date" id="data_recebimento" required>
                 </div>
+                <!-- As datas de remessa/julgamento foram movidas para após o resumo dos fatos -->
 
                 <!-- Encarregado -->
                 <div class="form-group">
@@ -343,6 +344,106 @@
                     <textarea id="resumo_fatos" rows="4"></textarea>
                 </div>
 
+                <!-- Complementos pós-resumo: Remessa, Julgamento e Solução -->
+                <!-- Remessa -->
+                <div class="form-group">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="chk_remessa">
+                        <label for="chk_remessa">Informar remessa ao encarregado</label>
+                    </div>
+                </div>
+                <div class="form-group" id="group_remessa" style="display:none;">
+                    <label for="data_remessa_encarregado">Data de Remessa ao Encarregado</label>
+                    <input type="date" id="data_remessa_encarregado">
+                </div>
+
+                <!-- Julgamento (apenas para processo e após remessa) -->
+                <div class="form-group" id="group_chk_julgado" style="display:none;">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="chk_julgado">
+                        <label for="chk_julgado">Informar julgamento</label>
+                    </div>
+                </div>
+                <div class="form-group" id="group_julgamento" style="display:none;">
+                    <label for="data_julgamento">Data de Julgamento</label>
+                    <input type="date" id="data_julgamento">
+                </div>
+
+                <!-- Solução -->
+                <div class="form-group">
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="chk_solucao">
+                        <label for="chk_solucao">Informar solução</label>
+                    </div>
+                </div>
+                <div class="form-group" id="group_solucao_select" style="display:none;">
+                    <label for="solucao_tipo">Tipo de Solução</label>
+                    <select id="solucao_tipo"></select>
+                </div>
+
+                <!-- Campos condicionais de solução para Procedimento -->
+                <div class="form-group" id="group_indicios_categorias" style="display:none;">
+                    <label for="indicios_categorias_select">Categorias de Indícios</label>
+                    <select id="indicios_categorias_select" multiple size="4" style="width:100%;">
+                        <option value="Indícios de crime comum">Indícios de crime comum</option>
+                        <option value="Indícios de crime militar">Indícios de crime militar</option>
+                        <option value="Indícios de transgressão disciplinar">Indícios de transgressão disciplinar</option>
+                        <option value="Não houve indícios, seja de transgressão ou crime">Não houve indícios, seja de transgressão ou crime</option>
+                    </select>
+                    <small class="form-help">Segure Ctrl (ou Cmd) para selecionar múltiplos itens.</small>
+                    <input type="hidden" id="indicios_categorias" value="">
+                </div>
+
+                <!-- Indícios: Crimes/Contravenções (com busca) -->
+                <div class="form-group" id="group_indicios_crimes" style="display:none;">
+                    <label for="indicios_crimes_input">Crimes/Contravenções</label>
+                    <div class="chips-input">
+                        <div id="indicios_crimes_chips" class="chips-container"></div>
+                        <input type="text" id="indicios_crimes_input" placeholder="Clique e digite para filtrar..." autocomplete="off">
+                        <div id="indicios_crimes_dropdown" class="chips-dropdown" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- Indícios: Transgressão (RDPM ou Estatuto) -->
+                <div class="form-group" id="group_indicios_transg_tipo" style="display:none;">
+                    <label for="indicios_transg_tipo">Tipo de transgressão</label>
+                    <select id="indicios_transg_tipo">
+                        <option value="rdpm">RDPM</option>
+                        <option value="art29">Estatuto (Art. 29)</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group_indicios_rdpm" style="display:none;">
+                    <label for="indicios_rdpm_input">RDPM - Incisos</label>
+                    <div class="chips-input">
+                        <div id="indicios_rdpm_chips" class="chips-container"></div>
+                        <input type="text" id="indicios_rdpm_input" placeholder="Clique e digite para filtrar..." autocomplete="off">
+                        <div id="indicios_rdpm_dropdown" class="chips-dropdown" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="form-group" id="group_indicios_art29" style="display:none;">
+                    <label for="indicios_art29_input">Estatuto (Art. 29) - Incisos</label>
+                    <div class="chips-input">
+                        <div id="indicios_art29_chips" class="chips-container"></div>
+                        <input type="text" id="indicios_art29_input" placeholder="Clique e digite para filtrar..." autocomplete="off">
+                        <div id="indicios_art29_dropdown" class="chips-dropdown" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- Campos condicionais para Processo (Punido) -->
+                <div class="form-group" id="group_penalidade" style="display:none;">
+                    <label for="penalidade_tipo">Tipo de Penalidade</label>
+                    <select id="penalidade_tipo">
+                        <option value="">Selecione...</option>
+                        <option value="Prisao">Prisão</option>
+                        <option value="Detencao">Detenção</option>
+                        <option value="Repreensao">Repreensão</option>
+                    </select>
+                </div>
+                <div class="form-group" id="group_penalidade_dias" style="display:none;">
+                    <label for="penalidade_dias">Dias de Penalidade</label>
+                    <input type="number" id="penalidade_dias" min="0" step="1" placeholder="0">
+                </div>
+
                 <!-- Conclusão -->
                 <div class="form-group">
                     <div class="checkbox-container">
@@ -382,6 +483,16 @@
     <script src="static/js/procedure_form.js"></script>
     <!-- Modal de busca de usuário -->
     <style>
+    /* Chips + Dropdown (autocomplete múltiplo) */
+    .chips-input { position: relative; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid #d1d5db; border-radius: 8px; }
+    .chips-input input { border: none; outline: none; flex: 1; min-width: 180px; padding: 6px 4px; }
+    .chips-container { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #1f2937; border: 1px solid #c7d2fe; padding: 4px 8px; border-radius: 999px; font-size: 0.9rem; }
+    .chip .remove { cursor: pointer; color: #6b7280; font-weight: bold; }
+    .chip .remove:hover { color: #ef4444; }
+    .chips-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; max-height: 280px; overflow-y: auto; box-shadow: 0 10px 24px rgba(0,0,0,0.08); z-index: 10; }
+    .chips-item { padding: 8px 10px; cursor: pointer; }
+    .chips-item:hover { background: #f3f4f6; }
         .modal-busca-usuario {
             display:none; position:fixed; top:0; left:0; width:100vw; height:100vh;
             background:rgba(0,0,0,0.35); z-index:9999; align-items:center; justify-content:center;
