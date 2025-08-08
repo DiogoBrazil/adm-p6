@@ -192,13 +192,15 @@ function obterTodosPmsEnvolvidos() {
     // PM principal (sempre obrigatório)
     const pmPrincipalId = document.getElementById('nome_pm').value;
     const pmPrincipalNome = document.getElementById('nome_pm_nome').value;
+    const pmPrincipalStatus = document.getElementById('status_pm')?.value || '';
     
     if (pmPrincipalId && pmPrincipalNome) {
         pms.push({
             id: pmPrincipalId,
             nome_completo: pmPrincipalNome,
             tipo: 'operador', // Será determinado no backend
-            ordem: 1
+            ordem: 1,
+            status_pm: pmPrincipalStatus || null
         });
     }
     
@@ -209,7 +211,8 @@ function obterTodosPmsEnvolvidos() {
                 id: pm.id,
                 nome_completo: pm.nome,
                 tipo: 'operador', // Será determinado no backend
-                ordem: index + 2
+                ordem: index + 2,
+                status_pm: pm.status_pm || (document.getElementById('status_pm')?.value || null)
             });
         }
     });
@@ -616,6 +619,12 @@ async function preencherFormularioEdicao(procedimento) {
             const primeiroP = procedimento.pms_envolvidos[0];
             document.getElementById('nome_pm').value = primeiroP.id || '';
             document.getElementById('nome_pm_nome').value = primeiroP.nome_completo || '';
+            // Ajustar o status geral para refletir o status do primeiro PM
+            if (primeiroP.status_pm && document.getElementById('status_pm')) {
+                document.getElementById('status_pm').value = primeiroP.status_pm;
+            }
+            // Preencher status individual (se existir)
+            // Status do PM principal herda do status geral selecionado
             
             // Limpar PMs adicionais existentes
             pmsAdicionais = [];
@@ -632,6 +641,10 @@ async function preencherFormularioEdicao(procedimento) {
                 document.getElementById(`pm_adicional_id_${index}`).value = pm.id;
                 pmsAdicionais[index].id = pm.id;
                 pmsAdicionais[index].nome = pm.nome_completo;
+                pmsAdicionais[index].status_pm = pm.status_pm || '';
+                // Preencher select de status do PM adicional
+                const statusSelect = document.getElementById(`pm_adicional_status_${index}`);
+                if (statusSelect) statusSelect.value = pm.status_pm || '';
             }
         } else if (procedimento.nome_pm_id) {
             // Para processos com PM único
@@ -1164,11 +1177,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Verificar se já tem um PM principal selecionado
                 const pmPrincipalSelecionado = document.getElementById('nome_pm').value !== '';
                 botaoAdicionarPm.style.display = pmPrincipalSelecionado ? 'block' : 'none';
+                // Mostrar container de status individual do principal
+                // Sem seletor de status individual para o principal
             } else {
                 botaoAdicionarPm.style.display = 'none';
                 // Para processos, limpar PMs adicionais se existirem
                 document.getElementById('pms_adicionais_container').style.display = 'none';
                 pmsAdicionais = [];
+                // Sem seletor de status individual para o principal
             }
         }
     }
@@ -1607,11 +1623,24 @@ function adicionarPmAdicional() {
     novoField.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;';
     
     novoField.innerHTML = `
-        <input type="text" id="pm_adicional_nome_${index}" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione outro PM...">
-        <input type="hidden" id="pm_adicional_id_${index}">
-        <button type="button" class="btn-lupa-adicional" data-index="${index}" title="Buscar PM" style="background: none; border: none; cursor: pointer;">
-            <i class="fas fa-search"></i>
-        </button>
+        <div style="display:flex; gap:8px; align-items:center; flex: 1 1 auto;">
+            <input type="text" id="pm_adicional_nome_${index}" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione outro PM...">
+            <input type="hidden" id="pm_adicional_id_${index}">
+            <button type="button" class="btn-lupa-adicional" data-index="${index}" title="Buscar PM" style="background: none; border: none; cursor: pointer;">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+        <div style="flex: 0 0 240px; display:flex; align-items:center; gap:6px;">
+            <label for="pm_adicional_status_${index}" style="font-size: 0.85rem; color:#555;">Status</label>
+            <select id="pm_adicional_status_${index}" style="width: 150px;">
+                <option value="">(geral)</option>
+                <option value="Acusado">Acusado</option>
+                <option value="Sindicado">Sindicado</option>
+                <option value="Investigado">Investigado</option>
+                <option value="Indiciado">Indiciado</option>
+                <option value="Acidentado">Acidentado</option>
+            </select>
+        </div>
         <button type="button" class="btn-remover-pm" data-index="${index}" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
             <i class="fas fa-times"></i>
         </button>
@@ -1633,7 +1662,17 @@ function adicionarPmAdicional() {
     });
     
     // Adicionar placeholder no array
-    pmsAdicionais.push({ id: null, nome: '', campo: novoField });
+    pmsAdicionais.push({ id: null, nome: '', status_pm: '', campo: novoField });
+
+    // Listener do select de status para armazenar no array
+    const statusSelect = novoField.querySelector(`#pm_adicional_status_${index}`);
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function() {
+            if (pmsAdicionais[index]) {
+                pmsAdicionais[index].status_pm = this.value;
+            }
+        });
+    }
 }
 
 function buscarPmAdicional(index) {
@@ -1690,9 +1729,11 @@ function reindexarPmsAdicionais() {
         });
         
         // Reconstruir array
+        const statusSelect = campo.querySelector('select[id^="pm_adicional_status_"]');
         pmsAdicionais.push({
             id: inputId.value || null,
             nome: inputNome.value || '',
+            status_pm: statusSelect ? statusSelect.value : '',
             campo: campo
         });
     });

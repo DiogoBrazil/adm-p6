@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizar Processo/Procedimento - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/procedures.css">
+    <link rel="stylesheet" href="static/css/procedure_view.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <!-- Breadcrumb -->
+        <nav class="breadcrumb">
+            <ol>
+                <li><a href="dashboard.html"><i class="fas fa-home"></i> Início</a></li>
+                <li><a href="procedure_list.html"><i class="fas fa-file-alt"></i> Processos/Procedimentos</a></li>
+                <li class="active"><i class="fas fa-eye"></i> Visualizar</li>
+            </ol>
+        </nav>
+
+        <div class="view-container">
+            <!-- Header do Processo/Procedimento -->
+            <div class="procedure-header">
+                <div class="procedure-avatar-large">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="procedure-header-info">
+                    <h1 id="procedureNumber">Carregando...</h1>
+                    <p id="procedureType">Carregando...</p>
+                    <div class="procedure-badge" id="procedureStatus">
+                        <i class="fas fa-clock"></i>
+                        <span>Carregando...</span>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn-action-large edit" onclick="editarProcedimento()">
+                        <i class="fas fa-edit"></i>
+                        Editar
+                    </button>
+                    <button class="btn-action-large back" onclick="voltarParaLista()">
+                        <i class="fas fa-arrow-left"></i>
+                        Voltar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Cards de Informações -->
+            <div class="info-cards">
+                <!-- Card de Informações Básicas -->
+                <div class="info-card main-info">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-info-circle"></i>
+                            Informações Básicas
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <table class="procedure-info-table">
+                            <tr>
+                                <td class="label-cell">Número:</td>
+                                <td class="value-cell" id="infoNumero">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Tipo:</td>
+                                <td class="value-cell" id="infoTipo">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Data de Abertura:</td>
+                                <td class="value-cell" id="infoDataAbertura">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Data de Conclusão:</td>
+                                <td class="value-cell" id="infoDataConclusao">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Local de Origem:</td>
+                                <td class="value-cell" id="infoLocalOrigem">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Processo SEI:</td>
+                                <td class="value-cell" id="infoProcessoSei">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Situação:</td>
+                                <td class="value-cell" id="infoSituacao">-</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Card de Encarregados -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-user-shield"></i>
+                            Encarregado(s)
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <div id="encarregadosContainer">
+                            <p class="loading">Carregando informações...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Envolvidos -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-users"></i>
+                            Envolvidos
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <div id="envolvidosContainer">
+                            <p class="loading">Carregando informações...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Observações -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-sticky-note"></i>
+                            Observações
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <div id="observacoesContainer">
+                            <p class="loading">Carregando informações...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/procedure_view.js"></script>
+</body>
+</html>

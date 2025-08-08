@@ -835,7 +835,7 @@ def buscar_pms_envolvidos(procedimento_id):
         
         # Busca primeiro os dados da tabela de relacionamento
         cursor.execute("""
-            SELECT pm_id, pm_tipo, ordem
+            SELECT pm_id, pm_tipo, ordem, status_pm
             FROM procedimento_pms_envolvidos 
             WHERE procedimento_id = ?
             ORDER BY ordem
@@ -845,7 +845,7 @@ def buscar_pms_envolvidos(procedimento_id):
         
         resultado = []
         for pm_rel in pms_relacionamento:
-            pm_id, pm_tipo_tabela, ordem = pm_rel
+            pm_id, pm_tipo_tabela, ordem, status_pm_env = pm_rel
             
             # Busca primeiro na tabela operadores
             cursor.execute("""
@@ -880,6 +880,7 @@ def buscar_pms_envolvidos(procedimento_id):
                     'id': pm_id,
                     'tipo': pm_tipo_tabela,
                     'ordem': ordem,
+                    'status_pm': status_pm_env,
                     'nome': nome,
                     'posto_graduacao': posto,
                     'matricula': matricula,
@@ -1118,10 +1119,11 @@ def registrar_processo(
             for i, pm in enumerate(pms_envolvidos):
                 if pm.get('id'):  # Verifica se o PM tem ID válido
                     pm_tipo = 'operador' if pm.get('tipo') == 'operador' else 'encarregado'
+                    status_pm_env = pm.get('status_pm', status_pm)
                     cursor.execute("""
-                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1))
+                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1, status_pm_env))
 
         conn.commit()
         conn.close()
@@ -1630,26 +1632,27 @@ def atualizar_processo(
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao, processo_id
         ))
-        
+
         # Se for procedimento e tiver múltiplos PMs envolvidos, atualizar na nova tabela
         if tipo_geral == 'procedimento' and pms_envolvidos is not None:
             print(f"📝 Atualizando PMs envolvidos para procedimento: {pms_envolvidos}")
-            
+
             # Remover PMs antigos
             cursor.execute("DELETE FROM procedimento_pms_envolvidos WHERE procedimento_id = ?", (processo_id,))
-            
+
             # Inserir novos PMs
             for i, pm in enumerate(pms_envolvidos):
                 if pm.get('id'):  # Verifica se o PM tem ID válido
                     pm_tipo = 'operador' if pm.get('tipo') == 'operador' else 'encarregado'
+                    status_pm_env = pm.get('status_pm', status_pm)
                     cursor.execute("""
-                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1))
-        
+                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1, status_pm_env))
+
         conn.commit()
         conn.close()
-        
+
         return {"sucesso": True, "mensagem": "Processo/Procedimento atualizado com sucesso!"}
     except sqlite3.IntegrityError as e:
         if "numero, documento_iniciador, tipo_detalhe, ano_instauracao, local_origem" in str(e).lower() or "unique" in str(e).lower():

@@ -1,0 +1,415 @@
+/* procedure_view.css - Estilos para a página de visualização de processos/procedimentos */
+
+/* Breadcrumb */
+.breadcrumb {
+    margin-bottom: 20px;
+}
+
+.breadcrumb ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.breadcrumb li {
+    display: flex;
+    align-items: center;
+}
+
+.breadcrumb li:not(:last-child)::after {
+    content: '›';
+    margin-left: 8px;
+    color: #6c757d;
+    font-weight: bold;
+}
+
+.breadcrumb a {
+    color: #667eea;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.breadcrumb a:hover {
+    color: #5a6ae0;
+}
+
+.breadcrumb .active {
+    color: #6c757d;
+}
+
+/* Container principal */
+.view-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header do procedimento */
+.procedure-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 30px;
+    margin-bottom: 30px;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.procedure-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+    height: 200px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(60px, -60px);
+}
+
+.procedure-avatar-large {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    color: white;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    z-index: 1;
+}
+
+.procedure-header-info {
+    flex: 1;
+    z-index: 1;
+}
+
+.procedure-header-info h1 {
+    margin: 0 0 8px 0;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.procedure-header-info p {
+    margin: 0 0 15px 0;
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.procedure-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.procedure-badge.concluido {
+    background: rgba(40, 167, 69, 0.8);
+}
+
+.procedure-badge.em-andamento {
+    background: rgba(255, 193, 7, 0.8);
+}
+
+.procedure-badge.em-prazo {
+    background: rgba(23, 162, 184, 0.8);
+}
+
+.procedure-badge.vencido {
+    background: rgba(220, 53, 69, 0.8);
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    z-index: 1;
+}
+
+.btn-action-large {
+    padding: 12px 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.btn-action-large:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-action-large.edit:hover {
+    background: rgba(40, 167, 69, 0.8);
+    border-color: rgba(40, 167, 69, 0.8);
+}
+
+.btn-action-large.back:hover {
+    background: rgba(108, 117, 125, 0.8);
+    border-color: rgba(108, 117, 125, 0.8);
+}
+
+/* Layout de cards de informações */
+.info-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 25px;
+    margin-bottom: 30px;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Card principal de informações do procedimento */
+.main-info {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-left: 4px solid #007bff;
+}
+
+.info-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.info-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.info-card .card-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 20px 25px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.info-card .card-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.info-card .card-header i {
+    color: #667eea;
+    font-size: 1.1rem;
+}
+
+.card-content {
+    padding: 25px;
+}
+
+/* Tabela de informações do procedimento */
+.procedure-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.procedure-info-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+}
+
+.procedure-info-table tr:last-child td {
+    border-bottom: none;
+}
+
+.label-cell {
+    font-weight: 600;
+    color: #495057;
+    background-color: #f8f9fa;
+    width: 35%;
+    border-right: 1px solid #e9ecef;
+}
+
+.value-cell {
+    color: #212529;
+    background-color: #ffffff;
+    font-weight: 400;
+}
+
+.procedure-info-table tr:hover {
+    background-color: #f1f3f4;
+}
+
+.procedure-info-table tr:hover .label-cell {
+    background-color: #e9ecef;
+}
+
+/* Seções de informações */
+.info-section {
+    margin-bottom: 20px;
+}
+
+.info-section h4 {
+    margin: 0 0 10px 0;
+    color: #495057;
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-section h4 i {
+    color: #667eea;
+    font-size: 0.9rem;
+}
+
+.info-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.info-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.info-list li:last-child {
+    border-bottom: none;
+}
+
+.info-list li i {
+    color: #6c757d;
+    width: 16px;
+    text-align: center;
+}
+
+.loading {
+    color: #6c757d;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.empty-state {
+    text-align: center;
+    color: #6c757d;
+    padding: 20px;
+    font-style: italic;
+}
+
+/* Estados especiais */
+.highlight {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+    margin-bottom: 10px;
+}
+
+.alert {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    padding: 10px;
+    border-radius: 8px;
+    border-left: 4px solid #dc3545;
+    margin-bottom: 10px;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+    .procedure-header {
+        padding: 20px;
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+    }
+    
+    .procedure-avatar-large {
+        width: 60px;
+        height: 60px;
+        font-size: 2rem;
+    }
+    
+    .btn-action-large {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+    
+    .info-card .card-header {
+        padding: 15px 20px;
+    }
+    
+    .info-card .card-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .view-container {
+        padding: 0 15px;
+    }
+}
+
+/* Layout para desktops - largura controlada */
+@media (min-width: 1200px) {
+    .view-container {
+        max-width: 1200px;
+    }
+}
+
+/* Animações */
+.info-card {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+.info-card:nth-child(1) { animation-delay: 0.1s; }
+.info-card:nth-child(2) { animation-delay: 0.2s; }
+.info-card:nth-child(3) { animation-delay: 0.3s; }
+.info-card:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.procedure-header {
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
