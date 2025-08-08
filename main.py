@@ -1938,6 +1938,23 @@ def listar_prazos_processo(processo_id):
         return {"sucesso": False, "mensagem": f"Erro ao listar prazos: {str(e)}"}
 
 @eel.expose
+def adicionar_prorrogacao(processo_id, dias_prorrogacao, numero_portaria=None, data_portaria=None, motivo=None, autorizado_por=None, autorizado_tipo=None):
+    """Cria uma prorrogação para o prazo ativo do processo, seguindo a regra do dia seguinte ao vencimento."""
+    try:
+        resultado = prazos_manager.prorrogar_prazo(
+            processo_id=processo_id,
+            dias_prorrogacao=int(dias_prorrogacao),
+            motivo=motivo,
+            autorizado_por=autorizado_por,
+            autorizado_tipo=autorizado_tipo,
+            numero_portaria=numero_portaria,
+            data_portaria=data_portaria
+        )
+        return resultado
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao adicionar prorrogação: {str(e)}"}
+
+@eel.expose
 def obter_prazos_vencendo(dias_antecedencia=7):
     """Obtém prazos que estão vencendo nos próximos dias"""
     try:
@@ -2421,13 +2438,59 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     pm_envolvido_completo = "Não informado"
                 pm_envolvido_tooltip = pm_envolvido_completo
             
+            # Buscar prorrogações e prazo ativo
+            prorrogacoes_dias = 0
+            data_limite_ativo = None
+            try:
+                conn2 = db_manager.get_connection()
+                c2 = conn2.cursor()
+                c2.execute("""
+                    SELECT SUM(CASE WHEN tipo_prazo='prorrogacao' THEN COALESCE(dias_adicionados,0) ELSE 0 END) as soma_prorrog,
+                           MAX(CASE WHEN ativo=1 THEN data_vencimento END) as data_venc_ativa
+                    FROM prazos_processo
+                    WHERE processo_id = ?
+                """, (processo_id,))
+                rowp = c2.fetchone()
+                if rowp:
+                    prorrogacoes_dias = int(rowp[0] or 0)
+                    data_limite_ativo = rowp[1]
+                conn2.close()
+            except Exception:
+                pass
+
             # Calcular prazo para cada processo
             calculo_prazo = calcular_prazo_processo(
                 tipo_detalhe=tipo_detalhe,
                 documento_iniciador=documento_iniciador,
                 data_recebimento=data_recebimento,
-                prorrogacoes_dias=0  # Por enquanto sem prorrogações, será implementado depois
+                prorrogacoes_dias=prorrogacoes_dias
             )
+            # Ajustar com data ativa, se existir
+            if data_limite_ativo:
+                try:
+                    calculo_prazo["data_limite"] = data_limite_ativo
+                    data_limite_dt = datetime.strptime(data_limite_ativo, "%Y-%m-%d")
+                    calculo_prazo["data_limite_formatada"] = data_limite_dt.strftime("%d/%m/%Y")
+                    hoje = datetime.now()
+                    dias_rest = (data_limite_dt - hoje).days
+                    calculo_prazo["dias_restantes"] = dias_rest
+                    if dias_rest < 0:
+                        calculo_prazo["status_prazo"] = f"Vencido há {abs(dias_rest)} dias"
+                        calculo_prazo["vencido"] = True
+                    elif dias_rest == 0:
+                        calculo_prazo["status_prazo"] = "Vence hoje"
+                        calculo_prazo["vencido"] = False
+                    elif dias_rest <= 5:
+                        calculo_prazo["status_prazo"] = f"Vence em {dias_rest} dias (URGENTE)"
+                        calculo_prazo["vencido"] = False
+                    elif dias_rest <= 10:
+                        calculo_prazo["status_prazo"] = f"Vence em {dias_rest} dias (ATENÇÃO)"
+                        calculo_prazo["vencido"] = False
+                    else:
+                        calculo_prazo["status_prazo"] = f"Vence em {dias_rest} dias"
+                        calculo_prazo["vencido"] = False
+                except Exception:
+                    pass
             
             # Formatar numero do processo usando numero_controle
             def formatar_numero_processo():

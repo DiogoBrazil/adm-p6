@@ -49,11 +49,30 @@ class PrazosAndamentosManager:
         except Exception as e:
             return {"sucesso": False, "mensagem": f"Erro ao adicionar prazo: {str(e)}"}
     
-    def prorrogar_prazo(self, processo_id, dias_prorrogacao, motivo, autorizado_por, autorizado_tipo):
-        """Prorroga o prazo de um processo"""
+    def prorrogar_prazo(self, processo_id, dias_prorrogacao, motivo, autorizado_por, autorizado_tipo, numero_portaria=None, data_portaria=None):
+        """Prorroga o prazo de um processo.
+        Regra: somar a quantidade de dias a partir do primeiro dia após o vencimento atual.
+        Armazena número e data da portaria e a ordem da prorrogação."""
         try:
+            if not dias_prorrogacao or dias_prorrogacao <= 0:
+                return {"sucesso": False, "mensagem": "Dias de prorrogação deve ser maior que zero."}
+
             conn = self.get_connection()
             cursor = conn.cursor()
+
+            # Garantir colunas novas (numero_portaria, data_portaria, ordem_prorrogacao)
+            try:
+                cursor.execute("PRAGMA table_info(prazos_processo)")
+                cols = [c[1] for c in cursor.fetchall()]
+                if 'numero_portaria' not in cols:
+                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN numero_portaria TEXT")
+                if 'data_portaria' not in cols:
+                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN data_portaria DATE")
+                if 'ordem_prorrogacao' not in cols:
+                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN ordem_prorrogacao INTEGER")
+                conn.commit()
+            except Exception:
+                pass
             
             # Buscar prazo atual
             cursor.execute('''
@@ -64,7 +83,52 @@ class PrazosAndamentosManager:
             
             prazo_atual = cursor.fetchone()
             if not prazo_atual:
-                return {"sucesso": False, "mensagem": "Processo não possui prazo ativo"}
+                # Tentar criar prazo inicial automaticamente com base na data_recebimento e regras
+                cursor.execute("""
+                    SELECT tipo_detalhe, documento_iniciador, data_recebimento
+                    FROM processos_procedimentos
+                    WHERE id = ? AND ativo = 1
+                """, (processo_id,))
+                proc = cursor.fetchone()
+                if not proc:
+                    return {"sucesso": False, "mensagem": "Processo não encontrado ou inativo"}
+                tipo_detalhe, documento_iniciador, data_recebimento = proc
+                if not data_recebimento:
+                    return {"sucesso": False, "mensagem": "Processo não possui data de recebimento para iniciar prazo"}
+                # Regras básicas de prazo
+                prazos_base = {
+                    'AO': 15, 'SV': 15, 'SR': 30, 'IPM': 40, 'FP': 30, 'CP': 30,
+                    'PAD': 30, 'PADE': 30, 'CD': 30, 'CJ': 30, 'PADS': 30,
+                    'Feito Preliminar': 15
+                }
+                dias_base = 30
+                if documento_iniciador == 'Feito Preliminar':
+                    dias_base = prazos_base['Feito Preliminar']
+                elif tipo_detalhe in prazos_base:
+                    dias_base = prazos_base[tipo_detalhe]
+                # Inserir prazo inicial
+                data_inicio_obj = datetime.strptime(data_recebimento, "%Y-%m-%d")
+                data_vencimento_ini = data_inicio_obj + timedelta(days=dias_base)
+                prazo_id_ini = str(uuid.uuid4())
+                cursor.execute('''
+                    INSERT INTO prazos_processo (
+                        id, processo_id, tipo_prazo, data_inicio, data_vencimento,
+                        dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo
+                    ) VALUES (?, ?, 'inicial', ?, ?, ?, ?, ?, ?, 1)
+                ''', (
+                    prazo_id_ini, processo_id, data_recebimento, data_vencimento_ini.strftime("%Y-%m-%d"),
+                    dias_base, 'Prazo inicial automático', autorizado_por, autorizado_tipo
+                ))
+                conn.commit()
+                # Recarregar prazo atual
+                cursor.execute('''
+                    SELECT id, data_vencimento, dias_adicionados 
+                    FROM prazos_processo 
+                    WHERE processo_id = ? AND ativo = 1
+                ''', (processo_id,))
+                prazo_atual = cursor.fetchone()
+                if not prazo_atual:
+                    return {"sucesso": False, "mensagem": "Não foi possível iniciar prazo do processo"}
             
             # Desativar prazo atual
             cursor.execute('''
@@ -74,20 +138,33 @@ class PrazosAndamentosManager:
             ''', (prazo_atual[0],))
             
             # Calcular nova data de vencimento
+            # Dia inicial da contagem é o dia seguinte ao vencimento atual
             data_vencimento_atual = datetime.strptime(prazo_atual[1], "%Y-%m-%d")
-            nova_data_vencimento = data_vencimento_atual + timedelta(days=dias_prorrogacao)
+            inicio_prorrogacao = data_vencimento_atual + timedelta(days=1)
+            nova_data_vencimento = inicio_prorrogacao + timedelta(days=dias_prorrogacao - 1) if dias_prorrogacao and dias_prorrogacao > 0 else inicio_prorrogacao
+
+            # Calcular a ordem da prorrogação (nº sequencial)
+            cursor.execute('''
+                SELECT COALESCE(MAX(ordem_prorrogacao), 0)
+                FROM prazos_processo
+                WHERE processo_id = ? AND tipo_prazo = 'prorrogacao'
+            ''', (processo_id,))
+            ordem_atual = cursor.fetchone()[0] or 0
+            proxima_ordem = ordem_atual + 1
             
             # Criar novo prazo (prorrogação)
             novo_prazo_id = str(uuid.uuid4())
             cursor.execute('''
                 INSERT INTO prazos_processo (
                     id, processo_id, tipo_prazo, data_inicio, data_vencimento,
-                    dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo,
+                    numero_portaria, data_portaria, ordem_prorrogacao
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 novo_prazo_id, processo_id, 'prorrogacao', 
-                prazo_atual[1], nova_data_vencimento.strftime("%Y-%m-%d"),
-                dias_prorrogacao, motivo, autorizado_por, autorizado_tipo, 1
+                data_vencimento_atual.strftime("%Y-%m-%d"), nova_data_vencimento.strftime("%Y-%m-%d"),
+                dias_prorrogacao, motivo, autorizado_por, autorizado_tipo, 1,
+                numero_portaria, data_portaria, proxima_ordem
             ))
             
             conn.commit()
@@ -97,11 +174,51 @@ class PrazosAndamentosManager:
                 "sucesso": True, 
                 "mensagem": f"Prazo prorrogado por {dias_prorrogacao} dias",
                 "nova_data_vencimento": nova_data_vencimento.strftime("%d/%m/%Y"),
-                "prazo_id": novo_prazo_id
+                "prazo_id": novo_prazo_id,
+                "ordem_prorrogacao": proxima_ordem
             }
             
         except Exception as e:
             return {"sucesso": False, "mensagem": f"Erro ao prorrogar prazo: {str(e)}"}
+
+    def listar_prazos_processo(self, processo_id):
+        """Lista histórico de prazos (inicial e prorrogações) com sequência e portaria"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, tipo_prazo, data_inicio, data_vencimento, dias_adicionados,
+                       motivo, autorizado_por, autorizado_tipo, ativo,
+                       numero_portaria, data_portaria, ordem_prorrogacao, created_at
+                FROM prazos_processo
+                WHERE processo_id = ?
+                ORDER BY 
+                    CASE tipo_prazo WHEN 'inicial' THEN 0 ELSE 1 END,
+                    COALESCE(ordem_prorrogacao, 0)
+            ''', (processo_id,))
+            rows = cursor.fetchall()
+            conn.close()
+            result = []
+            for r in rows:
+                result.append({
+                    "id": r[0],
+                    "tipo_prazo": r[1],
+                    "data_inicio": r[2],
+                    "data_vencimento": r[3],
+                    "dias_adicionados": r[4],
+                    "motivo": r[5],
+                    "autorizado_por": r[6],
+                    "autorizado_tipo": r[7],
+                    "ativo": bool(r[8]),
+                    "numero_portaria": r[9],
+                    "data_portaria": r[10],
+                    "ordem_prorrogacao": r[11],
+                    "created_at": r[12]
+                })
+            return result
+        except Exception as e:
+            print(f"Erro ao listar prazos do processo: {e}")
+            return []
     
     def obter_prazos_vencendo(self, dias_antecedencia=7):
         """Retorna processos com prazos vencendo"""

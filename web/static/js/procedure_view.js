@@ -205,6 +205,9 @@ function populateProcedureData(data) {
             if (row) row.style.display = 'none';
         }
     } catch (e) { /* noop */ }
+
+    // Carregar prazos e prorrogações (histórico)
+    loadPrazos(data.id);
 }
 
 // Função para obter informações de status
@@ -401,3 +404,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadProcedureData();
     }
 });
+
+// ==========================
+// Prazos e Prorrogações
+// ==========================
+function formatOrdinal(n) {
+    if (!n || n <= 0) return '';
+    return `${n}ª`;
+}
+
+async function loadPrazos(procedureId) {
+    const tbody = document.getElementById('prazosBody');
+    if (!tbody) return;
+    try {
+        // placeholder de carregando já está no HTML; vamos manter se demorar
+        const resp = await eel.listar_prazos_processo(procedureId)();
+        if (!resp || !resp.sucesso) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#b00;">${(resp && resp.mensagem) || 'Erro ao carregar prazos'}</td></tr>`;
+            return;
+        }
+        const prazos = resp.prazos || [];
+        if (prazos.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#777;">Nenhum prazo registrado</td></tr>';
+            return;
+        }
+        const rows = prazos.map(p => {
+            const isInicial = p.tipo_prazo === 'inicial';
+            const tipoTxt = isInicial ? 'Inicial' : `Prorrogação ${formatOrdinal(p.ordem_prorrogacao)}`;
+            const diasTxt = p.dias_adicionados != null ? p.dias_adicionados : '-';
+            const portaria = p.numero_portaria || '-';
+            const dataPortaria = p.data_portaria ? formatDate(p.data_portaria) : '-';
+            const inicio = p.data_inicio ? formatDate(p.data_inicio) : '-';
+            const venc = p.data_vencimento ? formatDate(p.data_vencimento) : '-';
+            const ativoBadge = p.ativo ? '<span class="badge-status em-prazo" title="Prazo ativo"><i class="fas fa-check"></i></span>' : '';
+            return `<tr>
+                <td>${tipoTxt} ${ativoBadge}</td>
+                <td>${inicio}</td>
+                <td>${venc}</td>
+                <td style="text-align:center;">${diasTxt}</td>
+                <td>${portaria}</td>
+                <td>${dataPortaria}</td>
+                <td style="text-align:center;">${isInicial ? '-' : (p.ordem_prorrogacao || '-')}</td>
+            </tr>`;
+        }).join('');
+        tbody.innerHTML = rows;
+    } catch (err) {
+        console.error('Erro ao carregar prazos:', err);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#b00;">Erro ao carregar prazos</td></tr>';
+    }
+}
