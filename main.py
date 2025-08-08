@@ -1569,9 +1569,13 @@ def obter_procedimento_completo(procedimento_id):
             """
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador,
-                p.processo_sei, p.local_origem, p.data_instauracao, p.data_conclusao,
+                p.processo_sei, p.local_origem, p.local_fatos,
+                p.data_instauracao, p.data_recebimento, p.data_conclusao,
                 p.concluido, p.status_pm, p.nome_pm_id,
-                p.responsavel_id, p.escrivao_id, p.resumo_fatos
+                p.responsavel_id, p.escrivao_id, p.resumo_fatos,
+                p.numero_controle, p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
+                p.natureza_processo, p.natureza_procedimento, p.solucao_final,
+                p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids
             FROM processos_procedimentos p
             WHERE p.id = ? AND p.ativo = 1
             """,
@@ -1585,26 +1589,46 @@ def obter_procedimento_completo(procedimento_id):
             return {"sucesso": False, "mensagem": "Procedimento não encontrado."}
 
         # Mapear campos para o formato esperado pelo front
-        concluido_flag = bool(row[9]) if row[9] is not None else False
+        concluido_flag = bool(row[11]) if row[11] is not None else False
         situacao = "Concluído" if concluido_flag else "Em Andamento"
+
+        # Tentar obter transgressões detalhadas reutilizando a função existente
+        trans_info = obter_processo(procedimento_id)
+        trans_sel = []
+        if isinstance(trans_info, dict) and trans_info.get('transgressoes_selecionadas') is not None:
+            trans_sel = trans_info.get('transgressoes_selecionadas')
 
         procedimento = {
             "id": row[0],
             "numero": row[1],
             "tipo_geral": row[2],
-            "tipo_procedimento": row[3],  # compatível com a view
+            "tipo_procedimento": row[3],
             "documento_iniciador": row[4],
             "processo_sei": row[5],
             "local_origem": row[6],
-            "data_abertura": row[7],  # alias para data_instauracao
-            "data_conclusao": row[8],
+            "local_fatos": row[7],
+            "data_abertura": row[8],
+            "data_recebimento": row[9],
+            "data_conclusao": row[10],
             "situacao": situacao,
-            # também disponibiliza campos úteis
-            "status_pm": row[10],
-            "nome_pm_id": row[11],
-            "responsavel_id": row[12],
-            "escrivao_id": row[13],
-            "observacoes": row[14]
+            "status_pm": row[12],
+            "nome_pm_id": row[13],
+            "responsavel_id": row[14],
+            "escrivao_id": row[15],
+            "observacoes": row[16],
+            "numero_controle": row[17],
+            "numero_portaria": row[18],
+            "numero_memorando": row[19],
+            "numero_feito": row[20],
+            "numero_rgf": row[21],
+            "natureza_processo": row[22],
+            "natureza_procedimento": row[23],
+            "solucao_final": row[24],
+            "created_at": row[25],
+            "updated_at": row[26],
+            "ano_instauracao": row[27],
+            "transgressoes_ids": row[28],
+            "transgressoes_selecionadas": trans_sel
         }
 
         return {"sucesso": True, "procedimento": procedimento}

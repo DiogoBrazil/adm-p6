@@ -88,16 +88,24 @@
                     <div class="card-content">
                         <table class="procedure-info-table">
                             <tr>
-                                <td class="label-cell">Número:</td>
-                                <td class="value-cell" id="infoNumero">-</td>
+                                <td class="label-cell">Tipo Geral:</td>
+                                <td class="value-cell" id="infoTipoGeral">-</td>
                             </tr>
                             <tr>
                                 <td class="label-cell">Tipo:</td>
                                 <td class="value-cell" id="infoTipo">-</td>
                             </tr>
                             <tr>
+                                <td class="label-cell">Documento Iniciador:</td>
+                                <td class="value-cell" id="infoDocumentoIniciador">-</td>
+                            </tr>
+                            <tr>
                                 <td class="label-cell">Data de Abertura:</td>
                                 <td class="value-cell" id="infoDataAbertura">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Data de Recebimento:</td>
+                                <td class="value-cell" id="infoDataRecebimento">-</td>
                             </tr>
                             <tr>
                                 <td class="label-cell">Data de Conclusão:</td>
@@ -108,12 +116,54 @@
                                 <td class="value-cell" id="infoLocalOrigem">-</td>
                             </tr>
                             <tr>
+                                <td class="label-cell">Local dos Fatos:</td>
+                                <td class="value-cell" id="infoLocalFatos">-</td>
+                            </tr>
+                            <tr>
                                 <td class="label-cell">Processo SEI:</td>
                                 <td class="value-cell" id="infoProcessoSei">-</td>
                             </tr>
                             <tr>
                                 <td class="label-cell">Situação:</td>
                                 <td class="value-cell" id="infoSituacao">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Ano de Instauração:</td>
+                                <td class="value-cell" id="infoAnoInstauracao">-</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Card de Numerações e Documentos -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-hashtag"></i>
+                            Numeração e Documentos
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <table class="procedure-info-table">
+                            <tr>
+                                <td class="label-cell">Número de Controle:</td>
+                                <td class="value-cell" id="infoNumeroControle">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Portaria:</td>
+                                <td class="value-cell" id="infoNumeroPortaria">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Memorando:</td>
+                                <td class="value-cell" id="infoNumeroMemorando">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Feito Preliminar:</td>
+                                <td class="value-cell" id="infoNumeroFeito">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">RGF:</td>
+                                <td class="value-cell" id="infoNumeroRGF">-</td>
                             </tr>
                         </table>
                     </div>
@@ -159,6 +209,43 @@
                     </div>
                     <div class="card-content">
                         <div id="observacoesContainer">
+                            <p class="loading">Carregando informações...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Natureza e Solução -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-scale-balanced"></i>
+                            Natureza e Solução
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <table class="procedure-info-table">
+                            <tr>
+                                <td class="label-cell">Natureza (Procedimento):</td>
+                                <td class="value-cell" id="infoNaturezaProcedimento">-</td>
+                            </tr>
+                            <tr>
+                                <td class="label-cell">Solução Final:</td>
+                                <td class="value-cell" id="infoSolucaoFinal">-</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Card de Transgressões -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3>
+                            <i class="fas fa-gavel"></i>
+                            Transgressões
+                        </h3>
+                    </div>
+                    <div class="card-content">
+                        <div id="transgressoesContainer">
                             <p class="loading">Carregando informações...</p>
                         </div>
                     </div>

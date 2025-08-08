@@ -163,13 +163,24 @@ function populateProcedureData(data) {
     statusElement.innerHTML = `<i class="${statusInfo.icon}"></i><span>${statusInfo.text}</span>`;
     
     // Informações básicas
-    document.getElementById('infoNumero').textContent = data.numero || '-';
     document.getElementById('infoTipo').textContent = data.tipo_procedimento || '-';
+    document.getElementById('infoTipoGeral').textContent = data.tipo_geral || '-';
+    document.getElementById('infoDocumentoIniciador').textContent = data.documento_iniciador || '-';
     document.getElementById('infoDataAbertura').textContent = formatDate(data.data_abertura) || '-';
+    document.getElementById('infoDataRecebimento').textContent = formatDate(data.data_recebimento) || '-';
     document.getElementById('infoDataConclusao').textContent = formatDate(data.data_conclusao) || '-';
     document.getElementById('infoLocalOrigem').textContent = data.local_origem || '-';
+    document.getElementById('infoLocalFatos').textContent = data.local_fatos || '-';
     document.getElementById('infoProcessoSei').textContent = data.processo_sei || '-';
     document.getElementById('infoSituacao').textContent = data.situacao || '-';
+    document.getElementById('infoAnoInstauracao').textContent = data.ano_instauracao || '-';
+
+    // Numeração e Documentos
+    document.getElementById('infoNumeroControle').textContent = data.numero_controle || '-';
+    document.getElementById('infoNumeroPortaria').textContent = data.numero_portaria || '-';
+    document.getElementById('infoNumeroMemorando').textContent = data.numero_memorando || '-';
+    document.getElementById('infoNumeroFeito').textContent = data.numero_feito || '-';
+    document.getElementById('infoNumeroRGF').textContent = data.numero_rgf || '-';
     
     // Carregar encarregados
     loadEncarregados(data.id);
@@ -177,8 +188,23 @@ function populateProcedureData(data) {
     // Carregar envolvidos
     loadEnvolvidos(data.id);
     
+    // Natureza e Solução
+    document.getElementById('infoNaturezaProcedimento').textContent = data.natureza_procedimento || '-';
+    document.getElementById('infoSolucaoFinal').textContent = data.solucao_final || '-';
+
     // Carregar observações
     loadObservacoes(data);
+
+    // Carregar transgressões
+    loadTransgressoes(data);
+
+    // Esconder Natureza (Procedimento) quando for um Tipo Geral = processo
+    try {
+        if (String(data.tipo_geral).toLowerCase() === 'processo') {
+            const row = document.getElementById('infoNaturezaProcedimento')?.closest('tr');
+            if (row) row.style.display = 'none';
+        }
+    } catch (e) { /* noop */ }
 }
 
 // Função para obter informações de status
@@ -308,6 +334,27 @@ function loadObservacoes(data) {
     } else {
         container.innerHTML = '<p class="empty-state">Nenhuma observação registrada</p>';
     }
+}
+
+// Função para carregar transgressões
+function loadTransgressoes(data) {
+    const container = document.getElementById('transgressoesContainer');
+    const lista = data.transgressoes_selecionadas || [];
+    if (!lista || lista.length === 0) {
+        container.innerHTML = '<p class="empty-state">Nenhuma transgressão registrada</p>';
+        return;
+    }
+    const itens = lista.map(t => {
+        if (t.tipo === 'estatuto') {
+            const ana = t.rdmp_analogia || {};
+            const anaTxt = ana.id ? ` (Analogia RDPM: Inciso ${ana.inciso || '-'} - ${ana.texto || ''})` : '';
+            return `<li><strong>Art. 29</strong> - Inciso ${t.inciso || '-'}: ${t.texto || ''}${anaTxt}</li>`;
+        }
+        // RDPM
+        const natureza = t.natureza ? ` [${t.natureza}]` : '';
+        return `<li><strong>RDPM</strong> - Inciso ${t.inciso || '-'}: ${t.texto || ''}${natureza}</li>`;
+    }).join('');
+    container.innerHTML = `<ul class="info-list">${itens}</ul>`;
 }
 
 // Função para formatar data
