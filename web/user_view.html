@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizar Usuário - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    <link rel="stylesheet" href="static/css/user_view.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <!-- Breadcrumb -->
+        <nav class="breadcrumb">
+            <ol>
+                <li><a href="dashboard.html"><i class="fas fa-home"></i> Início</a></li>
+                <li><a href="user_list.html"><i class="fas fa-users"></i> Usuários</a></li>
+                <li class="active"><i class="fas fa-eye"></i> Visualizar</li>
+            </ol>
+        </nav>
+
+        <div class="view-container">
+            <!-- Header do usuário -->
+            <div class="user-header">
+                <div class="user-avatar-large">
+                    <i id="userTypeIcon" class="fas fa-user"></i>
+                </div>
+                <div class="user-header-info">
+                    <h1 id="viewUserName">Carregando...</h1>
+                    <p id="viewUserTitle">Carregando informações...</p>
+                    <div class="user-badge" id="userBadge">
+                        <i class="fas fa-circle"></i>
+                        <span id="badgeText">Ativo</span>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn-action-large edit" onclick="editCurrentUser()" title="Editar Usuário">
+                        <i class="fas fa-edit"></i>
+                        Editar
+                    </button>
+                    <button class="btn-action-large back" onclick="goBack()" title="Voltar">
+                        <i class="fas fa-arrow-left"></i>
+                        Voltar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Cards de informações -->
+            <div class="info-cards">
+                <!-- Card de Informações Básicas -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-id-card"></i> Informações Básicas</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Nome Completo</label>
+                                <span id="infoNome">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Posto/Graduação</label>
+                                <span id="infoPosto">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Matrícula</label>
+                                <span id="infoMatricula">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>E-mail</label>
+                                <span id="infoEmail">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Tipo de Usuário</label>
+                                <span id="infoTipo">-</span>
+                            </div>
+                            <div class="info-item" id="profileItem" style="display: none;">
+                                <label>Perfil</label>
+                                <span id="infoPerfil">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Informações do Sistema -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-cogs"></i> Informações do Sistema</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label>Data de Cadastro</label>
+                                <span id="infoDataCriacao">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Última Atualização</label>
+                                <span id="infoUltimaAtualizacao">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>Status</label>
+                                <span id="infoStatus">-</span>
+                            </div>
+                            <div class="info-item">
+                                <label>ID do Sistema</label>
+                                <span id="infoId" class="code">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Estatísticas (se for aplicável) -->
+                <div class="info-card" id="statsCard" style="display: none;">
+                    <div class="card-header">
+                        <h3><i class="fas fa-chart-bar"></i> Estatísticas</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-number" id="statProcessos">0</div>
+                                <div class="stat-label">Processos Responsável</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" id="statEscrivao">0</div>
+                                <div class="stat-label">Como Escrivão</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number" id="statEnvolvido">0</div>
+                                <div class="stat-label">Envolvido em Processos</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card de Observações/Notas -->
+                <div class="info-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-sticky-note"></i> Observações</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="observations">
+                            <div class="observation-item">
+                                <i class="fas fa-info-circle"></i>
+                                <div class="observation-content">
+                                    <p><strong>Tipo de Acesso:</strong></p>
+                                    <p id="observacaoAcesso">Este usuário tem acesso ao sistema conforme seu perfil.</p>
+                                </div>
+                            </div>
+                            <div class="observation-item" id="emailObservation" style="display: none;">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <div class="observation-content">
+                                    <p><strong>Observação sobre E-mail:</strong></p>
+                                    <p>Usuário não possui e-mail cadastrado. Isso pode limitar algumas funcionalidades do sistema.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Carregando dados do usuário...</p>
+        </div>
+    </div>
+
+    <script src="static/js/user_view.js"></script>
+</body>
+</html>

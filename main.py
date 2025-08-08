@@ -2602,6 +2602,163 @@ def buscar_transgressoes(termo, gravidade=None):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao buscar transgressões: {str(e)}"}
 
+@eel.expose
+def obter_estatisticas_usuario(user_id, user_type):
+    """Obtém estatísticas detalhadas de um usuário específico"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        estatisticas = {
+            "encarregado_sindicancia": 0,  # SR e SV
+            "encarregado_pads": 0,
+            "encarregado_ipm": 0,
+            "encarregado_atestado_origem": 0,  # AO
+            "encarregado_feito_preliminar": 0,  # FP
+            "escrivao": 0,
+            "envolvido_sindicado": 0,
+            "envolvido_acusado": 0,
+            "envolvido_indiciado": 0,
+            "envolvido_investigado": 0,
+            "envolvido_acidentado": 0
+        }
+        
+        # 1. Encarregado de Sindicância (SR e SV)
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe IN ('SR', 'SV')
+        """, (user_id,))
+        estatisticas["encarregado_sindicancia"] = cursor.fetchone()[0]
+        
+        # 2. Encarregado de PADS
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe = 'PADS'
+        """, (user_id,))
+        estatisticas["encarregado_pads"] = cursor.fetchone()[0]
+        
+        # 3. Encarregado de IPM
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe = 'IPM'
+        """, (user_id,))
+        estatisticas["encarregado_ipm"] = cursor.fetchone()[0]
+        
+        # 4. Encarregado de Atestado de Origem (AO)
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe = 'AO'
+        """, (user_id,))
+        estatisticas["encarregado_atestado_origem"] = cursor.fetchone()[0]
+        
+        # 5. Encarregado de Feito Preliminar (FP)
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe = 'FP'
+        """, (user_id,))
+        estatisticas["encarregado_feito_preliminar"] = cursor.fetchone()[0]
+        
+        # 6. Escrivão
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE escrivao_id = ? AND ativo = 1
+        """, (user_id,))
+        estatisticas["escrivao"] = cursor.fetchone()[0]
+        
+        # 7. Envolvido como sindicado (status_pm = 'Sindicado')
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE nome_pm_id = ? AND ativo = 1 
+            AND LOWER(status_pm) = 'sindicado'
+        """, (user_id,))
+        estatisticas["envolvido_sindicado"] = cursor.fetchone()[0]
+        
+        # 8. Envolvido como acusado (status_pm = 'Acusado')
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE nome_pm_id = ? AND ativo = 1 
+            AND LOWER(status_pm) = 'acusado'
+        """, (user_id,))
+        estatisticas["envolvido_acusado"] = cursor.fetchone()[0]
+        
+        # 9. Envolvido como indiciado (status_pm = 'Indiciado')
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE nome_pm_id = ? AND ativo = 1 
+            AND LOWER(status_pm) = 'indiciado'
+        """, (user_id,))
+        estatisticas["envolvido_indiciado"] = cursor.fetchone()[0]
+        
+        # 10. Envolvido como investigado (status_pm = 'Investigado')
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE nome_pm_id = ? AND ativo = 1 
+            AND LOWER(status_pm) = 'investigado'
+        """, (user_id,))
+        estatisticas["envolvido_investigado"] = cursor.fetchone()[0]
+        
+        # 11. Envolvido como acidentado (status_pm = 'Acidentado')
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE nome_pm_id = ? AND ativo = 1 
+            AND LOWER(status_pm) = 'acidentado'
+        """, (user_id,))
+        estatisticas["envolvido_acidentado"] = cursor.fetchone()[0]
+        
+        # 12. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
+        cursor.execute("""
+            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
+            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
+            WHERE pme.pm_id = ? AND p.ativo = 1 
+            AND LOWER(p.status_pm) = 'sindicado'
+        """, (user_id,))
+        estatisticas["envolvido_sindicado"] += cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
+            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
+            WHERE pme.pm_id = ? AND p.ativo = 1 
+            AND LOWER(p.status_pm) = 'acusado'
+        """, (user_id,))
+        estatisticas["envolvido_acusado"] += cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
+            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
+            WHERE pme.pm_id = ? AND p.ativo = 1 
+            AND LOWER(p.status_pm) = 'indiciado'
+        """, (user_id,))
+        estatisticas["envolvido_indiciado"] += cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
+            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
+            WHERE pme.pm_id = ? AND p.ativo = 1 
+            AND LOWER(p.status_pm) = 'investigado'
+        """, (user_id,))
+        estatisticas["envolvido_investigado"] += cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
+            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
+            WHERE pme.pm_id = ? AND p.ativo = 1 
+            AND LOWER(p.status_pm) = 'acidentado'
+        """, (user_id,))
+        estatisticas["envolvido_acidentado"] += cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {"sucesso": True, "estatisticas": estatisticas}
+        
+    except Exception as e:
+        print(f"Erro ao obter estatísticas do usuário: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
 def main():
     """Função principal"""
     print("🚀 Iniciando Sistema de Login com Cadastro...")

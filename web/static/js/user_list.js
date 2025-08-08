@@ -153,6 +153,9 @@ async function loadUsers() {
                     <td>${user.nome}</td>
                     <td>${user.tipo === 'operador' ? (user.profile === 'admin' ? 'Operador (Admin)' : 'Operador') : 'Encarregado'}</td>
                     <td class="actions-cell">
+                        <button class="btn-action view-btn" onclick="viewUser('${user.id}', '${user.tipo}')" title="Visualizar">
+                            <i class="fas fa-eye"></i>
+                        </button>
                         <button class="btn-action edit-btn" onclick="editUser('${user.id}', '${user.tipo}')" title="Editar">
                             <i class="fas fa-edit"></i>
                         </button>
@@ -190,6 +193,11 @@ function prevPage() {
 // Função para editar usuário (apenas um placeholder por enquanto)
 function editUser(userId, userType) {
     window.location.href = `user_form.html?id=${userId}&type=${userType}`;
+}
+
+// Função para visualizar usuário
+function viewUser(userId, userType) {
+    window.location.href = `user_view.html?id=${userId}&type=${userType}`;
 }
 
 // Função para deletar usuário

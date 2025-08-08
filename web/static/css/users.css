@@ -329,6 +329,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     transition: color 0.3s ease;
 }
 
+.view-btn {
+    color: #28a745;
+}
+
+.view-btn:hover {
+    color: #218838;
+}
+
 .edit-btn {
     color: #667eea;
 }
