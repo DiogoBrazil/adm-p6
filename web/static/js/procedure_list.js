@@ -410,12 +410,9 @@ function exibirProcedimentos() {
             // Backend já retorna formatado: "posto/grad + matrícula + nome"
             const encarregadoCompleto = procedimento.responsavel || 'Não informado';
             
-            // Backend já retorna formatado: "posto/grad + matrícula + nome"
+            // Backend já retorna formatado: "posto/grad + matrícula + nome" (para múltiplos PMs, usar tooltip resumido)
             const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
             const pmEnvolvidoTooltip = procedimento.pm_envolvido_tooltip || pmEnvolvido;
-            
-            // Obter tipo de envolvimento
-            const tipoEnvolvimento = procedimento.status_pm || 'Não informado';
             
             // Gerar HTML do status do prazo com cores
             const statusPrazoHTML = gerarStatusPrazoHTML(procedimento);
@@ -435,7 +432,6 @@ function exibirProcedimentos() {
                     </td>
                     <td>${encarregadoCompleto}</td>
                     <td title="${pmEnvolvidoTooltip}">${pmEnvolvido}</td>
-                    <td>${tipoEnvolvimento}</td>
                     <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
                         <div class="action-buttons-inline">
@@ -542,7 +538,7 @@ async function carregarOpcoesDosFiltros() {
             povoarSelect('filtroTipo', opcoes.tipos);
             povoarSelect('filtroAno', opcoes.anos);
             povoarSelect('filtroOrigem', opcoes.origens);
-            povoarSelect('filtroStatus', opcoes.status);
+            // Removido: filtroStatus
             povoarSelect('filtroDocumento', opcoes.documentos);
             
             // Configurar datalist para os campos especiais
@@ -570,13 +566,13 @@ function carregarOpcoesDosFiltrosLegacy() {
     const anos = [...new Set(todosOsProcedimentos.map(p => extrairAno(p)).filter(a => a))].sort().reverse();
     const origens = [...new Set(todosOsProcedimentos.map(p => p.local_origem).filter(o => o))].sort();
     const encarregados = [...new Set(todosOsProcedimentos.map(p => p.responsavel).filter(e => e))].sort();
-    const status = [...new Set(todosOsProcedimentos.map(p => p.status_pm).filter(s => s))].sort();
+    // Removido: status_pm do fallback
     
     // Povoar os selects
     povoarSelect('filtroTipo', tipos);
     povoarSelect('filtroAno', anos);
     povoarSelect('filtroOrigem', origens);
-    povoarSelect('filtroStatus', status);
+    // Removido: povoar filtroStatus
     
     // Povoar datalists para campos especiais no fallback
     if (encarregados.length > 0) {
@@ -614,7 +610,7 @@ async function aplicarFiltros() {
         ano: document.getElementById('filtroAno').value,
         origem: document.getElementById('filtroOrigem').value,
         encarregado: getDatalistValue('filtroEncarregado'),
-        status: document.getElementById('filtroStatus').value,
+    // Removido: status PM
         pm_envolvido: getDatalistValue('filtroPmEnvolvido'),
         vitima: getDatalistValue('filtroVitima'),
         documento: document.getElementById('filtroDocumento').value,
@@ -632,7 +628,7 @@ async function aplicarFiltros() {
                 'ano': 'Ano', 
                 'origem': 'Origem',
                 'encarregado': 'Responsável',
-                'status': 'Status PM',
+                // Removido: Status PM
                 'pm_envolvido': 'PM Envolvido',
                 'vitima': 'Vítima/Ofendido',
                 'documento': 'Documento',
@@ -667,7 +663,7 @@ async function limparFiltros() {
     document.getElementById('filtroTipo').value = '';
     document.getElementById('filtroAno').value = '';
     document.getElementById('filtroOrigem').value = '';
-    document.getElementById('filtroStatus').value = '';
+    // Removido: limpar filtroStatus
     document.getElementById('filtroDocumento').value = '';
     document.getElementById('filtroSituacao').value = '';
     
