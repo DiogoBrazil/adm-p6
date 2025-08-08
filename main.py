@@ -1559,6 +1559,198 @@ def obter_processo(processo_id):
         return None
 
 @eel.expose
+def obter_procedimento_completo(procedimento_id):
+    """Obtém dados consolidados para a página de visualização"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT 
+                p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador,
+                p.processo_sei, p.local_origem, p.data_instauracao, p.data_conclusao,
+                p.concluido, p.status_pm, p.nome_pm_id,
+                p.responsavel_id, p.escrivao_id, p.resumo_fatos
+            FROM processos_procedimentos p
+            WHERE p.id = ? AND p.ativo = 1
+            """,
+            (procedimento_id,)
+        )
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return {"sucesso": False, "mensagem": "Procedimento não encontrado."}
+
+        # Mapear campos para o formato esperado pelo front
+        concluido_flag = bool(row[9]) if row[9] is not None else False
+        situacao = "Concluído" if concluido_flag else "Em Andamento"
+
+        procedimento = {
+            "id": row[0],
+            "numero": row[1],
+            "tipo_geral": row[2],
+            "tipo_procedimento": row[3],  # compatível com a view
+            "documento_iniciador": row[4],
+            "processo_sei": row[5],
+            "local_origem": row[6],
+            "data_abertura": row[7],  # alias para data_instauracao
+            "data_conclusao": row[8],
+            "situacao": situacao,
+            # também disponibiliza campos úteis
+            "status_pm": row[10],
+            "nome_pm_id": row[11],
+            "responsavel_id": row[12],
+            "escrivao_id": row[13],
+            "observacoes": row[14]
+        }
+
+        return {"sucesso": True, "procedimento": procedimento}
+    except Exception as e:
+        print(f"Erro em obter_procedimento_completo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao obter procedimento: {str(e)}"}
+
+@eel.expose
+def obter_encarregados_procedimento(procedimento_id):
+    """Retorna responsável e escrivão (se houver) para o procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT responsavel_id, escrivao_id
+            FROM processos_procedimentos
+            WHERE id = ? AND ativo = 1
+            """,
+            (procedimento_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return {"sucesso": True, "encarregados": []}
+
+        responsavel_id, escrivao_id = row[0], row[1]
+
+        def _buscar_usuario(user_id):
+            if not user_id:
+                return None
+            # Tenta operadores
+            cursor.execute(
+                "SELECT nome, posto_graduacao, matricula FROM operadores WHERE id = ?",
+                (user_id,)
+            )
+            u = cursor.fetchone()
+            if u:
+                return {"nome": u[0], "posto_graduacao": u[1], "matricula": u[2]}
+            # Tenta encarregados
+            cursor.execute(
+                "SELECT nome, posto_graduacao, matricula FROM encarregados WHERE id = ?",
+                (user_id,)
+            )
+            u = cursor.fetchone()
+            if u:
+                return {"nome": u[0], "posto_graduacao": u[1], "matricula": u[2]}
+            return None
+
+        encarregados = []
+        resp = _buscar_usuario(responsavel_id)
+        if resp:
+            encarregados.append({
+                "tipo_encarregado": "Responsável",
+                **resp
+            })
+
+        esc = _buscar_usuario(escrivao_id)
+        if esc:
+            encarregados.append({
+                "tipo_encarregado": "Escrivão",
+                **esc
+            })
+
+        conn.close()
+        return {"sucesso": True, "encarregados": encarregados}
+    except Exception as e:
+        print(f"Erro em obter_encarregados_procedimento: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao obter encarregados: {str(e)}"}
+
+@eel.expose
+def obter_envolvidos_procedimento(procedimento_id):
+    """Retorna os envolvidos do procedimento (múltiplos para procedimentos ou único para processos)"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        # Buscar tipo_geral e possível vítima/ofendido
+        cursor.execute(
+            "SELECT tipo_geral, nome_vitima FROM processos_procedimentos WHERE id = ? AND ativo = 1",
+            (procedimento_id,)
+        )
+        row_head = cursor.fetchone()
+        tipo_geral_val = row_head[0] if row_head else None
+        nome_vitima_val = row_head[1] if row_head else None
+
+        # Verificar se há registros na tabela de múltiplos PMs (procedimentos)
+        cursor.execute(
+            "SELECT COUNT(*) FROM procedimento_pms_envolvidos WHERE procedimento_id = ?",
+            (procedimento_id,)
+        )
+        count = cursor.fetchone()[0]
+
+        envolvidos = []
+
+        if count and count > 0:
+            # Usar função auxiliar já existente para montar dados do PM
+            pms = buscar_pms_envolvidos(procedimento_id)
+            for pm in pms:
+                envolvidos.append({
+                    "nome": pm.get("nome"),
+                    "posto_graduacao": pm.get("posto_graduacao"),
+                    "matricula": pm.get("matricula"),
+                    "tipo_envolvimento": pm.get("status_pm") or "Envolvido"
+                })
+        else:
+            # Tentar carregar envolvido único do próprio processo
+            cursor.execute(
+                """
+                SELECT p.status_pm, p.nome_pm_id,
+                       COALESCE(o.nome, e.nome, '') as nome,
+                       COALESCE(o.posto_graduacao, e.posto_graduacao, '') as posto,
+                       COALESCE(o.matricula, e.matricula, '') as matricula
+                FROM processos_procedimentos p
+                LEFT JOIN operadores o ON p.nome_pm_id = o.id
+                LEFT JOIN encarregados e ON p.nome_pm_id = e.id AND o.id IS NULL
+                WHERE p.id = ? AND p.ativo = 1
+                """,
+                (procedimento_id,)
+            )
+            row = cursor.fetchone()
+            if row and (row[2] or row[3] or row[4]):
+                envolvidos.append({
+                    "nome": row[2],
+                    "posto_graduacao": row[3],
+                    "matricula": row[4],
+                    "tipo_envolvimento": row[0] or "Envolvido"
+                })
+
+        # Para procedimentos, também listar a vítima/ofendido se existir
+        if tipo_geral_val == 'procedimento' and nome_vitima_val and str(nome_vitima_val).strip():
+            envolvidos.append({
+                "nome": str(nome_vitima_val).strip(),
+                "tipo_envolvimento": "Vítima/Ofendido",
+                "posto_graduacao": "",
+                "matricula": ""
+            })
+
+        conn.close()
+        return {"sucesso": True, "envolvidos": envolvidos}
+    except Exception as e:
+        print(f"Erro em obter_envolvidos_procedimento: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao obter envolvidos: {str(e)}"}
+
+@eel.expose
 def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,

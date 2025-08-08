@@ -439,6 +439,9 @@ function exibirProcedimentos() {
                     <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
                         <div class="action-buttons-inline">
+                            <button onclick="visualizarProcedimento('${procedimento.id}')" class="btn-view" title="Visualizar">
+                                <i class="fas fa-eye"></i>
+                            </button>
                             <button onclick="editarProcedimento('${procedimento.id}')" class="btn-edit" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -795,6 +798,11 @@ function getDatalistValue(campoId) {
 // Função para editar procedimento
 function editarProcedimento(id) {
     window.location.href = `procedure_form.html?id=${id}`;
+}
+
+// Função para visualizar procedimento (abre página dedicada)
+function visualizarProcedimento(id) {
+    window.location.href = `procedure_view.html?id=${id}`;
 }
 
 // Função para obter a classe CSS para o status do PM

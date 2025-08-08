@@ -258,7 +258,10 @@ async function loadEnvolvidos(procedureId) {
         const data = await eel.obter_envolvidos_procedimento(procedureId)();
         
         if (data.sucesso && data.envolvidos.length > 0) {
-            container.innerHTML = data.envolvidos.map(envolvido => `
+            container.innerHTML = data.envolvidos.map(envolvido => {
+                const nomeCompleto = `${envolvido.posto_graduacao ? envolvido.posto_graduacao + ' ' : ''}${envolvido.nome || ''}`.trim();
+                const temMatricula = envolvido.matricula && String(envolvido.matricula).trim() !== '';
+                return `
                 <div class="info-section">
                     <h4>
                         <i class="fas fa-users"></i>
@@ -267,12 +270,13 @@ async function loadEnvolvidos(procedureId) {
                     <ul class="info-list">
                         <li>
                             <i class="fas fa-user"></i>
-                            <strong>${envolvido.posto_graduacao || ''} ${envolvido.nome}</strong>
+                            <strong>${nomeCompleto}</strong>
                         </li>
+                        ${temMatricula ? `
                         <li>
                             <i class="fas fa-id-badge"></i>
-                            Matrícula: ${envolvido.matricula || 'Não informada'}
-                        </li>
+                            Matrícula: ${envolvido.matricula}
+                        </li>` : ''}
                         ${envolvido.observacoes ? `
                         <li>
                             <i class="fas fa-sticky-note"></i>
@@ -280,8 +284,8 @@ async function loadEnvolvidos(procedureId) {
                         </li>
                         ` : ''}
                     </ul>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         } else {
             container.innerHTML = '<p class="empty-state">Nenhum envolvido cadastrado</p>';
         }
