@@ -366,9 +366,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Ativar controles pós-resumo (remessa/julgamento/solução/indícios)
     wireNovosControlesPosResumo();
 
-    // Se for edição, preencher formulário
+    // Se for edição, carregar dados completos e então preencher
     if (editandoProcedimento && editandoProcedimento.id) {
-        await preencherFormularioEdicao(editandoProcedimento.id);
+        await carregarProcedimentoEdicao(editandoProcedimento.id);
     }
 });
 
@@ -640,108 +640,26 @@ function popularSelect(selectId, lista, mapFn) {
     });
 }
 
-async function preencherFormularioEdicao(id) {
+// Removida versão antiga de preencherFormularioEdicao(id) baseada em ID direto.
+
+// Loader central para modo edição que busca no backend e delega ao preenchimento por objeto
+async function carregarProcedimentoEdicao(id) {
     try {
-        const data = await eel.obter_processo(id)();
-        if (!data) return;
-        // Preencher campos básicos já existentes
-        document.getElementById('tipo_geral').value = data.tipo_geral || '';
-        if (data.tipo_geral === 'processo') {
-            document.getElementById('group_tipo_processo').style.display = '';
-            document.getElementById('tipo_processo').value = data.tipo_detalhe || '';
-        } else if (data.tipo_geral === 'procedimento') {
-            document.getElementById('group_tipo_procedimento').style.display = '';
-            document.getElementById('tipo_procedimento').value = data.tipo_detalhe || '';
+        const procedimento = await eel.obter_processo(id)();
+        if (!procedimento) {
+            showAlert('Registro não encontrado ou inativo.', 'error');
+            setTimeout(voltarParaListagem, 1500);
+            return;
         }
-        document.getElementById('documento_iniciador').value = data.documento_iniciador || '';
-        document.getElementById('processo_sei').value = data.processo_sei || '';
-        document.getElementById('local_origem').value = data.local_origem || '';
-        document.getElementById('local_fatos').value = data.local_fatos || '';
-        document.getElementById('data_instauracao').value = data.data_instauracao || '';
-        document.getElementById('data_recebimento').value = data.data_recebimento || '';
-        document.getElementById('escrivao_id').value = data.escrivao_id || '';
-        document.getElementById('status_pm').value = data.status_pm || '';
-        document.getElementById('nome_pm').value = data.nome_pm_id || '';
-        document.getElementById('nome_vitima').value = data.nome_vitima || '';
-        document.getElementById('natureza_procedimento').value = data.natureza_procedimento || '';
-        document.getElementById('resumo_fatos').value = data.resumo_fatos || '';
-        document.getElementById('numero_portaria').value = data.numero_portaria || '';
-        document.getElementById('numero_memorando').value = data.numero_memorando || '';
-        document.getElementById('numero_feito').value = data.numero_feito || '';
-        document.getElementById('numero_rgf').value = data.numero_rgf || '';
-        document.getElementById('numero_controle').value = data.numero_controle || '';
-        document.getElementById('concluido').checked = !!data.concluido;
-        document.getElementById('data_conclusao').value = data.data_conclusao || '';
-        document.getElementById('solucao_final').value = data.solucao_final || '';
-
-        // Novos campos (UI pós-resumo)
-        if (data.data_remessa_encarregado) {
-            const chk = document.getElementById('chk_remessa');
-            if (chk) chk.checked = true;
-            const dt = document.getElementById('data_remessa_encarregado');
-            if (dt) dt.value = data.data_remessa_encarregado;
-        }
-        if (data.data_julgamento) {
-            const reveal = document.getElementById('group_chk_julgado');
-            if (reveal) reveal.style.display = '';
-            const chk = document.getElementById('chk_julgado');
-            if (chk) chk.checked = true;
-            const dt = document.getElementById('data_julgamento');
-            if (dt) dt.value = data.data_julgamento;
-        }
-        const solSel = document.getElementById('solucao_tipo');
-        if (solSel) solSel.value = data.solucao_tipo || '';
-        const penSel = document.getElementById('penalidade_tipo');
-        if (penSel) {
-            let val = data.penalidade_tipo || '';
-            // Normalizar valores legados com acento para os valores do enum do banco
-            if (val === 'Prisão') val = 'Prisao';
-            if (val === 'Detenção') val = 'Detencao';
-            if (val === 'Repreensão') val = 'Repreensao';
-            penSel.value = val;
-        }
-        if (document.getElementById('penalidade_dias')) {
-            document.getElementById('penalidade_dias').value = (data.penalidade_dias != null ? String(data.penalidade_dias) : '');
-        }
-        if (data.solucao_tipo) {
-            const chkSol = document.getElementById('chk_solucao');
-            if (chkSol) chkSol.checked = true;
-        }
-        // categorias: aceitar array JSON ou string
-        const hid = document.getElementById('indicios_categorias');
-        const selCats = document.getElementById('indicios_categorias_select');
-        if (hid && selCats && data.indicios_categorias) {
-            let arr = null;
-            try { const parsed = JSON.parse(data.indicios_categorias); if (Array.isArray(parsed)) arr = parsed; } catch {}
-            if (!arr) {
-                // tentar mapear single string para seleção
-                arr = [data.indicios_categorias].filter(Boolean);
-            }
-            if (arr) {
-                Array.from(selCats.options).forEach(o => { o.selected = arr.includes(o.value); });
-                hid.value = JSON.stringify(arr);
-            }
-        }
-
-        // Prefill chips selecionados
-            if (data.indicios) {
-                (data.indicios.crimes || []).forEach(it => {
-                    const base = `${it.tipo || ''} ${it.dispositivo_legal || ''}${it.artigo ? ' art. ' + it.artigo : ''}`.trim();
-                    const compl = [it.paragrafo, it.inciso, it.alinea].filter(Boolean).join(' ');
-                    const desc = it.descricao_artigo ? ` - ${it.descricao_artigo}` : '';
-                    selectedChips.crimes.set(String(it.id), ([base, compl].filter(Boolean).join(' ') + desc));
-                });
-                (data.indicios.rdpm || []).forEach(it => selectedChips.rdpm.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`));
-                (data.indicios.art29 || []).forEach(it => selectedChips.art29.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`));
-                // Renderizar chips agora
-                renderSelectedChips('crimes', 'indicios_crimes_chips');
-                renderSelectedChips('rdpm', 'indicios_rdpm_chips');
-                renderSelectedChips('art29', 'indicios_art29_chips');
-            }
-    // Atualizar visibilidades recém-incluídas
-    wireNovosControlesPosResumo();
+        await preencherFormularioEdicao(procedimento); // usa versão por objeto (definida mais abaixo)
+        // Ajustar UI (título e botão)
+        const titulo = document.querySelector('h2');
+        if (titulo) titulo.textContent = 'Editar Registro';
+        const submitBtn = document.querySelector('#processForm button[type="submit"]');
+        if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-save"></i> Atualizar';
     } catch (e) {
-        console.error('Erro ao preencher formulário de edição:', e);
+        console.error('Erro ao carregar procedimento para edição:', e);
+        showAlert('Erro ao carregar dados para edição.', 'error');
     }
 }
 
@@ -1133,6 +1051,128 @@ async function preencherFormularioEdicao(procedimento) {
             atualizarTransgressoesSelecionadas();
             
             console.log('✅ Transgressões carregadas na edição:', transgressoesSelecionadas);
+        }
+
+        // ==========================
+        // Campos pós-resumo (remessa / julgamento / solução / penalidade / indícios categorias)
+        // ==========================
+        try {
+            // Remessa
+            if (procedimento.data_remessa_encarregado) {
+                const chkRemessa = document.getElementById('chk_remessa');
+                const dtRemessa = document.getElementById('data_remessa_encarregado');
+                if (chkRemessa) chkRemessa.checked = true;
+                if (dtRemessa) dtRemessa.value = procedimento.data_remessa_encarregado;
+                if (chkRemessa) chkRemessa.dispatchEvent(new Event('change'));
+            }
+            // Julgamento
+            if (procedimento.data_julgamento) {
+                const chkJulgado = document.getElementById('chk_julgado');
+                const dtJulg = document.getElementById('data_julgamento');
+                // Para julgamento aparecer precisa da remessa marcada (já tratada acima se houver)
+                if (chkJulgado) chkJulgado.checked = true;
+                if (dtJulg) dtJulg.value = procedimento.data_julgamento;
+                if (chkJulgado) chkJulgado.dispatchEvent(new Event('change'));
+            }
+            // Solução
+            if (procedimento.solucao_tipo) {
+                const chkSolucao = document.getElementById('chk_solucao');
+                const selSolucao = document.getElementById('solucao_tipo');
+                if (chkSolucao) chkSolucao.checked = true;
+                if (chkSolucao) chkSolucao.dispatchEvent(new Event('change')); // revela select e repopula opções
+                // Pequeno delay para garantir opções populadas conforme tipo (processo/procedimento)
+                await new Promise(r => setTimeout(r, 50));
+                if (selSolucao) {
+                    selSolucao.value = procedimento.solucao_tipo;
+                    selSolucao.dispatchEvent(new Event('change'));
+                }
+                // Penalidade (apenas se processo Punido)
+                if (procedimento.penalidade_tipo || procedimento.penalidade_dias != null) {
+                    let pen = procedimento.penalidade_tipo || '';
+                    if (pen === 'Prisão') pen = 'Prisao';
+                    if (pen === 'Detenção') pen = 'Detencao';
+                    if (pen === 'Repreensão') pen = 'Repreensao';
+                    const penSel = document.getElementById('penalidade_tipo');
+                    const penDias = document.getElementById('penalidade_dias');
+                    if (penSel) penSel.value = pen;
+                    if (penSel) penSel.dispatchEvent(new Event('change'));
+                    if (penDias && (pen === 'Prisao' || pen === 'Detencao')) {
+                        penDias.value = procedimento.penalidade_dias != null ? String(procedimento.penalidade_dias) : '';
+                    }
+                }
+                // Categorias de indícios
+                if (procedimento.indicios_categorias) {
+                    const selCats = document.getElementById('indicios_categorias_select');
+                    const hidCats = document.getElementById('indicios_categorias');
+                    let arr = [];
+                    try {
+                        const parsed = JSON.parse(procedimento.indicios_categorias);
+                        if (Array.isArray(parsed)) arr = parsed;
+                    } catch { arr = [procedimento.indicios_categorias]; }
+                    if (selCats) {
+                        const setVals = new Set(arr);
+                        Array.from(selCats.options).forEach(o => { o.selected = setVals.has(o.value); });
+                    }
+                    if (hidCats) hidCats.value = JSON.stringify(arr);
+                    // Disparar change para atualizar visibilidade dos grupos de indícios
+                    if (selCats) selCats.dispatchEvent(new Event('change'));
+                }
+            }
+        } catch (eInner) {
+            console.warn('Aviso ao preencher campos de solução/remessa:', eInner);
+        }
+
+        // ==========================
+        // Pré-preencher chips de Indícios (Crimes, RDPM, Art.29)
+        // ==========================
+        try {
+            if (procedimento.indicios) {
+                // Limpar estados anteriores caso já tenha aberto outra edição sem recarregar página
+                selectedChips.crimes.clear();
+                selectedChips.rdpm.clear();
+                selectedChips.art29.clear();
+
+                (procedimento.indicios.crimes || []).forEach(it => {
+                    const base = `${it.tipo || ''} ${it.dispositivo_legal || ''}${it.artigo ? ' art. ' + it.artigo : ''}`.trim();
+                    const compl = [it.paragrafo, it.inciso, it.alinea].filter(Boolean).join(' ');
+                    const desc = it.descricao_artigo ? ` - ${it.descricao_artigo}` : '';
+                    const label = [base, compl].filter(Boolean).join(' ') + desc;
+                    selectedChips.crimes.set(String(it.id), label);
+                });
+                (procedimento.indicios.rdpm || []).forEach(it => {
+                    selectedChips.rdpm.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`);
+                });
+                (procedimento.indicios.art29 || []).forEach(it => {
+                    selectedChips.art29.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`);
+                });
+
+                // Renderizar visualmente
+                renderSelectedChips('crimes', 'indicios_crimes_chips');
+                renderSelectedChips('rdpm', 'indicios_rdpm_chips');
+                renderSelectedChips('art29', 'indicios_art29_chips');
+
+                // Ajustar automaticamente o seletor de tipo de transgressão conforme dados
+                const selTipoTransg = document.getElementById('indicios_transg_tipo');
+                if (selTipoTransg) {
+                    if (selectedChips.art29.size > 0 && selectedChips.rdpm.size === 0) {
+                        selTipoTransg.value = 'art29';
+                        selTipoTransg.dispatchEvent(new Event('change'));
+                    } else if (selectedChips.rdpm.size > 0 && selectedChips.art29.size === 0) {
+                        selTipoTransg.value = 'rdpm';
+                        selTipoTransg.dispatchEvent(new Event('change'));
+                    } else if (selectedChips.art29.size > 0 && selectedChips.rdpm.size > 0) {
+                        // Se ambos existem, manter valor atual; se vazio, prioriza RDPM
+                        if (!selTipoTransg.value) {
+                            selTipoTransg.value = 'rdpm';
+                            selTipoTransg.dispatchEvent(new Event('change'));
+                        } else {
+                            selTipoTransg.dispatchEvent(new Event('change'));
+                        }
+                    }
+                }
+            }
+        } catch (eChips) {
+            console.warn('Falha ao preencher chips de indícios:', eChips);
         }
         
         console.log('✅ Preenchimento do formulário concluído com sucesso');

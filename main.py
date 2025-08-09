@@ -1107,7 +1107,7 @@ def registrar_processo(
             CREATE TABLE IF NOT EXISTS procedimentos_indicios_art29 (
                 id TEXT PRIMARY KEY,
                 procedimento_id TEXT NOT NULL,
-                infracao_id INTEGER NOT NULL,
+                art29_id INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -1232,7 +1232,14 @@ def registrar_processo(
 
         _insert_indicios(indicios_crimes, 'procedimentos_indicios_crimes', 'crime_id')
         _insert_indicios(indicios_rdpm, 'procedimentos_indicios_rdpm', 'transgressao_id')
-        _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', 'infracao_id')
+        # Detectar nome correto da coluna (migrações antigas podem ter infracao_id)
+        try:
+            cursor.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+            cols_art29 = [r[1] for r in cursor.fetchall()]
+            col_art29 = 'art29_id' if 'art29_id' in cols_art29 else ('infracao_id' if 'infracao_id' in cols_art29 else 'art29_id')
+        except Exception:
+            col_art29 = 'art29_id'
+        _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', col_art29)
 
         conn.commit()
         conn.close()
@@ -1685,11 +1692,15 @@ def obter_processo(processo_id):
                 pass
             # art29
             try:
+                # Detectar coluna (art29_id ou infracao_id)
+                cur_i.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+                ccols = [r[1] for r in cur_i.fetchall()]
+                col_fk = 'art29_id' if 'art29_id' in ccols else ('infracao_id' if 'infracao_id' in ccols else 'art29_id')
                 cur_i.execute(
-                    """
+                    f"""
                     SELECT a.id, a.inciso, a.texto
                     FROM procedimentos_indicios_art29 pia
-                    JOIN infracoes_estatuto_art29 a ON a.id = pia.infracao_id
+                    JOIN infracoes_estatuto_art29 a ON a.id = pia.{col_fk}
                     WHERE pia.procedimento_id = ?
                     """,
                     (pid,)
@@ -2137,9 +2148,16 @@ def atualizar_processo(
                     "INSERT INTO procedimentos_indicios_rdpm (id, procedimento_id, transgressao_id) VALUES (?, ?, ?)",
                     (str(uuid.uuid4()), processo_id, tid)
                 )
+            # detectar nome da coluna FK de art29
+            try:
+                cursor.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+                cols_art29 = [r[1] for r in cursor.fetchall()]
+                col_art29 = 'art29_id' if 'art29_id' in cols_art29 else ('infracao_id' if 'infracao_id' in cols_art29 else 'art29_id')
+            except Exception:
+                col_art29 = 'art29_id'
             for aid in art29_ids:
                 cursor.execute(
-                    "INSERT INTO procedimentos_indicios_art29 (id, procedimento_id, infracao_id) VALUES (?, ?, ?)",
+                    f"INSERT INTO procedimentos_indicios_art29 (id, procedimento_id, {col_art29}) VALUES (?, ?, ?)",
                     (str(uuid.uuid4()), processo_id, aid)
                 )
         except Exception as _e:
