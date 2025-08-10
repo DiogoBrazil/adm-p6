@@ -136,8 +136,11 @@ class ModalIndiciosSolucao {
         });
     }
 
-    async abrir() {
+    async abrir(pmId = null, dadosExistentes = null) {
         console.log('Abrindo modal de indícios...');
+        console.log('PM ID:', pmId);
+        console.log('Dados existentes:', dadosExistentes);
+        
         try {
             // Carregar PMs envolvidos
             await this.carregarPMsEnvolvidos();
@@ -145,12 +148,91 @@ class ModalIndiciosSolucao {
             // Limpar formulário
             this.limparFormulario();
             
+            // Se há dados existentes e um PM específico, pré-preencher
+            if (pmId && dadosExistentes) {
+                await this.preencherDadosExistentes(pmId, dadosExistentes);
+            }
+            
             // Mostrar modal
             this.modalElement.style.display = 'block';
             console.log('Modal de indícios aberto com sucesso');
         } catch (error) {
             console.error('Erro ao abrir modal de indícios:', error);
         }
+    }
+
+    async preencherDadosExistentes(pmId, dados) {
+        console.log('📋 Preenchendo dados existentes para PM:', pmId, dados);
+        
+        try {
+            // Selecionar o PM no dropdown
+            const selectPM = document.getElementById('pm_envolvido_select');
+            if (selectPM) {
+                selectPM.value = pmId;
+            }
+            
+            // Preencher categoria
+            if (dados.categoria) {
+                const selectCategoria = document.getElementById('categoria_indicio');
+                if (selectCategoria) {
+                    selectCategoria.value = dados.categoria;
+                    selectCategoria.dispatchEvent(new Event('change')); // Mostrar campos apropriados
+                }
+            }
+            
+            // Aguardar campos aparecerem
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Preencher crimes selecionados
+            if (dados.crimes && dados.crimes.length > 0) {
+                console.log('🔍 Carregando crimes existentes:', dados.crimes);
+                this.crimesSelecionados = dados.crimes.map(crime => ({
+                    id: crime.id,
+                    nome: this.formatarCrimeTexto(crime),
+                    tipo: 'crime'
+                }));
+                this.atualizarCrimesSelecionados();
+            }
+            
+            // Preencher transgressões selecionadas  
+            if (dados.rdpm && dados.rdpm.length > 0) {
+                console.log('🔍 Carregando transgressões RDPM existentes:', dados.rdpm);
+                dados.rdpm.forEach(rdpm => {
+                    this.transgressoesSelecionadas.push({
+                        id: rdpm.id,
+                        nome: `Inciso ${rdpm.inciso} - ${rdpm.texto}`,
+                        tipo: 'rdpm'
+                    });
+                });
+            }
+            
+            if (dados.art29 && dados.art29.length > 0) {
+                console.log('🔍 Carregando infrações Art. 29 existentes:', dados.art29);
+                dados.art29.forEach(art29 => {
+                    this.transgressoesSelecionadas.push({
+                        id: art29.id,
+                        nome: `Inciso ${art29.inciso} - ${art29.texto}`,
+                        tipo: 'art29'
+                    });
+                });
+            }
+            
+            if (this.transgressoesSelecionadas.length > 0) {
+                this.atualizarTransgressoesSelecionadas();
+            }
+            
+            console.log('✅ Dados existentes carregados no modal');
+            
+        } catch (error) {
+            console.error('❌ Erro ao preencher dados existentes:', error);
+        }
+    }
+
+    formatarCrimeTexto(crime) {
+        const base = `${crime.tipo || ''} ${crime.dispositivo_legal || ''}${crime.artigo ? ' art. ' + crime.artigo : ''}`.trim();
+        const complemento = [crime.paragrafo, crime.inciso, crime.alinea].filter(Boolean).join(' ');
+        const descricao = crime.descricao_artigo ? ` - ${crime.descricao_artigo}` : '';
+        return [base, complemento].filter(Boolean).join(' ') + descricao;
     }
 
     fechar() {
@@ -320,14 +402,14 @@ class ModalIndiciosSolucao {
     }
 
     adicionarCrimeClick(elemento) {
-        const id = parseInt(elemento.dataset.id);
+        const id = elemento.dataset.id;  // Remover parseInt para suportar UUIDs
         const texto = elemento.dataset.texto;
         this.adicionarCrime(id, texto);
     }
 
     adicionarTransgressaoClick(elemento) {
         console.log('🎯 CLICK NA TRANSGRESSÃO!');
-        const id = parseInt(elemento.dataset.id);
+        const id = elemento.dataset.id;  // Remover parseInt para suportar UUIDs
         const texto = elemento.dataset.texto;
         const tipo = elemento.dataset.tipo;
         console.log('Adicionando transgressão:', {id, texto, tipo});
@@ -727,6 +809,30 @@ class ModalIndiciosSolucao {
         // Adicionar à lista global
         this.indiciosAdicionados.push(novoIndicio);
 
+        // ======== ATUALIZAR VARIÁVEL GLOBAL INDICIOSPORPM ========
+        // Garantir que a variável global existe
+        if (typeof indiciosPorPM === 'undefined') {
+            window.indiciosPorPM = {};
+        }
+        
+        // Criar estrutura de dados compatível com o backend
+        const dadosBackend = {
+            categoria: categorias.join(', '), // Backend espera string única
+            crimes: this.crimesSelecionados.map(crime => ({ id: crime.id })),
+            rdpm: this.transgressoesSelecionadas.filter(t => t.tipo === 'rdpm').map(trans => ({ id: trans.id })),
+            art29: this.transgressoesSelecionadas.filter(t => t.tipo === 'estatuto').map(trans => ({ id: trans.id }))
+        };
+        
+        // Atualizar variável global
+        if (typeof indiciosPorPM !== 'undefined') {
+            indiciosPorPM[pmSelecionado] = dadosBackend;
+            console.log('✅ Variável global indiciosPorPM atualizada:', indiciosPorPM);
+        } else {
+            window.indiciosPorPM = {};
+            window.indiciosPorPM[pmSelecionado] = dadosBackend;
+            console.log('✅ Criada variável global window.indiciosPorPM:', window.indiciosPorPM);
+        }
+        
         // Atualizar visualização
         this.atualizarListaIndicios();
 

@@ -835,7 +835,7 @@ def buscar_pms_envolvidos(procedimento_id):
         
         # Busca primeiro os dados da tabela de relacionamento
         cursor.execute("""
-            SELECT pm_id, pm_tipo, ordem, status_pm
+            SELECT id, pm_id, pm_tipo, ordem, status_pm
             FROM procedimento_pms_envolvidos 
             WHERE procedimento_id = ?
             ORDER BY ordem
@@ -845,7 +845,7 @@ def buscar_pms_envolvidos(procedimento_id):
         
         resultado = []
         for pm_rel in pms_relacionamento:
-            pm_id, pm_tipo_tabela, ordem, status_pm_env = pm_rel
+            pm_envolvido_id, pm_id, pm_tipo_tabela, ordem, status_pm_env = pm_rel
             
             # Busca primeiro na tabela operadores
             cursor.execute("""
@@ -876,15 +876,20 @@ def buscar_pms_envolvidos(procedimento_id):
                 # Remover espaços duplos
                 nome_completo = " ".join(nome_completo.split())
                 
+                # Buscar indícios associados a este PM
+                indicios = buscar_indicios_por_pm(pm_envolvido_id)
+                
                 resultado.append({
                     'id': pm_id,
+                    'pm_envolvido_id': pm_envolvido_id,  # Adicionar o ID da tabela de relacionamento
                     'tipo': pm_tipo_tabela,
                     'ordem': ordem,
                     'status_pm': status_pm_env,
                     'nome': nome,
                     'posto_graduacao': posto,
                     'matricula': matricula,
-                    'nome_completo': nome_completo
+                    'nome_completo': nome_completo,
+                    'indicios': indicios
                 })
         
         conn.close()
@@ -896,6 +901,94 @@ def buscar_pms_envolvidos(procedimento_id):
     except Exception as e:
         print(f"Erro ao buscar PMs envolvidos: {e}")
         return []
+
+def buscar_indicios_por_pm(pm_envolvido_id):
+    """Busca todos os indícios associados a um PM específico"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar o registro principal de indícios
+        cursor.execute("""
+            SELECT id, categoria
+            FROM pm_envolvido_indicios 
+            WHERE pm_envolvido_id = ? AND ativo = 1
+        """, (pm_envolvido_id,))
+        
+        indicios_result = cursor.fetchone()
+        if not indicios_result:
+            conn.close()
+            return None
+            
+        indicios_id, categoria = indicios_result
+        
+        # Buscar crimes associados
+        crimes = []
+        cursor.execute("""
+            SELECT c.id, c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, 
+                   c.paragrafo, c.inciso, c.alinea
+            FROM pm_envolvido_crimes pec
+            JOIN crimes_contravencoes c ON c.id = pec.crime_id
+            WHERE pec.pm_indicios_id = ?
+        """, (indicios_id,))
+        
+        for row in cursor.fetchall():
+            crimes.append({
+                "id": row[0],
+                "tipo": row[1],
+                "dispositivo_legal": row[2], 
+                "artigo": row[3],
+                "descricao_artigo": row[4],
+                "paragrafo": row[5] or "",
+                "inciso": row[6] or "",
+                "alinea": row[7] or ""
+            })
+        
+        # Buscar transgressões RDPM associadas
+        rdpm = []
+        cursor.execute("""
+            SELECT t.id, t.gravidade, t.inciso, t.texto
+            FROM pm_envolvido_rdpm per
+            JOIN transgressoes t ON t.id = per.transgressao_id
+            WHERE per.pm_indicios_id = ?
+        """, (indicios_id,))
+        
+        for row in cursor.fetchall():
+            rdpm.append({
+                "id": row[0],
+                "gravidade": row[1],
+                "inciso": row[2],
+                "texto": row[3]
+            })
+        
+        # Buscar infrações Art. 29 associadas
+        art29 = []
+        cursor.execute("""
+            SELECT a.id, a.inciso, a.texto
+            FROM pm_envolvido_art29 pea
+            JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id
+            WHERE pea.pm_indicios_id = ?
+        """, (indicios_id,))
+        
+        for row in cursor.fetchall():
+            art29.append({
+                "id": row[0],
+                "inciso": row[1],
+                "texto": row[2]
+            })
+        
+        conn.close()
+        
+        return {
+            "categoria": categoria,
+            "crimes": crimes,
+            "rdpm": rdpm,
+            "art29": art29
+        }
+        
+    except Exception as e:
+        print(f"Erro ao buscar indícios do PM {pm_envolvido_id}: {e}")
+        return None
 
 @eel.expose
 def listar_usuarios(search_term=None, page=1, per_page=10):
@@ -1012,7 +1105,9 @@ def registrar_processo(
     # Novos campos (Migração 014)
     data_remessa_encarregado=None, data_julgamento=None, solucao_tipo=None,
     penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
-    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None
+    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None,
+    # Novos indícios por PM (Migração 015)
+    indicios_por_pm=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -1240,6 +1335,87 @@ def registrar_processo(
         except Exception:
             col_art29 = 'art29_id'
         _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', col_art29)
+
+        # ======== PROCESSAR INDÍCIOS POR PM (MIGRAÇÃO 015) ========
+        try:
+            print(f"🔍 Verificando indícios por PM recebidos: {indicios_por_pm}")
+            print(f"🔍 Tipo dos indícios por PM: {type(indicios_por_pm)}")
+            
+            if indicios_por_pm and isinstance(indicios_por_pm, dict):
+                print(f"🔧 Processando indícios por PM: {len(indicios_por_pm)} PMs")
+                
+                for pm_id, dados_indicios in indicios_por_pm.items():
+                    print(f"🔍 Processando PM {pm_id}: {dados_indicios}")
+                    
+                    if not dados_indicios:
+                        print(f"⚠️ PM {pm_id} sem dados de indícios")
+                        continue
+                        
+                    # Buscar pm_envolvido_id para este PM
+                    cursor.execute("""
+                        SELECT id FROM procedimento_pms_envolvidos 
+                        WHERE procedimento_id = ? AND pm_id = ?
+                    """, (processo_id, pm_id))
+                    
+                    pm_envolvido_result = cursor.fetchone()
+                    if not pm_envolvido_result:
+                        print(f"⚠️ PM {pm_id} não encontrado na tabela procedimento_pms_envolvidos")
+                        continue
+                        
+                    pm_envolvido_id = pm_envolvido_result[0]
+                    
+                    # Chamar função para salvar indícios deste PM
+                    try:
+                        from uuid import uuid4
+                        
+                        categoria = dados_indicios.get('categoria', '')
+                        if categoria:
+                            # Inserir registro principal
+                            indicios_main_id = str(uuid4())
+                            # Converter categoria em array JSON para categorias_indicios
+                            import json
+                            categorias_array = [cat.strip() for cat in categoria.split(',') if cat.strip()]
+                            categorias_json = json.dumps(categorias_array)
+                            
+                            cursor.execute("""
+                                INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (indicios_main_id, pm_envolvido_id, processo_id, categoria, categorias_json))
+                            
+                            # Inserir crimes
+                            crimes = dados_indicios.get('crimes', [])
+                            for crime in crimes:
+                                crime_id = crime.get('id') if isinstance(crime, dict) else crime
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, crime_id))
+                            
+                            # Inserir transgressões RDPM
+                            rdpm = dados_indicios.get('rdpm', [])
+                            for trans in rdpm:
+                                trans_id = trans.get('id') if isinstance(trans, dict) else trans
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, trans_id))
+                            
+                            # Inserir infrações Art. 29
+                            art29 = dados_indicios.get('art29', [])
+                            for infracao in art29:
+                                infracao_id = infracao.get('id') if isinstance(infracao, dict) else infracao
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, infracao_id))
+                            
+                            print(f"✅ Indícios salvos para PM {pm_id}: {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
+                            
+                    except Exception as e:
+                        print(f"❌ Erro ao salvar indícios do PM {pm_id}: {e}")
+                        
+        except Exception as _e:
+            print(f"Aviso: falha ao processar indícios por PM: {_e}")
 
         conn.commit()
         conn.close()
@@ -1718,6 +1894,19 @@ def obter_processo(processo_id):
 
         indicios = _carregar_indicios(processo_id)
 
+        # Carregar indícios por PM para procedimentos
+        indicios_por_pm = {}
+        if processo[2] == 'procedimento' and pms_envolvidos:  # tipo_geral
+            print(f"🔍 Carregando indícios por PM para procedimento {processo_id}")
+            for pm_envolvido in pms_envolvidos:
+                pm_envolvido_id = pm_envolvido.get('pm_envolvido_id')
+                if pm_envolvido_id:
+                    indicios_pm = buscar_indicios_por_pm(pm_envolvido_id)
+                    if indicios_pm:
+                        indicios_por_pm[pm_envolvido['id']] = indicios_pm
+                        print(f"✅ Indícios carregados para PM {pm_envolvido['nome_completo']}: {indicios_pm}")
+            print(f"📋 Total de PMs com indícios carregados: {len(indicios_por_pm)}")
+
         return {
             "id": processo[0],
             "numero": processo[1],
@@ -1760,7 +1949,8 @@ def obter_processo(processo_id):
             "penalidade_tipo": processo[32],
             "penalidade_dias": processo[33],
             "indicios_categorias": processo[34],
-            "indicios": indicios
+            "indicios": indicios,
+            "indicios_por_pm": indicios_por_pm
         }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
@@ -2005,7 +2195,9 @@ def atualizar_processo(
     # Novos campos (Migração 014)
     data_remessa_encarregado=None, data_julgamento=None, solucao_tipo=None,
     penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
-    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None
+    indicios_crimes=None, indicios_rdpm=None, indicios_art29=None,
+    # Novos indícios por PM (Migração 015)
+    indicios_por_pm=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -2163,6 +2355,95 @@ def atualizar_processo(
         except Exception as _e:
             # Não bloquear a atualização toda por falha de indícios; apenas logar
             print(f"Aviso: falha ao atualizar indícios do procedimento {processo_id}: {_e}")
+
+        # ======== PROCESSAR INDÍCIOS POR PM (MIGRAÇÃO 015) ========
+        try:
+            if indicios_por_pm and isinstance(indicios_por_pm, dict):
+                print(f"🔧 Processando indícios por PM: {len(indicios_por_pm)} PMs")
+                
+                for pm_id, dados_indicios in indicios_por_pm.items():
+                    if not dados_indicios:
+                        continue
+                        
+                    # Buscar pm_envolvido_id para este PM
+                    cursor.execute("""
+                        SELECT id FROM procedimento_pms_envolvidos 
+                        WHERE procedimento_id = ? AND pm_id = ?
+                    """, (processo_id, pm_id))
+                    
+                    pm_envolvido_result = cursor.fetchone()
+                    if not pm_envolvido_result:
+                        print(f"⚠️ PM {pm_id} não encontrado na tabela procedimento_pms_envolvidos")
+                        continue
+                        
+                    pm_envolvido_id = pm_envolvido_result[0]
+                    
+                    # Chamar função para salvar indícios deste PM
+                    try:
+                        from uuid import uuid4
+                        
+                        # Limpar indícios existentes deste PM primeiro
+                        # Buscar o ID do registro principal de indícios
+                        cursor.execute("SELECT id FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+                        indicios_existentes = cursor.fetchone()
+                        if indicios_existentes:
+                            indicios_main_id = indicios_existentes[0]
+                            # Limpar registros dependentes usando pm_indicios_id
+                            cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = ?", (indicios_main_id,))
+                            cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_indicios_id = ?", (indicios_main_id,))
+                            cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_indicios_id = ?", (indicios_main_id,))
+                        
+                        # Limpar registro principal
+                        cursor.execute("DELETE FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+                        
+                        categoria = dados_indicios.get('categoria', '')
+                        if categoria:
+                            # Inserir registro principal
+                            indicios_main_id = str(uuid4())
+                            # Converter categoria em array JSON para categorias_indicios
+                            import json
+                            categorias_array = [cat.strip() for cat in categoria.split(',') if cat.strip()]
+                            categorias_json = json.dumps(categorias_array)
+                            
+                            cursor.execute("""
+                                INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (indicios_main_id, pm_envolvido_id, processo_id, categoria, categorias_json))
+                            
+                            # Inserir crimes
+                            crimes = dados_indicios.get('crimes', [])
+                            for crime in crimes:
+                                crime_id = crime.get('id') if isinstance(crime, dict) else crime
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, crime_id))
+                            
+                            # Inserir transgressões RDPM
+                            rdpm = dados_indicios.get('rdpm', [])
+                            for trans in rdpm:
+                                trans_id = trans.get('id') if isinstance(trans, dict) else trans
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, trans_id))
+                            
+                            # Inserir infrações Art. 29
+                            art29 = dados_indicios.get('art29', [])
+                            for infracao in art29:
+                                infracao_id = infracao.get('id') if isinstance(infracao, dict) else infracao
+                                cursor.execute("""
+                                    INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
+                                    VALUES (?, ?, ?)
+                                """, (str(uuid4()), indicios_main_id, infracao_id))
+                            
+                            print(f"✅ Indícios salvos para PM {pm_id}: {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
+                            
+                    except Exception as e:
+                        print(f"❌ Erro ao salvar indícios do PM {pm_id}: {e}")
+                        
+        except Exception as _e:
+            print(f"Aviso: falha ao processar indícios por PM: {_e}")
 
         conn.commit()
         conn.close()
@@ -4078,10 +4359,15 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
         categorias = indicios_data.get('categorias', [])
         if categorias:
             for categoria in categorias:
+                # Converter categoria em array JSON para categorias_indicios
+                import json
+                categorias_array = [categoria] if isinstance(categoria, str) else categoria
+                categorias_json = json.dumps(categorias_array)
+                
                 cursor.execute("""
-                    INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria)
-                    VALUES (?, ?, ?, ?)
-                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, categoria))
+                    INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, categoria, categorias_json))
         
         # Salvar crimes/contravenções
         crimes = indicios_data.get('crimes', [])
@@ -4251,13 +4537,26 @@ def listar_pms_envolvidos_com_indicios(procedimento_id):
             cursor.execute("SELECT COUNT(*) FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
             total_categorias = cursor.fetchone()[0]
             
-            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_crimes WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            # Para crimes, rdpm e art29, precisamos buscar via pm_indicios_id
+            cursor.execute("""
+                SELECT COUNT(*) FROM pm_envolvido_crimes pec 
+                JOIN pm_envolvido_indicios pei ON pec.pm_indicios_id = pei.id 
+                WHERE pei.pm_envolvido_id = ?
+            """, (pm_envolvido_id,))
             total_crimes = cursor.fetchone()[0]
             
-            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_rdpm WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            cursor.execute("""
+                SELECT COUNT(*) FROM pm_envolvido_rdpm per 
+                JOIN pm_envolvido_indicios pei ON per.pm_indicios_id = pei.id 
+                WHERE pei.pm_envolvido_id = ?
+            """, (pm_envolvido_id,))
             total_rdpm = cursor.fetchone()[0]
             
-            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_art29 WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            cursor.execute("""
+                SELECT COUNT(*) FROM pm_envolvido_art29 pea 
+                JOIN pm_envolvido_indicios pei ON pea.pm_indicios_id = pei.id 
+                WHERE pei.pm_envolvido_id = ?
+            """, (pm_envolvido_id,))
             total_art29 = cursor.fetchone()[0]
             
             pms_envolvidos.append({

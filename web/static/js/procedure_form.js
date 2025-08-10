@@ -9,6 +9,10 @@ let pmsAdicionais = [];
 // Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
 
+// Array para armazenar indícios por PM específico
+// Formato: {pm_id: {categoria: "categoria", crimes: [...], rdpm: [...], art29: [...]}}
+let indiciosPorPM = {};
+
 // Array para armazenar municípios/distritos
 let municipiosDisponiveis = [];
 
@@ -853,6 +857,7 @@ async function verificarEdicao() {
             if (procedimento) {
                 console.log('✅ Procedimento carregado, iniciando preenchimento...');
                 editandoProcedimento = procedimento;
+                modoEdicaoId = procedimentoId; // Definir modo de edição
                 await preencherFormularioEdicao(procedimento);
                 
                 // Atualizar título da página
@@ -881,6 +886,114 @@ async function verificarEdicao() {
             showAlert('Erro ao carregar dados do procedimento!', 'error');
         }
     }
+}
+
+// ============================================
+// FUNÇÃO PARA EXIBIR INDÍCIOS GLOBAIS (ANTIGOS)
+// ============================================
+
+function exibirIndiciosGlobais(indicios) {
+    console.log('📋 Exibindo indícios globais:', indicios);
+    
+    const container = document.getElementById('lista_indicios_adicionados');
+    if (!container) {
+        console.warn('❌ Container lista_indicios_adicionados não encontrado');
+        return;
+    }
+    
+    // Limpar container primeiro (mas só a parte global)
+    const existingGlobal = container.querySelector('.indicio-card-global');
+    if (existingGlobal) {
+        existingGlobal.remove();
+    }
+    
+    if (!indicios || (!indicios.crimes?.length && !indicios.rdpm?.length && !indicios.art29?.length)) {
+        console.log('ℹ️ Nenhum indício global encontrado');
+        return;
+    }
+    
+    // Criar card para indícios globais
+    const indiciosCard = document.createElement('div');
+    indiciosCard.className = 'indicio-card-global';
+    indiciosCard.style.cssText = `
+        border: 1px solid #007bff;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: #f8f9ff;
+        border-left: 4px solid #007bff;
+    `;
+    
+    let conteudoHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1;">
+                <div style="margin-bottom: 0.5rem;">
+                    <strong style="color: #007bff;"><i class="fas fa-balance-scale"></i> Indícios do Procedimento (Global)</strong>
+                </div>
+    `;
+    
+    // Adicionar crimes se existirem
+    if (indicios.crimes && indicios.crimes.length > 0) {
+        conteudoHTML += `
+                <div style="margin-bottom: 0.5rem;">
+                    <strong>Crimes/Contravenções:</strong>
+                    <ul style="margin: 0.25rem 0 0 1.5rem;">
+        `;
+        indicios.crimes.forEach(crime => {
+            const base = `${crime.tipo || ''} ${crime.dispositivo_legal || ''}${crime.artigo ? ' art. ' + crime.artigo : ''}`.trim();
+            const compl = [crime.paragrafo, crime.inciso, crime.alinea].filter(Boolean).join(' ');
+            const desc = crime.descricao_artigo ? ` - ${crime.descricao_artigo}` : '';
+            const label = [base, compl].filter(Boolean).join(' ') + desc;
+            conteudoHTML += `<li>${label}</li>`;
+        });
+        conteudoHTML += `</ul></div>`;
+    }
+    
+    // Adicionar RDPM se existirem
+    if (indicios.rdpm && indicios.rdpm.length > 0) {
+        conteudoHTML += `
+                <div style="margin-bottom: 0.5rem;">
+                    <strong>Transgressões RDPM:</strong>
+                    <ul style="margin: 0.25rem 0 0 1.5rem;">
+        `;
+        indicios.rdpm.forEach(trans => {
+            conteudoHTML += `<li>Inciso ${trans.inciso} - ${trans.texto}</li>`;
+        });
+        conteudoHTML += `</ul></div>`;
+    }
+    
+    // Adicionar Art. 29 se existirem
+    if (indicios.art29 && indicios.art29.length > 0) {
+        conteudoHTML += `
+                <div style="margin-bottom: 0.5rem;">
+                    <strong>Infrações Art. 29:</strong>
+                    <ul style="margin: 0.25rem 0 0 1.5rem;">
+        `;
+        indicios.art29.forEach(infracao => {
+            conteudoHTML += `<li>Inciso ${infracao.inciso} - ${infracao.texto}</li>`;
+        });
+        conteudoHTML += `</ul></div>`;
+    }
+    
+    conteudoHTML += `
+            </div>
+            <div style="margin-left: 1rem;">
+                <span style="
+                    background: #007bff;
+                    color: white;
+                    padding: 0.25rem 0.5rem;
+                    border-radius: 0.25rem;
+                    font-size: 0.8rem;
+                    font-weight: bold;
+                ">GLOBAL</span>
+            </div>
+        </div>
+    `;
+    
+    indiciosCard.innerHTML = conteudoHTML;
+    container.insertBefore(indiciosCard, container.firstChild); // Adicionar no início
+    
+    console.log('✅ Indícios globais exibidos no container');
 }
 
 // Função para preencher formulário com dados do procedimento
@@ -1014,6 +1127,51 @@ async function preencherFormularioEdicao(procedimento) {
         }
         
         console.log('✅ Campos de usuários preenchidos');
+        
+        // Carregar indícios por PM na edição
+        indiciosPorPM = {};
+        if (procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
+            console.log('🔍 Carregando indícios por PM para edição...');
+            
+            procedimento.pms_envolvidos.forEach((pm, index) => {
+                if (pm.indicios) {
+                    console.log(`📋 PM ${pm.nome_completo} tem indícios:`, pm.indicios);
+                    indiciosPorPM[pm.id] = {
+                        categoria: pm.indicios.categoria || '',
+                        crimes: pm.indicios.crimes || [],
+                        rdpm: pm.indicios.rdpm || [],
+                        art29: pm.indicios.art29 || []
+                    };
+                    
+                    // Mostrar indicador visual nos botões de indícios se houver dados
+                    const totalIndicios = (pm.indicios.crimes?.length || 0) + 
+                                         (pm.indicios.rdpm?.length || 0) + 
+                                         (pm.indicios.art29?.length || 0);
+                    
+                    if (totalIndicios > 0) {
+                        // Atualizar botão do PM principal (index 0)
+                        if (index === 0) {
+                            // PM principal - botão foi removido anteriormente
+                            console.log(`✅ PM principal tem ${totalIndicios} indícios carregados`);
+                        } else {
+                            // PMs adicionais - encontrar e atualizar botão
+                            setTimeout(() => {
+                                const btnIndicios = document.querySelector(`[data-index="${index - 1}"].btn-indicios-pm`);
+                                if (btnIndicios) {
+                                    btnIndicios.style.backgroundColor = '#28a745'; // Verde para indicar que há dados
+                                    btnIndicios.title = `Gerenciar Indícios (${totalIndicios} items)`;
+                                    console.log(`✅ PM adicional ${index} tem ${totalIndicios} indícios carregados`);
+                                }
+                            }, 500);
+                        }
+                    }
+                } else {
+                    console.log(`ℹ️ PM ${pm.nome_completo} não tem indícios`);
+                }
+            });
+            
+            console.log('✅ Indícios por PM carregados:', indiciosPorPM);
+        }
         
         // Se for procedimento e tiver PMs, mostrar botão de indícios e atualizar visualização
         if (procedimento.tipo_geral === 'procedimento' && procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
@@ -1159,11 +1317,19 @@ async function preencherFormularioEdicao(procedimento) {
         // Pré-preencher chips de Indícios (Crimes, RDPM, Art.29)
         // ==========================
         try {
+            console.log('🔍 Verificando indícios no procedimento:', procedimento.indicios);
+            
             if (procedimento.indicios) {
                 // Limpar estados anteriores caso já tenha aberto outra edição sem recarregar página
                 selectedChips.crimes.clear();
                 selectedChips.rdpm.clear();
                 selectedChips.art29.clear();
+
+                console.log('📋 Carregando indícios globais:', {
+                    crimes: procedimento.indicios.crimes?.length || 0,
+                    rdpm: procedimento.indicios.rdpm?.length || 0,
+                    art29: procedimento.indicios.art29?.length || 0
+                });
 
                 (procedimento.indicios.crimes || []).forEach(it => {
                     const base = `${it.tipo || ''} ${it.dispositivo_legal || ''}${it.artigo ? ' art. ' + it.artigo : ''}`.trim();
@@ -1171,18 +1337,29 @@ async function preencherFormularioEdicao(procedimento) {
                     const desc = it.descricao_artigo ? ` - ${it.descricao_artigo}` : '';
                     const label = [base, compl].filter(Boolean).join(' ') + desc;
                     selectedChips.crimes.set(String(it.id), label);
+                    console.log('➕ Crime adicionado:', label);
                 });
                 (procedimento.indicios.rdpm || []).forEach(it => {
-                    selectedChips.rdpm.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`);
+                    const label = `Inciso ${it.inciso} - ${it.texto}`;
+                    selectedChips.rdpm.set(String(it.id), label);
+                    console.log('➕ RDPM adicionado:', label);
                 });
                 (procedimento.indicios.art29 || []).forEach(it => {
-                    selectedChips.art29.set(String(it.id), `Inciso ${it.inciso} - ${it.texto}`);
+                    const label = `Inciso ${it.inciso} - ${it.texto}`;
+                    selectedChips.art29.set(String(it.id), label);
+                    console.log('➕ Art.29 adicionado:', label);
                 });
 
                 // Renderizar visualmente
                 renderSelectedChips('crimes', 'indicios_crimes_chips');
                 renderSelectedChips('rdpm', 'indicios_rdpm_chips');
                 renderSelectedChips('art29', 'indicios_art29_chips');
+
+                console.log('✅ Chips renderizados. Total de indícios:', {
+                    crimes: selectedChips.crimes.size,
+                    rdpm: selectedChips.rdpm.size,
+                    art29: selectedChips.art29.size
+                });
 
                 // Ajustar automaticamente o seletor de tipo de transgressão conforme dados
                 const selTipoTransg = document.getElementById('indicios_transg_tipo');
@@ -1203,9 +1380,128 @@ async function preencherFormularioEdicao(procedimento) {
                         }
                     }
                 }
+            } else {
+                console.log('ℹ️ Nenhum indício global encontrado no procedimento');
             }
         } catch (eChips) {
             console.warn('Falha ao preencher chips de indícios:', eChips);
+        }
+        
+        // ==============================
+        // Atualizar visualização dos indícios por PM na lista "Indícios Cadastrados"
+        // ==============================
+        try {
+            console.log('🔍 Verificando modal de indícios e dados por PM:', {
+                modalExists: !!window.modalIndiciosSolucao,
+                indiciosPorPMCount: Object.keys(indiciosPorPM).length,
+                indiciosPorPMLocal: indiciosPorPM,
+                indiciosPorPMBackend: procedimento.indicios_por_pm || {}
+            });
+            
+            // Exibir indícios antigos (globais) se existirem
+            exibirIndiciosGlobais(procedimento.indicios);
+            
+            // Carregar indícios por PM vindos do backend primeiro
+            if (procedimento.indicios_por_pm && Object.keys(procedimento.indicios_por_pm).length > 0) {
+                console.log('📋 Carregando indícios por PM do backend...');
+                indiciosPorPM = procedimento.indicios_por_pm; // Atualizar variável global
+            }
+            
+            // Exibir indícios por PM se existirem
+            if (window.modalIndiciosSolucao && Object.keys(indiciosPorPM).length > 0) {
+                console.log('📋 Atualizando lista de indícios cadastrados...');
+                
+                // Converter indiciosPorPM para o formato esperado pelo modal
+                const indiciosParaLista = [];
+                
+                for (const [pmId, dadosIndicios] of Object.entries(indiciosPorPM)) {
+                    // Buscar nome do PM pelos dados carregados
+                    let pmNome = 'PM não identificado';
+                    if (procedimento.pms_envolvidos) {
+                        const pm = procedimento.pms_envolvidos.find(p => p.id == pmId);
+                        pmNome = pm ? pm.nome_completo : `PM ID: ${pmId}`;
+                    }
+                    
+                    // Só adicionar se tiver pelo menos uma categoria ou indícios
+                    const temCategorias = dadosIndicios.categoria && dadosIndicios.categoria.trim();
+                    const temCrimes = dadosIndicios.crimes && dadosIndicios.crimes.length > 0;
+                    const temRdpm = dadosIndicios.rdpm && dadosIndicios.rdpm.length > 0;
+                    const temArt29 = dadosIndicios.art29 && dadosIndicios.art29.length > 0;
+                    
+                    console.log(`🔍 PM ${pmNome} (${pmId}):`, {
+                        temCategorias, temCrimes, temRdpm, temArt29,
+                        categoria: dadosIndicios.categoria,
+                        crimes: dadosIndicios.crimes?.length || 0,
+                        rdpm: dadosIndicios.rdpm?.length || 0,
+                        art29: dadosIndicios.art29?.length || 0
+                    });
+                    
+                    if (temCategorias || temCrimes || temRdpm || temArt29) {
+                        // Preparar crimes para exibição
+                        const crimesFormatados = (dadosIndicios.crimes || []).map(crime => {
+                            const base = `${crime.tipo || ''} ${crime.dispositivo_legal || ''}${crime.artigo ? ' art. ' + crime.artigo : ''}`.trim();
+                            const compl = [crime.paragrafo, crime.inciso, crime.alinea].filter(Boolean).join(' ');
+                            const desc = crime.descricao_artigo ? ` - ${crime.descricao_artigo}` : '';
+                            const label = [base, compl].filter(Boolean).join(' ') + desc;
+                            return {
+                                id: crime.id,
+                                nome: label
+                            };
+                        });
+
+                        // Preparar transgressões (RDPM + Art. 29) para exibição
+                        const transgressoesFormatadas = [];
+                        
+                        // Adicionar RDPM
+                        (dadosIndicios.rdpm || []).forEach(rdpm => {
+                            transgressoesFormatadas.push({
+                                id: rdpm.id,
+                                nome: `Inciso ${rdpm.inciso} - ${rdpm.texto}`,
+                                tipo: 'rdpm'
+                            });
+                        });
+                        
+                        // Adicionar Art. 29
+                        (dadosIndicios.art29 || []).forEach(art29 => {
+                            transgressoesFormatadas.push({
+                                id: art29.id,
+                                nome: `Inciso ${art29.inciso} - ${art29.texto}`,
+                                tipo: 'art29'
+                            });
+                        });
+
+                        const indicioItem = {
+                            pmId: pmId,
+                            pmNome: pmNome,
+                            categorias: temCategorias ? [dadosIndicios.categoria] : [],
+                            crimes: crimesFormatados,
+                            transgressoes: transgressoesFormatadas,
+                            // Manter dados originais para compatibilidade
+                            rdpm: dadosIndicios.rdpm || [],
+                            art29: dadosIndicios.art29 || []
+                        };
+                        
+                        indiciosParaLista.push(indicioItem);
+                        console.log('➕ Indício adicionado à lista:', indicioItem);
+                    }
+                }
+                
+                // Atualizar a lista no modal se houver indícios
+                if (indiciosParaLista.length > 0) {
+                    window.modalIndiciosSolucao.indiciosAdicionados = indiciosParaLista;
+                    window.modalIndiciosSolucao.atualizarListaIndicios();
+                    console.log(`✅ ${indiciosParaLista.length} indícios de PMs adicionados à lista`);
+                } else {
+                    // Limpar lista se não houver indícios
+                    window.modalIndiciosSolucao.indiciosAdicionados = [];
+                    window.modalIndiciosSolucao.atualizarListaIndicios();
+                    console.log('ℹ️ Lista de indícios limpa (nenhum indício encontrado)');
+                }
+            } else {
+                console.log('ℹ️ Modal não disponível ou nenhum indício por PM encontrado');
+            }
+        } catch (eIndiciosList) {
+            console.warn('Aviso ao atualizar lista de indícios:', eIndiciosList);
         }
         
         console.log('✅ Preenchimento do formulário concluído com sucesso');
@@ -2029,6 +2325,18 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const indicios_crimes = Array.from(selectedChips.crimes.keys());
     const indicios_rdpm = Array.from(selectedChips.rdpm.keys());
     const indicios_art29 = Array.from(selectedChips.art29.keys());
+    
+    // Coletar indícios por PM específico (novo sistema)
+    const indicios_por_pm = indiciosPorPM || {};
+    
+    console.log('📤 Enviando dados do formulário:');
+    console.log('📋 Indícios globais:', {
+        crimes: indicios_crimes.length,
+        rdpm: indicios_rdpm.length,
+        art29: indicios_art29.length
+    });
+    console.log('📋 Indícios por PM:', indicios_por_pm);
+    console.log('📋 Total de PMs com indícios:', Object.keys(indicios_por_pm).length);
 
         let result;
         if (editandoProcedimento) {
@@ -2072,7 +2380,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 indicios_categorias,
                 indicios_crimes,
                 indicios_rdpm,
-                indicios_art29
+                indicios_art29,
+                indicios_por_pm
             )();
         } else {
             // Modo criação
@@ -2114,7 +2423,8 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 indicios_categorias,
                 indicios_crimes,
                 indicios_rdpm,
-                indicios_art29
+                indicios_art29,
+                indicios_por_pm
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');
@@ -3398,10 +3708,18 @@ async function abrirIndiciosPM(index, tipo) {
         index: index
     };
     
-    // Abrir modal usando a instância global
-    if (window.indiciosPMModal) {
-        await window.indiciosPMModal.abrir(pmEnvolvidoId, pmNome);
+    // Buscar dados existentes de indícios para este PM
+    let dadosExistentes = null;
+    if (indiciosPorPM && indiciosPorPM[pmId]) {
+        dadosExistentes = indiciosPorPM[pmId];
+        console.log(`📋 Encontrados dados existentes para PM ${pmNome}:`, dadosExistentes);
+    }
+    
+    // Abrir modal passando dados existentes se houver
+    if (window.modalIndiciosSolucao) {
+        await window.modalIndiciosSolucao.abrir(pmId, dadosExistentes);
     } else {
+        console.error('❌ Modal de indícios não está disponível');
         showAlert('Modal de indícios não está disponível', 'error');
     }
 }
