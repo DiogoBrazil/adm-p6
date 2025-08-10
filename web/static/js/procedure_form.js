@@ -1149,21 +1149,7 @@ async function preencherFormularioEdicao(procedimento) {
                                          (pm.indicios.art29?.length || 0);
                     
                     if (totalIndicios > 0) {
-                        // Atualizar botão do PM principal (index 0)
-                        if (index === 0) {
-                            // PM principal - botão foi removido anteriormente
-                            console.log(`✅ PM principal tem ${totalIndicios} indícios carregados`);
-                        } else {
-                            // PMs adicionais - encontrar e atualizar botão
-                            setTimeout(() => {
-                                const btnIndicios = document.querySelector(`[data-index="${index - 1}"].btn-indicios-pm`);
-                                if (btnIndicios) {
-                                    btnIndicios.style.backgroundColor = '#28a745'; // Verde para indicar que há dados
-                                    btnIndicios.title = `Gerenciar Indícios (${totalIndicios} items)`;
-                                    console.log(`✅ PM adicional ${index} tem ${totalIndicios} indícios carregados`);
-                                }
-                            }, 500);
-                        }
+                        console.log(`✅ PM ${pm.nome_completo} tem ${totalIndicios} indícios carregados`);
                     }
                 } else {
                     console.log(`ℹ️ PM ${pm.nome_completo} não tem indícios`);
@@ -2479,10 +2465,6 @@ function adicionarPmAdicional() {
             </select>
         </div>
         <div style="flex: 0 0 auto; display:flex; gap:4px; align-items:center;">
-            <button type="button" class="btn-indicios-pm" data-index="${index}" title="Gerenciar Indícios" 
-                    style="background: #17a2b8; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                <i class="fas fa-search-plus"></i>
-            </button>
             <button type="button" class="btn-remover-pm" data-index="${index}" 
                     style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
                 <i class="fas fa-times"></i>
@@ -2496,7 +2478,6 @@ function adicionarPmAdicional() {
     // Adicionar event listeners aos novos botões
     const btnBuscar = novoField.querySelector('.btn-lupa-adicional');
     const btnRemover = novoField.querySelector('.btn-remover-pm');
-    const btnIndicios = novoField.querySelector('.btn-indicios-pm');
     
     btnBuscar.addEventListener('click', function() {
         buscarPmAdicional(index);
@@ -2504,10 +2485,6 @@ function adicionarPmAdicional() {
     
     btnRemover.addEventListener('click', function() {
         removerPmAdicional(index);
-    });
-    
-    btnIndicios.addEventListener('click', function() {
-        abrirIndiciosPM(index, 'adicional');
     });
     
     // Adicionar placeholder no array
@@ -3754,23 +3731,6 @@ async function atualizarVisualizacaoPMsEnvolvidos() {
                         } else {
                             btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> Indícios`;
                             btnIndiciosPrincipal.style.background = '#17a2b8';
-                        }
-                    }
-                }
-                
-                // Atualizar PMs adicionais
-                const pmAdicionalIndex = pm.ordem - 2; // -2 porque ordem 2 = index 0
-                if (pmAdicionalIndex >= 0 && pmAdicionalIndex < pmsAdicionais.length) {
-                    const btnIndiciosAdicional = document.querySelector(`.btn-indicios-pm[data-index="${pmAdicionalIndex}"]`);
-                    if (btnIndiciosAdicional) {
-                        if (totalIndicios > 0) {
-                            btnIndiciosAdicional.innerHTML = `<i class="fas fa-search-plus"></i> ${totalIndicios}`;
-                            btnIndiciosAdicional.style.background = '#28a745';
-                            btnIndiciosAdicional.title = `${totalIndicios} indícios configurados`;
-                        } else {
-                            btnIndiciosAdicional.innerHTML = `<i class="fas fa-search-plus"></i>`;
-                            btnIndiciosAdicional.style.background = '#17a2b8';
-                            btnIndiciosAdicional.title = 'Gerenciar Indícios';
                         }
                     }
                 }
