@@ -575,24 +575,38 @@ function wireNovosControlesPosResumo() {
         popularOpcoesSolucao();
 
         const sol = selSolucao.value;
+        
+        // Mostrar botão de adicionar indícios quando checkbox marcado e tipo selecionado
+        const containerBtnIndicios = document.getElementById('container_btn_indicios_solucao');
+        const containerIndiciosAdicionados = document.getElementById('container_indicios_adicionados');
+        
+        if (containerBtnIndicios) {
+            const mostrarBotaoIndicios = active && sol !== '';
+            containerBtnIndicios.style.display = mostrarBotaoIndicios ? 'block' : 'none';
+        }
+        
+        if (containerIndiciosAdicionados) {
+            containerIndiciosAdicionados.style.display = active ? 'block' : 'none';
+        }
+
         const showIndCats = active && isProcedimento() && (sol === 'Homologado' || sol === 'Avocado');
-        groupIndCats.style.display = showIndCats ? '' : 'none';
+        if (groupIndCats) groupIndCats.style.display = showIndCats ? '' : 'none';
 
         const cats = Array.from(document.getElementById('indicios_categorias_select')?.selectedOptions || []).map(o => o.value);
         const hasCrime = cats.includes('Indícios de crime comum') || cats.includes('Indícios de crime militar');
         const hasTransg = cats.includes('Indícios de transgressão disciplinar');
-        groupIndCrimes.style.display = showIndCats && hasCrime ? '' : 'none';
-        groupIndTransgTipo.style.display = showIndCats && hasTransg ? '' : 'none';
+        if (groupIndCrimes) groupIndCrimes.style.display = showIndCats && hasCrime ? '' : 'none';
+        if (groupIndTransgTipo) groupIndTransgTipo.style.display = showIndCats && hasTransg ? '' : 'none';
         const t = selIndTransgTipo?.value || 'rdpm';
-        groupIndRDPM.style.display = showIndCats && hasTransg && t === 'rdpm' ? '' : 'none';
-        groupIndArt29.style.display = showIndCats && hasTransg && t === 'art29' ? '' : 'none';
+        if (groupIndRDPM) groupIndRDPM.style.display = showIndCats && hasTransg && t === 'rdpm' ? '' : 'none';
+        if (groupIndArt29) groupIndArt29.style.display = showIndCats && hasTransg && t === 'art29' ? '' : 'none';
 
         // Processo Punido => penalidade
         const showPenal = active && isProcesso() && sol === 'Punido';
-        penalGroup.style.display = showPenal ? '' : 'none';
+        if (penalGroup) penalGroup.style.display = showPenal ? '' : 'none';
     const pSel = document.getElementById('penalidade_tipo')?.value || '';
     // Dias apenas para Prisao/Detencao
-    penalDiasGroup.style.display = showPenal && (pSel === 'Prisao' || pSel === 'Detencao') ? '' : 'none';
+    if (penalDiasGroup) penalDiasGroup.style.display = showPenal && (pSel === 'Prisao' || pSel === 'Detencao') ? '' : 'none';
     }
 
     // Eventos
@@ -615,6 +629,16 @@ function wireNovosControlesPosResumo() {
         const vals = Array.from(document.getElementById('indicios_categorias_select').selectedOptions).map(o => o.value);
         hiddenIndCats.value = JSON.stringify(vals);
         refreshSolucaoVisibility();
+    });
+
+    // Event listener para o botão de adicionar indícios
+    document.getElementById('btnAdicionarIndicios')?.addEventListener('click', () => {
+        console.log('Botão de adicionar indícios clicado');
+        if (window.modalIndiciosSolucao) {
+            modalIndiciosSolucao.abrir();
+        } else {
+            console.error('modalIndiciosSolucao não encontrado na janela global');
+        }
     });
 
     // Remove antiga lógica de filtro de selects
@@ -990,6 +1014,15 @@ async function preencherFormularioEdicao(procedimento) {
         }
         
         console.log('✅ Campos de usuários preenchidos');
+        
+        // Se for procedimento e tiver PMs, mostrar botão de indícios e atualizar visualização
+        if (procedimento.tipo_geral === 'procedimento' && procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
+            toggleBotaoIndiciosPmPrincipal(true);
+            // Aguardar carregar campos e então atualizar visualização dos indícios
+            setTimeout(() => {
+                atualizarVisualizacaoPMsEnvolvidos();
+            }, 500);
+        }
 
         // Aguardar um pouco para garantir que os campos estejam carregados
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -1243,6 +1276,7 @@ function toggleGroup(group, show) {
 
 // Função principal que atualiza a visibilidade de todo o formulário
 function updateFormVisibility() {
+    console.log('🔄 updateFormVisibility chamada');
     const tipoGeral = fields.tipoGeral.value;
     const tipoProcedimento = fields.tipoProcedimento ? fields.tipoProcedimento.value : '';
     const tipoProcesso = fields.tipoProcesso ? fields.tipoProcesso.value : '';
@@ -1631,15 +1665,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Verificar se já tem um PM principal selecionado
                 const pmPrincipalSelecionado = document.getElementById('nome_pm').value !== '';
                 botaoAdicionarPm.style.display = pmPrincipalSelecionado ? 'block' : 'none';
-                // Mostrar container de status individual do principal
-                // Sem seletor de status individual para o principal
+                
+                // Remover a lógica do botão de indícios por PM específico
+                // toggleBotaoIndiciosPmPrincipal(pmPrincipalSelecionado);
             } else {
                 botaoAdicionarPm.style.display = 'none';
                 // Para processos, limpar PMs adicionais se existirem
                 document.getElementById('pms_adicionais_container').style.display = 'none';
                 pmsAdicionais = [];
-                // Sem seletor de status individual para o principal
+                
+                // Esconder botão de indícios para processos
+                // toggleBotaoIndiciosPmPrincipal(false);
             }
+        } else {
+            // Quando não há status de PM selecionado, esconder todos os botões relacionados
+            const botaoAdicionarPm = document.getElementById('botao_adicionar_pm');
+            if (botaoAdicionarPm) {
+                botaoAdicionarPm.style.display = 'none';
+            }
+            // toggleBotaoIndiciosPmPrincipal(false);
         }
     }
 
@@ -2124,9 +2168,16 @@ function adicionarPmAdicional() {
                 <option value="Acidentado">Acidentado</option>
             </select>
         </div>
-        <button type="button" class="btn-remover-pm" data-index="${index}" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-            <i class="fas fa-times"></i>
-        </button>
+        <div style="flex: 0 0 auto; display:flex; gap:4px; align-items:center;">
+            <button type="button" class="btn-indicios-pm" data-index="${index}" title="Gerenciar Indícios" 
+                    style="background: #17a2b8; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                <i class="fas fa-search-plus"></i>
+            </button>
+            <button type="button" class="btn-remover-pm" data-index="${index}" 
+                    style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
     `;
     
     container.appendChild(novoField);
@@ -2135,6 +2186,7 @@ function adicionarPmAdicional() {
     // Adicionar event listeners aos novos botões
     const btnBuscar = novoField.querySelector('.btn-lupa-adicional');
     const btnRemover = novoField.querySelector('.btn-remover-pm');
+    const btnIndicios = novoField.querySelector('.btn-indicios-pm');
     
     btnBuscar.addEventListener('click', function() {
         buscarPmAdicional(index);
@@ -2142,6 +2194,10 @@ function adicionarPmAdicional() {
     
     btnRemover.addEventListener('click', function() {
         removerPmAdicional(index);
+    });
+    
+    btnIndicios.addEventListener('click', function() {
+        abrirIndiciosPM(index, 'adicional');
     });
     
     // Adicionar placeholder no array
@@ -2299,6 +2355,8 @@ async function buscarUsuariosModal() {
                 const tipoGeral = document.getElementById('tipo_geral').value;
                 if (tipoGeral === 'procedimento') {
                     document.getElementById('botao_adicionar_pm').style.display = 'block';
+                    // Mostrar botão de indícios para PM principal em procedimentos
+                    toggleBotaoIndiciosPmPrincipal(true);
                 }
             } else if (campoBuscaUsuario === 'pm_adicional') {
                 // PM adicional
@@ -3246,4 +3304,174 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    
+    // Event listener para o botão de indícios do PM principal
+    const btnIndiciosPmPrincipal = document.getElementById('btnIndiciosPmPrincipal');
+    if (btnIndiciosPmPrincipal) {
+        btnIndiciosPmPrincipal.addEventListener('click', function() {
+            abrirIndiciosPM(0, 'principal');
+        });
+    }
 });
+
+// ============================================
+// FUNÇÕES PARA INTEGRAÇÃO COM MODAL DE INDÍCIOS POR PM
+// ============================================
+
+/**
+ * Abre o modal de indícios para um PM específico
+ * @param {number} index - Índice do PM (0 para principal, 1+ para adicionais)
+ * @param {string} tipo - 'principal' ou 'adicional'
+ */
+async function abrirIndiciosPM(index, tipo) {
+    console.log(`🔧 Abrindo indícios para PM ${tipo} index ${index}`);
+    
+    let pmId, pmNome, pmEnvolvidoId;
+    
+    if (tipo === 'principal') {
+        pmId = document.getElementById('nome_pm').value;
+        pmNome = document.getElementById('nome_pm_nome').value;
+        
+        if (!pmId || !pmNome) {
+            showAlert('Primeiro selecione o PM principal antes de gerenciar seus indícios', 'warning');
+            return;
+        }
+        
+        // Para o PM principal, precisamos buscar ou criar o registro na tabela procedimento_pms_envolvidos
+        if (modoEdicaoId) {
+            // Em modo de edição, buscar o PM envolvido existente
+            try {
+                const resultado = await eel.listar_pms_envolvidos_com_indicios(modoEdicaoId)();
+                if (resultado.sucesso && resultado.pms_envolvidos.length > 0) {
+                    const pmPrincipalEncontrado = resultado.pms_envolvidos.find(pm => pm.ordem === 1);
+                    if (pmPrincipalEncontrado) {
+                        pmEnvolvidoId = pmPrincipalEncontrado.pm_envolvido_id;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao buscar PM principal:', error);
+            }
+        }
+        
+        if (!pmEnvolvidoId) {
+            showAlert('PM principal não encontrado no procedimento. Salve o procedimento primeiro.', 'warning');
+            return;
+        }
+    } else {
+        // PM adicional
+        if (!pmsAdicionais[index] || !pmsAdicionais[index].id) {
+            showAlert('Primeiro selecione o PM adicional antes de gerenciar seus indícios', 'warning');
+            return;
+        }
+        
+        pmId = pmsAdicionais[index].id;
+        pmNome = pmsAdicionais[index].nome;
+        
+        // Para PMs adicionais em modo de edição, buscar o pm_envolvido_id
+        if (modoEdicaoId) {
+            try {
+                const resultado = await eel.listar_pms_envolvidos_com_indicios(modoEdicaoId)();
+                if (resultado.sucesso) {
+                    const pmAdicionalEncontrado = resultado.pms_envolvidos.find(pm => 
+                        pm.pm_id === pmId && pm.ordem === (index + 2) // +2 porque index 0 = ordem 2
+                    );
+                    if (pmAdicionalEncontrado) {
+                        pmEnvolvidoId = pmAdicionalEncontrado.pm_envolvido_id;
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao buscar PM adicional:', error);
+            }
+        }
+        
+        if (!pmEnvolvidoId) {
+            showAlert('PM adicional não encontrado no procedimento. Salve o procedimento primeiro.', 'warning');
+            return;
+        }
+    }
+    
+    // Montar dados do PM para o modal
+    const pmData = {
+        id: pmId,
+        nome_completo: pmNome,
+        tipo: tipo,
+        index: index
+    };
+    
+    // Abrir modal usando a instância global
+    if (window.indiciosPMModal) {
+        await window.indiciosPMModal.abrir(pmEnvolvidoId, pmNome);
+    } else {
+        showAlert('Modal de indícios não está disponível', 'error');
+    }
+}
+
+/**
+ * Atualiza a visualização dos PMs envolvidos (callback do modal)
+ */
+async function atualizarVisualizacaoPMsEnvolvidos() {
+    console.log('🔄 Atualizando visualização dos PMs envolvidos');
+    
+    if (!modoEdicaoId) return;
+    
+    try {
+        const resultado = await eel.listar_pms_envolvidos_com_indicios(modoEdicaoId)();
+        if (resultado.sucesso) {
+            // Atualizar indicadores visuais dos indícios
+            resultado.pms_envolvidos.forEach(pm => {
+                const totalIndicios = pm.resumo_indicios.total;
+                let badge = '';
+                
+                if (totalIndicios > 0) {
+                    badge = `<span class="badge bg-info ms-2">${totalIndicios} indícios</span>`;
+                }
+                
+                // Atualizar PM principal
+                if (pm.ordem === 1) {
+                    const btnIndiciosPrincipal = document.getElementById('btnIndiciosPmPrincipal');
+                    if (btnIndiciosPrincipal) {
+                        if (totalIndicios > 0) {
+                            btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> ${totalIndicios} Indícios`;
+                            btnIndiciosPrincipal.style.background = '#28a745';
+                        } else {
+                            btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> Indícios`;
+                            btnIndiciosPrincipal.style.background = '#17a2b8';
+                        }
+                    }
+                }
+                
+                // Atualizar PMs adicionais
+                const pmAdicionalIndex = pm.ordem - 2; // -2 porque ordem 2 = index 0
+                if (pmAdicionalIndex >= 0 && pmAdicionalIndex < pmsAdicionais.length) {
+                    const btnIndiciosAdicional = document.querySelector(`.btn-indicios-pm[data-index="${pmAdicionalIndex}"]`);
+                    if (btnIndiciosAdicional) {
+                        if (totalIndicios > 0) {
+                            btnIndiciosAdicional.innerHTML = `<i class="fas fa-search-plus"></i> ${totalIndicios}`;
+                            btnIndiciosAdicional.style.background = '#28a745';
+                            btnIndiciosAdicional.title = `${totalIndicios} indícios configurados`;
+                        } else {
+                            btnIndiciosAdicional.innerHTML = `<i class="fas fa-search-plus"></i>`;
+                            btnIndiciosAdicional.style.background = '#17a2b8';
+                            btnIndiciosAdicional.title = 'Gerenciar Indícios';
+                        }
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Erro ao atualizar visualização dos PMs:', error);
+    }
+}
+
+/**
+ * Mostra/esconde o botão de indícios do PM principal conforme necessário
+ */
+function toggleBotaoIndiciosPmPrincipal(mostrar) {
+    const btnIndicios = document.getElementById('btnIndiciosPmPrincipal');
+    if (btnIndicios) {
+        btnIndicios.style.display = mostrar ? 'block' : 'none';
+    }
+}
+
+// Expor função globalmente para callback do modal
+window.atualizarVisualizacaoPMsEnvolvidos = atualizarVisualizacaoPMsEnvolvidos;

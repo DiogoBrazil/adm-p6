@@ -4034,5 +4034,469 @@ def excluir_infracao_estatuto_art29(infracao_id):
         print(f"❌ Erro ao excluir infração do Art. 29: {e}")
         return {'success': False, 'error': str(e)}
 
+# ====================================================================
+# FUNÇÕES PARA INDÍCIOS POR PM ENVOLVIDO (MIGRAÇÃO 015)
+# ====================================================================
+
+@eel.expose
+def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
+    """
+    Salva os indícios específicos de um PM envolvido
+    
+    Args:
+        pm_envolvido_id (str): ID do PM na tabela procedimento_pms_envolvidos
+        indicios_data (dict): Dados dos indícios com estrutura:
+        {
+            'categorias': ['categoria1', 'categoria2'],
+            'crimes': [{'id': 'crime_id1'}, {'id': 'crime_id2'}],
+            'rdpm': [{'id': 'trans_id1', 'natureza': 'grave'}, {'id': 'trans_id2', 'natureza': 'leve'}],
+            'art29': [{'id': 'art29_id1'}, {'id': 'art29_id2'}]
+        }
+    """
+    try:
+        print(f"💾 Salvando indícios para PM envolvido: {pm_envolvido_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se o PM envolvido existe
+        cursor.execute("SELECT procedimento_id FROM procedimento_pms_envolvidos WHERE id = ?", (pm_envolvido_id,))
+        pm_data = cursor.fetchone()
+        if not pm_data:
+            conn.close()
+            return {"sucesso": False, "mensagem": "PM envolvido não encontrado"}
+        
+        procedimento_id = pm_data[0]
+        
+        # Limpar indícios existentes para este PM
+        cursor.execute("DELETE FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        
+        # Salvar categorias de indícios
+        categorias = indicios_data.get('categorias', [])
+        if categorias:
+            for categoria in categorias:
+                cursor.execute("""
+                    INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria)
+                    VALUES (?, ?, ?, ?)
+                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, categoria))
+        
+        # Salvar crimes/contravenções
+        crimes = indicios_data.get('crimes', [])
+        if crimes:
+            for crime in crimes:
+                cursor.execute("""
+                    INSERT INTO pm_envolvido_crimes (id, pm_envolvido_id, procedimento_id, crime_id)
+                    VALUES (?, ?, ?, ?)
+                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, crime['id']))
+        
+        # Salvar transgressões RDPM
+        rdpm = indicios_data.get('rdpm', [])
+        if rdpm:
+            for trans in rdpm:
+                cursor.execute("""
+                    INSERT INTO pm_envolvido_rdpm (id, pm_envolvido_id, procedimento_id, transgressao_id, natureza)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, trans['id'], trans.get('natureza', 'leve')))
+        
+        # Salvar infrações Art. 29
+        art29 = indicios_data.get('art29', [])
+        if art29:
+            for infracao in art29:
+                cursor.execute("""
+                    INSERT INTO pm_envolvido_art29 (id, pm_envolvido_id, procedimento_id, art29_id)
+                    VALUES (?, ?, ?, ?)
+                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, infracao['id']))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Indícios salvos para PM envolvido: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
+        return {"sucesso": True, "mensagem": "Indícios salvos com sucesso"}
+        
+    except Exception as e:
+        print(f"❌ Erro ao salvar indícios do PM: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao salvar indícios: {str(e)}"}
+
+@eel.expose
+def carregar_indicios_pm_envolvido(pm_envolvido_id):
+    """
+    Carrega os indícios específicos de um PM envolvido
+    
+    Args:
+        pm_envolvido_id (str): ID do PM na tabela procedimento_pms_envolvidos
+    
+    Returns:
+        dict: Indícios estruturados por categoria
+    """
+    try:
+        print(f"📋 Carregando indícios para PM envolvido: {pm_envolvido_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        indicios = {
+            'categorias': [],
+            'crimes': [],
+            'rdpm': [],
+            'art29': []
+        }
+        
+        # Carregar categorias
+        cursor.execute("SELECT categoria FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        indicios['categorias'] = [row[0] for row in cursor.fetchall()]
+        
+        # Carregar crimes/contravenções com detalhes
+        cursor.execute("""
+            SELECT c.id, c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, 
+                   c.paragrafo, c.inciso, c.alinea
+            FROM pm_envolvido_crimes pec
+            JOIN crimes_contravencoes c ON c.id = pec.crime_id
+            WHERE pec.pm_envolvido_id = ?
+        """, (pm_envolvido_id,))
+        
+        for row in cursor.fetchall():
+            indicios['crimes'].append({
+                'id': row[0],
+                'tipo': row[1],
+                'dispositivo_legal': row[2],
+                'artigo': row[3],
+                'descricao_artigo': row[4],
+                'paragrafo': row[5] or '',
+                'inciso': row[6] or '',
+                'alinea': row[7] or ''
+            })
+        
+        # Carregar transgressões RDPM com detalhes
+        cursor.execute("""
+            SELECT t.id, t.gravidade, t.inciso, t.texto, per.natureza
+            FROM pm_envolvido_rdpm per
+            JOIN transgressoes t ON t.id = per.transgressao_id
+            WHERE per.pm_envolvido_id = ?
+        """, (pm_envolvido_id,))
+        
+        for row in cursor.fetchall():
+            indicios['rdpm'].append({
+                'id': row[0],
+                'gravidade': row[1],
+                'inciso': row[2],
+                'texto': row[3],
+                'natureza': row[4]
+            })
+        
+        # Carregar infrações Art. 29 com detalhes
+        cursor.execute("""
+            SELECT a.id, a.inciso, a.texto
+            FROM pm_envolvido_art29 pea
+            JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id
+            WHERE pea.pm_envolvido_id = ?
+        """, (pm_envolvido_id,))
+        
+        for row in cursor.fetchall():
+            indicios['art29'].append({
+                'id': row[0],
+                'inciso': row[1],
+                'texto': row[2]
+            })
+        
+        conn.close()
+        
+        print(f"✅ Indícios carregados: {len(indicios['categorias'])} categorias, {len(indicios['crimes'])} crimes, {len(indicios['rdpm'])} RDPM, {len(indicios['art29'])} Art.29")
+        return {"sucesso": True, "indicios": indicios}
+        
+    except Exception as e:
+        print(f"❌ Erro ao carregar indícios do PM: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao carregar indícios: {str(e)}"}
+
+@eel.expose
+def listar_pms_envolvidos_com_indicios(procedimento_id):
+    """
+    Lista todos os PMs envolvidos em um procedimento com seus indícios
+    
+    Args:
+        procedimento_id (str): ID do procedimento
+    
+    Returns:
+        dict: Lista de PMs com seus indícios
+    """
+    try:
+        print(f"📋 Listando PMs envolvidos com indícios para procedimento: {procedimento_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar PMs envolvidos
+        cursor.execute("""
+            SELECT pme.id, pme.pm_id, pme.pm_tipo, pme.ordem, pme.status_pm,
+                   COALESCE(o.nome, e.nome, '') as nome,
+                   COALESCE(o.posto_graduacao, e.posto_graduacao, '') as posto,
+                   COALESCE(o.matricula, e.matricula, '') as matricula
+            FROM procedimento_pms_envolvidos pme
+            LEFT JOIN operadores o ON pme.pm_id = o.id AND pme.pm_tipo = 'operador'
+            LEFT JOIN encarregados e ON pme.pm_id = e.id AND pme.pm_tipo = 'encarregado'
+            WHERE pme.procedimento_id = ?
+            ORDER BY pme.ordem
+        """, (procedimento_id,))
+        
+        pms_envolvidos = []
+        for row in cursor.fetchall():
+            pm_envolvido_id, pm_id, pm_tipo, ordem, status_pm, nome, posto, matricula = row
+            
+            # Montar nome completo
+            nome_completo = f"{posto} {matricula} {nome}".strip()
+            
+            # Carregar resumo dos indícios
+            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            total_categorias = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_crimes WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            total_crimes = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_rdpm WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            total_rdpm = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM pm_envolvido_art29 WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+            total_art29 = cursor.fetchone()[0]
+            
+            pms_envolvidos.append({
+                'pm_envolvido_id': pm_envolvido_id,
+                'pm_id': pm_id,
+                'pm_tipo': pm_tipo,
+                'ordem': ordem,
+                'status_pm': status_pm,
+                'nome': nome,
+                'posto_graduacao': posto,
+                'matricula': matricula,
+                'nome_completo': nome_completo,
+                'resumo_indicios': {
+                    'categorias': total_categorias,
+                    'crimes': total_crimes,
+                    'rdpm': total_rdpm,
+                    'art29': total_art29,
+                    'total': total_categorias + total_crimes + total_rdpm + total_art29
+                }
+            })
+        
+        conn.close()
+        
+        print(f"✅ {len(pms_envolvidos)} PMs envolvidos encontrados")
+        return {"sucesso": True, "pms_envolvidos": pms_envolvidos}
+        
+    except Exception as e:
+        print(f"❌ Erro ao listar PMs envolvidos: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao listar PMs envolvidos: {str(e)}"}
+
+@eel.expose
+def remover_indicios_pm_envolvido(pm_envolvido_id):
+    """
+    Remove todos os indícios de um PM envolvido
+    
+    Args:
+        pm_envolvido_id (str): ID do PM na tabela procedimento_pms_envolvidos
+    """
+    try:
+        print(f"🗑️ Removendo indícios do PM envolvido: {pm_envolvido_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Remover todos os indícios
+        cursor.execute("DELETE FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Indícios removidos para PM envolvido: {pm_envolvido_id}")
+        return {"sucesso": True, "mensagem": "Indícios removidos com sucesso"}
+        
+    except Exception as e:
+        print(f"❌ Erro ao remover indícios do PM: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao remover indícios: {str(e)}"}
+
+@eel.expose
+def buscar_crimes_para_indicios(termo=''):
+    """
+    Busca crimes/contravenções para seleção de indícios
+    
+    Args:
+        termo (str): Termo de busca
+    
+    Returns:
+        dict: Lista de crimes encontrados
+    """
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if termo:
+            cursor.execute("""
+                SELECT id, tipo, dispositivo_legal, artigo, descricao_artigo, 
+                       paragrafo, inciso, alinea
+                FROM crimes_contravencoes 
+                WHERE ativo = 1 
+                AND (artigo LIKE ? OR descricao_artigo LIKE ? OR dispositivo_legal LIKE ?)
+                ORDER BY tipo, dispositivo_legal, artigo
+                LIMIT 50
+            """, (f'%{termo}%', f'%{termo}%', f'%{termo}%'))
+        else:
+            cursor.execute("""
+                SELECT id, tipo, dispositivo_legal, artigo, descricao_artigo, 
+                       paragrafo, inciso, alinea
+                FROM crimes_contravencoes 
+                WHERE ativo = 1
+                ORDER BY tipo, dispositivo_legal, artigo
+                LIMIT 50
+            """)
+        
+        crimes = []
+        for row in cursor.fetchall():
+            # Formatar texto para exibição
+            texto_completo = f"Art. {row[3]}"
+            if row[5]:  # parágrafo
+                texto_completo += f", {row[5]}"
+            if row[6]:  # inciso
+                texto_completo += f", inciso {row[6]}"
+            if row[7]:  # alínea
+                texto_completo += f", alínea {row[7]}"
+            texto_completo += f" - {row[2]} - {row[4]}"
+            
+            crimes.append({
+                'id': row[0],
+                'tipo': row[1],
+                'dispositivo_legal': row[2],
+                'artigo': row[3],
+                'descricao_artigo': row[4],
+                'paragrafo': row[5] or '',
+                'inciso': row[6] or '',
+                'alinea': row[7] or '',
+                'texto_completo': texto_completo
+            })
+        
+        conn.close()
+        
+        return {"sucesso": True, "crimes": crimes}
+        
+    except Exception as e:
+        print(f"❌ Erro ao buscar crimes: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao buscar crimes: {str(e)}"}
+
+@eel.expose
+def buscar_rdpm_para_indicios(termo='', gravidade=None):
+    """
+    Busca transgressões RDPM para seleção de indícios
+    
+    Args:
+        termo (str): Termo de busca
+        gravidade (str): Filtro por gravidade
+    
+    Returns:
+        dict: Lista de transgressões encontradas
+    """
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        params = []
+        where_clause = "WHERE ativo = 1"
+        
+        if termo:
+            where_clause += " AND (inciso LIKE ? OR texto LIKE ?)"
+            params.extend([f'%{termo}%', f'%{termo}%'])
+        
+        if gravidade:
+            where_clause += " AND gravidade = ?"
+            params.append(gravidade)
+        
+        cursor.execute(f"""
+            SELECT id, gravidade, inciso, texto
+            FROM transgressoes 
+            {where_clause}
+            ORDER BY gravidade, inciso
+            LIMIT 50
+        """, params)
+        
+        transgressoes = []
+        for row in cursor.fetchall():
+            transgressoes.append({
+                'id': row[0],
+                'gravidade': row[1],
+                'inciso': row[2],
+                'texto': row[3],
+                'texto_completo': f"Inciso {row[2]} ({row[1]}) - {row[3]}"
+            })
+        
+        conn.close()
+        
+        return {"sucesso": True, "transgressoes": transgressoes}
+        
+    except Exception as e:
+        print(f"❌ Erro ao buscar transgressões RDPM: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao buscar transgressões: {str(e)}"}
+
+@eel.expose
+def buscar_art29_para_indicios(termo=''):
+    """
+    Busca infrações do Art. 29 para seleção de indícios
+    
+    Args:
+        termo (str): Termo de busca
+    
+    Returns:
+        dict: Lista de infrações encontradas
+    """
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        if termo:
+            cursor.execute("""
+                SELECT id, inciso, texto
+                FROM infracoes_estatuto_art29 
+                WHERE ativo = 1 
+                AND (inciso LIKE ? OR texto LIKE ?)
+                ORDER BY 
+                    CASE 
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
+                        ELSE 999
+                    END,
+                    inciso
+                LIMIT 50
+            """, (f'%{termo}%', f'%{termo}%'))
+        else:
+            cursor.execute("""
+                SELECT id, inciso, texto
+                FROM infracoes_estatuto_art29 
+                WHERE ativo = 1
+                ORDER BY 
+                    CASE 
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
+                        ELSE 999
+                    END,
+                    inciso
+                LIMIT 50
+            """)
+        
+        infracoes = []
+        for row in cursor.fetchall():
+            infracoes.append({
+                'id': row[0],
+                'inciso': row[1],
+                'texto': row[2],
+                'texto_completo': f"Inciso {row[1]} - {row[2]}"
+            })
+        
+        conn.close()
+        
+        return {"sucesso": True, "infracoes": infracoes}
+        
+    except Exception as e:
+        print(f"❌ Erro ao buscar infrações Art. 29: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao buscar infrações: {str(e)}"}
+
 if __name__ == "__main__":
     main()

@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="static/css/dashboard.css">
     <link rel="stylesheet" href="static/css/users.css">
     <link rel="stylesheet" href="static/css/processes.css">
+    <link rel="stylesheet" href="static/css/indicios-pm-modal.css">
 </head>
 <body>
     <header class="header">
@@ -379,9 +380,25 @@
                 <div class="form-group" id="group_solucao_select" style="display:none;">
                     <label for="solucao_tipo">Tipo de Solução</label>
                     <select id="solucao_tipo"></select>
+                    
+                    <!-- Botão para adicionar indícios -->
+                    <div id="container_btn_indicios_solucao" style="display: none; margin-top: 10px;">
+                        <button type="button" id="btnAdicionarIndicios" class="btn-success-custom" title="Adicionar Indícios">
+                            <i class="fas fa-plus"></i> Adicionar Indícios
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Container para mostrar indícios adicionados -->
+                <div id="container_indicios_adicionados" style="display: none;">
+                    <h6><i class="fas fa-list"></i> Indícios Cadastrados</h6>
+                    <div id="lista_indicios_adicionados">
+                        <!-- Indícios serão mostrados aqui -->
+                    </div>
                 </div>
 
                 <!-- Campos condicionais de solução para Procedimento -->
+                <!-- CAMPO REMOVIDO: Agora as categorias são gerenciadas via modal
                 <div class="form-group" id="group_indicios_categorias" style="display:none;">
                     <label for="indicios_categorias_select">Categorias de Indícios</label>
                     <select id="indicios_categorias_select" multiple size="4" style="width:100%;">
@@ -393,6 +410,7 @@
                     <small class="form-help">Segure Ctrl (ou Cmd) para selecionar múltiplos itens.</small>
                     <input type="hidden" id="indicios_categorias" value="">
                 </div>
+                -->
 
                 <!-- Indícios: Crimes/Contravenções (com busca) -->
                 <div class="form-group" id="group_indicios_crimes" style="display:none;">
@@ -481,6 +499,8 @@
     </div>
     
     <script src="static/js/procedure_form.js"></script>
+    <script src="static/js/indicios-pm-modal-custom.js"></script>
+    <script src="static/js/modal-indicios-solucao.js"></script>
     <!-- Modal de busca de usuário -->
     <style>
     /* Chips + Dropdown (autocomplete múltiplo) */
