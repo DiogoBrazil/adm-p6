@@ -1151,6 +1151,28 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('escrivao_id').value = procedimento.escrivao_id || '';
             document.getElementById('escrivao_nome').value = procedimento.escrivao_completo || '';
         }
+        
+        // Preencher campos específicos de PAD, CD, CJ
+        // Presidente
+        if (procedimento.presidente_id) {
+            document.getElementById('presidente_id').value = procedimento.presidente_id || '';
+            document.getElementById('presidente_nome').value = procedimento.presidente_completo || procedimento.presidente_nome || '';
+            console.log('✅ Campo Presidente preenchido:', procedimento.presidente_completo || procedimento.presidente_nome);
+        }
+        
+        // Interrogante/Relator
+        if (procedimento.interrogante_id) {
+            document.getElementById('interrogante_id').value = procedimento.interrogante_id || '';
+            document.getElementById('interrogante_nome').value = procedimento.interrogante_completo || procedimento.interrogante_nome || '';
+            console.log('✅ Campo Interrogante/Relator preenchido:', procedimento.interrogante_completo || procedimento.interrogante_nome);
+        }
+        
+        // Escrivão do Processo
+        if (procedimento.escrivao_processo_id) {
+            document.getElementById('escrivao_processo_id').value = procedimento.escrivao_processo_id || '';
+            document.getElementById('escrivao_processo_nome').value = procedimento.escrivao_processo_completo || procedimento.escrivao_processo_nome || '';
+            console.log('✅ Campo Escrivão do Processo preenchido:', procedimento.escrivao_processo_completo || procedimento.escrivao_processo_nome);
+        }
 
         // Preencher campos de PM envolvido com formato completo
         if (procedimento.tipo_geral === 'procedimento' && procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
@@ -1571,6 +1593,9 @@ const fieldGroups = {
     tipoProcedimento: document.getElementById('group_tipo_procedimento'),
     tipoProcesso: document.getElementById('group_tipo_processo'),
     escrivao: document.getElementById('group_escrivao'),
+    presidente: document.getElementById('group_presidente'),
+    interrogante: document.getElementById('group_interrogante'),
+    escrivaoProcesso: document.getElementById('group_escrivao_processo'),
     numeroPortaria: document.getElementById('group_numero_portaria'),
     numeroMemorando: document.getElementById('group_numero_memorando'),
     numeroFeito: document.getElementById('group_numero_feito'),
@@ -1640,6 +1665,12 @@ function updateFormVisibility() {
 
     // Lógica para Escrivão (se Procedimento for IPM)
     toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');
+    
+    // Lógica para campos específicos de processos PAD, CD, CJ
+    const showProcessRoles = tipoGeral === 'processo' && ['PAD', 'CD', 'CJ'].includes(tipoProcesso);
+    toggleGroup(fieldGroups.presidente, showProcessRoles);
+    toggleGroup(fieldGroups.interrogante, showProcessRoles);
+    toggleGroup(fieldGroups.escrivaoProcesso, showProcessRoles);
 
     // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
     // Não mostrar mais o campo de natureza processo para PADS
@@ -1876,6 +1907,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         tipoProcedimento: document.getElementById('group_tipo_procedimento'),
         tipoProcesso: document.getElementById('group_tipo_processo'),
         escrivao: document.getElementById('group_escrivao'),
+        presidente: document.getElementById('group_presidente'),
+        interrogante: document.getElementById('group_interrogante'),
+        escrivaoProcesso: document.getElementById('group_escrivao_processo'),
         numeroPortaria: document.getElementById('group_numero_portaria'),
         numeroMemorando: document.getElementById('group_numero_memorando'),
         numeroFeito: document.getElementById('group_numero_feito'),
@@ -1944,6 +1978,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Lógica para Escrivão (se Procedimento for IPM)
         toggleGroup(fieldGroups.escrivao, tipoGeral === 'procedimento' && tipoProcedimento === 'IPM');
+        
+        // Lógica para campos específicos de processos PAD, CD, CJ
+        const showProcessRoles = tipoGeral === 'processo' && ['PAD', 'CD', 'CJ'].includes(tipoProcesso);
+        toggleGroup(fieldGroups.presidente, showProcessRoles);
+        toggleGroup(fieldGroups.interrogante, showProcessRoles);
+        toggleGroup(fieldGroups.escrivaoProcesso, showProcessRoles);
+        
+        // Ocultar campo de Encarregado quando mostrar Presidente (PAD, CD, CJ)
+        const encarregadoGroup = document.getElementById('responsavel_nome')?.closest('.form-group');
+        if (encarregadoGroup) {
+            encarregadoGroup.style.display = showProcessRoles ? 'none' : 'block';
+        }
 
         // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
         // const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS'; // Removido
@@ -2190,6 +2236,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnBuscarEscrivao').onclick = function() {
         abrirModalBuscaUsuario('escrivao');
     };
+    document.getElementById('btnBuscarPresidente').onclick = function() {
+        abrirModalBuscaUsuario('presidente');
+    };
+    document.getElementById('btnBuscarInterrogante').onclick = function() {
+        abrirModalBuscaUsuario('interrogante');
+    };
+    document.getElementById('btnBuscarEscrivaoProcesso').onclick = function() {
+        abrirModalBuscaUsuario('escrivao_processo');
+    };
     document.getElementById('btnBuscarPm').onclick = function() {
         abrirModalBuscaUsuario('pm');
     };
@@ -2250,7 +2305,13 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const tipo_geral = document.getElementById('tipo_geral').value;
     const documento_iniciador = document.getElementById('documento_iniciador').value;
     const processo_sei = document.getElementById('processo_sei').value.trim();
-    const responsavel_id = document.getElementById('responsavel_id').value;
+    
+    // Para PAD, CD, CJ usar presidente_id, caso contrário usar responsavel_id
+    const tipoProcessoAtual = document.getElementById('tipo_processo')?.value;
+    const isProcessoEspecial = tipo_geral === 'processo' && ['PAD', 'CD', 'CJ'].includes(tipoProcessoAtual);
+    const responsavel_id = isProcessoEspecial ? 
+        document.getElementById('presidente_id').value : 
+        document.getElementById('responsavel_id').value;
     
     // Determinar o tipo_detalhe baseado no tipo_geral selecionado
     let tipo_detalhe = '';
@@ -2315,9 +2376,33 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         return;
     }
 
-    // Validação básica
-    if (!tipo_geral || !tipo_detalhe || !documento_iniciador || !responsavel_id || !numero_documento || !numero_controle) {
+    // Validação básica - responsavel_id agora pode ser presidente_id para PAD/CD/CJ
+    if (!tipo_geral || !tipo_detalhe || !documento_iniciador || !numero_documento || !numero_controle) {
         showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
+        return;
+    }
+    
+    // Validação específica para PAD/CD/CJ - verificar se os campos específicos foram preenchidos
+    if (isProcessoEspecial) {
+        const presidente_id = document.getElementById('presidente_id')?.value;
+        const interrogante_id = document.getElementById('interrogante_id')?.value;
+        const escrivao_processo_id = document.getElementById('escrivao_processo_id')?.value;
+        
+        if (!presidente_id) {
+            showAlert('Por favor, selecione o Presidente!', 'error');
+            return;
+        }
+        if (!interrogante_id) {
+            showAlert('Por favor, selecione o Interrogante/Relator!', 'error');
+            return;
+        }
+        if (!escrivao_processo_id) {
+            showAlert('Por favor, selecione o Escrivão do Processo!', 'error');
+            return;
+        }
+    } else if (!responsavel_id) {
+        // Para outros tipos, verificar se o encarregado foi preenchido
+        showAlert('Por favor, selecione o Encarregado!', 'error');
         return;
     }
     
@@ -2354,6 +2439,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     try {
         // Coletar PMs envolvidos para procedimentos
         const pmsParaEnvio = tipo_geral === 'procedimento' ? obterTodosPmsEnvolvidos() : null;
+        
+        // Coletar campos específicos de PAD/CD/CJ
+        const presidente_id = isProcessoEspecial ? document.getElementById('presidente_id')?.value || null : null;
+        const interrogante_id = isProcessoEspecial ? document.getElementById('interrogante_id')?.value || null : null;
+        const escrivao_processo_id = isProcessoEspecial ? document.getElementById('escrivao_processo_id')?.value || null : null;
         
         // Coletar novos campos (migração 014)
         const data_remessa_encarregado = document.getElementById('data_remessa_encarregado')?.value || null;
@@ -2415,6 +2505,10 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids,
+                // campos específicos PAD/CD/CJ
+                presidente_id,
+                interrogante_id,
+                escrivao_processo_id,
                 // novos campos
                 data_remessa_encarregado,
                 data_julgamento,
@@ -2458,6 +2552,10 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids,
+                // campos específicos PAD/CD/CJ
+                presidente_id,
+                interrogante_id,
+                escrivao_processo_id,
                 // novos campos
                 data_remessa_encarregado,
                 data_julgamento,
@@ -2690,6 +2788,15 @@ async function buscarUsuariosModal() {
             } else if (campoBuscaUsuario === 'escrivao') {
                 document.getElementById('escrivao_nome').value = texto;
                 document.getElementById('escrivao_id').value = id;
+            } else if (campoBuscaUsuario === 'presidente') {
+                document.getElementById('presidente_nome').value = texto;
+                document.getElementById('presidente_id').value = id;
+            } else if (campoBuscaUsuario === 'interrogante') {
+                document.getElementById('interrogante_nome').value = texto;
+                document.getElementById('interrogante_id').value = id;
+            } else if (campoBuscaUsuario === 'escrivao_processo') {
+                document.getElementById('escrivao_processo_nome').value = texto;
+                document.getElementById('escrivao_processo_id').value = id;
             } else if (campoBuscaUsuario === 'pm') {
                 // PM principal
                 document.getElementById('nome_pm_nome').value = texto;

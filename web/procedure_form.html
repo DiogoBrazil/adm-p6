@@ -211,6 +211,42 @@
                     </div>
                 </div>
 
+                <!-- Campo dependente: Presidente (para PAD, CD, CJ) -->
+                <div class="form-group" id="group_presidente" style="display: none;">
+                    <label for="presidente_nome">Nome do Presidente *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="presidente_nome" name="presidente_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o presidente...">
+                        <input type="hidden" id="presidente_id" name="presidente_id">
+                        <button type="button" id="btnBuscarPresidente" class="btn-lupa" title="Buscar Presidente" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Campo dependente: Interrogante (para PAD, CD, CJ) -->
+                <div class="form-group" id="group_interrogante" style="display: none;">
+                    <label for="interrogante_nome">Nome do Interrogante *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="interrogante_nome" name="interrogante_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o interrogante...">
+                        <input type="hidden" id="interrogante_id" name="interrogante_id">
+                        <button type="button" id="btnBuscarInterrogante" class="btn-lupa" title="Buscar Interrogante" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Campo dependente: Escrivão do Processo (para PAD, CD, CJ) -->
+                <div class="form-group" id="group_escrivao_processo" style="display: none;">
+                    <label for="escrivao_processo_nome">Nome do Escrivão do Processo *</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="escrivao_processo_nome" name="escrivao_processo_nome" readonly required style="flex:1; background:#f5f5f5; cursor:pointer;" placeholder="Selecione o escrivão do processo...">
+                        <input type="hidden" id="escrivao_processo_id" name="escrivao_processo_id">
+                        <button type="button" id="btnBuscarEscrivaoProcesso" class="btn-lupa" title="Buscar Escrivão do Processo" style="background: none; border: none; cursor: pointer;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Status do PM -->
                 <div class="form-group">
                     <label for="status_pm">Status do PM Envolvido *</label>

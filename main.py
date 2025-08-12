@@ -1107,7 +1107,11 @@ def registrar_processo(
     penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
     indicios_crimes=None, indicios_rdpm=None, indicios_art29=None,
     # Novos indícios por PM (Migração 015)
-    indicios_por_pm=None
+    indicios_por_pm=None,
+    # Novos campos para PAD, CD, CJ (Migração 018)
+    presidente_id=None, presidente_tipo=None,
+    interrogante_id=None, interrogante_tipo=None,
+    escrivao_processo_id=None, escrivao_processo_tipo=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -1243,6 +1247,30 @@ def registrar_processo(
                 return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
 
         print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
+        
+        # Definir tipos para presidente, interrogante e escrivão do processo (sempre encarregado para esses papéis)
+        # Corrigir tipos incorretos (listas/dicts vazios para None)
+        if isinstance(presidente_id, (list, dict)):
+            presidente_id = None if not presidente_id else None
+        if isinstance(interrogante_id, (list, dict)):
+            interrogante_id = None if not interrogante_id else None
+        if isinstance(escrivao_processo_id, (list, dict)):
+            escrivao_processo_id = None if not escrivao_processo_id else None
+            
+        if presidente_id:
+            presidente_tipo = 'encarregado'
+        else:
+            presidente_tipo = None
+            
+        if interrogante_id:
+            interrogante_tipo = 'encarregado'
+        else:
+            interrogante_tipo = None
+            
+        if escrivao_processo_id:
+            escrivao_processo_tipo = 'encarregado'
+        else:
+            escrivao_processo_tipo = None
 
         # Normalização defensiva de penalidade_tipo para atender o CHECK do banco
         if penalidade_tipo:
@@ -1267,6 +1295,39 @@ def registrar_processo(
 
         # Gerar ID único para o processo/procedimento
         processo_id = str(uuid.uuid4())
+        
+        # Debug: verificar TODOS os parâmetros da query SQL
+        print(f"\n========== DEBUG SQL PARAMETERS ===========")
+        print(f"Tipo: {tipo_geral} / {tipo_detalhe}")
+        
+        # Criar tupla de parâmetros para debug
+        params = (
+            processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
+            local_origem, local_fatos, data_instauracao, data_recebimento, escrivao_id, status_pm, nome_pm_id,
+            nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
+            numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
+            concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
+            data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
+            presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo
+        )
+        
+        # Imprimir cada parâmetro com seu índice, valor e tipo
+        param_names = [
+            "processo_id", "numero", "tipo_geral", "tipo_detalhe", "documento_iniciador",
+            "processo_sei", "responsavel_id", "responsavel_tipo", "local_origem", "local_fatos",
+            "data_instauracao", "data_recebimento", "escrivao_id", "status_pm", "nome_pm_id",
+            "nome_vitima", "natureza_processo", "natureza_procedimento", "resumo_fatos",
+            "numero_portaria", "numero_memorando", "numero_feito", "numero_rgf", "numero_controle",
+            "concluido", "data_conclusao", "solucao_final", "transgressoes_ids", "ano_instauracao",
+            "data_remessa_encarregado", "data_julgamento", "solucao_tipo", "penalidade_tipo", "penalidade_dias",
+            "indicios_categorias", "presidente_id", "presidente_tipo", "interrogante_id", "interrogante_tipo",
+            "escrivao_processo_id", "escrivao_processo_tipo"
+        ]
+        
+        for i, (name, value) in enumerate(zip(param_names, params)):
+            print(f"Param {i:2d} ({name:25s}): {repr(value):50s} | tipo: {type(value).__name__}")
+        
+        print(f"==========================================\n")
 
         cursor.execute("""
             INSERT INTO processos_procedimentos (
@@ -1275,15 +1336,16 @@ def registrar_processo(
                 nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
-                data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias
+                data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
+                presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?
             )
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
@@ -1291,7 +1353,8 @@ def registrar_processo(
             nome_vitima, natureza_processo, natureza_procedimento, resumo_fatos,
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
-            data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias
+            data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
+            presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -2201,7 +2264,11 @@ def atualizar_processo(
     penalidade_tipo=None, penalidade_dias=None, indicios_categorias=None,
     indicios_crimes=None, indicios_rdpm=None, indicios_art29=None,
     # Novos indícios por PM (Migração 015)
-    indicios_por_pm=None
+    indicios_por_pm=None,
+    # Novos campos para PAD, CD, CJ (Migração 018)
+    presidente_id=None, presidente_tipo=None,
+    interrogante_id=None, interrogante_tipo=None,
+    escrivao_processo_id=None, escrivao_processo_tipo=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -2282,6 +2349,7 @@ def atualizar_processo(
                 numero_portaria = ?, numero_memorando = ?, numero_feito = ?, numero_rgf = ?, numero_controle = ?,
                 concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?,
                 data_remessa_encarregado = ?, data_julgamento = ?, solucao_tipo = ?, penalidade_tipo = ?, penalidade_dias = ?, indicios_categorias = ?,
+                presidente_id = ?, presidente_tipo = ?, interrogante_id = ?, interrogante_tipo = ?, escrivao_processo_id = ?, escrivao_processo_tipo = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -2292,6 +2360,7 @@ def atualizar_processo(
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
                 data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
+                presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
                 processo_id
             )
         )
