@@ -537,6 +537,9 @@ function abrirModalAndamentos(processoId, numeroProcesso) {
     modalAndamentos.dataset.processoId = processoId;
     modalAndamentos.querySelector('#andamentosNumero').textContent = numeroProcesso;
     
+    // Limpar o campo de texto sempre que abrir o modal
+    modalAndamentos.querySelector('#textoAndamento').value = '';
+    
     // Carregar andamentos existentes
     carregarAndamentos(processoId);
     
@@ -550,6 +553,9 @@ function fecharModalAndamentos() {
         // Limpar lista ao fechar
         const lista = modalAndamentos.querySelector('#listaAndamentos');
         if (lista) lista.innerHTML = '';
+        // Limpar campo de texto ao fechar
+        const textoAndamento = modalAndamentos.querySelector('#textoAndamento');
+        if (textoAndamento) textoAndamento.value = '';
     }
 }
 
@@ -650,11 +656,11 @@ async function adicionarAndamento() {
         const resultado = await eel.adicionar_andamento(processoId, texto, usuarioNome)();
         
         if (resultado.sucesso) {
-            showAlert('Andamento adicionado com sucesso!', 'success');
-            // Limpar campo
-            modalAndamentos.querySelector('#textoAndamento').value = '';
-            // Recarregar lista
-            carregarAndamentos(processoId);
+            // Fechar o modal de andamentos
+            fecharModalAndamentos();
+            
+            // Mostrar modal de sucesso por 2 segundos
+            showSuccessModal('Andamento adicionado com sucesso!', 2000);
         } else {
             showAlert(resultado.mensagem || 'Erro ao adicionar andamento.', 'error');
         }
