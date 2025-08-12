@@ -93,7 +93,7 @@
     cursor: help;
 }
 
-/* Modal genérico (prorrogação) */
+/* Modal genérico (mantido para compatibilidade) */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -124,6 +124,295 @@
 .modal-body label { display:block; font-weight: 600; margin: 8px 0 4px; }
 .modal-body input, .modal-body textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
 .modal-footer { display:flex; gap:8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid #eee; }
+
+/* Modal de Prorrogação Estilizado */
+.modal-prorrogacao-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-prorrogacao {
+    background: white;
+    width: 90%;
+    max-width: 580px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-prorrogacao-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-prorrogacao-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-prorrogacao-header h3 i {
+    font-size: 1.1rem;
+}
+
+.modal-prorrogacao-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.modal-prorrogacao-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.modal-prorrogacao-body {
+    padding: 24px;
+}
+
+.processo-info {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.processo-info i {
+    font-size: 1.5rem;
+    color: #667eea;
+}
+
+.processo-info .label {
+    font-size: 0.9rem;
+    color: #6c757d;
+    font-weight: 500;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.processo-info .processo-numero {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #2d3436;
+}
+
+.form-group-prorrogacao {
+    margin-bottom: 20px;
+}
+
+.form-group-prorrogacao label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.form-group-prorrogacao label i {
+    margin-right: 6px;
+    color: #667eea;
+    font-size: 0.9rem;
+}
+
+.form-control-prorrogacao {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.form-control-prorrogacao:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+}
+
+.form-control-prorrogacao:hover {
+    border-color: #adb5bd;
+}
+
+textarea.form-control-prorrogacao {
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
+}
+
+.form-row-prorrogacao {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.modal-prorrogacao-footer {
+    background: #f8f9fa;
+    padding: 20px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    border-top: 1px solid #dee2e6;
+}
+
+.btn-prorrogacao-save,
+.btn-prorrogacao-cancel {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+    justify-content: center;
+}
+
+.btn-prorrogacao-save {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    flex: 1;
+    max-width: 200px;
+}
+
+.btn-prorrogacao-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-prorrogacao-save:active {
+    transform: translateY(0);
+}
+
+.btn-prorrogacao-cancel {
+    background: #e9ecef;
+    color: #495057;
+    flex: 1;
+    max-width: 160px;
+}
+
+.btn-prorrogacao-cancel:hover {
+    background: #dee2e6;
+}
+
+/* Responsividade do Modal de Prorrogação */
+@media (max-width: 640px) {
+    .modal-prorrogacao {
+        width: 95%;
+        max-height: 95vh;
+        margin: 10px;
+    }
+    
+    .modal-prorrogacao-header {
+        padding: 16px 20px;
+    }
+    
+    .modal-prorrogacao-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .modal-prorrogacao-body {
+        padding: 20px;
+    }
+    
+    .form-row-prorrogacao {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-prorrogacao-footer {
+        flex-direction: column;
+        padding: 16px 20px;
+    }
+    
+    .btn-prorrogacao-save,
+    .btn-prorrogacao-cancel {
+        width: 100%;
+        max-width: none;
+    }
+    
+    .processo-info {
+        flex-direction: column;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-prorrogacao {
+        border-radius: 12px;
+    }
+    
+    .modal-prorrogacao-header h3 {
+        font-size: 1rem;
+        gap: 8px;
+    }
+    
+    .modal-prorrogacao-header h3 i {
+        font-size: 1rem;
+    }
+    
+    .form-control-prorrogacao {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+    
+    .btn-prorrogacao-save,
+    .btn-prorrogacao-cancel {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+}
 
 /* Estilo para tipos de procedimento */
 .procedure-type {
@@ -673,7 +962,88 @@
     }
 }
 
-/* Responsividade do modal */
+/* Modal de Sucesso */
+.modal-success-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.modal-success-overlay.show {
+    opacity: 1;
+}
+
+.modal-success {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.modal-success-overlay.show .modal-success {
+    transform: scale(1);
+}
+
+.modal-success-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: successPulse 0.5s ease;
+}
+
+.modal-success-icon i {
+    font-size: 40px;
+    color: white;
+}
+
+.modal-success-content h3 {
+    margin: 0 0 10px;
+    font-size: 24px;
+    color: #333;
+    font-weight: 600;
+}
+
+.modal-success-content p {
+    margin: 0;
+    font-size: 16px;
+    color: #666;
+    line-height: 1.5;
+}
+
+@keyframes successPulse {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Responsividade */
 @media (min-width: 769px) and (max-width: 1024px) {
     .modal-footer-filtros .btn {
         min-width: 120px;

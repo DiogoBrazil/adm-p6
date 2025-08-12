@@ -106,6 +106,46 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
+// Função para mostrar modal de sucesso
+function showSuccessModal(message, autoCloseTime = 2000) {
+    // Criar o modal se não existir
+    let modalSuccess = document.getElementById('modalSuccess');
+    if (!modalSuccess) {
+        modalSuccess = document.createElement('div');
+        modalSuccess.id = 'modalSuccess';
+        modalSuccess.className = 'modal-success-overlay';
+        modalSuccess.innerHTML = `
+            <div class="modal-success">
+                <div class="modal-success-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="modal-success-content">
+                    <h3>Sucesso!</h3>
+                    <p id="modalSuccessMessage"></p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modalSuccess);
+    }
+    
+    // Atualizar mensagem
+    document.getElementById('modalSuccessMessage').innerHTML = message;
+    
+    // Mostrar modal com animação
+    modalSuccess.style.display = 'flex';
+    setTimeout(() => {
+        modalSuccess.classList.add('show');
+    }, 10);
+    
+    // Fechar automaticamente após o tempo especificado
+    setTimeout(() => {
+        modalSuccess.classList.remove('show');
+        setTimeout(() => {
+            modalSuccess.style.display = 'none';
+        }, 300); // Aguardar animação de fade out
+    }, autoCloseTime);
+}
+
 // Função para fechar alerta
 function closeAlert(alertId) {
     const alert = document.getElementById(alertId);
@@ -468,43 +508,71 @@ function abrirModalProrrogacao(processoId, numeroFmt) {
     }
     modalProrrogacao.querySelector('#prorProcId').value = processoId;
     modalProrrogacao.querySelector('#prorNumero').textContent = numeroFmt;
-    modalProrrogacao.style.display = 'block';
+    modalProrrogacao.style.display = 'flex';
+    // Focar no primeiro campo após abrir
+    setTimeout(() => {
+        modalProrrogacao.querySelector('#prorDias').focus();
+    }, 100);
 }
 
 function fecharModalProrrogacao() {
-    if (modalProrrogacao) modalProrrogacao.style.display = 'none';
+    if (modalProrrogacao) {
+        modalProrrogacao.style.display = 'none';
+        // Limpar campos ao fechar
+        modalProrrogacao.querySelector('#prorDias').value = '';
+        modalProrrogacao.querySelector('#prorPortaria').value = '';
+        modalProrrogacao.querySelector('#prorDataPortaria').value = '';
+        modalProrrogacao.querySelector('#prorMotivo').value = '';
+    }
 }
 
 function criarModalProrrogacao() {
     modalProrrogacao = document.createElement('div');
-    modalProrrogacao.className = 'modal-overlay';
+    modalProrrogacao.className = 'modal-prorrogacao-overlay';
     modalProrrogacao.innerHTML = `
-        <div class="modal">
-            <div class="modal-header">
-                <h3>Adicionar Prorrogação</h3>
-                <button class="close" onclick="fecharModalProrrogacao()">&times;</button>
+        <div class="modal-prorrogacao">
+            <div class="modal-prorrogacao-header">
+                <h3><i class="fas fa-clock"></i> Adicionar Prorrogação de Prazo</h3>
+                <button class="modal-prorrogacao-close" onclick="fecharModalProrrogacao()">&times;</button>
             </div>
-            <div class="modal-body">
+            <div class="modal-prorrogacao-body">
                 <input type="hidden" id="prorProcId" />
-                <p><strong>Processo:</strong> <span id="prorNumero"></span></p>
-                <label>Dias de prorrogação</label>
-                <input type="number" id="prorDias" min="1" placeholder="Ex: 10" />
-                <div style="margin-top:8px; display:flex; gap:12px;">
-                    <div style="flex:1;">
-                        <label>Número da Portaria</label>
-                        <input type="text" id="prorPortaria" placeholder="Ex: 123/2025" />
-                    </div>
-                    <div style="flex:1;">
-                        <label>Data da Portaria</label>
-                        <input type="date" id="prorDataPortaria" />
+                <div class="processo-info">
+                    <i class="fas fa-folder-open"></i>
+                    <div>
+                        <span class="label">Processo/Procedimento:</span>
+                        <span id="prorNumero" class="processo-numero"></span>
                     </div>
                 </div>
-                <label style="margin-top:8px;">Motivo (opcional)</label>
-                <textarea id="prorMotivo" rows="3" placeholder="Justificativa"></textarea>
+                
+                <div class="form-group-prorrogacao">
+                    <label><i class="fas fa-calendar-plus"></i> Dias de prorrogação *</label>
+                    <input type="number" id="prorDias" min="1" placeholder="Ex: 10" class="form-control-prorrogacao" required />
+                </div>
+                
+                <div class="form-row-prorrogacao">
+                    <div class="form-group-prorrogacao">
+                        <label><i class="fas fa-file-alt"></i> Número da Portaria</label>
+                        <input type="text" id="prorPortaria" placeholder="Ex: 123" class="form-control-prorrogacao" />
+                    </div>
+                    <div class="form-group-prorrogacao">
+                        <label><i class="fas fa-calendar"></i> Data da Portaria</label>
+                        <input type="date" id="prorDataPortaria" class="form-control-prorrogacao" />
+                    </div>
+                </div>
+                
+                <div class="form-group-prorrogacao">
+                    <label><i class="fas fa-comment-alt"></i> Motivo/Justificativa (opcional)</label>
+                    <textarea id="prorMotivo" rows="3" placeholder="Descreva o motivo da prorrogação..." class="form-control-prorrogacao"></textarea>
+                </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-action" onclick="salvarProrrogacao()"><i class="fas fa-save"></i> Salvar</button>
-                <button class="btn-delete" onclick="fecharModalProrrogacao()">Cancelar</button>
+            <div class="modal-prorrogacao-footer">
+                <button class="btn-prorrogacao-save" onclick="salvarProrrogacao()">
+                    <i class="fas fa-save"></i> Salvar Prorrogação
+                </button>
+                <button class="btn-prorrogacao-cancel" onclick="fecharModalProrrogacao()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
             </div>
         </div>`;
     document.body.appendChild(modalProrrogacao);
@@ -516,22 +584,42 @@ async function salvarProrrogacao() {
     const numPortaria = modalProrrogacao.querySelector('#prorPortaria').value || null;
     const dataPortaria = modalProrrogacao.querySelector('#prorDataPortaria').value || null;
     const motivo = modalProrrogacao.querySelector('#prorMotivo').value || null;
+    
     if (!dias || dias <= 0) {
-        alert('Informe a quantidade de dias da prorrogação.');
+        showAlert('Por favor, informe a quantidade de dias da prorrogação.', 'error');
+        modalProrrogacao.querySelector('#prorDias').focus();
         return;
     }
+    
     try {
         const res = await eel.adicionar_prorrogacao(procId, dias, numPortaria, dataPortaria, motivo, null, null)();
         if (res && res.sucesso) {
-            alert(res.mensagem + (res.ordem_prorrogacao ? ` (Prorrogação nº ${res.ordem_prorrogacao})` : ''));
+            // Montar mensagem de sucesso
+            let mensagemSucesso = res.mensagem || 'Prorrogação salva com sucesso!';
+            if (res.ordem_prorrogacao) {
+                mensagemSucesso += `<br><strong>Prorrogação nº ${res.ordem_prorrogacao}</strong>`;
+            }
+            if (res.nova_data_vencimento) {
+                mensagemSucesso += `<br>Novo vencimento: <strong>${res.nova_data_vencimento}</strong>`;
+            }
+            
+            // Fechar modal de prorrogação primeiro
             fecharModalProrrogacao();
-            carregarProcedimentos();
+            
+            // Mostrar modal de sucesso com auto-fechamento em 2 segundos
+            showSuccessModal(mensagemSucesso, 2000);
+            
+            // Recarregar procedimentos após o modal de sucesso fechar
+            setTimeout(() => {
+                carregarProcedimentos();
+            }, 2300); // Aguardar o modal fechar + 300ms
         } else {
-            alert(res?.mensagem || 'Erro ao salvar prorrogação.');
+            // Mostrar mensagem de erro
+            showAlert(res?.mensagem || 'Erro ao salvar prorrogação. Por favor, tente novamente.', 'error');
         }
     } catch (e) {
-        console.error(e);
-        alert('Erro ao salvar prorrogação.');
+        console.error('Erro ao salvar prorrogação:', e);
+        showAlert('Erro ao processar a solicitação. Por favor, tente novamente.', 'error');
     }
 }
 
