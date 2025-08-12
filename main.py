@@ -1249,7 +1249,11 @@ def registrar_processo(
             mapping = {
                 'Prisão': 'Prisao', 'Prisao': 'Prisao',
                 'Detenção': 'Detencao', 'Detencao': 'Detencao',
-                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao'
+                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao',
+                # Novas penalidades específicas por tipo de processo
+                'Licenciado_Disciplina': 'Licenciado_Disciplina',
+                'Excluido_Disciplina': 'Excluido_Disciplina',
+                'Demitido_Exoficio': 'Demitido_Exoficio'
             }
             penalidade_tipo = mapping.get(penalidade_tipo, penalidade_tipo)
         # Se a solução não for Punido, limpar campos de penalidade
@@ -2254,7 +2258,11 @@ def atualizar_processo(
             mapping = {
                 'Prisão': 'Prisao', 'Prisao': 'Prisao',
                 'Detenção': 'Detencao', 'Detencao': 'Detencao',
-                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao'
+                'Repreensão': 'Repreensao', 'Repreensao': 'Repreensao',
+                # Novas penalidades específicas por tipo de processo
+                'Licenciado_Disciplina': 'Licenciado_Disciplina',
+                'Excluido_Disciplina': 'Excluido_Disciplina',
+                'Demitido_Exoficio': 'Demitido_Exoficio'
             }
             penalidade_tipo = mapping.get(penalidade_tipo, penalidade_tipo)
         if (solucao_tipo or '').strip() != 'Punido':
@@ -2648,7 +2656,6 @@ def calcular_prazo_processo(tipo_detalhe, documento_iniciador, data_recebimento,
     # Definir prazos base conforme regras
     prazos_base = {
         # Procedimentos com 15 dias
-        'AO': 15,
         'SV': 15,
         # Procedimentos com 30 dias (mantidos)
         'SR': 30,
@@ -3614,8 +3621,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             "envolvido_sindicado": 0,
             "envolvido_acusado": 0,
             "envolvido_indiciado": 0,
-            "envolvido_investigado": 0,
-            "envolvido_acidentado": 0
+            "envolvido_investigado": 0
         }
         
         # 1. Encarregado de Sindicância (SR e SV)
@@ -3642,15 +3648,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["encarregado_ipm"] = cursor.fetchone()[0]
         
-        # 4. Encarregado de Atestado de Origem (AO)
-        cursor.execute("""
-            SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE responsavel_id = ? AND ativo = 1 
-            AND tipo_detalhe = 'AO'
-        """, (user_id,))
-        estatisticas["encarregado_atestado_origem"] = cursor.fetchone()[0]
-        
-        # 5. Encarregado de Feito Preliminar (FP)
+        # 4. Encarregado de Feito Preliminar (FP)
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE responsavel_id = ? AND ativo = 1 
@@ -3697,15 +3695,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["envolvido_investigado"] = cursor.fetchone()[0]
         
-        # 11. Envolvido como acidentado (status_pm = 'Acidentado')
-        cursor.execute("""
-            SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE nome_pm_id = ? AND ativo = 1 
-            AND LOWER(status_pm) = 'acidentado'
-        """, (user_id,))
-        estatisticas["envolvido_acidentado"] = cursor.fetchone()[0]
-        
-        # 12. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
+        # 11. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
         cursor.execute("""
             SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
             JOIN processos_procedimentos p ON pme.procedimento_id = p.id
@@ -3737,14 +3727,6 @@ def obter_estatisticas_usuario(user_id, user_type):
             AND LOWER(p.status_pm) = 'investigado'
         """, (user_id,))
         estatisticas["envolvido_investigado"] += cursor.fetchone()[0]
-        
-        cursor.execute("""
-            SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
-            JOIN processos_procedimentos p ON pme.procedimento_id = p.id
-            WHERE pme.pm_id = ? AND p.ativo = 1 
-            AND LOWER(p.status_pm) = 'acidentado'
-        """, (user_id,))
-        estatisticas["envolvido_acidentado"] += cursor.fetchone()[0]
         
         conn.close()
         

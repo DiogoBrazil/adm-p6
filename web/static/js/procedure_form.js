@@ -546,6 +546,7 @@ function wireNovosControlesPosResumo() {
 
     const isProcesso = () => (tipoGeral?.value || '').toLowerCase() === 'processo';
     const isProcedimento = () => (tipoGeral?.value || '').toLowerCase() === 'procedimento';
+    const getTipoProcesso = () => document.getElementById('tipo_processo')?.value || '';
 
     function popularOpcoesSolucao() {
         if (!selSolucao) return;
@@ -560,6 +561,52 @@ function wireNovosControlesPosResumo() {
             op.value = o.v; op.textContent = o.t; selSolucao.appendChild(op);
         });
         if ([...selSolucao.options].some(o => o.value === prev)) selSolucao.value = prev;
+    }
+
+    function popularOpcoesPenalidade() {
+        const selPenalidade = document.getElementById('penalidade_tipo');
+        if (!selPenalidade) return;
+        
+        const prev = selPenalidade.value;
+        selPenalidade.innerHTML = '';
+        
+        // Opções base que sempre aparecem
+        const opcoesBase = [
+            { v: '', t: 'Selecione...' },
+            { v: 'Prisao', t: 'Prisão' },
+            { v: 'Detencao', t: 'Detenção' },
+            { v: 'Repreensao', t: 'Repreensão' }
+        ];
+        
+        // Adicionar opções específicas baseadas no tipo de processo
+        const tipoProcesso = getTipoProcesso();
+        const opcoesAdicionais = [];
+        
+        switch (tipoProcesso) {
+            case 'PAD':
+                opcoesAdicionais.push({ v: 'Licenciado_Disciplina', t: 'Licenciado a bem da disciplina' });
+                break;
+            case 'CD':
+                opcoesAdicionais.push({ v: 'Excluido_Disciplina', t: 'Excluído a bem da disciplina' });
+                break;
+            case 'CJ':
+                opcoesAdicionais.push({ v: 'Demitido_Exoficio', t: 'Demitido ex-ofício' });
+                break;
+            // PADS mantém apenas as opções base
+        }
+        
+        // Combinar opções e adicionar ao select
+        [...opcoesBase, ...opcoesAdicionais].forEach(o => {
+            const op = document.createElement('option');
+            op.value = o.v;
+            op.textContent = o.t;
+            selPenalidade.appendChild(op);
+        });
+        
+        // Restaurar seleção anterior se ainda existir
+        if ([...selPenalidade.options].some(o => o.value === prev)) {
+            selPenalidade.value = prev;
+        }
     }
 
     function refreshJulgamentoVisibility() {
@@ -607,10 +654,16 @@ function wireNovosControlesPosResumo() {
 
         // Processo Punido => penalidade
         const showPenal = active && isProcesso() && sol === 'Punido';
-        if (penalGroup) penalGroup.style.display = showPenal ? '' : 'none';
-    const pSel = document.getElementById('penalidade_tipo')?.value || '';
-    // Dias apenas para Prisao/Detencao
-    if (penalDiasGroup) penalDiasGroup.style.display = showPenal && (pSel === 'Prisao' || pSel === 'Detencao') ? '' : 'none';
+        if (penalGroup) {
+            penalGroup.style.display = showPenal ? '' : 'none';
+            // Atualizar opções de penalidade quando mostrar o campo
+            if (showPenal) {
+                popularOpcoesPenalidade();
+            }
+        }
+        const pSel = document.getElementById('penalidade_tipo')?.value || '';
+        // Dias apenas para Prisao/Detencao
+        if (penalDiasGroup) penalDiasGroup.style.display = showPenal && (pSel === 'Prisao' || pSel === 'Detencao') ? '' : 'none';
     }
 
     // Eventos
@@ -619,6 +672,15 @@ function wireNovosControlesPosResumo() {
         refreshJulgamentoVisibility();
         refreshSolucaoVisibility();
     }, { passive: true });
+    
+    // Adicionar evento para atualizar penalidades quando o tipo de processo mudar
+    document.getElementById('tipo_processo')?.addEventListener('change', () => {
+        // Se o campo de penalidade estiver visível, atualizar as opções
+        const showPenal = chkSolucao?.checked && isProcesso() && selSolucao?.value === 'Punido';
+        if (showPenal) {
+            popularOpcoesPenalidade();
+        }
+    });
     chkRemessa?.addEventListener('change', () => {
         groupRemessa.style.display = chkRemessa.checked ? '' : 'none';
         refreshJulgamentoVisibility();
@@ -1569,8 +1631,8 @@ function updateFormVisibility() {
     toggleGroup(fieldGroups.tipoProcesso, tipoGeral === 'processo');
     toggleGroup(fieldGroups.tipoProcedimento, tipoGeral === 'procedimento');
     
-    // Lógica para Nome da Vítima/Ofendido (procedimento, mas não AO)
-    const showNomeVitima = tipoGeral === 'procedimento' && tipoProcedimento !== 'AO';
+    // Lógica para Nome da Vítima/Ofendido (apenas para procedimento)
+    const showNomeVitima = tipoGeral === 'procedimento';
     toggleGroup(fieldGroups.nomeVitima, showNomeVitima);
 
     // Lógica para Escrivão (se Procedimento for IPM)
@@ -1635,9 +1697,6 @@ function updateFormVisibility() {
             case 'testemunha':
                 fields.labelNomePm.textContent = 'Nome do PM (Testemunha) *';
                 break;
-            case 'acidentado':
-                fields.labelNomePm.textContent = 'Nome do PM (Acidentado) *';
-                break;
             default:
                 fields.labelNomePm.textContent = 'Nome do PM *';
         }
@@ -1694,10 +1753,6 @@ function updateNumeroControleLabels(tipoGeral, tipoProcedimento, tipoProcesso) {
             case 'CP':
                 label = 'Número da CP *';
                 help = 'Número de controle da CP';
-                break;
-            case 'AO':
-                label = 'Número da AO *';
-                help = 'Número de controle da AO';
                 break;
         }
     } else if (tipoGeral === 'processo') {
@@ -1880,8 +1935,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         toggleGroup(fieldGroups.tipoProcesso, tipoGeral === 'processo');
         toggleGroup(fieldGroups.tipoProcedimento, tipoGeral === 'procedimento');
         
-        // Lógica para Nome da Vítima/Ofendido (procedimento, mas não AO)
-        const showNomeVitima = tipoGeral === 'procedimento' && tipoProcedimento !== 'AO';
+        // Lógica para Nome da Vítima/Ofendido (apenas para procedimento)
+        const showNomeVitima = tipoGeral === 'procedimento';
         toggleGroup(fieldGroups.nomeVitima, showNomeVitima);
 
         // Lógica para Escrivão (se Procedimento for IPM)
@@ -2461,7 +2516,6 @@ function adicionarPmAdicional() {
                 <option value="Sindicado">Sindicado</option>
                 <option value="Investigado">Investigado</option>
                 <option value="Indiciado">Indiciado</option>
-                <option value="Acidentado">Acidentado</option>
             </select>
         </div>
         <div style="flex: 0 0 auto; display:flex; gap:4px; align-items:center;">

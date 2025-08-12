@@ -337,12 +337,6 @@ function updateDetailedStats(stats) {
             value: stats.envolvido_investigado, 
             desc: 'Envolvido como investigado', 
             gradient: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)'
-        },
-        { 
-            label: 'Acidentado', 
-            value: stats.envolvido_acidentado, 
-            desc: 'Envolvido como acidentado', 
-            gradient: 'linear-gradient(135deg, #795548 0%, #5d4037 100%)'
         }
     ];
     

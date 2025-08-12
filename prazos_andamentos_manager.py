@@ -97,7 +97,7 @@ class PrazosAndamentosManager:
                     return {"sucesso": False, "mensagem": "Processo não possui data de recebimento para iniciar prazo"}
                 # Regras básicas de prazo
                 prazos_base = {
-                    'AO': 15, 'SV': 15, 'SR': 30, 'IPM': 40, 'FP': 30, 'CP': 30,
+                    'SV': 15, 'SR': 30, 'IPM': 40, 'FP': 30, 'CP': 30,
                     'PAD': 30, 'PADE': 30, 'CD': 30, 'CJ': 30, 'PADS': 30,
                     'Feito Preliminar': 15
                 }
