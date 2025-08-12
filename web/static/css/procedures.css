@@ -1075,7 +1075,357 @@ textarea.form-control-prorrogacao {
     }
 }
 
-/* Modal de Sucesso */
+/* ========================================
+   MODAL DE ANDAMENTOS (HISTÓRICO)
+   ======================================== */
+
+.modal-andamentos-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s ease;
+}
+
+.modal-andamentos {
+    background: white;
+    width: 90%;
+    max-width: 700px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-andamentos-header {
+    background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-andamentos-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-andamentos-header h3 i {
+    font-size: 1.1rem;
+}
+
+.modal-andamentos-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.modal-andamentos-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.modal-andamentos-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Seção de adicionar andamento */
+.adicionar-andamento {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    border: 2px solid #e9ecef;
+}
+
+.form-group-andamento {
+    margin-bottom: 16px;
+}
+
+.form-group-andamento label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.form-group-andamento label i {
+    margin-right: 6px;
+    color: #4A90E2;
+    font-size: 0.9rem;
+}
+
+.form-control-andamento {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    background: white;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+.form-control-andamento:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.1);
+}
+
+.btn-adicionar-andamento {
+    background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.btn-adicionar-andamento:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(74, 144, 226, 0.3);
+}
+
+.btn-adicionar-andamento:active {
+    transform: translateY(0);
+}
+
+/* Lista de andamentos */
+.andamentos-existentes {
+    margin-top: 20px;
+}
+
+.andamentos-existentes h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2d3436;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.andamentos-existentes h4 i {
+    color: #4A90E2;
+    font-size: 1rem;
+}
+
+.lista-andamentos {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.andamento-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.andamento-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+}
+
+.andamento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.andamento-data {
+    font-size: 0.85rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.andamento-data i {
+    font-size: 0.75rem;
+    color: #adb5bd;
+}
+
+.andamento-usuario {
+    font-size: 0.85rem;
+    color: #495057;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.andamento-usuario i {
+    font-size: 0.75rem;
+    color: #4A90E2;
+}
+
+.btn-remover-andamento {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    color: #dc3545;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-remover-andamento:hover {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+    transform: scale(1.05);
+}
+
+.andamento-texto {
+    color: #2d3436;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Estados vazios e erros */
+.andamento-vazio,
+.andamento-erro {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+
+.andamento-erro {
+    color: #dc3545;
+    background: #fff5f5;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+/* Scrollbar personalizada para lista de andamentos */
+.lista-andamentos::-webkit-scrollbar {
+    width: 6px;
+}
+
+.lista-andamentos::-webkit-scrollbar-track {
+    background: #f1f3f5;
+    border-radius: 3px;
+}
+
+.lista-andamentos::-webkit-scrollbar-thumb {
+    background: #adb5bd;
+    border-radius: 3px;
+}
+
+.lista-andamentos::-webkit-scrollbar-thumb:hover {
+    background: #868e96;
+}
+
+/* Responsividade do Modal de Andamentos */
+@media (max-width: 768px) {
+    .modal-andamentos {
+        width: 95%;
+        max-height: 90vh;
+        margin: 10px;
+    }
+    
+    .modal-andamentos-header {
+        padding: 16px 20px;
+    }
+    
+    .modal-andamentos-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .modal-andamentos-body {
+        padding: 20px;
+    }
+    
+    .lista-andamentos {
+        max-height: 250px;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-andamentos {
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+    }
+    
+    .modal-andamentos-header h3 {
+        font-size: 1rem;
+    }
+    
+    .modal-andamentos-body {
+        padding: 16px;
+    }
+    
+    .adicionar-andamento {
+        padding: 16px;
+    }
+    
+    .andamento-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .btn-remover-andamento {
+        align-self: flex-end;
+        margin-top: 8px;
+    }
+}
+
+/* Modal de sucesso */
 .modal-success-overlay {
     position: fixed;
     top: 0;

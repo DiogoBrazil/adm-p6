@@ -2796,6 +2796,140 @@ def calcular_prazo_por_processo(processo_id):
         return {"sucesso": False, "mensagem": f"Erro ao calcular prazo: {str(e)}"}
 
 @eel.expose
+def adicionar_andamento(processo_id, texto, usuario_nome=None):
+    """Adiciona um novo andamento (progresso) ao processo/procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar andamentos atuais
+        cursor.execute("""
+            SELECT andamentos FROM processos_procedimentos WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
+        
+        # Parse andamentos existentes ou criar lista vazia
+        andamentos_json = result[0] if result[0] else '[]'
+        try:
+            andamentos = json.loads(andamentos_json)
+        except:
+            andamentos = []
+        
+        # Criar novo andamento
+        novo_andamento = {
+            "id": str(uuid.uuid4()),
+            "texto": texto,
+            "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "usuario": usuario_nome or "Sistema"
+        }
+        
+        # Adicionar ao início da lista (mais recente primeiro)
+        andamentos.insert(0, novo_andamento)
+        
+        # Salvar de volta no banco
+        cursor.execute("""
+            UPDATE processos_procedimentos 
+            SET andamentos = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (json.dumps(andamentos), processo_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "sucesso": True, 
+            "mensagem": "Andamento adicionado com sucesso",
+            "andamento": novo_andamento
+        }
+        
+    except Exception as e:
+        print(f"Erro ao adicionar andamento: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao adicionar andamento: {str(e)}"}
+
+@eel.expose
+def listar_andamentos(processo_id):
+    """Lista todos os andamentos de um processo/procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT andamentos FROM processos_procedimentos WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
+        
+        # Parse andamentos
+        andamentos_json = result[0] if result[0] else '[]'
+        try:
+            andamentos = json.loads(andamentos_json)
+        except:
+            andamentos = []
+        
+        return {
+            "sucesso": True,
+            "andamentos": andamentos
+        }
+        
+    except Exception as e:
+        print(f"Erro ao listar andamentos: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
+
+@eel.expose
+def remover_andamento(processo_id, andamento_id):
+    """Remove um andamento específico do processo/procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar andamentos atuais
+        cursor.execute("""
+            SELECT andamentos FROM processos_procedimentos WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
+        
+        # Parse andamentos existentes
+        andamentos_json = result[0] if result[0] else '[]'
+        try:
+            andamentos = json.loads(andamentos_json)
+        except:
+            andamentos = []
+        
+        # Remover andamento específico
+        andamentos = [a for a in andamentos if a.get('id') != andamento_id]
+        
+        # Salvar de volta no banco
+        cursor.execute("""
+            UPDATE processos_procedimentos 
+            SET andamentos = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (json.dumps(andamentos), processo_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "sucesso": True, 
+            "mensagem": "Andamento removido com sucesso"
+        }
+        
+    except Exception as e:
+        print(f"Erro ao remover andamento: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao remover andamento: {str(e)}"}
+
+@eel.expose
 def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=None):
     """Lista processos com cálculo de prazo automático, paginação e filtros avançados"""
     try:

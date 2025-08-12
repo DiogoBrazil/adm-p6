@@ -500,6 +500,9 @@ function exibirProcedimentos() {
                             <button class="btn-action view-btn" onclick="visualizarProcedimento('${procedimento.id}')" title="Visualizar">
                                 <i class="fas fa-eye"></i>
                             </button>
+                            <button class="btn-action" onclick="abrirModalAndamentos('${procedimento.id}', '${numero.replace(/'/g, '\\\'')}')" title="Andamentos">
+                                <i class="fas fa-history"></i>
+                            </button>
                             <button class="btn-action" data-numero="${encodeURIComponent(numero)}" onclick="abrirModalProrrogacao('${procedimento.id}', decodeURIComponent(this.dataset.numero))" title="Adicionar prorrogação">
                                 <i class="fas fa-clock"></i>
                             </button>
@@ -520,6 +523,183 @@ function exibirProcedimentos() {
     
     // Sempre atualizar os controles de paginação
     updatePaginationControls();
+}
+
+// Modal de andamentos (histórico de progresso)
+let modalAndamentos;
+
+function abrirModalAndamentos(processoId, numeroProcesso) {
+    if (!modalAndamentos) {
+        criarModalAndamentos();
+    }
+    
+    // Armazenar o ID do processo no modal
+    modalAndamentos.dataset.processoId = processoId;
+    modalAndamentos.querySelector('#andamentosNumero').textContent = numeroProcesso;
+    
+    // Carregar andamentos existentes
+    carregarAndamentos(processoId);
+    
+    // Mostrar modal
+    modalAndamentos.style.display = 'flex';
+}
+
+function fecharModalAndamentos() {
+    if (modalAndamentos) {
+        modalAndamentos.style.display = 'none';
+        // Limpar lista ao fechar
+        const lista = modalAndamentos.querySelector('#listaAndamentos');
+        if (lista) lista.innerHTML = '';
+    }
+}
+
+function criarModalAndamentos() {
+    modalAndamentos = document.createElement('div');
+    modalAndamentos.className = 'modal-andamentos-overlay';
+    modalAndamentos.innerHTML = `
+        <div class="modal-andamentos">
+            <div class="modal-andamentos-header">
+                <h3><i class="fas fa-history"></i> Andamentos do Processo</h3>
+                <button class="modal-andamentos-close" onclick="fecharModalAndamentos()">&times;</button>
+            </div>
+            <div class="modal-andamentos-body">
+                <div class="processo-info">
+                    <i class="fas fa-folder-open"></i>
+                    <div>
+                        <span class="label">Processo/Procedimento:</span>
+                        <span id="andamentosNumero" class="processo-numero"></span>
+                    </div>
+                </div>
+                
+                <!-- Formulário para adicionar novo andamento -->
+                <div class="adicionar-andamento">
+                    <div class="form-group-andamento">
+                        <label><i class="fas fa-plus-circle"></i> Adicionar Novo Andamento</label>
+                        <textarea id="textoAndamento" rows="3" placeholder="Descreva o andamento..." class="form-control-andamento"></textarea>
+                    </div>
+                    <button class="btn-adicionar-andamento" onclick="adicionarAndamento()">
+                        <i class="fas fa-save"></i> Adicionar Andamento
+                    </button>
+                </div>
+                
+                <!-- Lista de andamentos existentes -->
+                <div class="andamentos-existentes">
+                    <h4><i class="fas fa-list"></i> Histórico de Andamentos</h4>
+                    <div id="listaAndamentos" class="lista-andamentos">
+                        <!-- Andamentos serão carregados aqui -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modalAndamentos);
+}
+
+async function carregarAndamentos(processoId) {
+    try {
+        const resultado = await eel.listar_andamentos(processoId)();
+        const lista = modalAndamentos.querySelector('#listaAndamentos');
+        
+        if (resultado.sucesso && resultado.andamentos) {
+            if (resultado.andamentos.length === 0) {
+                lista.innerHTML = '<p class="andamento-vazio">Nenhum andamento registrado ainda.</p>';
+            } else {
+                lista.innerHTML = resultado.andamentos.map(andamento => `
+                    <div class="andamento-item">
+                        <div class="andamento-header">
+                            <span class="andamento-data">
+                                <i class="fas fa-calendar"></i> 
+                                ${formatarDataHora(andamento.data)}
+                            </span>
+                            <span class="andamento-usuario">
+                                <i class="fas fa-user"></i> 
+                                ${andamento.usuario}
+                            </span>
+                            <button class="btn-remover-andamento" onclick="removerAndamento('${andamento.id}')" title="Remover andamento">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div class="andamento-texto">${andamento.texto}</div>
+                    </div>
+                `).join('');
+            }
+        } else {
+            lista.innerHTML = '<p class="andamento-erro">Erro ao carregar andamentos.</p>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar andamentos:', error);
+        const lista = modalAndamentos.querySelector('#listaAndamentos');
+        lista.innerHTML = '<p class="andamento-erro">Erro ao carregar andamentos.</p>';
+    }
+}
+
+async function adicionarAndamento() {
+    const processoId = modalAndamentos.dataset.processoId;
+    const texto = modalAndamentos.querySelector('#textoAndamento').value.trim();
+    
+    if (!texto) {
+        showAlert('Por favor, descreva o andamento.', 'error');
+        return;
+    }
+    
+    try {
+        // Obter nome do usuário logado
+        const usuarioResult = await eel.obter_usuario_logado()();
+        const usuarioNome = usuarioResult.logado ? usuarioResult.usuario.nome : 'Sistema';
+        
+        const resultado = await eel.adicionar_andamento(processoId, texto, usuarioNome)();
+        
+        if (resultado.sucesso) {
+            showAlert('Andamento adicionado com sucesso!', 'success');
+            // Limpar campo
+            modalAndamentos.querySelector('#textoAndamento').value = '';
+            // Recarregar lista
+            carregarAndamentos(processoId);
+        } else {
+            showAlert(resultado.mensagem || 'Erro ao adicionar andamento.', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao adicionar andamento:', error);
+        showAlert('Erro ao adicionar andamento.', 'error');
+    }
+}
+
+async function removerAndamento(andamentoId) {
+    if (!confirm('Tem certeza que deseja remover este andamento?')) {
+        return;
+    }
+    
+    const processoId = modalAndamentos.dataset.processoId;
+    
+    try {
+        const resultado = await eel.remover_andamento(processoId, andamentoId)();
+        
+        if (resultado.sucesso) {
+            showAlert('Andamento removido com sucesso!', 'success');
+            // Recarregar lista
+            carregarAndamentos(processoId);
+        } else {
+            showAlert(resultado.mensagem || 'Erro ao remover andamento.', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao remover andamento:', error);
+        showAlert('Erro ao remover andamento.', 'error');
+    }
+}
+
+function formatarDataHora(dataString) {
+    try {
+        const data = new Date(dataString);
+        return data.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        return dataString;
+    }
 }
 
 // Modal de prorrogação
