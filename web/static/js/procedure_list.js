@@ -54,35 +54,57 @@ function realizarLogout() {
 
 // Função para mostrar modal de confirmação
 function showConfirmModal(title, message, onConfirm) {
-    const modal = document.getElementById('confirmModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalMessage = document.getElementById('modalMessage');
-    const confirmBtn = document.getElementById('confirmBtn');
-    const cancelBtn = document.getElementById('cancelBtn');
-
-    modalTitle.textContent = title;
-    modalMessage.textContent = message;
+    // Remover modal existente se houver
+    let existingModal = document.getElementById('confirmModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Criar novo modal
+    const modal = document.createElement('div');
+    modal.id = 'confirmModal';
+    modal.className = 'modal-feedback';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 3rem; margin-bottom: 20px;"></i>
+            <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem;">${title}</h3>
+            <p style="margin-bottom: 25px; color: #666; font-size: 1rem;">${message}</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmCancel" class="btn-secondary" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Cancelar</button>
+                <button id="confirmOk" class="btn-danger" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Confirmar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Mostrar modal
     modal.style.display = 'flex';
-    modal.classList.add('show');
-
-    confirmBtn.onclick = () => {
+    
+    // Event listeners
+    const cancelBtn = document.getElementById('confirmCancel');
+    const okBtn = document.getElementById('confirmOk');
+    
+    const closeModal = () => {
         modal.style.display = 'none';
-        modal.classList.remove('show');
+    };
+    
+    // Remover listeners anteriores
+    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    okBtn.replaceWith(okBtn.cloneNode(true));
+    
+    // Novos listeners
+    document.getElementById('confirmCancel').addEventListener('click', closeModal);
+    document.getElementById('confirmOk').addEventListener('click', () => {
+        closeModal();
         onConfirm();
-    };
-
-    cancelBtn.onclick = () => {
-        modal.style.display = 'none';
-        modal.classList.remove('show');
-    };
-
-    // Fechar modal clicando fora dele
-    modal.onclick = (e) => {
+    });
+    
+    // Fechar ao clicar fora do modal
+    modal.addEventListener('click', (e) => {
         if (e.target === modal) {
-            modal.style.display = 'none';
-            modal.classList.remove('show');
+            closeModal();
         }
-    };
+    });
 }
 
 // Função para mostrar alertas
