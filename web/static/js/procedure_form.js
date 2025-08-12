@@ -627,17 +627,20 @@ function wireNovosControlesPosResumo() {
 
         const sol = selSolucao.value;
         
-        // Mostrar botão de adicionar indícios quando checkbox marcado e tipo selecionado
+        // Mostrar botão de adicionar indícios apenas para PROCEDIMENTO
+        // Para PROCESSO, não deve aparecer o botão de indícios
         const containerBtnIndicios = document.getElementById('container_btn_indicios_solucao');
         const containerIndiciosAdicionados = document.getElementById('container_indicios_adicionados');
         
         if (containerBtnIndicios) {
-            const mostrarBotaoIndicios = active && sol !== '';
+            // Botão só aparece se: checkbox marcado, tipo selecionado E for procedimento
+            const mostrarBotaoIndicios = active && sol !== '' && isProcedimento();
             containerBtnIndicios.style.display = mostrarBotaoIndicios ? 'block' : 'none';
         }
         
         if (containerIndiciosAdicionados) {
-            containerIndiciosAdicionados.style.display = active ? 'block' : 'none';
+            // Container de indícios também só aparece para procedimentos
+            containerIndiciosAdicionados.style.display = (active && isProcedimento()) ? 'block' : 'none';
         }
 
         const showIndCats = active && isProcedimento() && (sol === 'Homologado' || sol === 'Avocado');
