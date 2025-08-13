@@ -31,6 +31,13 @@ function initializeSidebar() {
     // Toggle menu móvel
     if (menuToggle && sidebar) {
         menuToggle.addEventListener('click', function() {
+            const isOpening = !sidebar.classList.contains('open');
+            
+            // Adicionar feedback tátil
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+            
             sidebar.classList.toggle('open');
             
             // Criar overlay se não existir
@@ -42,32 +49,77 @@ function initializeSidebar() {
                 
                 // Fechar menu ao clicar no overlay
                 overlay.addEventListener('click', function() {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
+                    closeSidebar();
                 });
             }
             
-            // Ativar/desativar overlay
-            overlay.classList.toggle('active', sidebar.classList.contains('open'));
+            // Ativar/desativar overlay com animação
+            if (isOpening) {
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden'; // Prevenir scroll
+            } else {
+                closeSidebar();
+            }
         });
     }
+    
+    // Função para fechar sidebar
+    function closeSidebar() {
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        if (sidebar && overlay) {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = ''; // Restaurar scroll
+        }
+    }
 
-    // Gerenciar submenus
+    // Gerenciar submenus com animações melhoradas
     submenuToggles.forEach(toggle => {
         toggle.addEventListener('click', function(e) {
             e.preventDefault();
             const parentItem = this.closest('.nav-item');
             const wasOpen = parentItem.classList.contains('open');
+            const submenu = parentItem.querySelector('.submenu');
             
-            // Fechar todos os outros submenus
+            // Adicionar feedback tátil
+            if (navigator.vibrate) {
+                navigator.vibrate(30);
+            }
+            
+            // Fechar todos os outros submenus com animação
             document.querySelectorAll('.nav-item.has-submenu.open').forEach(item => {
                 if (item !== parentItem) {
                     item.classList.remove('open');
+                    const otherSubmenu = item.querySelector('.submenu');
+                    if (otherSubmenu) {
+                        otherSubmenu.style.maxHeight = '0px';
+                    }
                 }
             });
             
-            // Toggle do submenu atual
-            parentItem.classList.toggle('open', !wasOpen);
+            // Toggle do submenu atual com animação suave
+            if (wasOpen) {
+                parentItem.classList.remove('open');
+                if (submenu) {
+                    submenu.style.maxHeight = '0px';
+                }
+            } else {
+                parentItem.classList.add('open');
+                if (submenu) {
+                    // Calcular altura necessária
+                    const scrollHeight = submenu.scrollHeight;
+                    submenu.style.maxHeight = scrollHeight + 'px';
+                    
+                    // Remover altura fixa após animação
+                    setTimeout(() => {
+                        if (parentItem.classList.contains('open')) {
+                            submenu.style.maxHeight = 'none';
+                        }
+                    }, 400);
+                }
+            }
         });
     });
 
@@ -101,7 +153,41 @@ function initializeSidebar() {
             if (overlay) {
                 overlay.classList.remove('active');
             }
+            document.body.style.overflow = '';
         }
+    });
+    
+    // Fechar sidebar ao pressionar ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+            closeSidebar();
+        }
+    });
+    
+    // Adicionar swipe gesture para fechar em mobile
+    let startX = 0;
+    let currentX = 0;
+    let isTracking = false;
+    
+    sidebar.addEventListener('touchstart', function(e) {
+        startX = e.touches[0].clientX;
+        isTracking = true;
+    });
+    
+    sidebar.addEventListener('touchmove', function(e) {
+        if (!isTracking) return;
+        currentX = e.touches[0].clientX;
+        const diffX = startX - currentX;
+        
+        // Se arrastar para a esquerda mais de 50px
+        if (diffX > 50) {
+            closeSidebar();
+            isTracking = false;
+        }
+    });
+    
+    sidebar.addEventListener('touchend', function() {
+        isTracking = false;
     });
 }
 
