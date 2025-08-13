@@ -69,7 +69,7 @@ class DatabaseManager:
             )
         ''')
         
-        # Criar tabela processos_procedimentos se não existir
+        # Criar tabela processos_procedimentos se não existir (schema atualizado)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS processos_procedimentos (
                 id TEXT PRIMARY KEY,
@@ -78,9 +78,11 @@ class DatabaseManager:
                 tipo_detalhe TEXT NOT NULL,
                 documento_iniciador TEXT NOT NULL CHECK (documento_iniciador IN ('Portaria', 'Memorando Disciplinar', 'Feito Preliminar')),
                 processo_sei TEXT,
-                responsavel_id TEXT NOT NULL,
-                responsavel_tipo TEXT NOT NULL CHECK (responsavel_tipo IN ('encarregado', 'operador')),
+                -- Agora opcionais para suportar PAD/CD/CJ
+                responsavel_id TEXT,
+                responsavel_tipo TEXT CHECK (responsavel_tipo IN ('encarregado', 'operador')),
                 local_origem TEXT,
+                local_fatos TEXT,
                 data_instauracao DATE,
                 data_recebimento DATE,
                 escrivao_id TEXT,
@@ -104,6 +106,20 @@ class DatabaseManager:
                 transgressoes_ids TEXT,
                 solucao_final TEXT,
                 ano_instauracao TEXT,
+                andamentos TEXT,
+                data_remessa_encarregado DATE,
+                data_julgamento DATE,
+                solucao_tipo TEXT,
+                penalidade_tipo TEXT,
+                penalidade_dias INTEGER,
+                indicios_categorias TEXT,
+                -- Papéis específicos para processos PAD/CD/CJ
+                presidente_id TEXT,
+                presidente_tipo TEXT CHECK (presidente_tipo IN ('encarregado', 'operador')),
+                interrogante_id TEXT,
+                interrogante_tipo TEXT CHECK (interrogante_tipo IN ('encarregado', 'operador')),
+                escrivao_processo_id TEXT,
+                escrivao_processo_tipo TEXT CHECK (escrivao_processo_tipo IN ('encarregado', 'operador')),
                 UNIQUE(numero, documento_iniciador, ano_instauracao)
             )
         ''')
@@ -1211,7 +1227,7 @@ def registrar_processo(
             )
         """)
 
-        # Verificações específicas antes da inserção para mensagens de erro mais precisas
+    # Verificações específicas antes da inserção para mensagens de erro mais precisas
         print(f"🔍 Verificando conflitos para: número={numero}, tipo={tipo_detalhe}, doc={documento_iniciador}, local={local_origem}, ano={ano_instauracao}")
         print(f"📅 Data instauração recebida: {data_instauracao}")
         
@@ -1247,8 +1263,14 @@ def registrar_processo(
                 return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
 
         print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
+
+        # Para PAD/CD/CJ, não existe 'Encarregado' do processo: deixar responsavel_id/tipo como NULL
+        if (tipo_geral == 'processo') and (tipo_detalhe in ('PAD', 'CD', 'CJ')):
+            print("ℹ️ Processo do tipo PAD/CD/CJ: definindo responsavel_id/responsavel_tipo como NULL")
+            responsavel_id = None
+            responsavel_tipo = None
         
-        # Definir tipos para presidente, interrogante e escrivão do processo (sempre encarregado para esses papéis)
+        # Resolver tipos para presidente, interrogante e escrivão do processo com base no ID
         # Corrigir tipos incorretos (listas/dicts vazios para None)
         if isinstance(presidente_id, (list, dict)):
             presidente_id = None if not presidente_id else None
@@ -1256,21 +1278,24 @@ def registrar_processo(
             interrogante_id = None if not interrogante_id else None
         if isinstance(escrivao_processo_id, (list, dict)):
             escrivao_processo_id = None if not escrivao_processo_id else None
-            
-        if presidente_id:
-            presidente_tipo = 'encarregado'
-        else:
-            presidente_tipo = None
-            
-        if interrogante_id:
-            interrogante_tipo = 'encarregado'
-        else:
-            interrogante_tipo = None
-            
-        if escrivao_processo_id:
-            escrivao_processo_tipo = 'encarregado'
-        else:
-            escrivao_processo_tipo = None
+
+        def _resolve_user_tipo(_cursor, _id):
+            if not _id:
+                return None
+            try:
+                _cursor.execute("SELECT 1 FROM operadores WHERE id = ?", (_id,))
+                if _cursor.fetchone():
+                    return 'operador'
+                _cursor.execute("SELECT 1 FROM encarregados WHERE id = ?", (_id,))
+                if _cursor.fetchone():
+                    return 'encarregado'
+            except Exception:
+                pass
+            return None
+
+        presidente_tipo = _resolve_user_tipo(cursor, presidente_id) if presidente_id else None
+        interrogante_tipo = _resolve_user_tipo(cursor, interrogante_id) if interrogante_id else None
+        escrivao_processo_tipo = _resolve_user_tipo(cursor, escrivao_processo_id) if escrivao_processo_id else None
 
         # Normalização defensiva de penalidade_tipo para atender o CHECK do banco
         if penalidade_tipo:
@@ -1516,7 +1541,10 @@ def listar_processos():
     cursor.execute("""
         SELECT 
             p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
-            COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel,
+            CASE 
+                WHEN p.tipo_geral = 'processo' AND p.tipo_detalhe IN ('PAD','CD','CJ') AND p.responsavel_id IS NULL THEN 'Não se aplica'
+                ELSE COALESCE(o.nome, e.nome, 'Desconhecido')
+            END as responsavel,
             p.created_at,
             p.local_origem, 
             p.data_instauracao,
@@ -1550,9 +1578,9 @@ def listar_processos():
             p.numero_controle,
             p.concluido,
             p.data_conclusao
-        FROM processos_procedimentos p
-        LEFT JOIN operadores o ON p.responsavel_id = o.id
-        LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
+    FROM processos_procedimentos p
+    LEFT JOIN operadores o ON p.responsavel_id = o.id
+    LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
         WHERE p.ativo = 1
         ORDER BY p.created_at DESC
     """)
@@ -1753,23 +1781,44 @@ def obter_processo(processo_id):
                 -- Dados completos do responsável
                 COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
                 COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
-                -- Dados completos do escrivão
+                -- Dados completos do escrivão (procedimentos)
                 COALESCE(esc_o.nome, esc_e.nome, '') as escrivao_nome,
                 COALESCE(esc_o.posto_graduacao, esc_e.posto_graduacao, '') as escrivao_posto,
                 COALESCE(esc_o.matricula, esc_e.matricula, '') as escrivao_matricula,
                 -- Dados completos do PM envolvido
                 COALESCE(pm_o.nome, pm_e.nome, '') as pm_nome,
                 COALESCE(pm_o.posto_graduacao, pm_e.posto_graduacao, '') as pm_posto,
-                COALESCE(pm_o.matricula, pm_e.matricula, '') as pm_matricula
+                COALESCE(pm_o.matricula, pm_e.matricula, '') as pm_matricula,
+                -- IDs e tipos das funções de processo (PAD/CD/CJ)
+                p.presidente_id, p.presidente_tipo,
+                p.interrogante_id, p.interrogante_tipo,
+                p.escrivao_processo_id, p.escrivao_processo_tipo,
+                -- Dados completos das funções do processo
+                COALESCE(pres_o.nome, pres_e.nome, '') as presidente_nome,
+                COALESCE(pres_o.posto_graduacao, pres_e.posto_graduacao, '') as presidente_posto,
+                COALESCE(pres_o.matricula, pres_e.matricula, '') as presidente_matricula,
+                COALESCE(int_o.nome, int_e.nome, '') as interrogante_nome,
+                COALESCE(int_o.posto_graduacao, int_e.posto_graduacao, '') as interrogante_posto,
+                COALESCE(int_o.matricula, int_e.matricula, '') as interrogante_matricula,
+                COALESCE(escrp_o.nome, escrp_e.nome, '') as escrivao_processo_nome,
+                COALESCE(escrp_o.posto_graduacao, escrp_e.posto_graduacao, '') as escrivao_processo_posto,
+                COALESCE(escrp_o.matricula, escrp_e.matricula, '') as escrivao_processo_matricula
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
-            -- JOINs para escrivão
+            -- JOINs para escrivão (procedimentos)
             LEFT JOIN operadores esc_o ON p.escrivao_id = esc_o.id
             LEFT JOIN encarregados esc_e ON p.escrivao_id = esc_e.id AND esc_o.id IS NULL
             -- JOINs para PM envolvido
             LEFT JOIN operadores pm_o ON p.nome_pm_id = pm_o.id
             LEFT JOIN encarregados pm_e ON p.nome_pm_id = pm_e.id AND pm_o.id IS NULL
+            -- JOINs para funções específicas de processo (PAD/CD/CJ)
+            LEFT JOIN operadores pres_o ON p.presidente_id = pres_o.id AND p.presidente_tipo = 'operador'
+            LEFT JOIN encarregados pres_e ON p.presidente_id = pres_e.id AND p.presidente_tipo = 'encarregado'
+            LEFT JOIN operadores int_o ON p.interrogante_id = int_o.id AND p.interrogante_tipo = 'operador'
+            LEFT JOIN encarregados int_e ON p.interrogante_id = int_e.id AND p.interrogante_tipo = 'encarregado'
+            LEFT JOIN operadores escrp_o ON p.escrivao_processo_id = escrp_o.id AND p.escrivao_processo_tipo = 'operador'
+            LEFT JOIN encarregados escrp_e ON p.escrivao_processo_id = escrp_e.id AND p.escrivao_processo_tipo = 'encarregado'
             WHERE p.id = ? AND p.ativo = 1
             """,
             (processo_id,)
@@ -1974,6 +2023,19 @@ def obter_processo(processo_id):
                         print(f"✅ Indícios carregados para PM {pm_envolvido['nome_completo']}: {indicios_pm}")
             print(f"📋 Total de PMs com indícios carregados: {len(indicios_por_pm)}")
 
+        # Montar nomes completos das funções de processo (campos adicionados ao final)
+        presidente_completo = ""
+        if processo[50] and processo[51] and processo[49]:
+            presidente_completo = f"{processo[50]} {processo[51]} {processo[49]}".strip()
+
+        interrogante_completo = ""
+        if processo[53] and processo[54] and processo[52]:
+            interrogante_completo = f"{processo[53]} {processo[54]} {processo[52]}".strip()
+
+        escrivao_processo_completo = ""
+        if processo[56] and processo[57] and processo[55]:
+            escrivao_processo_completo = f"{processo[56]} {processo[57]} {processo[55]}".strip()
+
         return {
             "id": processo[0],
             "numero": processo[1],
@@ -2017,7 +2079,20 @@ def obter_processo(processo_id):
             "penalidade_dias": processo[33],
             "indicios_categorias": processo[34],
             "indicios": indicios,
-            "indicios_por_pm": indicios_por_pm
+            "indicios_por_pm": indicios_por_pm,
+            # Funções específicas do processo (PAD/CD/CJ)
+            "presidente_id": processo[43],
+            "presidente_tipo": processo[44],
+            "interrogante_id": processo[45],
+            "interrogante_tipo": processo[46],
+            "escrivao_processo_id": processo[47],
+            "escrivao_processo_tipo": processo[48],
+            "presidente_nome": processo[49],
+            "presidente_completo": presidente_completo,
+            "interrogante_nome": processo[52],
+            "interrogante_completo": interrogante_completo,
+            "escrivao_processo_nome": processo[55],
+            "escrivao_processo_completo": escrivao_processo_completo,
         }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
@@ -2339,6 +2414,41 @@ def atualizar_processo(
             if penalidade_tipo not in ('Prisao', 'Detencao'):
                 penalidade_dias = None
 
+        # Para PAD/CD/CJ, não existe 'Encarregado' do processo: deixar responsavel_id/tipo como NULL
+        if (tipo_geral == 'processo') and (tipo_detalhe in ('PAD', 'CD', 'CJ')):
+            print("ℹ️ Atualização de PAD/CD/CJ: definindo responsavel_id/responsavel_tipo como NULL")
+            responsavel_id = None
+            responsavel_tipo = None
+
+        # Normalizar IDs vazios/estranhos e definir tipos das funções do processo
+        # Isso garante que os JOINs funcionem nas listagens e no obter_processo
+        # Corrigir casos em que o frontend envia listas/dicts vazios
+        if isinstance(presidente_id, (list, dict)):
+            presidente_id = None if not presidente_id else None
+        if isinstance(interrogante_id, (list, dict)):
+            interrogante_id = None if not interrogante_id else None
+        if isinstance(escrivao_processo_id, (list, dict)):
+            escrivao_processo_id = None if not escrivao_processo_id else None
+
+        # Resolver tipo real com base em qual tabela contém o ID (operadores ou encarregados)
+        def _resolve_user_tipo(_cursor, _id):
+            if not _id:
+                return None
+            try:
+                _cursor.execute("SELECT 1 FROM operadores WHERE id = ?", (_id,))
+                if _cursor.fetchone():
+                    return 'operador'
+                _cursor.execute("SELECT 1 FROM encarregados WHERE id = ?", (_id,))
+                if _cursor.fetchone():
+                    return 'encarregado'
+            except Exception:
+                pass
+            return None
+
+        presidente_tipo = _resolve_user_tipo(cursor, presidente_id) if presidente_id else None
+        interrogante_tipo = _resolve_user_tipo(cursor, interrogante_id) if interrogante_id else None
+        escrivao_processo_tipo = _resolve_user_tipo(cursor, escrivao_processo_id) if escrivao_processo_id else None
+
         cursor.execute(
             """
             UPDATE processos_procedimentos 
@@ -2627,6 +2737,52 @@ def obter_prazos_vencidos():
         return {"sucesso": True, "prazos": prazos}
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter prazos vencidos: {str(e)}"}
+
+@eel.expose
+def backfill_tipos_funcoes_processo():
+    """Backfill presidente_tipo/interrogante_tipo/escrivao_processo_tipo onde ID existe e tipo está NULL/errado."""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        def resolve_tipo(_id):
+            if not _id:
+                return None
+            cursor.execute("SELECT 1 FROM operadores WHERE id = ?", (_id,))
+            if cursor.fetchone():
+                return 'operador'
+            cursor.execute("SELECT 1 FROM encarregados WHERE id = ?", (_id,))
+            if cursor.fetchone():
+                return 'encarregado'
+            return None
+
+        cursor.execute("SELECT id, presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo FROM processos_procedimentos WHERE ativo = 1")
+        rows = cursor.fetchall()
+        upd = 0
+        for (pid, pres_id, pres_tp, int_id, int_tp, escp_id, escp_tp) in rows:
+            # Sempre resolver o tipo atual baseado na origem real do ID
+            resolved_pres = resolve_tipo(pres_id) if pres_id else None
+            resolved_int = resolve_tipo(int_id) if int_id else None
+            resolved_escp = resolve_tipo(escp_id) if escp_id else None
+            new_pres = resolved_pres if resolved_pres != pres_tp else pres_tp
+            new_int = resolved_int if resolved_int != int_tp else int_tp
+            new_escp = resolved_escp if resolved_escp != escp_tp else escp_tp
+            if new_pres != pres_tp or new_int != int_tp or new_escp != escp_tp:
+                cursor.execute(
+                    """
+                    UPDATE processos_procedimentos 
+                    SET presidente_tipo = ?, interrogante_tipo = ?, escrivao_processo_tipo = ?
+                    WHERE id = ?
+                    """,
+                    (new_pres, new_int, new_escp, pid)
+                )
+                upd += 1
+
+        conn.commit()
+        conn.close()
+        return {"sucesso": True, "atualizados": upd}
+    except Exception as e:
+        return {"sucesso": False, "mensagem": str(e)}
 
 @eel.expose
 def registrar_andamento_processo(processo_id, tipo_andamento, descricao, data_andamento=None, responsavel_id=None, observacoes=None):
@@ -3011,11 +3167,11 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Construir a cláusula WHERE para pesquisa
         where_clause = "WHERE p.ativo = 1"
         search_params = []
-        
+
         # Adicionar busca por texto se fornecida
         if search_term:
             where_clause += """ AND (
@@ -3027,25 +3183,25 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             )"""
             search_term_like = f"%{search_term}%"
             search_params = [search_term_like] * 9
-        
+
         # Adicionar filtros avançados se fornecidos
         if filtros:
             if filtros.get('tipo'):
                 where_clause += " AND p.tipo_detalhe = ?"
                 search_params.append(filtros['tipo'])
-            
+
             if filtros.get('origem'):
                 where_clause += " AND p.local_origem = ?"
                 search_params.append(filtros['origem'])
-            
+
             if filtros.get('documento'):
                 where_clause += " AND p.documento_iniciador = ?"
                 search_params.append(filtros['documento'])
-            
+
             if filtros.get('status'):
                 where_clause += " AND p.status_pm = ?"
                 search_params.append(filtros['status'])
-            
+
             if filtros.get('encarregado'):
                 where_clause += """ AND (
                     TRIM(COALESCE(
@@ -3057,7 +3213,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     )) = ?
                 )"""
                 search_params.append(filtros['encarregado'])
-            
+
             if filtros.get('ano'):
                 # Priorizar data_instauracao, depois data_recebimento, depois created_at
                 where_clause += """ AND (
@@ -3068,7 +3224,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     END = ?
                 )"""
                 search_params.append(filtros['ano'])
-            
+
             if filtros.get('pm_envolvido'):
                 where_clause += """ AND (
                     TRIM(COALESCE(
@@ -3078,11 +3234,11 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     )) = ?
                 )"""
                 search_params.append(filtros['pm_envolvido'])
-            
+
             if filtros.get('vitima'):
                 where_clause += " AND p.nome_vitima = ?"
                 search_params.append(filtros['vitima'])
-            
+
             if filtros.get('situacao'):
                 if filtros['situacao'] == 'concluido':
                     where_clause += " AND p.concluido = 1"
@@ -3120,7 +3276,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                                                   CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 30
                                           END
                                       )"""
-        
+
         # Contar total de registros
         count_query = f"""
             SELECT COUNT(*)
@@ -3135,10 +3291,10 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
         """
         cursor.execute(count_query, search_params)
         total_processos = cursor.fetchone()[0]
-        
+
         # Calcular offset para paginação
         offset = (page - 1) * per_page
-        
+
         # Query principal com paginação - ordenado por data_instauracao DESC (mais recente primeiro)
         main_query = f"""
             SELECT 
@@ -3165,6 +3321,16 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                     e_backup.matricula,
                     ''
                 ) as responsavel_matricula,
+                -- Dados de funções (PAD/CD/CJ)
+                COALESCE(pres_o.nome, pres_e.nome, '') as presidente_nome,
+                COALESCE(pres_o.posto_graduacao, pres_e.posto_graduacao, '') as presidente_posto,
+                COALESCE(pres_o.matricula, pres_e.matricula, '') as presidente_matricula,
+                COALESCE(int_o.nome, int_e.nome, '') as interrogante_nome,
+                COALESCE(int_o.posto_graduacao, int_e.posto_graduacao, '') as interrogante_posto,
+                COALESCE(int_o.matricula, int_e.matricula, '') as interrogante_matricula,
+                COALESCE(escr_o.nome, escr_e.nome, '') as escrivao_nome,
+                COALESCE(escr_o.posto_graduacao, escr_e.posto_graduacao, '') as escrivao_posto,
+                COALESCE(escr_o.matricula, escr_e.matricula, '') as escrivao_matricula,
                 p.local_origem, p.processo_sei, p.nome_pm_id, p.status_pm,
                 COALESCE(pm_env_e.nome, pm_env_o.nome, 'Não informado') as pm_envolvido_nome,
                 COALESCE(pm_env_e.posto_graduacao, pm_env_o.posto_graduacao, '') as pm_envolvido_posto,
@@ -3179,30 +3345,50 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
             LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
             LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
+            -- Junções para funções específicas em processos (PAD/CD/CJ)
+            LEFT JOIN operadores pres_o ON p.presidente_id = pres_o.id AND p.presidente_tipo = 'operador'
+            LEFT JOIN encarregados pres_e ON p.presidente_id = pres_e.id AND p.presidente_tipo = 'encarregado'
+            LEFT JOIN operadores int_o ON p.interrogante_id = int_o.id AND p.interrogante_tipo = 'operador'
+            LEFT JOIN encarregados int_e ON p.interrogante_id = int_e.id AND p.interrogante_tipo = 'encarregado'
+            LEFT JOIN operadores escr_o ON p.escrivao_processo_id = escr_o.id AND p.escrivao_processo_tipo = 'operador'
+            LEFT JOIN encarregados escr_e ON p.escrivao_processo_id = escr_e.id AND p.escrivao_processo_tipo = 'encarregado'
             {where_clause}
             ORDER BY 
                 CASE WHEN p.data_instauracao IS NOT NULL THEN p.data_instauracao ELSE p.created_at END DESC
             LIMIT ? OFFSET ?
         """
         cursor.execute(main_query, search_params + [per_page, offset])
-        
+
         processos = cursor.fetchall()
         conn.close()
-        
+
         processos_com_prazos = []
-        
+
         for processo in processos:
             (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
              data_recebimento, created_at, data_instauracao, responsavel_nome, responsavel_posto, responsavel_matricula,
+             presidente_nome, presidente_posto, presidente_matricula,
+             interrogante_nome, interrogante_posto, interrogante_matricula,
+             escrivao_nome, escrivao_posto, escrivao_matricula,
              local_origem, processo_sei, nome_pm_id, status_pm, 
              pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula, numero_controle, 
              concluido, data_conclusao) = processo
-            
+
             # Formatar responsável completo: "posto/grad + matrícula + nome"
             responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
             if responsavel_completo == "Desconhecido":
                 responsavel_completo = "Desconhecido"
-            
+
+            # Formatar nomes completos das funções (quando houver)
+            def monta_nome_completo(posto, matricula, nome):
+                if not nome:
+                    return None
+                return f"{posto} {matricula} {nome}".strip()
+
+            presidente_completo = monta_nome_completo(presidente_posto, presidente_matricula, presidente_nome)
+            interrogante_completo = monta_nome_completo(interrogante_posto, interrogante_matricula, interrogante_nome)
+            escrivao_completo = monta_nome_completo(escrivao_posto, escrivao_matricula, escrivao_nome)
+
             # Formatar PM envolvido - para procedimentos, buscar múltiplos PMs
             if tipo_geral == 'procedimento':
                 pms_envolvidos = buscar_pms_envolvidos(processo_id)
@@ -3226,19 +3412,40 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 else:
                     pm_envolvido_completo = "Não informado"
                 pm_envolvido_tooltip = pm_envolvido_completo
-            
+
+            # Montar exibição do "Encarregado" para PAD/CD/CJ
+            encarregado_display = responsavel_completo
+            encarregado_tooltip = responsavel_completo
+            if tipo_geral == 'processo' and (tipo_detalhe in ('PAD', 'CD', 'CJ')):
+                if presidente_completo:
+                    encarregado_display = f"{presidente_completo} e outros"
+                else:
+                    encarregado_display = "Não se aplica"
+                # Tooltip com todas as funções disponíveis
+                partes = []
+                if presidente_completo:
+                    partes.append(f"Presidente: {presidente_completo}")
+                if interrogante_completo:
+                    partes.append(f"Interrogante: {interrogante_completo}")
+                if escrivao_completo:
+                    partes.append(f"Escrivão do Processo: {escrivao_completo}")
+                encarregado_tooltip = '; '.join(partes) if partes else encarregado_display
+
             # Buscar prorrogações e prazo ativo
             prorrogacoes_dias = 0
             data_limite_ativo = None
             try:
                 conn2 = db_manager.get_connection()
                 c2 = conn2.cursor()
-                c2.execute("""
+                c2.execute(
+                    """
                     SELECT SUM(CASE WHEN tipo_prazo='prorrogacao' THEN COALESCE(dias_adicionados,0) ELSE 0 END) as soma_prorrog,
                            MAX(CASE WHEN ativo=1 THEN data_vencimento END) as data_venc_ativa
                     FROM prazos_processo
                     WHERE processo_id = ?
-                """, (processo_id,))
+                    """,
+                    (processo_id,),
+                )
                 rowp = c2.fetchone()
                 if rowp:
                     prorrogacoes_dias = int(rowp[0] or 0)
@@ -3252,7 +3459,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 tipo_detalhe=tipo_detalhe,
                 documento_iniciador=documento_iniciador,
                 data_recebimento=data_recebimento,
-                prorrogacoes_dias=prorrogacoes_dias
+                prorrogacoes_dias=prorrogacoes_dias,
             )
             # Ajustar com data ativa, se existir
             if data_limite_ativo:
@@ -3280,25 +3487,25 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                         calculo_prazo["vencido"] = False
                 except Exception:
                     pass
-            
+
             # Formatar numero do processo usando numero_controle
             def formatar_numero_processo():
                 ano_instauracao = ""
-                
+
                 # Usar data_instauracao primeiro, se não existir usar data_recebimento
                 data_para_ano = data_instauracao or data_recebimento
                 if data_para_ano:
                     try:
                         ano_instauracao = str(datetime.strptime(data_para_ano, "%Y-%m-%d").year)
-                    except:
+                    except Exception:
                         ano_instauracao = ""
-                
+
                 # Usar numero_controle primeiro, depois fallback para numero
                 numero_para_formatacao = numero_controle or numero
                 if numero_para_formatacao:
                     return f"{tipo_detalhe} nº {numero_para_formatacao}/{local_origem or ''}/{ano_instauracao}"
                 return "S/N"
-            
+
             processo_formatado = {
                 "id": processo_id,
                 "numero": numero,
@@ -3312,9 +3519,14 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 "data_instauracao": data_instauracao,
                 "data_instauracao_formatada": datetime.strptime(data_instauracao, "%Y-%m-%d").strftime("%d/%m/%Y") if data_instauracao else None,
                 "responsavel": responsavel_completo,
+                "encarregado_display": encarregado_display,
+                "encarregado_tooltip": encarregado_tooltip,
                 "responsavel_posto": responsavel_posto,
                 "responsavel_matricula": responsavel_matricula,
                 "responsavel_nome": responsavel_nome,
+                "presidente_nome_completo": presidente_completo,
+                "interrogante_nome_completo": interrogante_completo,
+                "escrivao_nome_completo": escrivao_completo,
                 "local_origem": local_origem,
                 "processo_sei": processo_sei,
                 "nome_pm_id": nome_pm_id,
@@ -3326,20 +3538,20 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 "data_criacao": created_at,
                 "concluido": bool(concluido) if concluido is not None else False,
                 "data_conclusao": data_conclusao,
-                "prazo": calculo_prazo
+                "prazo": calculo_prazo,
             }
-            
+
             processos_com_prazos.append(processo_formatado)
-        
+
         return {
-            "sucesso": True, 
+            "sucesso": True,
             "processos": processos_com_prazos,
             "total": total_processos,
             "page": page,
             "per_page": per_page,
-            "total_pages": (total_processos + per_page - 1) // per_page
+            "total_pages": (total_processos + per_page - 1) // per_page,
         }
-        
+
     except Exception as e:
         import traceback
         traceback.print_exc()

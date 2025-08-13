@@ -1,4 +1,4 @@
-// Variável para usuário logado
+// (cleaned) removed stray text
 let usuarioLogado = null;
 let editandoProcedimento = null;
 
@@ -28,26 +28,6 @@ let modoEdicaoId = null;
 // FUNÇÕES DE BUSCA DE MUNICÍPIOS
 // ============================================
 
-async function carregarMunicipios() {
-    try {
-        console.log('Carregando municípios/distritos...');
-        const response = await eel.buscar_municipios_distritos('')();
-        
-        if (response && response.sucesso && response.municipios) {
-            municipiosDisponiveis = response.municipios;
-            console.log(`Carregados ${municipiosDisponiveis.length} municípios/distritos`);
-            preencherDropdownMunicipios();
-        } else {
-            console.error('Resposta inválida ao carregar municípios:', response);
-            if (response && response.erro) {
-                console.error('Erro do servidor:', response.erro);
-            }
-        }
-    } catch (error) {
-        console.error('Erro ao carregar municípios:', error);
-    }
-}
-
 function preencherDropdownMunicipios() {
     const dropdown = document.getElementById('local_fatos_dropdown');
     if (!dropdown) return;
@@ -74,17 +54,11 @@ function preencherDropdownMunicipios() {
         option.addEventListener('click', function() {
             selecionarMunicipio(municipio.nome_display);
         });
-        
-        option.addEventListener('mouseenter', function() {
-            this.style.backgroundColor = '#f8f9fa';
-        });
-        
-        option.addEventListener('mouseleave', function() {
-            this.style.backgroundColor = '';
-        });
-        
         dropdown.appendChild(option);
     });
+
+    // Exibir dropdown quando opções carregarem
+    dropdown.style.display = 'block';
 }
 
 function selecionarMunicipio(nomeMunicipio) {
@@ -100,12 +74,43 @@ function selecionarMunicipio(nomeMunicipio) {
         }
         input.classList.remove('error');
     }
-    
+
     if (dropdown) {
         dropdown.style.display = 'none';
     }
-    
+
     console.log('Município selecionado:', nomeMunicipio);
+}
+
+async function carregarMunicipios() {
+    try {
+        // Buscar municípios e distritos do backend (HTTP endpoint)
+        const resp = await fetch('/buscar_municipios_distritos');
+        const data = await resp.json();
+        let lista = [];
+        if (Array.isArray(data)) {
+            lista = data;
+        } else if (data && Array.isArray(data.municipios)) {
+            lista = data.municipios;
+        } else if (data && data.sucesso && Array.isArray(data.municipios)) {
+            lista = data.municipios;
+        } else {
+            console.warn('Resposta inesperada ao buscar municípios/distritos:', data);
+            lista = [];
+        }
+        municipiosDisponiveis = (lista || []).map(m => ({
+            id: m.id,
+            nome: m.nome || m.nome_display,
+            nome_display: m.nome_display || m.nome,
+            tipo: m.tipo,
+            municipio_pai: m.municipio_pai || null,
+        }));
+        preencherDropdownMunicipios();
+    } catch (e) {
+        console.error('Erro ao carregar municípios/distritos:', e);
+        municipiosDisponiveis = [];
+        preencherDropdownMunicipios();
+    }
 }
 
 function filtrarMunicipios() {
@@ -2505,11 +2510,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids,
-                // campos específicos PAD/CD/CJ
-                presidente_id,
-                interrogante_id,
-                escrivao_processo_id,
-                // novos campos
+                // novos campos (Migração 014/015)
                 data_remessa_encarregado,
                 data_julgamento,
                 solucao_tipo,
@@ -2519,7 +2520,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 indicios_crimes,
                 indicios_rdpm,
                 indicios_art29,
-                indicios_por_pm
+                indicios_por_pm,
+                // campos específicos PAD/CD/CJ (Migração 018)
+                presidente_id, null,
+                interrogante_id, null,
+                escrivao_processo_id, null
             )();
         } else {
             // Modo criação
@@ -2552,11 +2557,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 solucao_final,
                 pmsParaEnvio,
                 transgressoes_ids,
-                // campos específicos PAD/CD/CJ
-                presidente_id,
-                interrogante_id,
-                escrivao_processo_id,
-                // novos campos
+                // novos campos (Migração 014/015)
                 data_remessa_encarregado,
                 data_julgamento,
                 solucao_tipo,
@@ -2566,7 +2567,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 indicios_crimes,
                 indicios_rdpm,
                 indicios_art29,
-                indicios_por_pm
+                indicios_por_pm,
+                // campos específicos PAD/CD/CJ (Migração 018)
+                presidente_id, null,
+                interrogante_id, null,
+                escrivao_processo_id, null
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');

@@ -469,8 +469,14 @@ function exibirProcedimentos() {
             // Obter o número do campo "numero"
             const numero = obterNumeroDocumento(procedimento);
             
-            // Backend já retorna formatado: "posto/grad + matrícula + nome"
-            const encarregadoCompleto = procedimento.responsavel || 'Não informado';
+            // Para PAD/CD/CJ, usar presidente + "e outros" e tooltip com funções; senão usar responsável
+            const isProcessoFuncoes = procedimento.tipo_geral === 'processo' && ['PAD','CD','CJ'].includes(procedimento.tipo_detalhe);
+            const encarregadoCompleto = isProcessoFuncoes
+                ? (procedimento.encarregado_display || 'Não se aplica')
+                : (procedimento.responsavel || 'Não informado');
+            const encarregadoTooltip = isProcessoFuncoes
+                ? (procedimento.encarregado_tooltip || encarregadoCompleto)
+                : encarregadoCompleto;
             
             // Backend já retorna formatado: "posto/grad + matrícula + nome" (para múltiplos PMs, usar tooltip resumido)
             const pmEnvolvido = procedimento.pm_envolvido_nome || 'Não informado';
@@ -492,7 +498,7 @@ function exibirProcedimentos() {
                     <td>
                         ${procedimento.processo_sei ? procedimento.processo_sei : '<em style="color:#999;">Não informado</em>'}
                     </td>
-                    <td>${encarregadoCompleto}</td>
+                    <td title="${encarregadoTooltip}">${encarregadoCompleto}</td>
                     <td title="${pmEnvolvidoTooltip}">${pmEnvolvido}</td>
                     <td style="text-align: center;">${statusPrazoHTML}</td>
                     <td>
