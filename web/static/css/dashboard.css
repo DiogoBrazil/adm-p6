@@ -255,6 +255,7 @@ body {
     transition: all 0.3s ease;
     border-right: 3px solid transparent;
     font-weight: 500;
+    position: relative;
 }
 
 .nav-link:hover {
@@ -263,7 +264,7 @@ body {
     border-right-color: #10b981;
 }
 
-.nav-item.active .nav-link {
+.nav-item.active > .nav-link {
     background: linear-gradient(90deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
     color: #10b981;
     border-right-color: #10b981;
@@ -273,6 +274,57 @@ body {
     width: 20px;
     text-align: center;
     font-size: 1.1rem;
+}
+
+/* Submenus */
+.nav-item.has-submenu > .nav-link {
+    justify-content: space-between;
+}
+
+.submenu-toggle {
+    cursor: pointer;
+}
+
+.submenu-arrow {
+    width: 16px !important;
+    font-size: 0.8rem !important;
+    transition: transform 0.3s ease;
+}
+
+.nav-item.has-submenu.open > .nav-link .submenu-arrow {
+    transform: rotate(180deg);
+}
+
+.submenu {
+    list-style: none;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: rgba(241, 245, 249, 0.5);
+}
+
+.nav-item.has-submenu.open .submenu {
+    max-height: 300px;
+}
+
+.submenu .nav-item {
+    margin-bottom: 0;
+}
+
+.submenu .nav-link {
+    padding: 8px 20px 8px 52px;
+    font-size: 0.9rem;
+    border-right: none;
+}
+
+.submenu .nav-link:hover {
+    background: rgba(16, 185, 129, 0.1);
+    padding-left: 56px;
+}
+
+.submenu .nav-link i {
+    width: 16px;
+    font-size: 0.9rem;
 }
 
 /* Conteúdo Principal */

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feitos por Encarregado - Sistema de Gestão</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/theme.css">
+    <link rel="stylesheet" href="static/css/estatisticas.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <a href="dashboard.html" class="back-btn">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Voltar ao Dashboard</span>
+                </a>
+                <div class="page-title">
+                    <h1><i class="fas fa-chart-bar"></i> Feitos por Encarregado</h1>
+                    <p>Estatísticas de processos e procedimentos por responsável</p>
+                </div>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">-</h3>
+                        <p id="userEmail">-</p>
+                    </div>
+                </div>
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Sair</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="main-content">
+        <div id="alertContainer"></div>
+        
+        <div class="page-container">
+            <!-- Filtros e Controles -->
+            <div class="controls-section">
+                <div class="search-controls">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" placeholder="Buscar por nome, matrícula ou posto...">
+                        <button id="clearSearch" class="clear-btn" style="display: none;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="action-controls">
+                    <button class="btn-export" onclick="exportarDados()">
+                        <i class="fas fa-download"></i>
+                        <span>Exportar</span>
+                    </button>
+                    <button class="btn-refresh" onclick="carregarEstatisticas()">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Atualizar</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabela de Estatísticas -->
+            <div class="table-section">
+                <div class="table-header">
+                    <h2>Estatísticas Detalhadas</h2>
+                    <div class="table-info">
+                        <span id="totalRegistros">Carregando...</span>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table class="stats-table" id="statsTable">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-column="nome">
+                                    <div class="th-content">
+                                        <span>PM</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="sr">
+                                    <div class="th-content">
+                                        <span>SR</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="fp">
+                                    <div class="th-content">
+                                        <span>FP</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="ipm">
+                                    <div class="th-content">
+                                        <span>IPM</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="escrivao">
+                                    <div class="th-content">
+                                        <span>Escrivão</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="pads">
+                                    <div class="th-content">
+                                        <span>PADS</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="pad">
+                                    <div class="th-content">
+                                        <span>PAD</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="cd">
+                                    <div class="th-content">
+                                        <span>CD</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="cj">
+                                    <div class="th-content">
+                                        <span>CJ</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                                <th class="sortable" data-column="total">
+                                    <div class="th-content">
+                                        <span>Total</span>
+                                        <i class="fas fa-sort sort-icon"></i>
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="statsTableBody">
+                            <!-- Dados serão inseridos dinamicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Loading State -->
+                <div id="loadingState" class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Carregando estatísticas...</p>
+                </div>
+                
+                <!-- Empty State -->
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <i class="fas fa-chart-bar"></i>
+                    <h3>Nenhum dado encontrado</h3>
+                    <p>Não foram encontradas estatísticas para exibir.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loader global overlay -->
+    <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
+        <div class="spinner"></div>
+    </div>
+
+    <script src="static/js/estatisticas_encarregados.js"></script>
+</body>
+</html>

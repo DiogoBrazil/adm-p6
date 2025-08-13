@@ -26,6 +26,7 @@ function initializeSidebar() {
     const menuToggle = document.querySelector('.menu-toggle');
     const sidebar = document.querySelector('.sidebar');
     const navLinks = document.querySelectorAll('.nav-link');
+    const submenuToggles = document.querySelectorAll('.submenu-toggle');
 
     // Toggle menu móvel
     if (menuToggle && sidebar) {
@@ -51,6 +52,25 @@ function initializeSidebar() {
         });
     }
 
+    // Gerenciar submenus
+    submenuToggles.forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            const parentItem = this.closest('.nav-item');
+            const wasOpen = parentItem.classList.contains('open');
+            
+            // Fechar todos os outros submenus
+            document.querySelectorAll('.nav-item.has-submenu.open').forEach(item => {
+                if (item !== parentItem) {
+                    item.classList.remove('open');
+                }
+            });
+            
+            // Toggle do submenu atual
+            parentItem.classList.toggle('open', !wasOpen);
+        });
+    });
+
     // Gerenciar estado ativo dos links de navegação
     const currentPath = window.location.pathname;
     navLinks.forEach(link => {
@@ -59,6 +79,15 @@ function initializeSidebar() {
         
         if (href && currentPath.includes(href) && href !== '/') {
             parentItem.classList.add('active');
+            
+            // Se for um link de submenu, abrir o submenu pai
+            const parentSubmenu = parentItem.closest('.submenu');
+            if (parentSubmenu) {
+                const parentSubmenuItem = parentSubmenu.closest('.nav-item.has-submenu');
+                if (parentSubmenuItem) {
+                    parentSubmenuItem.classList.add('open');
+                }
+            }
         } else if (href === '/' && (currentPath === '/' || currentPath === '/dashboard')) {
             parentItem.classList.add('active');
         }

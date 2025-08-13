@@ -1107,6 +1107,141 @@ def verificar_admin():
     return False
 
 @eel.expose
+def obter_estatisticas_encarregados():
+    """Retorna estatísticas detalhadas por encarregado"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Primeiro, obter todos os encarregados
+        cursor.execute('''
+            SELECT id, posto_graduacao, matricula, nome
+            FROM encarregados 
+            WHERE ativo = 1
+            ORDER BY posto_graduacao, nome
+        ''')
+        encarregados = cursor.fetchall()
+        
+        estatisticas = []
+        total_processos = 0
+        mais_ativo = {"nome": "N/A", "total": 0}
+        
+        for encarregado in encarregados:
+            enc_id, posto, matricula, nome = encarregado
+            nome_completo = f"{posto} {matricula} {nome}"
+            
+            # Inicializar contadores
+            contadores = {
+                'sr': 0, 'fp': 0, 'ipm': 0, 'escrivao': 0,
+                'pads': 0, 'pad': 0, 'cd': 0, 'cj': 0
+            }
+            
+            # SR e Sindicâncias (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND (tipo_detalhe = 'SR' OR tipo_detalhe = 'SINDICANCIA')
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['sr'] = cursor.fetchone()[0]
+            
+            # FP - Feito Preliminar (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND (tipo_detalhe = 'FP' OR tipo_detalhe = 'FEITO_PRELIMINAR')
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['fp'] = cursor.fetchone()[0]
+            
+            # IPM (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['ipm'] = cursor.fetchone()[0]
+            
+            # Escrivão (quando foi escrivão em IPM)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE escrivao_id = ?
+                AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['escrivao'] = cursor.fetchone()[0]
+            
+            # PADS (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND tipo_detalhe = 'PADS'
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['pads'] = cursor.fetchone()[0]
+            
+            # PAD (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND tipo_detalhe = 'PAD'
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['pad'] = cursor.fetchone()[0]
+            
+            # CD - Conselho de Disciplina (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND tipo_detalhe = 'CD'
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['cd'] = cursor.fetchone()[0]
+            
+            # CJ - Conselho de Justificação (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                AND tipo_detalhe = 'CJ'
+                AND ativo = 1
+            ''', (enc_id,))
+            contadores['cj'] = cursor.fetchone()[0]
+            
+            # Calcular total para este encarregado
+            total_encarregado = sum(contadores.values())
+            total_processos += total_encarregado
+            
+            # Verificar se é o mais ativo
+            if total_encarregado > mais_ativo["total"]:
+                mais_ativo = {"nome": nome_completo, "total": total_encarregado}
+            
+            # Adicionar aos resultados
+            estatisticas.append({
+                'id': enc_id,
+                'nome': nome_completo,
+                **contadores
+            })
+        
+        # Preparar resumo
+        resumo = {
+            'totalEncarregados': len(encarregados),
+            'totalProcessos': total_processos,
+            'maisAtivo': mais_ativo["nome"] if mais_ativo["total"] > 0 else "N/A"
+        }
+        
+        conn.close()
+        
+        return {
+            "sucesso": True,
+            "dados": estatisticas,
+            "resumo": resumo
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def obter_estatisticas_processos_andamento():
     """Retorna estatísticas dos processos em andamento por tipo"""
     try:
