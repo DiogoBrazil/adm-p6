@@ -14,10 +14,6 @@
     <header class="header">
         <div class="header-content">
             <div class="header-left">
-                <a href="dashboard.html" class="back-btn">
-                    <i class="fas fa-arrow-left"></i>
-                    <span>Voltar ao Dashboard</span>
-                </a>
                 <div class="page-title">
                     <h1><i class="fas fa-chart-bar"></i> Feitos por Encarregado</h1>
                     <p>Estatísticas de processos e procedimentos por responsável</p>
@@ -49,25 +45,30 @@
         <div class="page-container">
             <!-- Filtros e Controles -->
             <div class="controls-section">
-                <div class="search-controls">
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
+                <div class="actions">
+                    <!-- Área de Busca Simples -->
+                    <div class="search-area">
                         <input type="text" id="searchInput" placeholder="Buscar por nome, matrícula ou posto...">
-                        <button id="clearSearch" class="clear-btn" style="display: none;">
-                            <i class="fas fa-times"></i>
+                        <button id="clearSearch" class="btn-icon btn-clear" style="display: none;">
+                            <i class="fas fa-times"></i> Limpar
                         </button>
                     </div>
-                </div>
-                
-                <div class="action-controls">
-                    <button class="btn-export" onclick="exportarDados()">
-                        <i class="fas fa-download"></i>
-                        <span>Exportar</span>
-                    </button>
-                    <button class="btn-refresh" onclick="carregarEstatisticas()">
-                        <i class="fas fa-sync-alt"></i>
-                        <span>Atualizar</span>
-                    </button>
+                    
+                    <!-- Área de Ações -->
+                    <div class="main-actions">
+                        <button class="btn-icon btn-export" onclick="exportarDados()">
+                            <i class="fas fa-download"></i>
+                            <span>Exportar</span>
+                        </button>
+                        <button class="btn-icon btn-refresh" onclick="carregarEstatisticas()">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>Atualizar</span>
+                        </button>
+                        <button class="btn-icon btn-home" onclick="window.location.href='dashboard.html'">
+                            <i class="fas fa-home"></i>
+                            <span>Início</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 

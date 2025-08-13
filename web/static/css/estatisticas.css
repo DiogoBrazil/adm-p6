@@ -188,83 +188,90 @@ body {
 
 /* Controles */
 .controls-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-    flex-wrap: wrap;
+    margin: 30px auto 0 auto;
 }
 
-.search-controls {
+/* Estilos para a área de ações (pesquisa e botões) - seguindo padrão da página de usuários */
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 30px auto 0 auto;
+}
+
+/* Novos estilos para áreas de busca e ações principais */
+.search-area {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-height: 44px;
+}
+
+.search-area input[type="text"] {
     flex: 1;
     min-width: 300px;
+    max-width: 500px;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    height: 44px;
+    box-sizing: border-box;
 }
 
-.search-box {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.search-box i {
-    position: absolute;
-    left: 16px;
-    color: #64748b;
-    z-index: 2;
-}
-
-.search-box input {
-    width: 100%;
-    padding: 12px 16px 12px 48px;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 1rem;
-    transition: all 0.3s ease;
-    background: white;
-}
-
-.search-box input:focus {
+.search-area input[type="text"]:focus {
     outline: none;
     border-color: #10b981;
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
-.clear-btn {
-    position: absolute;
-    right: 12px;
-    background: none;
-    border: none;
-    color: #64748b;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    transition: all 0.3s ease;
+.main-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 44px;
+}
+
+.btn-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.clear-btn:hover {
-    color: #dc2626;
-    background: #fee2e2;
-}
-
-.action-controls {
-    display: flex;
-    gap: 12px;
-}
-
-.btn-export, .btn-refresh {
-    display: flex;
-    align-items: center;
     gap: 8px;
     padding: 12px 20px;
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
+    color: white;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(102,126,234,0.08);
     transition: all 0.3s ease;
+    outline: none;
+    min-width: 140px;
+    height: 44px;
+    white-space: nowrap;
+    box-sizing: border-box;
     text-decoration: none;
+}
+
+.btn-icon:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-clear {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+.btn-clear:hover {
+    background: linear-gradient(135deg, #c82333 0%, #a02622 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
 }
 
 .btn-export {
@@ -273,8 +280,9 @@ body {
 }
 
 .btn-export:hover {
+    background: linear-gradient(135deg, #0891b2, #0e7490);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(6, 182, 212, 0.3);
+    box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
 }
 
 .btn-refresh {
@@ -283,8 +291,20 @@ body {
 }
 
 .btn-refresh:hover {
+    background: linear-gradient(135deg, #059669, #047857);
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-home {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+}
+
+.btn-home:hover {
+    background: linear-gradient(135deg, #4f46e5, #3730a3);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
 }
 
 /* Resumo Estatísticas */
@@ -567,16 +587,16 @@ body {
         padding: 0 16px;
     }
     
-    .controls-section {
+    .actions {
         flex-direction: column;
         align-items: stretch;
     }
     
-    .search-controls {
-        min-width: auto;
+    .search-area {
+        justify-content: center;
     }
     
-    .action-controls {
+    .main-actions {
         justify-content: center;
     }
 }
@@ -623,11 +643,22 @@ body {
 }
 
 @media (max-width: 480px) {
-    .action-controls {
+    .main-actions {
         flex-direction: column;
     }
     
-    .btn-export, .btn-refresh {
+    .search-area {
+        flex-direction: column;
+    }
+    
+    .search-area input[type="text"] {
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .btn-icon {
         justify-content: center;
+        min-width: auto;
+        width: 100%;
     }
 }
