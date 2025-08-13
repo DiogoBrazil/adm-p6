@@ -170,7 +170,7 @@
 }
 
 .modal-prorrogacao-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     color: white;
     padding: 20px 24px;
     display: flex;
@@ -227,7 +227,7 @@
 
 .processo-info i {
     font-size: 1.5rem;
-    color: #667eea;
+    color: #10b981;
 }
 
 .processo-info .label {
@@ -258,7 +258,7 @@
 
 .form-group-prorrogacao label i {
     margin-right: 6px;
-    color: #667eea;
+    color: #10b981;
     font-size: 0.9rem;
 }
 
@@ -274,7 +274,7 @@
 
 .form-control-prorrogacao:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #10b981;
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
 }
 
@@ -321,7 +321,7 @@ textarea.form-control-prorrogacao {
 }
 
 .btn-prorrogacao-save {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     color: white;
     flex: 1;
     max-width: 200px;
@@ -718,12 +718,12 @@ textarea.form-control-prorrogacao {
 }
 
 .btn-home {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
     color: white;
 }
 
 .btn-home:hover {
-    background: linear-gradient(135deg, #138496 0%, #0f6674 100%);
+    background: linear-gradient(135deg, #0891b2 0%, #0f6674 100%);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
 }
@@ -813,7 +813,7 @@ textarea.form-control-prorrogacao {
     align-items: center;
     padding: 20px 24px;
     border-bottom: 1px solid #dee2e6;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     color: white;
     border-radius: 12px 12px 0 0;
 }
@@ -878,7 +878,7 @@ textarea.form-control-prorrogacao {
 
 .filter-select-modal:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: #10b981;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -913,7 +913,7 @@ textarea.form-control-prorrogacao {
 }
 
 .modal-footer-filtros .btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     color: white;
 }
 
@@ -993,7 +993,7 @@ textarea.form-control-prorrogacao {
 }
 
 .modal-feedback .modal-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     color: white;
     padding: 20px 24px;
     border-bottom: none;

@@ -28,7 +28,7 @@
 }
 
 .breadcrumb a {
-    color: #667eea;
+    color: #10b981;
     text-decoration: none;
     transition: color 0.3s ease;
 }
@@ -50,7 +50,7 @@
 
 /* Header do usuário */
 .user-header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     border-radius: 16px;
     padding: 30px;
     margin-bottom: 30px;
@@ -238,7 +238,7 @@
 }
 
 .info-card .card-header i {
-    color: #667eea;
+    color: #10b981;
     font-size: 1.1rem;
 }
 
@@ -332,7 +332,7 @@
 .stat-item {
     text-align: center;
     padding: 15px 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #10b981 0%, #1e40af 100%);
     border-radius: 10px;
     color: white;
     min-height: 80px;
@@ -368,11 +368,11 @@
     padding: 15px;
     background: #f8f9fa;
     border-radius: 12px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #10b981;
 }
 
 .observation-item i {
-    color: #667eea;
+    color: #10b981;
     font-size: 1.2rem;
     margin-top: 2px;
 }
@@ -403,7 +403,7 @@
 
 .loading-spinner {
     text-align: center;
-    color: #667eea;
+    color: #10b981;
 }
 
 .loading-spinner i {

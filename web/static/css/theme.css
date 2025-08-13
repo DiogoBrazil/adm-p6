@@ -1,0 +1,96 @@
+/* 
+Paleta de Cores do Sistema - Verde e Azul
+Arquivo de tema para manter consistência visual
+*/
+
+:root {
+    /* Cores Primárias - Verde */
+    --primary-green: #10b981;          /* Emerald 500 */
+    --primary-green-light: #34d399;    /* Emerald 400 */
+    --primary-green-dark: #059669;     /* Emerald 600 */
+    --primary-green-darker: #047857;   /* Emerald 700 */
+    
+    /* Cores Secundárias - Azul */
+    --primary-blue: #1e40af;           /* Blue 700 */
+    --primary-blue-light: #3b82f6;     /* Blue 500 */
+    --primary-blue-dark: #1d4ed8;      /* Blue 700 */
+    --primary-blue-darker: #1e3a8a;    /* Blue 800 */
+    
+    /* Cores Complementares - Cyan */
+    --accent-cyan: #06b6d4;            /* Cyan 500 */
+    --accent-cyan-light: #22d3ee;      /* Cyan 400 */
+    --accent-cyan-dark: #0891b2;       /* Cyan 600 */
+    --accent-cyan-darker: #0e7490;     /* Cyan 700 */
+    
+    /* Gradientes Principais */
+    --gradient-primary: linear-gradient(135deg, var(--primary-green) 0%, var(--primary-blue) 100%);
+    --gradient-secondary: linear-gradient(135deg, var(--accent-cyan) 0%, var(--primary-blue-dark) 100%);
+    --gradient-success: linear-gradient(135deg, var(--primary-green-light) 0%, var(--primary-green-dark) 100%);
+    
+    /* Cores de Estado */
+    --success-color: #10b981;
+    --info-color: #06b6d4;
+    --warning-color: #f59e0b;
+    --danger-color: #dc3545;
+    
+    /* Cores Neutras */
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    
+    /* Sombras com base na nova paleta */
+    --shadow-green: 0 10px 25px rgba(16, 185, 129, 0.3);
+    --shadow-blue: 0 10px 25px rgba(30, 64, 175, 0.3);
+    --shadow-cyan: 0 10px 25px rgba(6, 182, 212, 0.3);
+    
+    /* Estados de foco */
+    --focus-green: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    --focus-blue: 0 0 0 3px rgba(30, 64, 175, 0.1);
+    --focus-cyan: 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+/* Classes utilitárias para aplicar o tema */
+.bg-primary { background: var(--gradient-primary) !important; }
+.bg-secondary { background: var(--gradient-secondary) !important; }
+.bg-success { background: var(--gradient-success) !important; }
+
+.text-primary { color: var(--primary-green) !important; }
+.text-secondary { color: var(--primary-blue) !important; }
+.text-accent { color: var(--accent-cyan) !important; }
+
+.border-primary { border-color: var(--primary-green) !important; }
+.border-secondary { border-color: var(--primary-blue) !important; }
+.border-accent { border-color: var(--accent-cyan) !important; }
+
+/* Aplicação automática do tema em elementos comuns */
+.btn-primary:not(.custom-color) {
+    background: var(--gradient-primary) !important;
+}
+
+.btn-primary:not(.custom-color):hover {
+    box-shadow: var(--shadow-green) !important;
+}
+
+.header:not(.custom-color) {
+    background: var(--gradient-primary) !important;
+}
+
+/* Override para inputs focus */
+input:focus:not(.custom-color),
+select:focus:not(.custom-color),
+textarea:focus:not(.custom-color) {
+    border-color: var(--primary-green) !important;
+    box-shadow: var(--focus-green) !important;
+}
+
+/* Icons com cor primária */
+.icon-primary { color: var(--primary-green) !important; }
+.icon-secondary { color: var(--primary-blue) !important; }
+.icon-accent { color: var(--accent-cyan) !important; }

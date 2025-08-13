@@ -1107,6 +1107,65 @@ def verificar_admin():
     return False
 
 @eel.expose
+def obter_estatisticas_processos_andamento():
+    """Retorna estatísticas dos processos em andamento por tipo"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Query para contar processos em andamento por tipo
+        query = '''
+            SELECT 
+                tipo_detalhe,
+                COUNT(*) as total
+            FROM processos_procedimentos 
+            WHERE ativo = 1 
+            AND (data_conclusao IS NULL OR data_conclusao = '')
+            AND (concluido = 0 OR concluido IS NULL)
+            GROUP BY tipo_detalhe
+            ORDER BY total DESC
+        '''
+        
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+        
+        # Converter para dicionário
+        estatisticas = {}
+        total_geral = 0
+        
+        for tipo, quantidade in resultados:
+            if tipo:  # Ignorar tipos vazios
+                estatisticas[tipo] = quantidade
+                total_geral += quantidade
+        
+        # Adicionar total geral
+        estatisticas['TOTAL'] = total_geral
+        
+        # Query para obter alguns dados adicionais úteis
+        cursor.execute('''
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE ativo = 1 AND data_conclusao IS NOT NULL AND data_conclusao != ''
+        ''')
+        concluidos = cursor.fetchone()[0]
+        
+        cursor.execute('''
+            SELECT COUNT(*) FROM processos_procedimentos WHERE ativo = 1
+        ''')
+        total_processos = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            "sucesso": True,
+            "andamento": estatisticas,
+            "concluidos": concluidos,
+            "total_processos": total_processos
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def obter_estatisticas():
     """Retorna estatísticas do sistema"""
     return db_manager.get_stats()

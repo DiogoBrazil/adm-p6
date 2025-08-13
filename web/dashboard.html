@@ -6,14 +6,20 @@
     <title>Início - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/theme.css">
     <link rel="stylesheet" href="static/css/dashboard.css">
 </head>
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo-dashboard">
-                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
-                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            <div class="header-left">
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="logo-dashboard">
+                    <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                    <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+                </div>
             </div>
             
             <div class="user-info">
@@ -35,72 +41,98 @@
         </div>
     </header>
 
-    <div class="main-container">
-        <div id="alertContainer"></div>
-
-        <!-- Conteúdo Principal - Cards de Navegação -->
-        <div class="content-section">
-            <!-- Card Usuários -->
-            <div class="section-card navigation-card" onclick="window.location.href='user_list.html'">
-                <div class="card-icon">
-                    <i class="fas fa-users"></i>
-                </div>
-                <h2 class="card-title">Usuários</h2>
-                <p class="card-description">Gerenciar usuários do sistema</p>
-                <div class="card-arrow">
-                    <i class="fas fa-chevron-right"></i>
+    <!-- Layout com Sidebar -->
+    <div class="app-layout">
+        <!-- Menu Lateral -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Sistema de Gestão</span>
                 </div>
             </div>
-
-            <!-- Card Processos/Procedimentos -->
-            <div class="section-card navigation-card" onclick="window.location.href='procedure_list.html'">
-                <div class="card-icon">
-                    <i class="fas fa-folder-open"></i>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Principal</h3>
+                    <ul class="nav-list">
+                        <li class="nav-item active">
+                            <a href="dashboard.html" class="nav-link">
+                                <i class="fas fa-home"></i>
+                                <span>Início</span>
+                            </a>
+                        </li>
+                    </ul>
                 </div>
-                <h2 class="card-title">Processos/Procedimentos</h2>
-                <p class="card-description">Gerenciar processos e procedimentos</p>
-                <div class="card-arrow">
-                    <i class="fas fa-chevron-right"></i>
+
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Administração</h3>
+                    <ul class="nav-list">
+                        <li class="nav-item">
+                            <a href="user_list.html" class="nav-link">
+                                <i class="fas fa-users"></i>
+                                <span>Usuários</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Processos</h3>
+                    <ul class="nav-list">
+                        <li class="nav-item">
+                            <a href="procedure_list.html" class="nav-link">
+                                <i class="fas fa-folder-open"></i>
+                                <span>Processos/Procedimentos</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <h3 class="nav-section-title">Base Legal</h3>
+                    <ul class="nav-list">
+                        <li class="nav-item">
+                            <a href="crime_list.html" class="nav-link">
+                                <i class="fas fa-gavel"></i>
+                                <span>Crimes e Contravenções</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="transgressao_list.html" class="nav-link">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <span>Transgressões</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="estatuto_art29.html" class="nav-link">
+                                <i class="fas fa-balance-scale"></i>
+                                <span>Art. 29 - Estatuto</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Conteúdo Principal -->
+        <main class="main-content">
+            <div id="alertContainer"></div>
+            
+            <div class="welcome-section">
+                <div class="welcome-header">
+                    <h1>Bem-vindo ao Sistema de Gestão</h1>
+                    <p>Seção de Justiça e Disciplina - 7º BPM</p>
+                </div>
+                
+                <div class="procedures-section">
+                    <h2 class="section-title">Processos e Procedimentos em Andamento</h2>
+                    <div class="stats-grid" id="statsGrid">
+                        <!-- Cards de processos em andamento serão inseridos aqui dinamicamente -->
+                    </div>
                 </div>
             </div>
-
-            <!-- Card Crimes e Contravenções -->
-            <div class="section-card navigation-card" onclick="window.location.href='crime_list.html'">
-                <div class="card-icon">
-                    <i class="fas fa-gavel"></i>
-                </div>
-                <h2 class="card-title">Crimes e Contravenções</h2>
-                <p class="card-description">Gerenciar crimes e contravenções penais</p>
-                <div class="card-arrow">
-                    <i class="fas fa-chevron-right"></i>
-                </div>
-            </div>
-
-            <!-- Card Transgressões Disciplinares -->
-            <div class="section-card navigation-card" onclick="window.location.href='transgressao_list.html'">
-                <div class="card-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <h2 class="card-title">Transgressões Disciplinares</h2>
-                <p class="card-description">Gerenciar transgressões do RDPM</p>
-                <div class="card-arrow">
-                    <i class="fas fa-chevron-right"></i>
-                </div>
-            </div>
-
-            <!-- Card Art. 29 - Estatuto -->
-            <div class="section-card navigation-card" onclick="window.location.href='estatuto_art29.html'">
-                <div class="card-icon">
-                    <i class="fas fa-balance-scale"></i>
-                </div>
-                <h2 class="card-title">Art. 29 - Estatuto</h2>
-                <p class="card-description">Infrações do Decreto Lei 09-A</p>
-                <div class="card-arrow">
-                    <i class="fas fa-chevron-right"></i>
-                </div>
-            </div>
-        </div>
-
+        </main>
     </div>
 
     <!-- Loader global (sobreposição) para transições como logout -->
