@@ -874,7 +874,7 @@ function showConfirmModal(title, message, onConfirm) {
 // Função de logout padronizada com modal de confirmação e overlay loader global
 async function realizarLogout() {
     showConfirmModal(
-        'Sair do sistema',
+        'Confirmar Logout',
         'Tem certeza que deseja encerrar a sessão?',
         async () => {
             const start = Date.now();

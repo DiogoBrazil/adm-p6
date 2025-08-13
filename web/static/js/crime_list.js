@@ -1,5 +1,5 @@
-// Verificação de segurança: só executa se estiver na página correta
-if (document.title.includes('Crimes') || document.getElementById('crimesTable')) {
+// Script da lista de crimes/contravenções - escopo global (sem wrapper condicional)
+console.log('🔧 Crime list JS carregado');
 
 // Variáveis globais
 let usuarioLogado = null;
@@ -451,42 +451,42 @@ function novoRegistro() {
 }
 
 async function realizarLogout() {
-    const showConfirm = (title, message, onConfirm) => {
+    console.log('🚪 realizarLogout chamada');
+    const showConfirmModal = (title, message, onConfirm) => {
+        console.log('📋 Criando modal de confirmação');
         let modal = document.getElementById('confirmModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'confirmModal';
-            modal.className = 'modal-overlay';
-            modal.style.display = 'none';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-exclamation-triangle"></i> <span id="confirmTitle"></span></h3>
-                    </div>
-                    <div class="modal-body">
-                        <p id="confirmMessage"></p>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="confirmCancel" class="btn-secondary">Cancelar</button>
-                        <button id="confirmOk" class="btn-danger">Sair</button>
-                    </div>
-                </div>`;
-            document.body.appendChild(modal);
-        }
-        modal.querySelector('#confirmTitle').textContent = title;
-        modal.querySelector('#confirmMessage').textContent = message;
+        if (modal) modal.remove();
+        
+        modal = document.createElement('div');
+        modal.id = 'confirmModal';
+        modal.className = 'modal-feedback';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 3rem; margin-bottom: 20px;"></i>
+                <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem;">${title}</h3>
+                <p style="margin-bottom: 25px; color: #666; font-size: 1rem;">${message}</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="confirmCancel" class="btn-secondary">Cancelar</button>
+                    <button id="confirmOk" class="btn-danger">Sair</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
         modal.style.display = 'flex';
+        console.log('✅ Modal criado e exibido');
+        
         const cancelBtn = modal.querySelector('#confirmCancel');
         const okBtn = modal.querySelector('#confirmOk');
         const close = () => (modal.style.display = 'none');
+        
         cancelBtn.onclick = close;
         okBtn.onclick = () => { close(); onConfirm(); };
         modal.onclick = (e) => { if (e.target === modal) close(); };
     };
 
-    showConfirm('Sair do sistema', 'Tem certeza que deseja encerrar a sessão?', async () => {
+    showConfirmModal('Sair do sistema', 'Tem certeza que deseja encerrar a sessão?', async () => {
+        console.log('🔄 Executando logout...');
         const start = Date.now();
-        try { await eel.fazer_logout()(); } catch (e) { console.warn('logout falhou, seguindo'); }
+        try { await eel.fazer_logout()(); } catch (e) { console.warn('logout falhou, prosseguindo'); }
         const loader = document.getElementById('globalLoader');
         if (loader) loader.style.display = 'flex';
         const elapsed = Date.now() - start;
@@ -628,4 +628,5 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-} // Fecha o bloco condicional de verificação da página
+// Garantir que realizarLogout esteja disponível globalmente
+window.realizarLogout = realizarLogout;

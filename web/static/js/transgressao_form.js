@@ -382,7 +382,7 @@ async function realizarLogout() {
         modal.onclick = (e) => { if (e.target === modal) close(); };
     };
 
-    showConfirm('Sair do sistema', 'Tem certeza que deseja encerrar a sessão?', async () => {
+    showConfirm('Confirmar Logout', 'Tem certeza que deseja encerrar a sessão?', async () => {
         const start = Date.now();
         try { await eel.fazer_logout()(); } catch (e) { console.warn('logout falhou, prosseguindo'); }
         const loader = document.getElementById('globalLoader');
