@@ -36,12 +36,14 @@ async function realizarLogout() {
         'Tem certeza que deseja sair do sistema?',
         async () => {
             try {
+                const startTs = Date.now();
                 await eel.fazer_logout()();
-                showAlert('Logout realizado com sucesso! Redirecionando...', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 1000);
+                const loader = document.getElementById('globalLoader');
+                if (loader) loader.classList.remove('hidden');
+                const elapsed = Date.now() - startTs;
+                const toWait = Math.max(0, 1000 - elapsed);
+                if (toWait > 0) await new Promise(r => setTimeout(r, toWait));
+                window.location.href = 'login.html';
             } catch (error) {
                 console.error('Erro no logout:', error);
                 showAlert('Erro ao fazer logout!', 'error');

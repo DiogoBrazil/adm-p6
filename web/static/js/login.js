@@ -5,6 +5,15 @@ const btnLogin = document.getElementById('btnLogin');
 const btnText = document.querySelector('.btn-text');
 const loading = document.querySelector('.loading');
 const alertContainer = document.getElementById('alertContainer');
+// Novos elementos para UX aprimorada
+const globalLoader = document.getElementById('globalLoader');
+const welcomeModal = document.getElementById('welcomeModal');
+const welcomeTitle = document.getElementById('welcomeTitle');
+const welcomeMessage = document.getElementById('welcomeMessage');
+
+// Durações mínimas (ms)
+const LOADER_MIN_MS = 2000;
+const MODAL_MIN_MS = 2000;
 
 // Função para mostrar alertas
 function showAlert(message, type = 'error') {
@@ -26,30 +35,43 @@ function setLoading(loading_state) {
     if (loading_state) {
         btnLogin.classList.add('loading');
         btnLogin.disabled = true;
+    if (globalLoader) globalLoader.classList.remove('hidden');
     } else {
         btnLogin.classList.remove('loading');
         btnLogin.disabled = false;
+    if (globalLoader) globalLoader.classList.add('hidden');
     }
 }
 
 // Função de login
 async function realizarLogin(email, senha) {
+    const startTs = Date.now();
     try {
         setLoading(true);
-        
+
         // Chama função Python
         const resultado = await eel.fazer_login(email, senha)();
-        
+
+        // Garantir loader por pelo menos LOADER_MIN_MS
+        const elapsed = Date.now() - startTs;
+        const toWait = Math.max(0, LOADER_MIN_MS - elapsed);
+        if (toWait > 0) await new Promise(r => setTimeout(r, toWait));
+        setLoading(false);
+
         if (resultado.sucesso) {
-            showAlert(resultado.mensagem, 'success');
-            
+            // Exibe modal de boas-vindas por pelo menos MODAL_MIN_MS
+            if (welcomeModal) {
+                const nome = (resultado.usuario && resultado.usuario.nome) ? resultado.usuario.nome : '';
+                welcomeTitle.textContent = `Bem-vindo${nome ? ',' : ''} ${nome}`.trim();
+                welcomeMessage.textContent = 'Login realizado com sucesso.';
+                welcomeModal.classList.remove('hidden');
+            }
+
             // Marca que o usuário acabou de fazer login
             sessionStorage.setItem('justLoggedIn', 'true');
-            
-            // Redireciona para página inicial após 1.5 segundos
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 1500);
+
+            await new Promise(r => setTimeout(r, MODAL_MIN_MS));
+            window.location.href = 'dashboard.html';
         } else {
             showAlert(resultado.mensagem, 'error');
             // Limpa senha em caso de erro
@@ -57,10 +79,13 @@ async function realizarLogin(email, senha) {
             document.getElementById('senha').focus();
         }
     } catch (error) {
+        // Garantir loader por pelo menos LOADER_MIN_MS em caso de erro também
+        const elapsed = Date.now() - startTs;
+        const toWait = Math.max(0, LOADER_MIN_MS - elapsed);
+        if (toWait > 0) await new Promise(r => setTimeout(r, toWait));
+        setLoading(false);
         showAlert('Erro ao conectar com o servidor!', 'error');
         console.error('Erro:', error);
-    } finally {
-        setLoading(false);
     }
 }
 

@@ -871,22 +871,23 @@ function showConfirmModal(title, message, onConfirm) {
     });
 }
 
-// Função de logout
+// Função de logout padronizada com modal de confirmação e overlay loader global
 async function realizarLogout() {
     showConfirmModal(
-        'Confirmar Logout',
-        'Tem certeza que deseja sair do sistema?',
+        'Sair do sistema',
+        'Tem certeza que deseja encerrar a sessão?',
         async () => {
+            const start = Date.now();
             try {
                 await eel.fazer_logout()();
-                showAlert('Logout realizado com sucesso! Redirecionando...', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 1000);
-            } catch (error) {
-                console.error('Erro no logout:', error);
-                showAlert('Erro ao fazer logout!', 'error');
+            } catch (e) {
+                console.warn('Falha ao chamar logout (seguindo com redirecionamento):', e);
+            } finally {
+                const loader = document.getElementById('globalLoader');
+                if (loader) loader.style.display = 'flex';
+                const elapsed = Date.now() - start;
+                const wait = Math.max(0, 1000 - elapsed);
+                setTimeout(() => { window.location.href = 'login.html'; }, wait);
             }
         }
     );

@@ -398,15 +398,49 @@ function voltarParaLista() {
 }
 
 async function realizarLogout() {
-    try {
-        const resultado = await eel.fazer_logout()();
-        if (resultado.sucesso) {
-            window.location.href = 'login.html';
+    const showConfirm = (title, message, onConfirm) => {
+        let modal = document.getElementById('confirmModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'confirmModal';
+            modal.className = 'modal-feedback';
+            modal.style.display = 'none';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <div><i class="fas fa-exclamation-triangle" style="color:#dc3545;"></i></div>
+                    </div>
+                    <div class="modal-body">
+                        <h3 id="confirmTitle" style="margin-bottom:10px;"></h3>
+                        <p id="confirmMessage"></p>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="confirmCancel" class="btn-secondary">Cancelar</button>
+                        <button id="confirmOk" class="btn-danger">Sair</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
         }
-    } catch (error) {
-        console.error('Erro ao fazer logout:', error);
-        window.location.href = 'login.html';
-    }
+        modal.querySelector('#confirmTitle').textContent = title;
+        modal.querySelector('#confirmMessage').textContent = message;
+        modal.style.display = 'flex';
+        const cancelBtn = modal.querySelector('#confirmCancel');
+        const okBtn = modal.querySelector('#confirmOk');
+        const close = () => (modal.style.display = 'none');
+        cancelBtn.onclick = close;
+        okBtn.onclick = () => { close(); onConfirm(); };
+        modal.onclick = (e) => { if (e.target === modal) close(); };
+    };
+
+    showConfirm('Sair do sistema', 'Tem certeza que deseja encerrar a sessão?', async () => {
+        const start = Date.now();
+        try { await eel.fazer_logout()(); } catch (e) { console.warn('logout falhou; redirecionando'); }
+        const loader = document.getElementById('globalLoader');
+        if (loader) loader.style.display = 'flex';
+        const elapsed = Date.now() - start;
+        const wait = Math.max(0, 1000 - elapsed);
+        setTimeout(() => { window.location.href = 'login.html'; }, wait);
+    });
 }
 
 // ============================================

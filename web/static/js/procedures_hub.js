@@ -20,63 +20,36 @@ async function carregarUsuarioLogado() {
 
 // Função para mostrar modal de confirmação
 function showConfirmModal(title, message, onConfirm) {
-    // Criar modal se não existir
-    let modal = document.getElementById('confirmModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'confirmModal';
-        modal.className = 'modal-feedback';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 id="modalTitle">${title}</h3>
-                </div>
-                <div class="modal-body">
-                    <p id="modalMessage">${message}</p>
-                </div>
-                <div class="modal-actions">
-                    <button id="confirmBtn" class="btn-primary">Confirmar</button>
-                    <button id="cancelBtn" class="btn-secondary">Cancelar</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
+    // Remover modal existente se houver
+    let existing = document.getElementById('confirmModal');
+    if (existing) existing.remove();
 
-    // Atualizar conteúdo do modal
-    document.getElementById('modalTitle').textContent = title;
-    document.getElementById('modalMessage').textContent = message;
-    
-    // Mostrar modal
+    const modal = document.createElement('div');
+    modal.id = 'confirmModal';
+    modal.className = 'modal-feedback';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 3rem; margin-bottom: 20px;"></i>
+            <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem;">${title}</h3>
+            <p style="margin-bottom: 25px; color: #666; font-size: 1rem;">${message}</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmCancel" class="btn-secondary" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Cancelar</button>
+                <button id="confirmOk" class="btn-danger" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Confirmar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
     modal.style.display = 'flex';
-    modal.classList.add('show');
-    
-    // Event listeners
-    const cancelBtn = document.getElementById('cancelBtn');
-    const confirmBtn = document.getElementById('confirmBtn');
-    
-    const closeModal = () => {
-        modal.style.display = 'none';
-        modal.classList.remove('show');
-    };
-    
-    // Remover listeners anteriores
+
+    const cancelBtn = document.getElementById('confirmCancel');
+    const okBtn = document.getElementById('confirmOk');
+    const closeModal = () => { modal.style.display = 'none'; };
     cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
-    
-    // Novos listeners
-    document.getElementById('cancelBtn').addEventListener('click', closeModal);
-    document.getElementById('confirmBtn').addEventListener('click', () => {
-        closeModal();
-        onConfirm();
-    });
-    
-    // Fechar ao clicar fora do modal
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
+    okBtn.replaceWith(okBtn.cloneNode(true));
+    document.getElementById('confirmCancel').addEventListener('click', closeModal);
+    document.getElementById('confirmOk').addEventListener('click', () => { closeModal(); onConfirm(); });
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 }
 
 // Função de logout
@@ -86,7 +59,13 @@ async function realizarLogout() {
         'Tem certeza que deseja sair do sistema?',
         async () => {
             try {
+                const startTs = Date.now();
                 await eel.fazer_logout()();
+                const loader = document.getElementById('globalLoader');
+                if (loader) loader.classList.remove('hidden');
+                const elapsed = Date.now() - startTs;
+                const toWait = Math.max(0, 1000 - elapsed);
+                if (toWait > 0) await new Promise(r => setTimeout(r, toWait));
                 window.location.href = 'login.html';
             } catch (error) {
                 console.error('Erro no logout:', error);
