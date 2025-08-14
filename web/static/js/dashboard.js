@@ -397,14 +397,24 @@ function showConfirmModal(title, message, onConfirm) {
     const modal = document.createElement('div');
     modal.id = 'confirmModal';
     modal.className = 'modal-feedback';
+    // Adicionar estilos inline para garantir centralização
+    modal.style.cssText = `
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.35);
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    `;
     modal.innerHTML = `
         <div class="modal-content">
             <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 3rem; margin-bottom: 20px;"></i>
             <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem;">${title}</h3>
             <p style="margin-bottom: 25px; color: #666; font-size: 1rem;">${message}</p>
             <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="confirmCancel" class="btn-secondary" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Cancelar</button>
-                <button id="confirmOk" class="btn-danger" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">Confirmar</button>
+                <button id="confirmCancel" class="btn-secondary">Cancelar</button>
+                <button id="confirmOk" class="btn-danger">Confirmar</button>
             </div>
         </div>
     `;
@@ -417,18 +427,29 @@ function showConfirmModal(title, message, onConfirm) {
     const cancelBtn = document.getElementById('confirmCancel');
     const okBtn = document.getElementById('confirmOk');
 
-    const closeModal = () => { modal.style.display = 'none'; };
+    const closeModal = () => { 
+        modal.style.display = 'none'; 
+        // Remover modal após fechar para evitar acúmulo no DOM
+        setTimeout(() => {
+            if (modal.parentNode) {
+                modal.parentNode.removeChild(modal);
+            }
+        }, 300);
+    };
 
-    // Remover listeners anteriores (clonar)
-    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-    okBtn.replaceWith(okBtn.cloneNode(true));
-
-    // Novos listeners
-    document.getElementById('confirmCancel').addEventListener('click', closeModal);
-    document.getElementById('confirmOk').addEventListener('click', () => { closeModal(); onConfirm(); });
+    // Adicionar listeners diretamente sem clonagem
+    cancelBtn.addEventListener('click', closeModal);
+    okBtn.addEventListener('click', () => { 
+        closeModal(); 
+        onConfirm(); 
+    });
 
     // Fechar ao clicar fora do modal
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modal.addEventListener('click', (e) => { 
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
 }
 
 // Função para carregar dados do usuário logado
@@ -477,19 +498,19 @@ async function realizarLogout() {
         'Confirmar Logout',
         'Tem certeza que deseja sair do sistema?',
         async () => {
-            const startTs = Date.now();
             try {
+                const startTs = Date.now();
                 // Chama backend para invalidar sessão
                 await eel.fazer_logout()();
-
+                
                 // Mostra loader global por pelo menos 1s
                 const loader = document.querySelector('.global-loader') || document.getElementById('globalLoader');
                 if (loader) loader.classList.remove('hidden');
-
+                
                 const elapsed = Date.now() - startTs;
                 const toWait = Math.max(0, 1000 - elapsed);
                 if (toWait > 0) await new Promise(r => setTimeout(r, toWait));
-
+                
                 window.location.href = 'login.html';
             } catch (error) {
                 console.error('Erro no logout:', error);
@@ -504,6 +525,11 @@ async function realizarLogout() {
 
 // Disponibilizar função globalmente para compatibilidade
 window.realizarLogout = realizarLogout;
+
+// Verificação adicional para garantir que a função esteja disponível
+if (typeof window.realizarLogout !== 'function') {
+    console.error('Falha ao disponibilizar realizarLogout globalmente');
+}
 
 // Função para animar números removida - não é necessária na página inicial atual
 
