@@ -1,0 +1,255 @@
+/* ========================================
+   MODAL DE SUBSTITUIÇÃO DE ENCARREGADO
+   ======================================== */
+
+.modal-substituir-encarregado-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-substituir-encarregado {
+    background: white;
+    width: 90%;
+    max-width: 580px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-substituir-encarregado-header {
+    background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.modal-substituir-encarregado-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-substituir-encarregado-header h3 i {
+    font-size: 1.1rem;
+}
+
+.modal-substituir-encarregado-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.modal-substituir-encarregado-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.modal-substituir-encarregado-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.form-group-substituicao {
+    margin-bottom: 20px;
+}
+
+.form-group-substituicao label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.form-group-substituicao label i {
+    margin-right: 6px;
+    color: #6f42c1;
+    font-size: 0.9rem;
+}
+
+.form-control-substituicao {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.form-control-substituicao:focus {
+    outline: none;
+    border-color: #6f42c1;
+    box-shadow: 0 0 0 4px rgba(111, 66, 193, 0.1);
+}
+
+.form-control-substituicao:hover {
+    border-color: #adb5bd;
+}
+
+textarea.form-control-substituicao {
+    resize: vertical;
+    min-height: 100px;
+    font-family: inherit;
+}
+
+.modal-substituir-encarregado-footer {
+    background: #f8f9fa;
+    padding: 20px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    border-top: 1px solid #dee2e6;
+    flex-shrink: 0;
+}
+
+.btn-substituicao-save,
+.btn-substituicao-cancel {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+    justify-content: center;
+}
+
+.btn-substituicao-save {
+    background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+    color: white;
+    flex: 1;
+    max-width: 200px;
+}
+
+.btn-substituicao-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(111, 66, 193, 0.3);
+}
+
+.btn-substituicao-save:active {
+    transform: translateY(0);
+}
+
+.btn-substituicao-cancel {
+    background: #e9ecef;
+    color: #495057;
+    flex: 1;
+    max-width: 160px;
+}
+
+.btn-substituicao-cancel:hover {
+    background: #dee2e6;
+}
+
+/* Responsividade do Modal de Substituição de Encarregado */
+@media (max-width: 640px) {
+    .modal-substituir-encarregado {
+        width: 95%;
+        max-height: 95vh;
+        margin: 10px;
+    }
+    
+    .modal-substituir-encarregado-header {
+        padding: 16px 20px;
+    }
+    
+    .modal-substituir-encarregado-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .modal-substituir-encarregado-header h3 i {
+        font-size: 1rem;
+    }
+    
+    .modal-substituir-encarregado-body {
+        padding: 20px;
+    }
+    
+    .modal-substituir-encarregado-footer {
+        flex-direction: column;
+        padding: 16px 20px;
+    }
+    
+    .btn-substituicao-save,
+    .btn-substituicao-cancel {
+        width: 100%;
+        max-width: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .modal-substituir-encarregado {
+        border-radius: 12px;
+    }
+    
+    .modal-substituir-encarregado-header h3 {
+        font-size: 1rem;
+        gap: 8px;
+    }
+    
+    .modal-substituir-encarregado-header h3 i {
+        font-size: 1rem;
+    }
+    
+    .form-control-substituicao {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+    
+    .btn-substituicao-save,
+    .btn-substituicao-cancel {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+}

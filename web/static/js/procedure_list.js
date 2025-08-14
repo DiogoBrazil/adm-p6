@@ -518,6 +518,9 @@ function exibirProcedimentos() {
                             <button class="btn-action" data-numero="${encodeURIComponent(numero)}" onclick="abrirModalProrrogacao('${procedimento.id}', decodeURIComponent(this.dataset.numero))" title="Adicionar prorrogação">
                                 <i class="fas fa-clock"></i>
                             </button>
+                            <button onclick="abrirModalSubstituirEncarregado('${procedimento.id}')" class="btn-action" title="Substituir Encarregado">
+                                <i class="fas fa-user-friends"></i>
+                            </button>
                             <button onclick="editarProcedimento('${procedimento.id}')" class="btn-edit" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1350,3 +1353,126 @@ document.addEventListener('DOMContentLoaded', function() {
         searchInputElement.addEventListener('input', buscarProcedimentos);
     }
 });
+
+// Modal de substituição de encarregado
+let modalSubstituirEncarregado;
+
+function abrirModalSubstituirEncarregado(processoId) {
+    if (!modalSubstituirEncarregado) {
+        criarModalSubstituirEncarregado();
+    }
+    
+    // Armazenar o ID do processo no modal
+    modalSubstituirEncarregado.dataset.processoId = processoId;
+    
+    // Limpar campos
+    modalSubstituirEncarregado.querySelector('#selectNovoEncarregado').innerHTML = '<option value="">Carregando...</option>';
+    modalSubstituirEncarregado.querySelector('#justificativaSubstituicao').value = '';
+    
+    // Carregar lista de usuários
+    carregarUsuariosParaSubstituicao();
+    
+    // Mostrar modal
+    modalSubstituirEncarregado.style.display = 'flex';
+}
+
+function fecharModalSubstituirEncarregado() {
+    if (modalSubstituirEncarregado) {
+        modalSubstituirEncarregado.style.display = 'none';
+    }
+}
+
+function criarModalSubstituirEncarregado() {
+    modalSubstituirEncarregado = document.createElement('div');
+    modalSubstituirEncarregado.className = 'modal-substituir-encarregado-overlay';
+    modalSubstituirEncarregado.innerHTML = `
+        <div class="modal-substituir-encarregado">
+            <div class="modal-substituir-encarregado-header">
+                <h3><i class="fas fa-user-friends"></i> Substituir Encarregado</h3>
+                <button class="modal-substituir-encarregado-close" onclick="fecharModalSubstituirEncarregado()">&times;</button>
+            </div>
+            <div class="modal-substituir-encarregado-body">
+                <div class="form-group-substituicao">
+                    <label><i class="fas fa-user"></i> Novo Encarregado *</label>
+                    <select id="selectNovoEncarregado" class="form-control-substituicao" required>
+                        <option value="">Selecione um encarregado...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group-substituicao">
+                    <label><i class="fas fa-comment-alt"></i> Justificativa (Opcional)</label>
+                    <textarea id="justificativaSubstituicao" rows="3" placeholder="Descreva o motivo da substituição..." class="form-control-substituicao"></textarea>
+                </div>
+            </div>
+            <div class="modal-substituir-encarregado-footer">
+                <button class="btn-substituicao-cancel" onclick="fecharModalSubstituirEncarregado()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button class="btn-substituicao-save" onclick="salvarSubstituicaoEncarregado()">
+                    <i class="fas fa-save"></i> Substituir Encarregado
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modalSubstituirEncarregado);
+}
+
+async function carregarUsuariosParaSubstituicao() {
+    try {
+        const resultado = await eel.listar_encarregados_operadores()();
+        const select = modalSubstituirEncarregado.querySelector('#selectNovoEncarregado');
+        
+        if (resultado && Array.isArray(resultado)) {
+            // Limpar opções existentes
+            select.innerHTML = '<option value="">Selecione um encarregado...</option>';
+            
+            // Adicionar usuários ao select
+            resultado.forEach(usuario => {
+                const option = document.createElement('option');
+                option.value = usuario.id;
+                option.textContent = usuario.nome_completo;
+                option.dataset.tipo = usuario.tipo;
+                select.appendChild(option);
+            });
+        } else {
+            select.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+        }
+    } catch (error) {
+        console.error('Erro ao carregar usuários:', error);
+        const select = modalSubstituirEncarregado.querySelector('#selectNovoEncarregado');
+        select.innerHTML = '<option value="">Erro ao carregar usuários</option>';
+    }
+}
+
+async function salvarSubstituicaoEncarregado() {
+    const processoId = modalSubstituirEncarregado.dataset.processoId;
+    const selectNovoEncarregado = modalSubstituirEncarregado.querySelector('#selectNovoEncarregado');
+    const justificativa = modalSubstituirEncarregado.querySelector('#justificativaSubstituicao').value;
+    
+    const novoEncarregadoId = selectNovoEncarregado.value;
+    
+    if (!novoEncarregadoId) {
+        showAlert('Por favor, selecione um novo encarregado.', 'error');
+        return;
+    }
+    
+    try {
+        const resultado = await eel.substituir_encarregado(processoId, novoEncarregadoId, justificativa)();
+        
+        if (resultado.sucesso) {
+            // Fechar modal
+            fecharModalSubstituirEncarregado();
+            
+            // Mostrar mensagem de sucesso
+            showAlert('Encarregado substituído com sucesso!', 'success');
+            
+            // Recarregar a lista de procedimentos
+            await carregarProcedimentos();
+        } else {
+            showAlert(resultado.mensagem || 'Erro ao substituir encarregado.', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao substituir encarregado:', error);
+        showAlert('Erro ao substituir encarregado.', 'error');
+    }
+}

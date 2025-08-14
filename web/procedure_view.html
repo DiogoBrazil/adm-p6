@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="static/css/dashboard.css">
     <link rel="stylesheet" href="static/css/procedures.css">
     <link rel="stylesheet" href="static/css/procedure_view.css">
+    <link rel="stylesheet" href="static/css/substituicao_encarregado.css">
 </head>
 <body>
     <header class="header">
@@ -204,6 +205,9 @@
                             <i class="fas fa-user-shield"></i>
                             Encarregado(s)
                         </h3>
+                        <button class="btn-action-small" onclick="abrirModalSubstituirEncarregado()" title="Substituir Encarregado">
+                            <i class="fas fa-user-friends"></i> Substituir
+                        </button>
                     </div>
                     <div class="card-content">
                         <div id="encarregadosContainer">
@@ -313,11 +317,45 @@
         </div>
     </div>
 
+    <!-- Modal de Substituição de Encarregado -->
+    <div id="modalSubstituirEncarregado" class="modal-substituir-encarregado-overlay" style="display: none;">
+        <div class="modal-substituir-encarregado">
+            <div class="modal-substituir-encarregado-header">
+                <h3><i class="fas fa-user-friends"></i> Substituir Encarregado</h3>
+                <button class="modal-substituir-encarregado-close" onclick="fecharModalSubstituirEncarregado()">&times;</button>
+            </div>
+            <div class="modal-substituir-encarregado-body">
+                <div class="form-group-substituicao">
+                    <label><i class="fas fa-user"></i> Novo Encarregado *</label>
+                    <select id="selectNovoEncarregado" class="form-control-substituicao" required>
+                        <option value="">Carregando...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group-substituicao">
+                    <label><i class="fas fa-comment-alt"></i> Justificativa (Opcional)</label>
+                    <textarea id="justificativaSubstituicao" rows="3" placeholder="Descreva o motivo da substituição..." class="form-control-substituicao"></textarea>
+                </div>
+            </div>
+            <div class="modal-substituir-encarregado-footer">
+                <button class="btn-substituicao-cancel" onclick="fecharModalSubstituirEncarregado()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button class="btn-substituicao-save" onclick="salvarSubstituicaoEncarregado()">
+                    <i class="fas fa-save"></i> Substituir Encarregado
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Loader global para transições (logout) -->
     <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
         <div class="spinner"></div>
     </div>
 
+    <script src="static/js/utils.js"></script>
+    <script src="static/js/alerts.js"></script>
     <script src="static/js/procedure_view.js"></script>
+    <script src="static/js/substituicao_encarregado.js"></script>
 </body>
 </html>

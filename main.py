@@ -1069,6 +1069,56 @@ def listar_todos_usuarios():
     return all_users
 
 @eel.expose
+def listar_encarregados_operadores():
+    """Lista todos os encarregados e operadores para substituição de encarregado"""
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    
+    usuarios = []
+
+    # Buscar encarregados
+    cursor.execute('''
+        SELECT id, posto_graduacao, matricula, nome, email
+        FROM encarregados 
+        WHERE ativo = 1
+        ORDER BY posto_graduacao, nome ASC
+    ''')
+    encarregados = cursor.fetchall()
+    for user in encarregados:
+        usuarios.append({
+            "id": user[0],
+            "posto_graduacao": user[1],
+            "matricula": user[2],
+            "nome": user[3],
+            "email": user[4],
+            "tipo": "encarregado",
+            "nome_completo": f"{user[1]} {user[2]} {user[3]}".strip()
+        })
+
+    # Buscar operadores (apenas os não-admin)
+    cursor.execute('''
+        SELECT id, posto_graduacao, matricula, nome, email
+        FROM operadores 
+        WHERE ativo = 1 AND profile != 'admin'
+        ORDER BY posto_graduacao, nome ASC
+    ''')
+    operadores = cursor.fetchall()
+    for user in operadores:
+        usuarios.append({
+            "id": user[0],
+            "posto_graduacao": user[1],
+            "matricula": user[2],
+            "nome": user[3],
+            "email": user[4],
+            "tipo": "operador",
+            "nome_completo": f"{user[1]} {user[2]} {user[3]}".strip()
+        })
+    
+    conn.close()
+    
+    return usuarios
+
+@eel.expose
 def atualizar_usuario(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
     """Atualiza um usuário existente"""
     # Validações básicas
@@ -1952,6 +2002,131 @@ def excluir_processo(processo_id):
         return {"sucesso": True, "mensagem": "Processo/Procedimento excluído com sucesso!"}
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao excluir processo/procedimento: {str(e)}"}
+
+@eel.expose
+def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None):
+    """Substitui o encarregado de um processo/procedimento e registra no histórico"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Obter dados atuais do processo
+        cursor.execute("""
+            SELECT p.responsavel_id, p.responsavel_tipo, 
+                   COALESCE(o.nome, e.nome, '') as responsavel_atual_nome,
+                   COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_atual_posto,
+                   COALESCE(o.matricula, e.matricula, '') as responsavel_atual_matricula
+            FROM processos_procedimentos p
+            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+            WHERE p.id = ? AND p.ativo = 1
+        """, (processo_id,))
+        
+        processo_atual = cursor.fetchone()
+        if not processo_atual:
+            conn.close()
+            return {"sucesso": False, "mensagem": "Processo não encontrado!"}
+        
+        responsavel_atual_id, responsavel_atual_tipo, responsavel_atual_nome, responsavel_atual_posto, responsavel_atual_matricula = processo_atual
+        
+        # Verificar se o novo encarregado é válido
+        cursor.execute("SELECT id, nome, posto_graduacao, matricula FROM encarregados WHERE id = ? AND ativo = 1", (novo_encarregado_id,))
+        novo_encarregado = cursor.fetchone()
+        if not novo_encarregado:
+            conn.close()
+            return {"sucesso": False, "mensagem": "Novo encarregado não encontrado ou inativo!"}
+        
+        novo_encarregado_id, novo_encarregado_nome, novo_encarregado_posto, novo_encarregado_matricula = novo_encarregado
+        
+        # Verificar se é o mesmo encarregado
+        if responsavel_atual_id == novo_encarregado_id:
+            conn.close()
+            return {"sucesso": False, "mensagem": "O novo encarregado é o mesmo que o atual!"}
+        
+        # Obter histórico atual
+        cursor.execute("SELECT historico_encarregados FROM processos_procedimentos WHERE id = ?", (processo_id,))
+        historico_atual = cursor.fetchone()[0]
+        
+        # Criar registro de substituição
+        import json
+        from datetime import datetime
+        
+        registro_substituicao = {
+            "data_substituicao": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "encarregado_anterior": {
+                "id": responsavel_atual_id,
+                "nome": responsavel_atual_nome,
+                "posto_graduacao": responsavel_atual_posto,
+                "matricula": responsavel_atual_matricula
+            },
+            "novo_encarregado": {
+                "id": novo_encarregado_id,
+                "nome": novo_encarregado_nome,
+                "posto_graduacao": novo_encarregado_posto,
+                "matricula": novo_encarregado_matricula
+            },
+            "justificativa": justificativa
+        }
+        
+        # Atualizar histórico
+        historico_atualizado = []
+        if historico_atual:
+            try:
+                historico_atualizado = json.loads(historico_atual)
+            except:
+                pass
+        
+        historico_atualizado.append(registro_substituicao)
+        historico_json = json.dumps(historico_atualizado, ensure_ascii=False)
+        
+        # Atualizar processo com novo encarregado e histórico
+        cursor.execute("""
+            UPDATE processos_procedimentos 
+            SET responsavel_id = ?, responsavel_tipo = ?, historico_encarregados = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (novo_encarregado_id, 'encarregado', historico_json, processo_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {"sucesso": True, "mensagem": "Encarregado substituído com sucesso!"}
+        
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao substituir encarregado: {str(e)}"}
+
+@eel.expose
+def obter_historico_encarregados(processo_id):
+    """Obtém o histórico de encarregados de um processo"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT historico_encarregados 
+            FROM processos_procedimentos 
+            WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return {"sucesso": False, "mensagem": "Processo não encontrado!"}
+        
+        historico_encarregados = row[0]
+        
+        if not historico_encarregados:
+            return {"sucesso": True, "historico": []}
+        
+        import json
+        try:
+            historico = json.loads(historico_encarregados)
+            return {"sucesso": True, "historico": historico}
+        except Exception as e:
+            return {"sucesso": False, "mensagem": f"Erro ao decodificar histórico: {str(e)}"}
+            
+    except Exception as e:
+        return {"sucesso": False, "mensagem": f"Erro ao obter histórico de encarregados: {str(e)}"}
 
 @eel.expose
 def obter_processo(processo_id):
