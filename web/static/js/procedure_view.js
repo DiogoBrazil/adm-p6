@@ -271,28 +271,40 @@ async function loadEncarregados(procedureId) {
         const container = document.getElementById('encarregadosContainer');
         const data = await eel.obter_encarregados_procedimento(procedureId)();
         
+        let encarregadosHtml = '';
+        
         if (data.sucesso && data.encarregados.length > 0) {
-            container.innerHTML = data.encarregados.map(encarregado => `
-                <div class="info-section">
+            encarregadosHtml = `
+                <div class="encarregados-atuais">
                     <h4>
                         <i class="fas fa-user-shield"></i>
-                        ${encarregado.tipo_encarregado}
+                        Encarregado(s) Atual(is)
                     </h4>
-                    <ul class="info-list">
-                        <li>
-                            <i class="fas fa-user"></i>
-                            <strong>${encarregado.posto_graduacao || ''} ${encarregado.nome}</strong>
-                        </li>
-                        <li>
-                            <i class="fas fa-id-badge"></i>
-                            Matrícula: ${encarregado.matricula || 'Não informada'}
-                        </li>
-                    </ul>
+                    <div class="encarregados-lista">
+                        ${data.encarregados.map(encarregado => `
+                            <div class="encarregado-item">
+                                <div class="encarregado-info">
+                                    <span class="encarregado-nome">
+                                        <strong>${encarregado.posto_graduacao || ''} ${encarregado.nome}</strong>
+                                    </span>
+                                    <span class="encarregado-matricula">
+                                        <i class="fas fa-id-badge"></i>
+                                        ${encarregado.matricula || 'Não informada'}
+                                    </span>
+                                    <span class="encarregado-tipo">
+                                        ${encarregado.tipo_encarregado}
+                                    </span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
-            `).join('');
+            `;
         } else {
-            container.innerHTML = '<p class="empty-state">Nenhum encarregado cadastrado</p>';
+            encarregadosHtml = '<p class="empty-state">Nenhum encarregado cadastrado</p>';
         }
+        
+        container.innerHTML = encarregadosHtml;
         
         // Carregar histórico de encarregados após carregar os encarregados atuais
         await loadHistoricoEncarregados(procedureId);
@@ -310,46 +322,40 @@ async function loadHistoricoEncarregados(procedureId) {
         if (data.sucesso && data.historico && data.historico.length > 0) {
             const container = document.getElementById('encarregadosContainer');
             const historicoHtml = `
-                <div class="info-section historico-encarregados">
+                <div class="historico-encarregados">
                     <h4>
                         <i class="fas fa-history"></i>
-                        Histórico de Substituições de Encarregado
+                        Histórico de Substituições
                     </h4>
-                    <ul class="info-list historico-list">
+                    <div class="historico-lista">
                         ${data.historico.map(registro => `
-                            <li class="historico-item">
-                                <div class="historico-header">
-                                    <span class="historico-data">
-                                        <i class="fas fa-calendar"></i>
-                                        ${formatDate(registro.data_substituicao)}
-                                    </span>
-                                    ${registro.justificativa ? `
-                                        <span class="historico-justificativa" title="${registro.justificativa}">
-                                            <i class="fas fa-comment-alt"></i>
-                                            Justificativa: ${registro.justificativa}
-                                        </span>
-                                    ` : ''}
+                            <div class="historico-item">
+                                <div class="historico-data">
+                                    <i class="fas fa-calendar-day"></i>
+                                    ${formatDate(registro.data_substituicao)}
                                 </div>
-                                <div class="historico-nomes">
-                                    <span class="encarregado-anterior">
-                                        <i class="fas fa-arrow-left"></i>
-                                        ${registro.encarregado_anterior.posto_graduacao || ''} 
-                                        ${registro.encarregado_anterior.matricula || ''} 
-                                        ${registro.encarregado_anterior.nome || ''}
-                                    </span>
-                                    <span class="seta-substituicao">
+                                <div class="historico-substituicao">
+                                    <div class="encarregado-anterior">
+                                        <span class="encarregado-nome">${registro.encarregado_anterior.posto_graduacao || ''} ${registro.encarregado_anterior.nome || ''}</span>
+                                        <span class="encarregado-matricula">${registro.encarregado_anterior.matricula || ''}</span>
+                                    </div>
+                                    <div class="seta-substituicao">
                                         <i class="fas fa-arrow-right"></i>
-                                    </span>
-                                    <span class="novo-encarregado">
-                                        ${registro.novo_encarregado.posto_graduacao || ''} 
-                                        ${registro.novo_encarregado.matricula || ''} 
-                                        ${registro.novo_encarregado.nome || ''}
-                                        <i class="fas fa-arrow-right"></i>
-                                    </span>
+                                    </div>
+                                    <div class="novo-encarregado">
+                                        <span class="encarregado-nome">${registro.novo_encarregado.posto_graduacao || ''} ${registro.novo_encarregado.nome || ''}</span>
+                                        <span class="encarregado-matricula">${registro.novo_encarregado.matricula || ''}</span>
+                                    </div>
                                 </div>
-                            </li>
+                                ${registro.justificativa ? `
+                                    <div class="historico-justificativa">
+                                        <i class="fas fa-comment-dots"></i>
+                                        ${registro.justificativa}
+                                    </div>
+                                ` : ''}
+                            </div>
                         `).join('')}
-                    </ul>
+                    </div>
                 </div>
             `;
             
@@ -362,65 +368,7 @@ async function loadHistoricoEncarregados(procedureId) {
     }
 }
 
-// Função para carregar histórico de encarregados
-async function loadHistoricoEncarregados(procedureId) {
-    try {
-        const data = await eel.obter_historico_encarregados(procedureId)();
-        
-        if (data.sucesso && data.historico && data.historico.length > 0) {
-            const container = document.getElementById('encarregadosContainer');
-            const historicoHtml = `
-                <div class="info-section historico-encarregados">
-                    <h4>
-                        <i class="fas fa-history"></i>
-                        Histórico de Encarregados
-                    </h4>
-                    <ul class="info-list historico-list">
-                        ${data.historico.map(registro => `
-                            <li class="historico-item">
-                                <div class="historico-header">
-                                    <span class="historico-data">
-                                        <i class="fas fa-calendar"></i>
-                                        ${formatDate(registro.data_substituicao)}
-                                    </span>
-                                    ${registro.justificativa ? `
-                                        <span class="historico-justificativa" title="${registro.justificativa}">
-                                            <i class="fas fa-comment-alt"></i>
-                                            Justificativa: ${registro.justificativa}
-                                        </span>
-                                    ` : ''}
-                                </div>
-                                <div class="historico-nomes">
-                                    <span class="encarregado-anterior">
-                                        <i class="fas fa-arrow-left"></i>
-                                        ${registro.encarregado_anterior.posto_graduacao || ''} 
-                                        ${registro.encarregado_anterior.matricula || ''} 
-                                        ${registro.encarregado_anterior.nome || ''}
-                                    </span>
-                                    <span class="seta-substituicao">
-                                        <i class="fas fa-arrow-right"></i>
-                                    </span>
-                                    <span class="novo-encarregado">
-                                        ${registro.novo_encarregado.posto_graduacao || ''} 
-                                        ${registro.novo_encarregado.matricula || ''} 
-                                        ${registro.novo_encarregado.nome || ''}
-                                        <i class="fas fa-arrow-right"></i>
-                                    </span>
-                                </div>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            `;
-            
-            // Adicionar histórico ao final do container
-            container.innerHTML += historicoHtml;
-        }
-    } catch (error) {
-        console.error('Erro ao carregar histórico de encarregados:', error);
-        // Não mostrar erro pois é opcional
-    }
-}
+
 
 // Função para carregar envolvidos
 async function loadEnvolvidos(procedureId) {

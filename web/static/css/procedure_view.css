@@ -226,6 +226,13 @@
     padding: 25px;
 }
 
+/* Estilos específicos para o card de encarregados */
+#encarregadosContainer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 /* Tabela de informações do procedimento */
 .procedure-info-table {
     width: 100%;

@@ -1,0 +1,464 @@
+/* ========================================
+   HISTÓRICO DE SUBSTITUIÇÃO DE ENCARREGADOS
+   ======================================== */
+
+.encarregados-atuais {
+    margin-bottom: 25px;
+}
+
+.encarregados-atuais h4 {
+    color: #495057;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.encarregados-atuais h4 i {
+    color: #0d6efd;
+    background: rgba(13, 110, 253, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.encarregados-lista {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.encarregado-item {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 15px;
+    flex: 1;
+    min-width: 250px;
+    transition: all 0.3s ease;
+}
+
+.encarregado-item:hover {
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.encarregado-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.encarregado-nome strong {
+    color: #212529;
+    font-size: 1rem;
+}
+
+.encarregado-matricula {
+    font-size: 0.85rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.encarregado-matricula i {
+    font-size: 0.8rem;
+}
+
+.encarregado-tipo {
+    font-size: 0.8rem;
+    color: #0d6efd;
+    background: rgba(13, 110, 253, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+    display: inline-block;
+    width: fit-content;
+    font-weight: 500;
+}
+
+.historico-encarregados {
+    margin-top: 25px;
+    border-top: 1px solid #e9ecef;
+    padding-top: 20px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.historico-encarregados h4 {
+    color: #495057;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.historico-encarregados h4 i {
+    color: #6f42c1;
+    background: rgba(111, 66, 193, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.historico-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.historico-item {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    position: relative;
+}
+
+.historico-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 3px;
+    background: linear-gradient(to bottom, #6f42c1, #e83e8c);
+    border-radius: 10px 0 0 10px;
+}
+
+.historico-item:hover {
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.historico-data {
+    font-size: 0.9rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.historico-data i {
+    color: #6f42c1;
+    font-size: 0.9rem;
+}
+
+.historico-substituicao {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.encarregado-anterior,
+.novo-encarregado {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 150px;
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.encarregado-anterior {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.novo-encarregado {
+    background: #e7f1ff;
+    border: 1px solid #d0e0ff;
+}
+
+.encarregado-nome {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #212529;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.encarregado-anterior .encarregado-nome {
+    color: #6c757d;
+}
+
+.novo-encarregado .encarregado-nome {
+    color: #0d6efd;
+}
+
+.encarregado-matricula {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.seta-substituicao {
+    color: #6f42c1;
+    font-size: 1rem;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
+
+.historico-justificativa {
+    font-size: 0.85rem;
+    color: #495057;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: #e7f5ff;
+    padding: 10px;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
+.historico-justificativa i {
+    color: #6f42c1;
+    font-size: 0.9rem;
+    margin-top: 2px;
+}
+
+/* Responsividade para histórico de encarregados */
+@media (max-width: 992px) {
+    .encarregados-lista {
+        flex-direction: column;
+    }
+    
+    .encarregado-item {
+        min-width: 100%;
+    }
+    
+    .historico-encarregados {
+        margin-top: 20px;
+        padding-top: 20px;
+    }
+    
+    .historico-encarregados h4 {
+        font-size: 1.1rem;
+        gap: 8px;
+    }
+    
+    .historico-encarregados h4 i {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+    
+    .historico-substituicao {
+        gap: 10px;
+    }
+    
+    .encarregado-anterior,
+    .novo-encarregado {
+        min-width: 120px;
+        padding: 8px;
+    }
+    
+    .encarregado-nome {
+        font-size: 0.9rem;
+    }
+    
+    .seta-substituicao {
+        font-size: 0.9rem;
+        width: 28px;
+        height: 28px;
+    }
+}
+
+@media (max-width: 768px) {
+    .encarregados-atuais h4 {
+        font-size: 1.1rem;
+        gap: 8px;
+    }
+    
+    .encarregados-atuais h4 i {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+    
+    .encarregado-item {
+        padding: 12px;
+    }
+    
+    .historico-encarregados h4 {
+        font-size: 1.1rem;
+    }
+    
+    .historico-item {
+        padding: 12px;
+    }
+    
+    .historico-data {
+        font-size: 0.85rem;
+        gap: 6px;
+        margin-bottom: 10px;
+    }
+    
+    .historico-substituicao {
+        gap: 8px;
+    }
+    
+    .encarregado-anterior,
+    .novo-encarregado {
+        padding: 8px;
+        min-width: 100px;
+    }
+    
+    .encarregado-nome {
+        font-size: 0.85rem;
+    }
+    
+    .encarregado-matricula {
+        font-size: 0.75rem;
+    }
+    
+    .seta-substituicao {
+        font-size: 0.8rem;
+        width: 24px;
+        height: 24px;
+    }
+    
+    .historico-justificativa {
+        font-size: 0.8rem;
+        gap: 6px;
+        padding: 8px;
+    }
+    
+    .historico-justificativa i {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .encarregados-atuais {
+        margin-bottom: 20px;
+    }
+    
+    .encarregados-atuais h4 {
+        font-size: 1rem;
+        gap: 6px;
+    }
+    
+    .encarregados-atuais h4 i {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+    
+    .encarregado-item {
+        padding: 10px;
+    }
+    
+    .encarregado-info {
+        gap: 6px;
+    }
+    
+    .encarregado-nome strong {
+        font-size: 0.9rem;
+    }
+    
+    .encarregado-matricula {
+        font-size: 0.7rem;
+        gap: 4px;
+    }
+    
+    .encarregado-tipo {
+        font-size: 0.7rem;
+        padding: 3px 6px;
+    }
+    
+    .historico-encarregados {
+        margin-top: 15px;
+        padding-top: 15px;
+    }
+    
+    .historico-encarregados h4 {
+        font-size: 1rem;
+        gap: 6px;
+    }
+    
+    .historico-encarregados h4 i {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+    
+    .historico-item {
+        padding: 10px;
+    }
+    
+    .historico-data {
+        font-size: 0.8rem;
+        gap: 5px;
+        margin-bottom: 8px;
+    }
+    
+    .historico-substituicao {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .encarregado-anterior,
+    .novo-encarregado {
+        min-width: 100%;
+        padding: 8px;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .encarregado-anterior .encarregado-info,
+    .novo-encarregado .encarregado-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .seta-substituicao {
+        transform: rotate(90deg);
+        align-self: center;
+        font-size: 0.8rem;
+        width: 24px;
+        height: 24px;
+    }
+    
+    .historico-justificativa {
+        font-size: 0.75rem;
+        gap: 5px;
+        padding: 6px;
+    }
+}
+
+/* Animações */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
