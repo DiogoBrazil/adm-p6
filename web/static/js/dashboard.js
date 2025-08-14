@@ -291,11 +291,10 @@ function criarCardsProcessos(andamento, concluidos, totalProcessos) {
         if (tipo === 'TOTAL') return; // Pular o total
         
         const config = tiposConfig[tipo] || tiposConfig['OUTROS'];
-        const cor = coresCss[config.cor];
         
         const card = document.createElement('div');
         card.className = 'stat-card';
-        card.style.borderLeft = `4px solid ${cor}`;
+        card.setAttribute('data-type', config.cor);
         card.style.opacity = '0';
         card.style.transform = 'translateY(20px)';
         card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
@@ -306,7 +305,7 @@ function criarCardsProcessos(andamento, concluidos, totalProcessos) {
         }
         
         card.innerHTML = `
-            <div class="stat-icon" style="background: linear-gradient(135deg, ${cor}, ${cor}dd);">
+            <div class="stat-icon">
                 <i class="${config.icon}"></i>
             </div>
             <div class="stat-content">
@@ -532,8 +531,16 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
+            const href = this.getAttribute('href');
+            
+            // Se href é apenas "#", previne o comportamento padrão mas não tenta fazer scroll
+            if (href === '#') {
+                e.preventDefault();
+                return;
+            }
+            
             e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
+            const target = document.querySelector(href);
             if (target) {
                 target.scrollIntoView({
                     behavior: 'smooth',

@@ -5,171 +5,151 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Início - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
     <link rel="stylesheet" href="static/css/theme.css">
-    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/dashboard_layout.css">
+    <link rel="stylesheet" href="static/css/pro-sidebar.css">
 </head>
 <body>
-    <header class="header">
-        <div class="header-content">
-            <div class="header-left">
-                <button class="menu-toggle" id="menuToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="logo-dashboard">
-                    <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
-                    <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
-                </div>
-            </div>
-            
-            <div class="user-info">
-                <div class="user-profile">
-                    <div class="user-avatar">
-                        <i class="fas fa-user-shield"></i>
-                    </div>
-                    <div class="user-details">
-                        <h3 id="userName">Carregando...</h3>
-                        <p id="userEmail">usuário</p>
-                    </div>
-                </div>
-                
-                <button class="btn-logout" onclick="realizarLogout()">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Sair
-                </button>
-            </div>
-        </div>
-    </header>
-
-    <!-- Layout com Sidebar -->
     <div class="app-layout">
-        <!-- Menu Lateral -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    <i class="fas fa-shield-alt"></i>
-                    <span>Sistema de Gestão</span>
+        <aside id="sidebar" class="sidebar break-point-sm has-bg-image">
+            <a id="btn-collapse" class="sidebar-collapser"><i class="ri-arrow-left-s-line"></i></a>
+            <div class="image-wrapper">
+                <img src="static/images/sidebar-bg.jpg" alt="sidebar background" />
+            </div>
+            <div class="sidebar-layout">
+                <div class="sidebar-header">
+                    <!-- Header removido conforme solicitado -->
+                </div>
+                <div class="sidebar-content">
+                    <nav class="menu open-current-submenu">
+                        <ul>
+                            <li class="menu-item">
+                                <a href="user_list.html">
+                                    <span class="menu-icon">
+                                        <i class="ri-user-fill"></i>
+                                    </span>
+                                    <span class="menu-title">Usuários</span>
+                                </a>
+                            </li>
+                            <li class="menu-item">
+                                <a href="procedure_list.html">
+                                    <span class="menu-icon">
+                                        <i class="ri-folder-open-fill"></i>
+                                    </span>
+                                    <span class="menu-title">Processos/Procedimentos</span>
+                                </a>
+                            </li>
+                            <li class="menu-item sub-menu">
+                                <a href="#">
+                                    <span class="menu-icon">
+                                        <i class="ri-bar-chart-2-fill"></i>
+                                    </span>
+                                    <span class="menu-title">Estatísticas</span>
+                                </a>
+                                <div class="sub-menu-list">
+                                    <ul>
+                                        <li class="menu-item">
+                                            <a href="estatisticas_encarregados.html">
+                                                <span class="menu-title">Feitos por Encarregado</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                            <li class="menu-item sub-menu">
+                                <a href="#">
+                                    <span class="menu-icon">
+                                        <i class="ri-scales-3-fill"></i>
+                                    </span>
+                                    <span class="menu-title">Base Legal</span>
+                                </a>
+                                <div class="sub-menu-list">
+                                    <ul>
+                                        <li class="menu-item">
+                                            <a href="crime_list.html">
+                                                <span class="menu-title">Crimes e Contravenções</span>
+                                            </a>
+                                        </li>
+                                        <li class="menu-item">
+                                            <a href="transgressao_list.html">
+                                                <span class="menu-title">Transgressões</span>
+                                            </a>
+                                        </li>
+                                        <li class="menu-item">
+                                            <a href="estatuto_art29.html">
+                                                <span class="menu-title">Art. 29 - Estatuto</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+                    </nav>
                 </div>
             </div>
-            
-            <nav class="sidebar-nav">
-                <div class="nav-section">
-                    <h3 class="nav-section-title">Principal</h3>
-                    <ul class="nav-list">
-                        <li class="nav-item active">
-                            <a href="dashboard.html" class="nav-link">
-                                <i class="fas fa-home"></i>
-                                <span>Início</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <h3 class="nav-section-title">Administração</h3>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="user_list.html" class="nav-link">
-                                <i class="fas fa-users"></i>
-                                <span>Usuários</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <h3 class="nav-section-title">Processos</h3>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="procedure_list.html" class="nav-link">
-                                <i class="fas fa-folder-open"></i>
-                                <span>Processos/Procedimentos</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <h3 class="nav-section-title">Estatísticas</h3>
-                    <ul class="nav-list">
-                        <li class="nav-item has-submenu">
-                            <a href="#" class="nav-link submenu-toggle">
-                                <i class="fas fa-chart-bar"></i>
-                                <span>Relatórios</span>
-                                <i class="fas fa-chevron-down submenu-arrow"></i>
-                            </a>
-                            <ul class="submenu">
-                                <li class="nav-item">
-                                    <a href="estatisticas_encarregados.html" class="nav-link">
-                                        <i class="fas fa-user-tie"></i>
-                                        <span>Feitos por Encarregado</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-
-                <div class="nav-section">
-                    <h3 class="nav-section-title">Base Legal</h3>
-                    <ul class="nav-list">
-                        <li class="nav-item has-submenu">
-                            <a href="#" class="nav-link submenu-toggle">
-                                <i class="fas fa-balance-scale"></i>
-                                <span>Base Legal</span>
-                                <i class="fas fa-chevron-down submenu-arrow"></i>
-                            </a>
-                            <ul class="submenu">
-                                <li class="nav-item">
-                                    <a href="crime_list.html" class="nav-link">
-                                        <i class="fas fa-gavel"></i>
-                                        <span>Crimes e Contravenções</span>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="transgressao_list.html" class="nav-link">
-                                        <i class="fas fa-exclamation-triangle"></i>
-                                        <span>Transgressões</span>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="estatuto_art29.html" class="nav-link">
-                                        <i class="fas fa-balance-scale"></i>
-                                        <span>Art. 29 - Estatuto</span>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
         </aside>
-
-        <!-- Conteúdo Principal -->
-        <main class="main-content">
-            <div id="alertContainer"></div>
-            
-            <div class="welcome-section">
-                <div class="welcome-header">
-                    <h1>Bem-vindo ao Sistema de Gestão</h1>
-                    <p>Seção de Justiça e Disciplina - 7º BPM</p>
-                </div>
-                
-                <div class="procedures-section">
-                    <h2 class="section-title">Processos e Procedimentos em Andamento</h2>
-                    <div class="stats-grid" id="statsGrid">
-                        <!-- Cards de processos em andamento serão inseridos aqui dinamicamente -->
+        <div class="main-content">
+            <header class="header">
+                <a id="btn-toggle" href="#" class="sidebar-toggler break-point-sm">
+                    <i class="ri-menu-line ri-xl"></i>
+                </a>
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="logo-dashboard">
+                            <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                            <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+                        </div>
+                    </div>
+                    
+                    <div class="user-info">
+                        <div class="user-profile">
+                            <div class="user-avatar">
+                                <i class="fas fa-user-shield"></i>
+                            </div>
+                            <div class="user-details">
+                                <h3 id="userName">Carregando...</h3>
+                                <p id="userEmail">usuário</p>
+                            </div>
+                        </div>
+                        
+                        <button class="btn-logout" onclick="realizarLogout()">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Sair
+                        </button>
                     </div>
                 </div>
-            </div>
-        </main>
+            </header>
+            <main class="content">
+                <div id="alertContainer"></div>
+                
+                <div class="welcome-section">
+                    <div class="welcome-header">
+                        <h1>Bem-vindo ao Sistema de Gestão</h1>
+                        <p>Seção de Justiça e Disciplina - 7º BPM</p>
+                    </div>
+                    
+                    <div class="procedures-section">
+                        <h2 class="section-title">Processos e Procedimentos em Andamento</h2>
+                        <div class="stats-grid" id="statsGrid">
+                            <!-- Cards de processos em andamento serão inseridos aqui dinamicamente -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
     </div>
 
     <!-- Loader global (sobreposição) para transições como logout -->
     <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
         <div class="spinner"></div>
     </div>
+    
+    <!-- Overlay para sidebar mobile -->
+    <div id="overlay" class="sidebar-overlay"></div>
 
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="static/js/dashboard.js"></script>
+    <script src="static/js/pro-sidebar.js"></script>
 </body>
 </html>
