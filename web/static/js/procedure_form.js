@@ -57,8 +57,8 @@ function preencherDropdownMunicipios() {
         dropdown.appendChild(option);
     });
 
-    // Exibir dropdown quando opções carregarem
-    dropdown.style.display = 'block';
+    // Não exibir dropdown automaticamente - só quando o usuário clicar/focar
+    // dropdown.style.display = 'block';
 }
 
 function selecionarMunicipio(nomeMunicipio) {
@@ -132,8 +132,9 @@ function filtrarMunicipios() {
     // Mostrar dropdown se houver texto e opções visíveis
     if (searchTerm && visibleCount > 0) {
         dropdown.style.display = 'block';
-    } else if (!searchTerm) {
-        dropdown.style.display = 'block'; // Mostrar todas quando vazio
+    } else if (!searchTerm && dropdown.style.display === 'block') {
+        // Só mostrar todas quando o dropdown já estiver visível (usuário clicou/focou)
+        dropdown.style.display = 'block';
     } else {
         dropdown.style.display = 'none'; // Ocultar se não houver resultados
     }
