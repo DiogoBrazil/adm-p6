@@ -1,6 +1,18 @@
-
 // Variável para usuário logado
 let usuarioLogado = null;
+
+console.log('🚀 Script user_form.js carregado!'); // Debug inicial
+
+// Mapas de postos/graduações
+const postosOficial = [
+    'CEL PM', 'TC PM', 'MAJ PM', 'CAP PM', 
+    '1º TEN PM', '2º TEN PM', 'ASP OF PM'
+];
+
+const graduacoesPraca = [
+    'ST PM', '1º SGT PM', '2º SGT PM', 
+    '3º SGT PM', 'CB PM', 'SD PM'
+];
 
 // Função para carregar dados do usuário logado
 async function carregarUsuarioLogado() {
@@ -26,301 +38,346 @@ async function carregarUsuarioLogado() {
     }
 }
 
-// Função para mostrar modal de confirmação
-function showConfirmModal(title, message, onConfirm) {
-    // Criar modal se não existir
-    let modal = document.getElementById('confirmModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'confirmModal';
-        modal.className = 'modal-feedback';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <i id="confirmIcon" class="fas fa-exclamation-triangle" style="color: #ff6b6b;"></i>
-                <h3 id="confirmTitle" style="margin-bottom: 15px; color: #333;"></h3>
-                <p id="confirmMessage" style="margin-bottom: 25px; color: #666;"></p>
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button id="confirmCancel" class="btn-secondary" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 8px; cursor: pointer;">Cancelar</button>
-                    <button id="confirmOk" class="btn-danger" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer;">Confirmar</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
+// Função para atualizar o select de posto/graduação baseado no tipo
+function atualizarPostoGraduacao() {
+    const tipoUsuario = document.getElementById('tipo_usuario').value;
+    const postoGraduacaoSelect = document.getElementById('posto_graduacao');
+    const label = document.getElementById('label_posto_graduacao');
+    
+    console.log('Tipo usuário selecionado:', tipoUsuario); // Debug
+    
+    // Limpar opções
+    postoGraduacaoSelect.innerHTML = '<option value="">Selecione...</option>';
+    
+    if (tipoUsuario === 'Oficial') {
+        label.textContent = 'Selecione o Posto';
+        postosOficial.forEach(posto => {
+            const option = document.createElement('option');
+            option.value = posto;
+            option.textContent = posto;
+            postoGraduacaoSelect.appendChild(option);
+        });
+        console.log('Postos carregados para Oficial'); // Debug
+    } else if (tipoUsuario === 'Praça') {
+        label.textContent = 'Selecione a Graduação';
+        graduacoesPraca.forEach(graduacao => {
+            const option = document.createElement('option');
+            option.value = graduacao;
+            option.textContent = graduacao;
+            postoGraduacaoSelect.appendChild(option);
+        });
+        console.log('Graduações carregadas para Praça'); // Debug
+    } else {
+        label.textContent = 'Posto/Graduação';
+        postoGraduacaoSelect.innerHTML = '<option value="">Primeiro selecione o tipo de usuário</option>';
+        console.log('Nenhum tipo selecionado'); // Debug
     }
+}
 
-    // Atualizar conteúdo do modal
-    document.getElementById('confirmTitle').textContent = title;
-    document.getElementById('confirmMessage').textContent = message;
+// Função para validar matrícula
+function validarMatricula(matricula) {
+    // Remove espaços e caracteres não numéricos
+    const numeroLimpo = matricula.replace(/\D/g, '');
     
-    // Mostrar modal
-    modal.style.display = 'flex';
+    // Verifica se tem exatamente 9 dígitos
+    if (numeroLimpo.length === 0) {
+        return {
+            valido: false,
+            mensagem: 'A matrícula é obrigatória.'
+        };
+    }
     
-    // Event listeners
-    const cancelBtn = document.getElementById('confirmCancel');
-    const okBtn = document.getElementById('confirmOk');
+    if (numeroLimpo.length < 9) {
+        return {
+            valido: false,
+            mensagem: `A matrícula deve ter exatamente 9 dígitos. Você digitou apenas ${numeroLimpo.length} dígitos.`
+        };
+    }
     
-    const closeModal = () => {
-        modal.style.display = 'none';
+    if (numeroLimpo.length > 9) {
+        return {
+            valido: false,
+            mensagem: 'A matrícula deve ter exatamente 9 dígitos. Limite excedido.'
+        };
+    }
+    
+    // Verifica se os primeiros 4 dígitos são "1000"
+    if (!numeroLimpo.startsWith('1000')) {
+        return {
+            valido: false,
+            mensagem: `A matrícula deve começar com "1000". Você digitou "${numeroLimpo.substring(0, 4)}".`
+        };
+    }
+    
+    return {
+        valido: true,
+        matricula: numeroLimpo
     };
-    
-    // Remover listeners anteriores
-    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-    okBtn.replaceWith(okBtn.cloneNode(true));
-    
-    // Novos listeners
-    document.getElementById('confirmCancel').addEventListener('click', closeModal);
-    document.getElementById('confirmOk').addEventListener('click', () => {
-        closeModal();
-        onConfirm();
-    });
-    
-    // Fechar ao clicar fora do modal
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
 }
 
-// Função de logout
-async function realizarLogout() {
-    showConfirmModal(
-        'Confirmar Logout',
-        'Tem certeza que deseja sair do sistema?',
-        async () => {
-            try {
-                await eel.fazer_logout()();
-                showAlert('Logout realizado com sucesso! Redirecionando...', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 1000);
-            } catch (error) {
-                console.error('Erro no logout:', error);
-                showAlert('Erro ao fazer logout!', 'error');
+// Função para configurar validações de campos
+function configurarValidacoesCampos() {
+    const nomeField = document.getElementById('nome');
+    const matriculaField = document.getElementById('matricula');
+    
+    // Validação do nome - sempre maiúsculo
+    if (nomeField) {
+        nomeField.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        
+        // Garantir que inicie maiúsculo
+        nomeField.addEventListener('blur', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        
+        console.log('Validação de maiúsculo configurada para o nome'); // Debug
+    }
+    
+    // Validação da matrícula - apenas números e formato correto
+    if (matriculaField) {
+        // Permitir apenas números
+        matriculaField.addEventListener('input', (e) => {
+            // Remove caracteres não numéricos
+            let valor = e.target.value.replace(/\D/g, '');
+            
+            // Limita a 9 dígitos
+            if (valor.length > 9) {
+                valor = valor.substring(0, 9);
             }
-        }
-    );
+            
+            e.target.value = valor;
+            
+            // Feedback visual em tempo real
+            if (valor.length > 0) {
+                if (valor.length < 4) {
+                    e.target.style.borderColor = '#ffc107'; // Amarelo - ainda digitando
+                } else if (!valor.startsWith('1000')) {
+                    e.target.style.borderColor = '#dc3545'; // Vermelho - erro
+                } else if (valor.length === 9) {
+                    e.target.style.borderColor = '#28a745'; // Verde - correto
+                } else {
+                    e.target.style.borderColor = '#ffc107'; // Amarelo - ainda digitando
+                }
+            } else {
+                e.target.style.borderColor = ''; // Reset
+            }
+        });
+        
+        // Validação completa ao sair do campo
+        matriculaField.addEventListener('blur', (e) => {
+            const valor = e.target.value;
+            if (valor) {
+                const validacao = validarMatricula(valor);
+                if (!validacao.valido) {
+                    showAlert(validacao.mensagem, 'error');
+                    e.target.style.borderColor = '#dc3545';
+                    // Não remove o foco automaticamente, deixa o usuário decidir
+                } else {
+                    e.target.value = validacao.matricula;
+                    e.target.style.borderColor = '#28a745';
+                }
+            } else {
+                e.target.style.borderColor = '';
+            }
+        });
+        
+        console.log('Validação de matrícula configurada'); // Debug
+    }
 }
 
-// Função para voltar à página de listagem
-function voltarParaListagem() {
-    window.location.href = 'user_list.html';
+// Função para controlar visibilidade dos campos de operador
+function toggleOperatorFields() {
+    const isOperadorChecked = document.getElementById('is_operador').checked;
+    const operatorFields = document.getElementById('operatorFields');
+    const emailField = document.getElementById('email');
+    const senhaField = document.getElementById('senha');
+    const perfilField = document.getElementById('perfil');
+    
+    console.log('Operador checkbox:', isOperadorChecked); // Debug
+    
+    if (isOperadorChecked) {
+        operatorFields.style.display = 'block';
+        emailField.setAttribute('required', 'required');
+        senhaField.setAttribute('required', 'required');
+        perfilField.setAttribute('required', 'required');
+        console.log('Campos de operador exibidos e marcados como obrigatórios'); // Debug
+    } else {
+        operatorFields.style.display = 'none';
+        emailField.removeAttribute('required');
+        senhaField.removeAttribute('required');
+        perfilField.removeAttribute('required');
+        // Limpar valores
+        emailField.value = '';
+        senhaField.value = '';
+        perfilField.value = '';
+        console.log('Campos de operador ocultos e não obrigatórios'); // Debug
+    }
 }
 
 // Função para mostrar alertas
-function showAlert(message, type = 'error') {
-    showModalFeedback(message, type);
-}
-
-function showModalFeedback(message, type = 'error') {
+function showAlert(message, type = 'info') {
     const modal = document.getElementById('modalFeedback');
     const icon = document.getElementById('modalIcon');
-    const msg = document.getElementById('modalMessage');
-    const btn = document.getElementById('modalCloseBtn');
+    const messageEl = document.getElementById('modalMessage');
+    
+    messageEl.textContent = message;
+    
+    // Definir ícone baseado no tipo
     if (type === 'success') {
-        icon.innerHTML = '<i class="fas fa-check-circle" style="color:#38c172;"></i>';
+        icon.className = 'fas fa-check-circle';
+        icon.style.color = '#28a745';
+    } else if (type === 'error') {
+        icon.className = 'fas fa-exclamation-circle';
+        icon.style.color = '#dc3545';
     } else {
-        icon.innerHTML = '<i class="fas fa-exclamation-triangle" style="color:#e3342f;"></i>';
+        icon.className = 'fas fa-info-circle';
+        icon.style.color = '#17a2b8';
     }
-    msg.textContent = message;
+    
     modal.style.display = 'flex';
-    btn.onclick = () => {
-        modal.style.display = 'none';
-    };
-    // Fecha automaticamente após 2.5s se sucesso e vai para listagem
-    if (type === 'success') {
-        setTimeout(() => {
-            modal.style.display = 'none';
-        }, 1200);
-    }
-}
-
-// Função para cadastrar ou atualizar usuário
-async function submitUser(tipo_usuario, posto_graduacao, matricula, nome, email, senha, profile, modoEdicao, userId) {
-    try {
-        let result;
-        if (modoEdicao) {
-            // Atualizar usuário
-            result = await eel.atualizar_usuario(userId, tipo_usuario, posto_graduacao, matricula, nome, email, senha, profile)();
-        } else {
-            // Cadastrar novo usuário
-            result = await eel.cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, senha, profile)();
-        }
-        if (result.sucesso) {
-            showAlert(result.mensagem, 'success');
-            // Redireciona para listagem tanto no cadastro quanto na edição após sucesso
-            setTimeout(() => {
-                window.location.href = 'user_list.html';
-            }, 1200); // Aguarda 1.2s para mostrar o alerta
-        } else {
-            showAlert(result.mensagem, 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao cadastrar/atualizar usuário:', error);
-        showAlert('Erro ao conectar com o servidor!', 'error');
-    }
 }
 
 // Event listeners
-// Detecta modo edição pelo parâmetro da URL
-function getUrlParams() {
-    const params = {};
-    window.location.search.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(m, key, value) {
-        params[key] = decodeURIComponent(value);
-    });
-    return params;
-}
-
-let modoEdicao = false;
-let userIdEdicao = null;
-let tipoUsuarioEdicao = null;
-
-// Função async para carregar dados de edição
-async function carregarDadosEdicao() {
-    const params = getUrlParams();
-    if (params.id && params.type) {
-        modoEdicao = true;
-        userIdEdicao = params.id;
-        tipoUsuarioEdicao = params.type;
-        
-        // Atualizar título e labels para modo edição
-        document.querySelector('.card-header h2').textContent = 'Editar Usuário';
-        
-        // Carregar dados do usuário para edição
-        const user = await eel.obter_usuario_por_id(userIdEdicao, tipoUsuarioEdicao)();
-        if (user) {
-            document.getElementById('tipo_usuario').value = user.tipo;
-            document.getElementById('posto_graduacao').value = user.posto_graduacao;
-            document.getElementById('matricula').value = user.matricula;
-            document.getElementById('nome').value = user.nome;
-            document.getElementById('email').value = user.email || '';
-            if (user.tipo === 'operador') {
-                document.getElementById('profile').value = user.profile;
-                // Atualizar placeholder e label da senha para modo edição
-                const senhaInput = document.getElementById('senha');
-                const senhaLabel = document.querySelector('label[for="senha"]');
-                senhaInput.placeholder = 'Deixe vazio para manter a senha atual';
-                senhaLabel.textContent = 'Senha (opcional)';
-            }
-            // Ajusta campos de acordo com tipo (após definir modo edição)
-            toggleOperatorFields();
-            // Muda texto do botão
-            document.getElementById('btnCadastrar').innerHTML = '<i class="fas fa-save"></i> Salvar Alterações';
-        }
-    }
-}
-
-// Lógica para mostrar/esconder campos de operador
-document.addEventListener('DOMContentLoaded', () => {
-    const tipoUsuarioSelect = document.getElementById('tipo_usuario');
-    const operatorFieldsDiv = document.getElementById('operatorFields');
-    const senhaInput = document.getElementById('senha');
-    const profileSelect = document.getElementById('profile');
-    const emailInput = document.getElementById('email');
-    const emailGroup = document.getElementById('emailGroup');
-
-    window.toggleOperatorFields = function() {
-        if (tipoUsuarioSelect.value === 'operador') {
-            operatorFieldsDiv.style.display = 'block';
-            // Senha só é obrigatória no cadastro, não na edição
-            if (!modoEdicao) {
-                senhaInput.setAttribute('required', 'required');
-            } else {
-                senhaInput.removeAttribute('required');
-            }
-            profileSelect.setAttribute('required', 'required');
-            emailInput.setAttribute('required', 'required');
-            emailGroup.style.display = 'block';
-        } else {
-            operatorFieldsDiv.style.display = 'none';
-            senhaInput.removeAttribute('required');
-            profileSelect.removeAttribute('required');
-            senhaInput.value = '';
-            profileSelect.value = '';
-            emailInput.removeAttribute('required');
-            emailInput.value = '';
-            emailGroup.style.display = 'none'; // Esconde campo email para encarregado
-        }
-    }
-
-    tipoUsuarioSelect.addEventListener('change', toggleOperatorFields);
-    
-    // Converter nome para maiúsculas automaticamente enquanto digita
-    const nomeInput = document.getElementById('nome');
-    nomeInput.addEventListener('input', function(e) {
-        const cursorPosition = e.target.selectionStart;
-        const value = e.target.value.toUpperCase();
-        e.target.value = value;
-        e.target.setSelectionRange(cursorPosition, cursorPosition);
-    });
-    
-    // Chamar no carregamento inicial para garantir o estado correto
-    toggleOperatorFields();
-    
-    // Carregar dados de edição se necessário
-    carregarDadosEdicao();
-});
-
-document.getElementById('userForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const tipo_usuario = document.getElementById('tipo_usuario').value;
-    const posto_graduacao = document.getElementById('posto_graduacao').value;
-    const matricula = document.getElementById('matricula').value.trim();
-    const nome = document.getElementById('nome').value.trim().toUpperCase();
-    const email = document.getElementById('email').value.trim();
-    let senha = null;
-    let profile = null;
-
-    // Validação matrícula
-    if (!/^1000\d{0,5}$/.test(matricula)) {
-        showAlert('A matrícula deve começar com 1000 e ter no máximo 9 dígitos!', 'error');
-        return;
-    }
-    if (matricula.length > 9) {
-        showAlert('A matrícula não pode ter mais que 9 dígitos!', 'error');
-        return;
-    }
-
-    if (tipo_usuario === 'operador') {
-        senha = document.getElementById('senha').value;
-        profile = document.getElementById('profile').value;
-        
-        // Validação de senha
-        if (modoEdicao) {
-            // No modo edição, senha é opcional - se fornecida, deve ter pelo menos 4 caracteres
-            if (senha && senha.trim() && senha.trim().length < 4) {
-                showAlert('Se informada, a senha deve ter pelo menos 4 caracteres!', 'error');
-                return;
-            }
-            // Se campo vazio, não altera a senha
-            senha = senha && senha.trim() ? senha.trim() : null;
-        } else {
-            // No cadastro, senha é obrigatória
-            if (!senha || senha.trim().length < 4) {
-                showAlert('Senha é obrigatória e deve ter pelo menos 4 caracteres para operadores!', 'error');
-                return;
-            }
-        }
-        
-        if (!profile) {
-            showAlert('Perfil é obrigatório para operadores!', 'error');
-            return;
-        }
-    }
-    if (!tipo_usuario || !posto_graduacao || !matricula || !nome) {
-        showAlert('Por favor, preencha todos os campos obrigatórios!', 'error');
-        return;
-    }
-    if (tipo_usuario === 'operador' && !email) {
-        showAlert('Email é obrigatório para operadores!', 'error');
-        return;
-    }
-    await submitUser(tipo_usuario, posto_graduacao, matricula, nome, email, senha, profile, modoEdicao, userIdEdicao);
-});
-
-// Inicialização da página
 document.addEventListener('DOMContentLoaded', async () => {
-    // Carrega dados do usuário logado primeiro
+    console.log('DOM carregado, iniciando configuração...'); // Debug
+    
+    // Carregar usuário logado
     await carregarUsuarioLogado();
+    
+    // Verificar se elementos existem
+    const tipoUsuarioSelect = document.getElementById('tipo_usuario');
+    const operadorCheckbox = document.getElementById('is_operador');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const userForm = document.getElementById('userForm');
+    
+    console.log('Elementos encontrados:', {
+        tipoUsuarioSelect: !!tipoUsuarioSelect,
+        operadorCheckbox: !!operadorCheckbox,
+        modalCloseBtn: !!modalCloseBtn,
+        userForm: !!userForm
+    }); // Debug
+    
+    // Configurar event listeners
+    if (tipoUsuarioSelect) {
+        tipoUsuarioSelect.addEventListener('change', atualizarPostoGraduacao);
+        console.log('Event listener adicionado ao tipo_usuario'); // Debug
+    }
+    
+    if (operadorCheckbox) {
+        operadorCheckbox.addEventListener('change', toggleOperatorFields);
+        console.log('Event listener adicionado ao is_operador'); // Debug
+    }
+    
+    // Garantir estado inicial correto dos campos de operador
+    toggleOperatorFields();
+    console.log('Estado inicial dos campos de operador configurado'); // Debug
+    
+    // Configurar validações de campos
+    configurarValidacoesCampos();
+    console.log('Validações de campos configuradas'); // Debug
+    
+    // Modal close
+    if (modalCloseBtn) {
+        modalCloseBtn.addEventListener('click', () => {
+            document.getElementById('modalFeedback').style.display = 'none';
+        });
+    }
+    
+    // Submit do formulário
+    if (userForm) {
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            console.log('Formulário submetido'); // Debug
+            
+            // Coletar dados do formulário
+            const formData = {
+                tipo_usuario: document.getElementById('tipo_usuario').value,
+                posto_graduacao: document.getElementById('posto_graduacao').value,
+                nome: document.getElementById('nome').value.trim(),
+                matricula: document.getElementById('matricula').value.trim(),
+                is_encarregado: document.getElementById('is_encarregado').checked,
+                is_operador: document.getElementById('is_operador').checked,
+                email: document.getElementById('email').value.trim() || null,
+                senha: document.getElementById('senha').value || null,
+                perfil: document.getElementById('perfil').value || null
+            };
+            
+            console.log('Dados do formulário:', formData); // Debug
+            
+            // Validações básicas
+            if (!formData.tipo_usuario || !formData.posto_graduacao || !formData.nome || !formData.matricula) {
+                showAlert('Todos os campos obrigatórios devem ser preenchidos!', 'error');
+                return;
+            }
+            
+            // Validar formato da matrícula
+            const validacaoMatricula = validarMatricula(formData.matricula);
+            if (!validacaoMatricula.valido) {
+                showAlert(validacaoMatricula.mensagem, 'error');
+                return;
+            }
+            
+            // Atualizar matrícula com formato correto
+            formData.matricula = validacaoMatricula.matricula;
+            
+            // Validar campos de operador se necessário
+            if (formData.is_operador) {
+                if (!formData.email || !formData.senha || !formData.perfil) {
+                    showAlert('Para operadores, email, senha e perfil são obrigatórios!', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const resultado = await eel.cadastrar_usuario(
+                    formData.tipo_usuario,
+                    formData.posto_graduacao,
+                    formData.nome,
+                    formData.matricula,
+                    formData.is_encarregado,
+                    formData.is_operador,
+                    formData.email,
+                    formData.senha,
+                    formData.perfil
+                )();
+                
+                if (resultado.sucesso) {
+                    showAlert('Usuário cadastrado com sucesso!', 'success');
+                    
+                    // Redirecionar para listagem após 1 segundo
+                    setTimeout(() => {
+                        document.getElementById('modalFeedback').style.display = 'none';
+                        window.location.href = 'user_list.html';
+                    }, 1000);
+                    
+                } else {
+                    showAlert(resultado.mensagem, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Erro ao cadastrar usuário:', error);
+                showAlert('Erro ao conectar com o servidor!', 'error');
+            }
+        });
+    }
+    
+    console.log('Configuração completa'); // Debug
 });
+
+// Função para logout
+async function realizarLogout() {
+    try {
+        await eel.fazer_logout()();
+        window.location.href = 'login.html';
+    } catch (error) {
+        console.error('Erro no logout:', error);
+        window.location.href = 'login.html';
+    }
+}
+
+// Função para voltar à listagem
+function voltarParaListagem() {
+    window.location.href = 'user_list.html';
+}

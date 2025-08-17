@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta                <div class="form-group">
+                    <label for="matricula">Matrícula</label>
+                    <input type="text" id="matricula" name="matricula" placeholder="Ex: 100012345 (9 dígitos, inicia com 1000)" maxlength="9" required>
+                </div>e="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cadastrar Usuário - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -10,7 +13,6 @@
     <link rel="stylesheet" href="static/css/users.css">
 </head>
 <body>
-    <script>console.log('📋 Body iniciando...');</script>
     <header class="header">
         <div class="header-content">
             <div class="logo-dashboard">
@@ -39,12 +41,24 @@
 
     <div class="main-container">
         <div id="alertContainer"></div>
+        
+        <div id="modalFeedback" class="modal-feedback" style="display:none;">
+            <div class="modal-content">
+                <span id="modalIcon"></span>
+                <span id="modalMessage"></span>
+                <button id="modalCloseBtn" class="btn-primary" style="margin-top:20px;">OK</button>
+            </div>
+        </div>
+        
+        <div class="container">
+        
         <div class="card">
             <div class="card-header">
                 <i class="fas fa-user-plus"></i>
-                <h2>Cadastrar Novo Usuário</h2>
+                <h2>Novo Usuário</h2>
             </div>
-            <form id="userForm" class="user-form">
+            
+            <form id="userForm">
                 <div class="form-group">
                     <label for="tipo_usuario">Tipo de Usuário</label>
                     <select id="tipo_usuario" name="tipo_usuario" required>
@@ -68,7 +82,7 @@
 
                 <div class="form-group">
                     <label for="matricula">Matrícula</label>
-                    <input type="text" id="matricula" name="matricula" placeholder="Ex: 100012345 (9 dígitos, inicia com 1000)" maxlength="9" required>
+                    <input type="text" id="matricula" name="matricula" placeholder="100012345" maxlength="9" required>
                 </div>
                 
                 <div class="form-group">
@@ -76,19 +90,11 @@
                     <div class="checkbox-group">
                         <div class="checkbox-item">
                             <input type="checkbox" id="is_encarregado" name="is_encarregado">
-                            <label for="is_encarregado">
-                                <i class="fas fa-user-tie"></i>
-                                Encarregado
-                                <i class="fas fa-question-circle tooltip-icon" title="Responsável por processos e procedimentos"></i>
-                            </label>
+                            <label for="is_encarregado">Encarregado</label>
                         </div>
                         <div class="checkbox-item">
                             <input type="checkbox" id="is_operador" name="is_operador">
-                            <label for="is_operador">
-                                <i class="fas fa-desktop"></i>
-                                Operador
-                                <i class="fas fa-question-circle tooltip-icon" title="Acesso ao sistema para consultas e relatórios"></i>
-                            </label>
+                            <label for="is_operador">Operador</label>
                         </div>
                     </div>
                 </div>
@@ -115,25 +121,19 @@
                 </div>
                 
                 <button type="submit" class="btn-primary" id="btnCadastrar">
-                    <i class="fas fa-save"></i> Cadastrar Usuário
+                    <i class="fas fa-user-plus"></i>
+                    Cadastrar Usuário
                 </button>
                 
                 <button type="button" onclick="voltarParaListagem()" class="btn-secondary-form">
-                    <i class="fas fa-arrow-left"></i> Voltar para Listagem
+                    <i class="fas fa-arrow-left"></i>
+                    Voltar
                 </button>
             </form>
         </div>
-    </div>
-
-    <!-- Modal de Feedback -->
-    <div id="modalFeedback" class="modal-feedback">
-        <div class="modal-content">
-            <i id="modalIcon" class="fas fa-info-circle"></i>
-            <p id="modalMessage">Mensagem do sistema</p>
-            <button id="modalCloseBtn" class="btn-primary">Fechar</button>
         </div>
     </div>
-
+    
     <script src="static/js/user_form.js"></script>
 </body>
 </html>

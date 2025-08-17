@@ -231,11 +231,10 @@ class PrazosAndamentosManager:
                     p.id, p.numero, p.tipo_detalhe,
                     pr.data_vencimento, pr.tipo_prazo,
                     JULIANDAY(pr.data_vencimento) - JULIANDAY(DATE('now')) as dias_restantes,
-                    COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel
+                    COALESCE(u.nome, 'Desconhecido') as responsavel
                 FROM processos_procedimentos p
                 INNER JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = 1
-                LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
-                LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
+                LEFT JOIN usuarios u ON p.responsavel_id = u.id
                 WHERE p.ativo = 1 
                   AND pr.data_vencimento <= DATE('now', '+{} days')
                 ORDER BY pr.data_vencimento ASC
@@ -302,11 +301,10 @@ class PrazosAndamentosManager:
                 SELECT 
                     a.id, a.data_movimentacao, a.tipo_andamento, a.descricao,
                     a.destino_origem, a.observacoes, a.documento_anexo, a.created_at,
-                    COALESCE(o.nome, e.nome, 'Sistema') as usuario_nome,
-                    COALESCE(o.posto_graduacao, e.posto_graduacao, '') as posto_graduacao
+                    COALESCE(u.nome, 'Sistema') as usuario_nome,
+                    COALESCE(u.posto_graduacao, '') as posto_graduacao
                 FROM andamentos_processo a
-                LEFT JOIN operadores o ON a.usuario_responsavel_id = o.id AND a.usuario_responsavel_tipo = 'operador'
-                LEFT JOIN encarregados e ON a.usuario_responsavel_id = e.id AND a.usuario_responsavel_tipo = 'encarregado'
+                LEFT JOIN usuarios u ON a.usuario_responsavel_id = u.id
                 WHERE a.processo_id = ?
                 ORDER BY a.data_movimentacao DESC, a.created_at DESC
             ''', (processo_id,))
@@ -341,16 +339,13 @@ class PrazosAndamentosManager:
     # ADAPTAÇÕES PARA CHAMADAS EXISTENTES NO MAIN
     # ============================================
     def _descobrir_usuario_tipo(self, cursor, usuario_id):
-        """Retorna 'operador'|'encarregado' ou None baseado no id informado."""
+        """Retorna 'usuario' ou None baseado no id informado."""
         if not usuario_id:
             return None
         try:
-            cursor.execute("SELECT 1 FROM operadores WHERE id = ?", (usuario_id,))
+            cursor.execute("SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1", (usuario_id,))
             if cursor.fetchone():
-                return 'operador'
-            cursor.execute("SELECT 1 FROM encarregados WHERE id = ?", (usuario_id,))
-            if cursor.fetchone():
-                return 'encarregado'
+                return 'usuario'
         except Exception:
             pass
         return None
@@ -483,10 +478,9 @@ class PrazosAndamentosManager:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT s.id, s.status_codigo, s.data_alteracao, s.observacoes, s.ativo,
-                       COALESCE(o.nome, e.nome, 'Sistema') as usuario_nome
+                       COALESCE(u.nome, 'Sistema') as usuario_nome
                 FROM status_detalhado_processo s
-                LEFT JOIN operadores o ON s.usuario_id = o.id AND s.usuario_tipo = 'operador'
-                LEFT JOIN encarregados e ON s.usuario_id = e.id AND s.usuario_tipo = 'encarregado'
+                LEFT JOIN usuarios u ON s.usuario_id = u.id
                 WHERE s.processo_id = ?
                 ORDER BY s.data_alteracao DESC, s.created_at DESC
             ''', (processo_id,))

@@ -39,30 +39,19 @@ class DatabaseManager:
         
         # Não apagar tabelas existentes para evitar perda de dados
 
-        # Criar tabela encarregados se não existir
+        # Criar tabela usuarios unificada se não existir
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS encarregados (
+            CREATE TABLE IF NOT EXISTS usuarios (
                 id TEXT PRIMARY KEY,
+                tipo_usuario TEXT NOT NULL CHECK (tipo_usuario IN ('Oficial', 'Praça')),
                 posto_graduacao TEXT NOT NULL,
-                matricula TEXT UNIQUE NOT NULL,
                 nome TEXT NOT NULL,
+                matricula TEXT UNIQUE NOT NULL,
+                is_encarregado BOOLEAN DEFAULT 0,
+                is_operador BOOLEAN DEFAULT 0,
                 email TEXT UNIQUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo BOOLEAN DEFAULT 1
-            )
-        ''')
-        
-        # Criar tabela operadores se não existir
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS operadores (
-                id TEXT PRIMARY KEY,
-                posto_graduacao TEXT NOT NULL,
-                matricula TEXT UNIQUE NOT NULL,
-                nome TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                senha TEXT NOT NULL,
-                profile TEXT NOT NULL CHECK (profile IN ('admin', 'comum')),
+                senha TEXT,
+                perfil TEXT CHECK (perfil IN ('admin', 'comum') OR perfil IS NULL),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 ativo BOOLEAN DEFAULT 1
@@ -80,7 +69,7 @@ class DatabaseManager:
                 processo_sei TEXT,
                 -- Agora opcionais para suportar PAD/CD/CJ
                 responsavel_id TEXT,
-                responsavel_tipo TEXT CHECK (responsavel_tipo IN ('encarregado', 'operador')),
+                responsavel_tipo TEXT CHECK (responsavel_tipo IN ('usuario')),
                 local_origem TEXT,
                 local_fatos TEXT,
                 data_instauracao DATE,
@@ -115,11 +104,11 @@ class DatabaseManager:
                 indicios_categorias TEXT,
                 -- Papéis específicos para processos PAD/CD/CJ
                 presidente_id TEXT,
-                presidente_tipo TEXT CHECK (presidente_tipo IN ('encarregado', 'operador')),
+                presidente_tipo TEXT CHECK (presidente_tipo IN ('usuario')),
                 interrogante_id TEXT,
-                interrogante_tipo TEXT CHECK (interrogante_tipo IN ('encarregado', 'operador')),
+                interrogante_tipo TEXT CHECK (interrogante_tipo IN ('usuario')),
                 escrivao_processo_id TEXT,
-                escrivao_processo_tipo TEXT CHECK (escrivao_processo_tipo IN ('encarregado', 'operador')),
+                escrivao_processo_tipo TEXT CHECK (escrivao_processo_tipo IN ('usuario')),
                 historico_encarregados TEXT, -- JSON com histórico de substituições
                 motorista_id TEXT, -- Motorista responsável em sinistros de trânsito
                 UNIQUE(numero, documento_iniciador, ano_instauracao)
@@ -135,33 +124,36 @@ class DatabaseManager:
     
     def create_admin_user(self, cursor):
         """Cria usuário admin padrão"""
-        # Verifica se admin já existe na tabela operadores
-        cursor.execute("SELECT id FROM operadores WHERE email = 'admin' AND profile = 'admin'")
+        # Verifica se admin já existe na tabela usuarios
+        cursor.execute("SELECT id FROM usuarios WHERE email = 'admin@sistema.com' AND perfil = 'admin'")
         if not cursor.fetchone():
             admin_id = str(uuid.uuid4())
             senha_hash = self.hash_password('123456')
             cursor.execute('''
-                INSERT INTO operadores (id, posto_graduacao, matricula, nome, email, senha, profile) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (admin_id, 'CEL PM', '000000', 'ADMINISTRADOR', 'admin', senha_hash, 'admin'))
-            print("👤 Usuário admin criado: admin / 123456\n   ID: " + admin_id)
+                INSERT INTO usuarios (
+                    id, tipo_usuario, posto_graduacao, nome, matricula,
+                    is_encarregado, is_operador, email, senha, perfil
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (admin_id, 'Oficial', 'CEL PM', 'ADMINISTRADOR', '000000', 0, 1, 'admin@sistema.com', senha_hash, 'admin'))
+            print("👤 Usuário admin criado: admin@sistema.com / 123456\n   ID: " + admin_id)
     
     def hash_password(self, password):
         """Gera hash da senha usando SHA-256"""
         return hashlib.sha256(password.encode()).hexdigest()
     
     def verify_login(self, email, senha):
-        """Verifica credenciais de login"""
+        """Verifica credenciais de login na nova estrutura unificada"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         senha_hash = self.hash_password(senha)
         
-        # Tenta logar como operador
+        # Buscar usuário que é operador (precisa de senha)
         cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, profile, created_at, updated_at
-            FROM operadores
-            WHERE email = ? AND senha = ? AND ativo = 1
+            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, email, 
+                   is_encarregado, is_operador, perfil, created_at, updated_at
+            FROM usuarios
+            WHERE email = ? AND senha = ? AND ativo = 1 AND is_operador = 1
         ''', (email, senha_hash))
         user = cursor.fetchone()
         
@@ -169,40 +161,20 @@ class DatabaseManager:
             conn.close()
             return {
                 "id": user[0],
-                "posto_graduacao": user[1],
-                "matricula": user[2],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
                 "nome": user[3],
-                "email": user[4],
-                "profile": user[5],
-                "is_admin": (user[5] == 'admin'),
-                "tipo": "operador",
-                "created_at": user[6],
-                "updated_at": user[7]
+                "matricula": user[4],
+                "email": user[5],
+                "is_encarregado": bool(user[6]),
+                "is_operador": bool(user[7]),
+                "perfil": user[8],
+                "is_admin": (user[8] == 'admin'),
+                "created_at": user[9],
+                "updated_at": user[10],
+                "nome_completo": f"{user[2]} {user[3]}"
             }
         
-        # Se não for operador, tenta logar como encarregado (sem senha)
-        cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at
-            FROM encarregados
-            WHERE email = ? AND ativo = 1 AND email IS NOT NULL
-        ''', (email,))
-        user = cursor.fetchone()
-        
-        if user:
-            conn.close()
-            return {
-                "id": user[0],
-                "posto_graduacao": user[1],
-                "matricula": user[2],
-                "nome": user[3],
-                "email": user[4],
-                "profile": "encarregado", # Encarregados não têm perfil específico, mas para consistência
-                "is_admin": False,
-                "tipo": "encarregado",
-                "created_at": user[5],
-                "updated_at": user[6]
-            }
-            
         conn.close()
         return None
     
@@ -392,64 +364,63 @@ class DatabaseManager:
             return {"sucesso": False, "mensagem": f"Erro ao desativar usuário: {str(e)}"}
     
     def get_paginated_users(self, search_term=None, page=1, per_page=10):
-        """Retorna usuários paginados e filtrados (encarregados e operadores)"""
+        """Busca usuários da nova estrutura unificada com paginação e pesquisa, excluindo o admin"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         users = []
 
-        # Construir a cláusula WHERE para pesquisa
-        where_clause = "WHERE ativo = 1"
+        # Construir a cláusula WHERE para pesquisa (excluindo admin)
+        where_clause = "WHERE ativo = 1 AND nome != 'ADMINISTRADOR'"
         search_params = []
         if search_term:
             where_clause += " AND (nome LIKE ? OR matricula LIKE ?)"
             search_term_like = f"%{search_term}%"
             search_params = [search_term_like, search_term_like]
 
-        # Contar total de encarregados
-        cursor.execute(f"SELECT COUNT(*) FROM encarregados {where_clause}", search_params)
-        total_encarregados = cursor.fetchone()[0]
-
-        # Contar total de operadores (incluindo admin, mas excluindo o usuário padrão "ADMINISTRADOR")
-        operador_where = where_clause + " AND nome != 'ADMINISTRADOR'"
-        cursor.execute(f"SELECT COUNT(*) FROM operadores {operador_where}", search_params)
-        total_operadores = cursor.fetchone()[0]
-
-        total_users = total_encarregados + total_operadores
+        # Contar total de usuários
+        cursor.execute(f"SELECT COUNT(*) FROM usuarios {where_clause}", search_params)
+        total_users = cursor.fetchone()[0]
 
         # Calcular offset para paginação
         offset = (page - 1) * per_page
 
-        # Buscar todos os usuários em uma única consulta usando UNION
-        union_query = f'''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, 'encarregado' as tipo, NULL as profile
-            FROM encarregados 
+        # Buscar usuários ordenados por nome
+        query = f'''
+            SELECT id, tipo_usuario, posto_graduacao, matricula, nome, email, 
+                   created_at, updated_at, ativo, is_encarregado, is_operador, perfil
+            FROM usuarios 
             {where_clause}
-            UNION ALL
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo, 'operador' as tipo, profile
-            FROM operadores 
-            {where_clause} AND nome != 'ADMINISTRADOR'
             ORDER BY nome ASC
             LIMIT ? OFFSET ?
         '''
         
-        # Combinar parâmetros para ambas as partes do UNION
-        all_params = search_params + search_params + [per_page, offset]
-        cursor.execute(union_query, all_params)
+        all_params = search_params + [per_page, offset]
+        cursor.execute(query, all_params)
         
         all_users = cursor.fetchall()
         for user in all_users:
+            # Determinar o tipo baseado nos vínculos
+            vinculos = []
+            if user[9]:  # is_encarregado
+                vinculos.append('encarregado')
+            if user[10]:  # is_operador
+                vinculos.append('operador')
+            
             users.append({
                 "id": user[0],
-                "posto_graduacao": user[1],
-                "matricula": user[2],
-                "nome": user[3],
-                "email": user[4],
-                "created_at": user[5],
-                "updated_at": user[6],
-                "ativo": bool(user[7]),
-                "tipo": user[8],
-                "profile": user[9] if user[8] == 'operador' else None
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "matricula": user[3],
+                "nome": user[4],
+                "email": user[5],
+                "created_at": user[6],
+                "updated_at": user[7],
+                "ativo": bool(user[8]),
+                "is_encarregado": bool(user[9]),
+                "is_operador": bool(user[10]),
+                "perfil": user[11],
+                "vinculos": vinculos
             })
         
         conn.close()
@@ -457,33 +428,31 @@ class DatabaseManager:
         return {"users": users, "total": total_users}
     
     def get_stats(self):
-        """Retorna estatísticas do sistema"""
+        """Retorna estatísticas do sistema baseadas na nova estrutura unificada"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Total de usuários (encarregados + operadores, exceto admin)
-        cursor.execute("SELECT COUNT(*) FROM encarregados WHERE ativo = 1")
-        total_encarregados = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM operadores WHERE profile != 'admin' AND ativo = 1")
-        total_operadores = cursor.fetchone()[0]
-        total_usuarios = total_encarregados + total_operadores
+        # Total de usuários ativos (excluindo admin)
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE ativo = 1 AND nome != 'ADMINISTRADOR'")
+        total_usuarios = cursor.fetchone()[0]
         
         # Total geral incluindo admin
-        cursor.execute("SELECT COUNT(*) FROM operadores WHERE ativo = 1")
-        total_geral = cursor.fetchone()[0] + total_encarregados
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE ativo = 1")
+        total_geral = cursor.fetchone()[0]
         
-        # Usuários criados hoje
+        # Usuários criados hoje (excluindo admin)
         cursor.execute('''
-            SELECT COUNT(*) FROM encarregados 
-            WHERE DATE(created_at) = DATE('now') AND ativo = 1
+            SELECT COUNT(*) FROM usuarios 
+            WHERE DATE(created_at) = DATE('now') AND ativo = 1 AND nome != 'ADMINISTRADOR'
         ''')
-        novos_encarregados_hoje = cursor.fetchone()[0]
-        cursor.execute('''
-            SELECT COUNT(*) FROM operadores 
-            WHERE DATE(created_at) = DATE('now') AND profile != 'admin' AND ativo = 1
-        ''')
-        novos_operadores_hoje = cursor.fetchone()[0]
-        novos_hoje = novos_encarregados_hoje + novos_operadores_hoje
+        novos_hoje = cursor.fetchone()[0]
+        
+        # Estatísticas por vínculo
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE is_encarregado = 1 AND ativo = 1 AND nome != 'ADMINISTRADOR'")
+        total_encarregados = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE is_operador = 1 AND ativo = 1 AND nome != 'ADMINISTRADOR'")
+        total_operadores = cursor.fetchone()[0]
         
         conn.close()
         
@@ -491,6 +460,8 @@ class DatabaseManager:
             "total_usuarios": total_usuarios,
             "total_geral": total_geral,
             "novos_hoje": novos_hoje,
+            "total_encarregados": total_encarregados,
+            "total_operadores": total_operadores,
             "banco_path": self.db_path
         }
 
@@ -811,16 +782,21 @@ def fazer_logout():
     return {"sucesso": True, "mensagem": "Logout realizado com sucesso!"}
 
 @eel.expose
-def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, senha=None, profile=None):
-    """Cadastra novo usuário (operador ou encarregado)"""
-    # Validações básicas comuns
-    if not tipo_usuario or not posto_graduacao or not matricula or not nome:
+def cadastrar_usuario(tipo_usuario, posto_graduacao, nome, matricula, is_encarregado=False, is_operador=False, email=None, senha=None, perfil=None):
+    """Cadastra novo usuário na estrutura unificada"""
+    
+    # Validações básicas
+    if not tipo_usuario or not posto_graduacao or not nome or not matricula:
         return {"sucesso": False, "mensagem": "Todos os campos obrigatórios devem ser preenchidos!"}
-
+    
     if len(nome.strip()) < 2:
         return {"sucesso": False, "mensagem": "Nome deve ter pelo menos 2 caracteres!"}
-
-    if tipo_usuario == 'operador':
+    
+    if tipo_usuario not in ['Oficial', 'Praça']:
+        return {"sucesso": False, "mensagem": "Tipo de usuário deve ser 'Oficial' ou 'Praça'!"}
+    
+    # Validações específicas para operador
+    if is_operador:
         if not email:
             return {"sucesso": False, "mensagem": "Email é obrigatório para operadores!"}
         if "@" not in email or "." not in email:
@@ -829,19 +805,56 @@ def cadastrar_usuario(tipo_usuario, posto_graduacao, matricula, nome, email, sen
             return {"sucesso": False, "mensagem": "Senha é obrigatória para operadores!"}
         if len(senha) < 4:
             return {"sucesso": False, "mensagem": "Senha deve ter pelo menos 4 caracteres!"}
-        if not profile or profile not in ['admin', 'comum']:
+        if not perfil or perfil not in ['admin', 'comum']:
             return {"sucesso": False, "mensagem": "Perfil inválido para operador!"}
-        return db_manager.add_operador(posto_graduacao, matricula.strip(), nome, email.strip().lower(), senha, profile)
-    elif tipo_usuario == 'encarregado':
-        # Email é opcional para encarregado, mas se preenchido, deve ser válido
+    
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se matrícula já existe
+        cursor.execute("SELECT id FROM usuarios WHERE matricula = ?", (matricula.strip(),))
+        if cursor.fetchone():
+            return {"sucesso": False, "mensagem": "Matrícula já cadastrada!"}
+        
+        # Verificar se email já existe (apenas se preenchido)
         if email:
-            if "@" not in email or "." not in email:
-                return {"sucesso": False, "mensagem": "Email inválido!"}
-            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome, email.strip().lower())
-        else:
-            return db_manager.add_encarregado(posto_graduacao, matricula.strip(), nome, None)
-    else:
-        return {"sucesso": False, "mensagem": "Tipo de usuário inválido!"}
+            cursor.execute("SELECT id FROM usuarios WHERE email = ?", (email.strip().lower(),))
+            if cursor.fetchone():
+                return {"sucesso": False, "mensagem": "Email já cadastrado!"}
+        
+        # Gerar ID e preparar dados
+        user_id = str(uuid.uuid4())
+        nome_upper = nome.strip().upper()
+        email_clean = email.strip().lower() if email else None
+        senha_hash = db_manager.hash_password(senha) if senha else None
+        
+        # Inserir usuário
+        cursor.execute('''
+            INSERT INTO usuarios (
+                id, tipo_usuario, posto_graduacao, nome, matricula,
+                is_encarregado, is_operador, email, senha, perfil
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id, tipo_usuario, posto_graduacao, nome_upper, matricula.strip(),
+            1 if is_encarregado else 0,
+            1 if is_operador else 0,
+            email_clean, senha_hash, perfil
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        # Mensagem de sucesso padronizada
+        return {
+            "sucesso": True, 
+            "mensagem": "Usuário cadastrado com sucesso!",
+            "user_id": user_id
+        }
+        
+    except Exception as e:
+        print(f"Erro ao cadastrar usuário: {e}")
+        return {"sucesso": False, "mensagem": "Erro interno do servidor!"}
 
 # ======== FUNÇÕES AUXILIARES ========
 
@@ -865,24 +878,14 @@ def buscar_pms_envolvidos(procedimento_id):
         for pm_rel in pms_relacionamento:
             pm_envolvido_id, pm_id, pm_tipo_tabela, ordem, status_pm_env = pm_rel
             
-            # Busca primeiro na tabela operadores
+            # Busca na tabela usuarios unificada
             cursor.execute("""
                 SELECT nome, posto_graduacao, matricula 
-                FROM operadores 
-                WHERE id = ?
+                FROM usuarios 
+                WHERE id = ? AND ativo = 1
             """, (pm_id,))
             
             pm_data = cursor.fetchone()
-            
-            # Se não encontrou em operadores, busca em encarregados
-            if not pm_data:
-                cursor.execute("""
-                    SELECT nome, posto_graduacao, matricula 
-                    FROM encarregados 
-                    WHERE id = ?
-                """, (pm_id,))
-                
-                pm_data = cursor.fetchone()
             
             if pm_data:
                 nome = pm_data[0] or ""
@@ -1015,110 +1018,98 @@ def listar_usuarios(search_term=None, page=1, per_page=10):
 
 @eel.expose
 def listar_todos_usuarios():
-    """Lista todos os usuários incluindo admin (para processos)"""
+    """Lista todos os usuários da nova estrutura unificada"""
     conn = db_manager.get_connection()
     cursor = conn.cursor()
     
-    all_users = []
-
-    # Buscar encarregados
-    cursor.execute('''
-        SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo 
-        FROM encarregados 
-        WHERE ativo = 1
-        ORDER BY nome ASC
-    ''')
-    encarregados = cursor.fetchall()
-    for user in encarregados:
-        all_users.append({
-            "id": user[0],
-            "posto_graduacao": user[1],
-            "matricula": user[2],
-            "nome": user[3],
-            "email": user[4],
-            "created_at": user[5],
-            "updated_at": user[6],
-            "ativo": bool(user[7]),
-            "tipo": "encarregado"
-        })
-
-    # Buscar operadores
-    cursor.execute('''
-        SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo 
-        FROM operadores 
-        WHERE ativo = 1
-        ORDER BY nome ASC
-    ''')
-    operadores = cursor.fetchall()
-    for user in operadores:
-        all_users.append({
-            "id": user[0],
-            "posto_graduacao": user[1],
-            "matricula": user[2],
-            "nome": user[3],
-            "email": user[4],
-            "created_at": user[5],
-            "updated_at": user[6],
-            "ativo": bool(user[7]),
-            "tipo": "operador"
-        })
-    
-    conn.close()
-    
-    # Opcional: ordenar a lista combinada se necessário
-    all_users.sort(key=lambda x: x['nome'])
-
-    return all_users
+    try:
+        cursor.execute('''
+            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, 
+                   is_encarregado, is_operador, email, perfil, created_at, updated_at, ativo 
+            FROM usuarios 
+            WHERE ativo = 1
+            ORDER BY nome ASC
+        ''')
+        
+        usuarios = []
+        for user in cursor.fetchall():
+            # Determinar vínculos
+            vinculos = []
+            if user[5]:  # is_encarregado
+                vinculos.append("Encarregado")
+            if user[6]:  # is_operador
+                perfil_texto = f"Operador ({user[8]})" if user[8] else "Operador"
+                vinculos.append(perfil_texto)
+            
+            vinculo_texto = " / ".join(vinculos) if vinculos else "Sem vínculo"
+            
+            usuarios.append({
+                "id": user[0],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "nome": user[3],
+                "matricula": user[4],
+                "is_encarregado": bool(user[5]),
+                "is_operador": bool(user[6]),
+                "email": user[7],
+                "perfil": user[8],
+                "created_at": user[9],
+                "updated_at": user[10],
+                "ativo": bool(user[11]),
+                "vinculo_texto": vinculo_texto,
+                "nome_completo": f"{user[2]} {user[3]}"  # posto/graduação + nome
+            })
+        
+        conn.close()
+        return usuarios
+        
+    except Exception as e:
+        print(f"Erro ao listar usuários: {e}")
+        return []
 
 @eel.expose
 def listar_encarregados_operadores():
-    """Lista todos os encarregados e operadores para substituição de encarregado"""
+    """Lista todos os usuários que são encarregados ou operadores"""
     conn = db_manager.get_connection()
     cursor = conn.cursor()
     
-    usuarios = []
-
-    # Buscar encarregados
-    cursor.execute('''
-        SELECT id, posto_graduacao, matricula, nome, email
-        FROM encarregados 
-        WHERE ativo = 1
-        ORDER BY posto_graduacao, nome ASC
-    ''')
-    encarregados = cursor.fetchall()
-    for user in encarregados:
-        usuarios.append({
-            "id": user[0],
-            "posto_graduacao": user[1],
-            "matricula": user[2],
-            "nome": user[3],
-            "email": user[4],
-            "tipo": "encarregado",
-            "nome_completo": f"{user[1]} {user[2]} {user[3]}".strip()
-        })
-
-    # Buscar operadores (apenas os não-admin)
-    cursor.execute('''
-        SELECT id, posto_graduacao, matricula, nome, email
-        FROM operadores 
-        WHERE ativo = 1 AND profile != 'admin'
-        ORDER BY posto_graduacao, nome ASC
-    ''')
-    operadores = cursor.fetchall()
-    for user in operadores:
-        usuarios.append({
-            "id": user[0],
-            "posto_graduacao": user[1],
-            "matricula": user[2],
-            "nome": user[3],
-            "email": user[4],
-            "tipo": "operador",
-            "nome_completo": f"{user[1]} {user[2]} {user[3]}".strip()
-        })
-    
-    conn.close()
-    
-    return usuarios
+    try:
+        cursor.execute('''
+            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, 
+                   is_encarregado, is_operador, email, perfil
+            FROM usuarios 
+            WHERE ativo = 1 AND (is_encarregado = 1 OR is_operador = 1)
+            ORDER BY posto_graduacao, nome ASC
+        ''')
+        
+        usuarios = []
+        for user in cursor.fetchall():
+            # Determinar tipo para compatibilidade
+            if user[5] and user[6]:  # Ambos
+                tipo = "encarregado_operador"
+            elif user[5]:  # Apenas encarregado
+                tipo = "encarregado"
+            else:  # Apenas operador
+                tipo = "operador"
+            
+            usuarios.append({
+                "id": user[0],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "nome": user[3],
+                "matricula": user[4],
+                "email": user[7],
+                "perfil": user[8],
+                "tipo": tipo,
+                "nome_completo": f"{user[2]} {user[4]} {user[3]}".strip() if user[4] else f"{user[2]} {user[3]}".strip()
+            })
+        
+        conn.close()
+        return usuarios
+        
+    except Exception as e:
+        print(f"Erro ao listar encarregados/operadores: {e}")
+        return []
 
 @eel.expose
 def atualizar_usuario(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
@@ -2206,61 +2197,50 @@ def obter_processo(processo_id):
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
                 p.responsavel_id, p.responsavel_tipo,
-                COALESCE(o.nome, e.nome, 'Desconhecido') as responsavel_nome,
+                COALESCE(u_resp.nome, 'Desconhecido') as responsavel_nome,
                 p.local_origem, p.local_fatos, p.data_instauracao, p.data_recebimento, p.escrivao_id, p.status_pm, p.nome_pm_id,
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
                 p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
                 p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
                 -- Dados completos do responsável
-                COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_posto,
-                COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
+                COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
+                COALESCE(u_resp.matricula, '') as responsavel_matricula,
                 -- Dados completos do escrivão (procedimentos)
-                COALESCE(esc_o.nome, esc_e.nome, '') as escrivao_nome,
-                COALESCE(esc_o.posto_graduacao, esc_e.posto_graduacao, '') as escrivao_posto,
-                COALESCE(esc_o.matricula, esc_e.matricula, '') as escrivao_matricula,
+                COALESCE(u_esc.nome, '') as escrivao_nome,
+                COALESCE(u_esc.posto_graduacao, '') as escrivao_posto,
+                COALESCE(u_esc.matricula, '') as escrivao_matricula,
                 -- Dados completos do PM envolvido
-                COALESCE(pm_o.nome, pm_e.nome, '') as pm_nome,
-                COALESCE(pm_o.posto_graduacao, pm_e.posto_graduacao, '') as pm_posto,
-                COALESCE(pm_o.matricula, pm_e.matricula, '') as pm_matricula,
+                COALESCE(u_pm.nome, '') as pm_nome,
+                COALESCE(u_pm.posto_graduacao, '') as pm_posto,
+                COALESCE(u_pm.matricula, '') as pm_matricula,
                 -- IDs e tipos das funções de processo (PAD/CD/CJ)
                 p.presidente_id, p.presidente_tipo,
                 p.interrogante_id, p.interrogante_tipo,
                 p.escrivao_processo_id, p.escrivao_processo_tipo,
                 -- Dados completos das funções do processo
-                COALESCE(pres_o.nome, pres_e.nome, '') as presidente_nome,
-                COALESCE(pres_o.posto_graduacao, pres_e.posto_graduacao, '') as presidente_posto,
-                COALESCE(pres_o.matricula, pres_e.matricula, '') as presidente_matricula,
-                COALESCE(int_o.nome, int_e.nome, '') as interrogante_nome,
-                COALESCE(int_o.posto_graduacao, int_e.posto_graduacao, '') as interrogante_posto,
-                COALESCE(int_o.matricula, int_e.matricula, '') as interrogante_matricula,
-                COALESCE(escrp_o.nome, escrp_e.nome, '') as escrivao_processo_nome,
-                COALESCE(escrp_o.posto_graduacao, escrp_e.posto_graduacao, '') as escrivao_processo_posto,
-                COALESCE(escrp_o.matricula, escrp_e.matricula, '') as escrivao_processo_matricula,
+                COALESCE(u_pres.nome, '') as presidente_nome,
+                COALESCE(u_pres.posto_graduacao, '') as presidente_posto,
+                COALESCE(u_pres.matricula, '') as presidente_matricula,
+                COALESCE(u_int.nome, '') as interrogante_nome,
+                COALESCE(u_int.posto_graduacao, '') as interrogante_posto,
+                COALESCE(u_int.matricula, '') as interrogante_matricula,
+                COALESCE(u_escrp.nome, '') as escrivao_processo_nome,
+                COALESCE(u_escrp.posto_graduacao, '') as escrivao_processo_posto,
+                COALESCE(u_escrp.matricula, '') as escrivao_processo_matricula,
                 -- Dados do motorista para sinistros de trânsito
                 p.motorista_id,
-                COALESCE(mot_o.nome, mot_e.nome, '') as motorista_nome,
-                COALESCE(mot_o.posto_graduacao, mot_e.posto_graduacao, '') as motorista_posto,
-                COALESCE(mot_o.matricula, mot_e.matricula, '') as motorista_matricula
+                COALESCE(u_mot.nome, '') as motorista_nome,
+                COALESCE(u_mot.posto_graduacao, '') as motorista_posto,
+                COALESCE(u_mot.matricula, '') as motorista_matricula
             FROM processos_procedimentos p
-            LEFT JOIN operadores o ON p.responsavel_id = o.id
-            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
-            -- JOINs para escrivão (procedimentos)
-            LEFT JOIN operadores esc_o ON p.escrivao_id = esc_o.id
-            LEFT JOIN encarregados esc_e ON p.escrivao_id = esc_e.id AND esc_o.id IS NULL
-            -- JOINs para PM envolvido
-            LEFT JOIN operadores pm_o ON p.nome_pm_id = pm_o.id
-            LEFT JOIN encarregados pm_e ON p.nome_pm_id = pm_e.id AND pm_o.id IS NULL
-            -- JOINs para funções específicas de processo (PAD/CD/CJ)
-            LEFT JOIN operadores pres_o ON p.presidente_id = pres_o.id AND p.presidente_tipo = 'operador'
-            LEFT JOIN encarregados pres_e ON p.presidente_id = pres_e.id AND p.presidente_tipo = 'encarregado'
-            LEFT JOIN operadores int_o ON p.interrogante_id = int_o.id AND p.interrogante_tipo = 'operador'
-            LEFT JOIN encarregados int_e ON p.interrogante_id = int_e.id AND p.interrogante_tipo = 'encarregado'
-            LEFT JOIN operadores escrp_o ON p.escrivao_processo_id = escrp_o.id AND p.escrivao_processo_tipo = 'operador'
-            LEFT JOIN encarregados escrp_e ON p.escrivao_processo_id = escrp_e.id AND p.escrivao_processo_tipo = 'encarregado'
-            -- JOINs para motorista (sinistros de trânsito)
-            LEFT JOIN operadores mot_o ON p.motorista_id = mot_o.id
-            LEFT JOIN encarregados mot_e ON p.motorista_id = mot_e.id AND mot_o.id IS NULL
+            LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            LEFT JOIN usuarios u_esc ON p.escrivao_id = u_esc.id
+            LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
+            LEFT JOIN usuarios u_pres ON p.presidente_id = u_pres.id
+            LEFT JOIN usuarios u_int ON p.interrogante_id = u_int.id
+            LEFT JOIN usuarios u_escrp ON p.escrivao_processo_id = u_escrp.id
+            LEFT JOIN usuarios u_mot ON p.motorista_id = u_mot.id
             WHERE p.id = ? AND p.ativo = 1
             """,
             (processo_id,)
@@ -3633,8 +3613,8 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 p.numero LIKE ? OR p.tipo_detalhe LIKE ? OR p.local_origem LIKE ? OR
                 p.processo_sei LIKE ? OR p.numero_portaria LIKE ? OR p.numero_memorando LIKE ? OR
                 p.numero_feito LIKE ? OR 
-                COALESCE(o.nome, e.nome, o_backup.nome, e_backup.nome, '') LIKE ? OR
-                COALESCE(pm_env_e.nome, pm_env_o.nome, '') LIKE ?
+                COALESCE(u_resp.nome, '') LIKE ? OR
+                COALESCE(u_pm.nome, '') LIKE ?
             )"""
             search_term_like = f"%{search_term}%"
             search_params = [search_term_like] * 9
@@ -3660,10 +3640,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             if filtros.get('encarregado'):
                 where_clause += """ AND (
                     TRIM(COALESCE(
-                        CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao || ' ' || o.matricula || ' ' || o.nome END,
-                        CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao || ' ' || e.matricula || ' ' || e.nome END,
-                        o_backup.posto_graduacao || ' ' || o_backup.matricula || ' ' || o_backup.nome,
-                        e_backup.posto_graduacao || ' ' || e_backup.matricula || ' ' || e_backup.nome,
+                        u_resp.posto_graduacao || ' ' || u_resp.matricula || ' ' || u_resp.nome,
                         ''
                     )) = ?
                 )"""
@@ -3683,8 +3660,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             if filtros.get('pm_envolvido'):
                 where_clause += """ AND (
                     TRIM(COALESCE(
-                        (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM operadores WHERE id = p.nome_pm_id),
-                        (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM encarregados WHERE id = p.nome_pm_id),
+                        u_pm.posto_graduacao || ' ' || u_pm.matricula || ' ' || u_pm.nome,
                         ''
                     )) = ?
                 )"""
@@ -3736,12 +3712,8 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
         count_query = f"""
             SELECT COUNT(*)
             FROM processos_procedimentos p
-            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
-            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
-            LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
-            LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
+            LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
             {where_clause}
         """
         cursor.execute(count_query, search_params)
@@ -3755,58 +3727,33 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             SELECT 
                 p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, 
                 p.data_recebimento, p.created_at, p.data_instauracao,
-                COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
-                    o_backup.nome,
-                    e_backup.nome,
-                    'Desconhecido'
-                ) as responsavel_nome,
-                COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao END,
-                    o_backup.posto_graduacao,
-                    e_backup.posto_graduacao,
-                    ''
-                ) as responsavel_posto,
-                COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.matricula END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.matricula END,
-                    o_backup.matricula,
-                    e_backup.matricula,
-                    ''
-                ) as responsavel_matricula,
+                COALESCE(u_resp.nome, 'Desconhecido') as responsavel_nome,
+                COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
+                COALESCE(u_resp.matricula, '') as responsavel_matricula,
                 -- Dados de funções (PAD/CD/CJ)
-                COALESCE(pres_o.nome, pres_e.nome, '') as presidente_nome,
-                COALESCE(pres_o.posto_graduacao, pres_e.posto_graduacao, '') as presidente_posto,
-                COALESCE(pres_o.matricula, pres_e.matricula, '') as presidente_matricula,
-                COALESCE(int_o.nome, int_e.nome, '') as interrogante_nome,
-                COALESCE(int_o.posto_graduacao, int_e.posto_graduacao, '') as interrogante_posto,
-                COALESCE(int_o.matricula, int_e.matricula, '') as interrogante_matricula,
-                COALESCE(escr_o.nome, escr_e.nome, '') as escrivao_nome,
-                COALESCE(escr_o.posto_graduacao, escr_e.posto_graduacao, '') as escrivao_posto,
-                COALESCE(escr_o.matricula, escr_e.matricula, '') as escrivao_matricula,
+                COALESCE(u_pres.nome, '') as presidente_nome,
+                COALESCE(u_pres.posto_graduacao, '') as presidente_posto,
+                COALESCE(u_pres.matricula, '') as presidente_matricula,
+                COALESCE(u_int.nome, '') as interrogante_nome,
+                COALESCE(u_int.posto_graduacao, '') as interrogante_posto,
+                COALESCE(u_int.matricula, '') as interrogante_matricula,
+                COALESCE(u_escr.nome, '') as escrivao_nome,
+                COALESCE(u_escr.posto_graduacao, '') as escrivao_posto,
+                COALESCE(u_escr.matricula, '') as escrivao_matricula,
                 p.local_origem, p.processo_sei, p.nome_pm_id, p.status_pm,
-                COALESCE(pm_env_e.nome, pm_env_o.nome, 'Não informado') as pm_envolvido_nome,
-                COALESCE(pm_env_e.posto_graduacao, pm_env_o.posto_graduacao, '') as pm_envolvido_posto,
-                COALESCE(pm_env_e.matricula, pm_env_o.matricula, '') as pm_envolvido_matricula,
+                COALESCE(u_pm.nome, 'Não informado') as pm_envolvido_nome,
+                COALESCE(u_pm.posto_graduacao, '') as pm_envolvido_posto,
+                COALESCE(u_pm.matricula, '') as pm_envolvido_matricula,
                 p.numero_controle,
                 p.concluido,
                 p.data_conclusao
             FROM processos_procedimentos p
-            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
-            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
-            LEFT JOIN encarregados pm_env_e ON p.nome_pm_id = pm_env_e.id
-            LEFT JOIN operadores pm_env_o ON p.nome_pm_id = pm_env_o.id
+            LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
             -- Junções para funções específicas em processos (PAD/CD/CJ)
-            LEFT JOIN operadores pres_o ON p.presidente_id = pres_o.id AND p.presidente_tipo = 'operador'
-            LEFT JOIN encarregados pres_e ON p.presidente_id = pres_e.id AND p.presidente_tipo = 'encarregado'
-            LEFT JOIN operadores int_o ON p.interrogante_id = int_o.id AND p.interrogante_tipo = 'operador'
-            LEFT JOIN encarregados int_e ON p.interrogante_id = int_e.id AND p.interrogante_tipo = 'encarregado'
-            LEFT JOIN operadores escr_o ON p.escrivao_processo_id = escr_o.id AND p.escrivao_processo_tipo = 'operador'
-            LEFT JOIN encarregados escr_e ON p.escrivao_processo_id = escr_e.id AND p.escrivao_processo_tipo = 'encarregado'
+            LEFT JOIN usuarios u_pres ON p.presidente_id = u_pres.id
+            LEFT JOIN usuarios u_int ON p.interrogante_id = u_int.id
+            LEFT JOIN usuarios u_escr ON p.escrivao_processo_id = u_escr.id
             {where_clause}
             ORDER BY 
                 CASE WHEN p.data_instauracao IS NOT NULL THEN p.data_instauracao ELSE p.created_at END DESC
@@ -4143,39 +4090,18 @@ def obter_opcoes_filtros():
                 p.documento_iniciador,
                 p.status_pm,
                 p.nome_vitima,
+                COALESCE(u_resp.nome, 'Desconhecido') as responsavel_nome,
+                COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
+                COALESCE(u_resp.matricula, '') as responsavel_matricula,
                 COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.nome END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.nome END,
-                    o_backup.nome,
-                    e_backup.nome,
-                    'Desconhecido'
-                ) as responsavel_nome,
-                COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.posto_graduacao END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.posto_graduacao END,
-                    o_backup.posto_graduacao,
-                    e_backup.posto_graduacao,
-                    ''
-                ) as responsavel_posto,
-                COALESCE(
-                    CASE WHEN p.responsavel_tipo = 'operador' THEN o.matricula END,
-                    CASE WHEN p.responsavel_tipo = 'encarregado' THEN e.matricula END,
-                    o_backup.matricula,
-                    e_backup.matricula,
-                    ''
-                ) as responsavel_matricula,
-                COALESCE(
-                    (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM operadores WHERE id = p.nome_pm_id),
-                    (SELECT posto_graduacao || ' ' || matricula || ' ' || nome FROM encarregados WHERE id = p.nome_pm_id),
+                    u_pm.posto_graduacao || ' ' || u_pm.matricula || ' ' || u_pm.nome,
                     ''
                 ) as pm_envolvido_completo,
                 strftime('%Y', p.data_instauracao) as ano_instauracao,
                 strftime('%Y', p.data_recebimento) as ano_recebimento
             FROM processos_procedimentos p
-            LEFT JOIN operadores o ON p.responsavel_id = o.id AND p.responsavel_tipo = 'operador'
-            LEFT JOIN encarregados e ON p.responsavel_id = e.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN operadores o_backup ON p.responsavel_id = o_backup.id AND p.responsavel_tipo = 'encarregado'
-            LEFT JOIN encarregados e_backup ON p.responsavel_id = e_backup.id AND p.responsavel_tipo = 'operador'
+            LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
             WHERE p.ativo = 1
         """)
         

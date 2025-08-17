@@ -132,15 +132,14 @@ async function loadUsers() {
                     <td>${user.posto_graduacao}</td>
                     <td>${user.matricula}</td>
                     <td>${user.nome}</td>
-                    <td>${user.tipo === 'operador' ? (user.profile === 'admin' ? 'Operador (Admin)' : 'Operador') : 'Encarregado'}</td>
                     <td class="actions-cell">
-                        <button class="btn-action view-btn" onclick="viewUser('${user.id}', '${user.tipo}')" title="Visualizar">
+                        <button class="btn-action view-btn" onclick="viewUser('${user.id}', 'usuario')" title="Visualizar">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="btn-action edit-btn" onclick="editUser('${user.id}', '${user.tipo}')" title="Editar">
+                        <button class="btn-action edit-btn" onclick="editUser('${user.id}', 'usuario')" title="Editar">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn-action delete-btn" onclick="deleteUser('${user.id}', '${user.tipo}', '${user.nome}')" title="Excluir">
+                        <button class="btn-action delete-btn" onclick="deleteUser('${user.id}', 'usuario', '${user.nome}')" title="Excluir">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </td>
@@ -183,11 +182,9 @@ function viewUser(userId, userType) {
 
 // Função para deletar usuário
 async function deleteUser(userId, userType, userName) {
-    const tipoTexto = userType === 'operador' ? 'operador' : 'encarregado';
-    
     showConfirmModal(
         'Confirmar Exclusão',
-        `Tem certeza que deseja desativar o ${tipoTexto} ${userName}?`,
+        `Tem certeza que deseja desativar o usuário ${userName}?`,
         async () => {
             try {
                 const result = await eel.delete_user(userId, userType)();
