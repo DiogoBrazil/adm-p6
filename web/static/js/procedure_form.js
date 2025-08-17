@@ -3198,7 +3198,7 @@ async function buscarUsuariosModal() {
                 <span style="font-weight:500;">${u.posto_graduacao || ''}</span>
                 <span style="margin-left:8px; color:#555;">${u.matricula || ''}</span>
                 <span style="margin-left:8px; color:#222;">${u.nome}</span>
-                <span style="margin-left:8px; font-size:12px; color:#888;">(${u.tipo})</span>
+                <span style="margin-left:8px; font-size:12px; color:#888;">(${u.vinculo_texto || 'Sem vínculo'})</span>
             </div>
             <button class="btnEscolherUsuario" data-id="${u.id}" data-nome="${u.nome}" data-matricula="${u.matricula}" data-pg="${u.posto_graduacao}" style="background:none; border:none; color:#28a745; font-size:20px; cursor:pointer;" title="Escolher"><i class="fas fa-check-circle"></i></button>
         </div>

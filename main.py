@@ -1783,18 +1783,14 @@ def listar_processos():
             p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador, p.processo_sei,
             CASE 
                 WHEN p.tipo_geral = 'processo' AND p.tipo_detalhe IN ('PAD','CD','CJ') AND p.responsavel_id IS NULL THEN 'Não se aplica'
-                ELSE COALESCE(o.nome, e.nome, 'Desconhecido')
+                ELSE COALESCE(u1.nome, 'Desconhecido')
             END as responsavel,
             p.created_at,
             p.local_origem, 
             p.data_instauracao,
             p.status_pm,
             CASE 
-                WHEN p.nome_pm_id IS NOT NULL THEN COALESCE(
-                    (SELECT nome FROM operadores WHERE id = p.nome_pm_id),
-                    (SELECT nome FROM encarregados WHERE id = p.nome_pm_id),
-                    'Desconhecido'
-                )
+                WHEN p.nome_pm_id IS NOT NULL THEN COALESCE(u2.nome, 'Desconhecido')
                 ELSE NULL
             END as nome_pm,
             p.numero_portaria,
@@ -1802,25 +1798,17 @@ def listar_processos():
             p.numero_feito,
             p.responsavel_id, 
             p.responsavel_tipo,
-            COALESCE(o.posto_graduacao, e.posto_graduacao, '') as responsavel_pg,
-            COALESCE(o.matricula, e.matricula, '') as responsavel_matricula,
-            COALESCE(
-                (SELECT posto_graduacao FROM operadores WHERE id = p.nome_pm_id),
-                (SELECT posto_graduacao FROM encarregados WHERE id = p.nome_pm_id),
-                ''
-            ) as nome_pm_pg,
-            COALESCE(
-                (SELECT matricula FROM operadores WHERE id = p.nome_pm_id),
-                (SELECT matricula FROM encarregados WHERE id = p.nome_pm_id),
-                ''
-            ) as nome_pm_matricula,
+            COALESCE(u1.posto_graduacao, '') as responsavel_pg,
+            COALESCE(u1.matricula, '') as responsavel_matricula,
+            COALESCE(u2.posto_graduacao, '') as nome_pm_pg,
+            COALESCE(u2.matricula, '') as nome_pm_matricula,
             p.numero_rgf,
             p.numero_controle,
             p.concluido,
             p.data_conclusao
     FROM processos_procedimentos p
-    LEFT JOIN operadores o ON p.responsavel_id = o.id
-    LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
+    LEFT JOIN usuarios u1 ON p.responsavel_id = u1.id
+    LEFT JOIN usuarios u2 ON p.nome_pm_id = u2.id
         WHERE p.ativo = 1
         ORDER BY p.created_at DESC
     """)
@@ -2647,17 +2635,9 @@ def obter_encarregados_procedimento(procedimento_id):
         def _buscar_usuario(user_id):
             if not user_id:
                 return None
-            # Tenta operadores
+            # Busca na tabela usuarios unificada
             cursor.execute(
-                "SELECT nome, posto_graduacao, matricula FROM operadores WHERE id = ?",
-                (user_id,)
-            )
-            u = cursor.fetchone()
-            if u:
-                return {"nome": u[0], "posto_graduacao": u[1], "matricula": u[2]}
-            # Tenta encarregados
-            cursor.execute(
-                "SELECT nome, posto_graduacao, matricula FROM encarregados WHERE id = ?",
+                "SELECT nome, posto_graduacao, matricula FROM usuarios WHERE id = ? AND ativo = 1",
                 (user_id,)
             )
             u = cursor.fetchone()
