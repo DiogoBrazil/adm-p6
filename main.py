@@ -120,6 +120,8 @@ class DatabaseManager:
                 interrogante_tipo TEXT CHECK (interrogante_tipo IN ('encarregado', 'operador')),
                 escrivao_processo_id TEXT,
                 escrivao_processo_tipo TEXT CHECK (escrivao_processo_tipo IN ('encarregado', 'operador')),
+                historico_encarregados TEXT, -- JSON com histórico de substituições
+                motorista_id TEXT, -- Motorista responsável em sinistros de trânsito
                 UNIQUE(numero, documento_iniciador, ano_instauracao)
             )
         ''')
@@ -1359,7 +1361,7 @@ def obter_estatisticas():
 def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
-    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
+    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, motorista_id=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
     concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None,
     # Novos campos (Migração 014)
@@ -1606,7 +1608,8 @@ def registrar_processo(
                 numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
                 data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
-                presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo
+                presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
+                motorista_id
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
@@ -1614,7 +1617,8 @@ def registrar_processo(
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?,
+                ?
             )
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
@@ -1623,7 +1627,8 @@ def registrar_processo(
             numero_portaria, numero_memorando, numero_feito, numero_rgf, numero_controle,
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
             data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
-            presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo
+            presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
+            motorista_id
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -2231,7 +2236,12 @@ def obter_processo(processo_id):
                 COALESCE(int_o.matricula, int_e.matricula, '') as interrogante_matricula,
                 COALESCE(escrp_o.nome, escrp_e.nome, '') as escrivao_processo_nome,
                 COALESCE(escrp_o.posto_graduacao, escrp_e.posto_graduacao, '') as escrivao_processo_posto,
-                COALESCE(escrp_o.matricula, escrp_e.matricula, '') as escrivao_processo_matricula
+                COALESCE(escrp_o.matricula, escrp_e.matricula, '') as escrivao_processo_matricula,
+                -- Dados do motorista para sinistros de trânsito
+                p.motorista_id,
+                COALESCE(mot_o.nome, mot_e.nome, '') as motorista_nome,
+                COALESCE(mot_o.posto_graduacao, mot_e.posto_graduacao, '') as motorista_posto,
+                COALESCE(mot_o.matricula, mot_e.matricula, '') as motorista_matricula
             FROM processos_procedimentos p
             LEFT JOIN operadores o ON p.responsavel_id = o.id
             LEFT JOIN encarregados e ON p.responsavel_id = e.id AND o.id IS NULL
@@ -2248,6 +2258,9 @@ def obter_processo(processo_id):
             LEFT JOIN encarregados int_e ON p.interrogante_id = int_e.id AND p.interrogante_tipo = 'encarregado'
             LEFT JOIN operadores escrp_o ON p.escrivao_processo_id = escrp_o.id AND p.escrivao_processo_tipo = 'operador'
             LEFT JOIN encarregados escrp_e ON p.escrivao_processo_id = escrp_e.id AND p.escrivao_processo_tipo = 'encarregado'
+            -- JOINs para motorista (sinistros de trânsito)
+            LEFT JOIN operadores mot_o ON p.motorista_id = mot_o.id
+            LEFT JOIN encarregados mot_e ON p.motorista_id = mot_e.id AND mot_o.id IS NULL
             WHERE p.id = ? AND p.ativo = 1
             """,
             (processo_id,)
@@ -2465,6 +2478,13 @@ def obter_processo(processo_id):
         if processo[56] and processo[57] and processo[55]:
             escrivao_processo_completo = f"{processo[56]} {processo[57]} {processo[55]}".strip()
 
+        motorista_completo = ""
+        # indices: 59=motorista_nome, 60=motorista_posto, 61=motorista_matricula
+        if processo[60] and processo[61] and processo[59]:
+            motorista_completo = f"{processo[60]} {processo[61]} {processo[59]}".strip()
+        elif processo[59]:
+            motorista_completo = processo[59]
+
         return {
             "id": processo[0],
             "numero": processo[1],
@@ -2522,6 +2542,10 @@ def obter_processo(processo_id):
             "interrogante_completo": interrogante_completo,
             "escrivao_processo_nome": processo[55],
             "escrivao_processo_completo": escrivao_processo_completo,
+            # Motorista (sinistros de trânsito)
+            "motorista_id": processo[58],
+            "motorista_nome": processo[59],
+            "motorista_completo": motorista_completo,
         }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
@@ -2760,7 +2784,7 @@ def obter_envolvidos_procedimento(procedimento_id):
 def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
-    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, resumo_fatos=None,
+    nome_vitima=None, natureza_processo=None, natureza_procedimento=None, motorista_id=None, resumo_fatos=None,
     numero_portaria=None, numero_memorando=None, numero_feito=None, numero_rgf=None, numero_controle=None,
     concluido=False, data_conclusao=None, solucao_final=None, pms_envolvidos=None, transgressoes_ids=None,
     # Novos campos (Migração 014)
@@ -2889,6 +2913,7 @@ def atualizar_processo(
                 concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?,
                 data_remessa_encarregado = ?, data_julgamento = ?, solucao_tipo = ?, penalidade_tipo = ?, penalidade_dias = ?, indicios_categorias = ?,
                 presidente_id = ?, presidente_tipo = ?, interrogante_id = ?, interrogante_tipo = ?, escrivao_processo_id = ?, escrivao_processo_tipo = ?,
+                motorista_id = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -2900,6 +2925,7 @@ def atualizar_processo(
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
                 data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
                 presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
+                motorista_id,
                 processo_id
             )
         )

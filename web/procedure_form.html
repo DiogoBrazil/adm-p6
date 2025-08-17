@@ -405,6 +405,16 @@
                     </select>
                 </div>
 
+                <!-- Motorista (apenas para sinistros de trânsito) -->
+                <div class="form-group" id="group_motorista_sinistro" style="display: none;">
+                    <label for="motorista_sinistro">Motorista Responsável *</label>
+                    <select id="motorista_sinistro" name="motorista_sinistro" required>
+                        <option value="">Primeiro selecione os PMs envolvidos...</option>
+                    </select>
+                    <input type="hidden" id="motorista_id" name="motorista_id">
+                    <small class="form-help">Selecione o PM que estava dirigindo no momento do sinistro</small>
+                </div>
+
                 <!-- Resumo dos Fatos -->
                 <div class="form-group">
                     <label for="resumo_fatos">Resumo dos Fatos (opcional)</label>

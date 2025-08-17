@@ -5,6 +5,96 @@ let editandoProcedimento = null;
 // Array para armazenar PMs adicionais (além do primeiro)
 let pmsAdicionais = [];
 
+// Função para obter todos os PMs envolvidos (principal + adicionais)
+function obterTodosPmsEnvolvidos() {
+    const pmsEnvolvidos = [];
+    
+    // PM Principal - primeiro tentar pegar do array global de PMs se existir
+    const pmPrincipalId = document.getElementById('nome_pm').value;
+    const pmPrincipalNome = document.getElementById('nome_pm_nome').value;
+    
+    console.log('🔍 PM Principal debug:', {
+        id: pmPrincipalId,
+        nome: pmPrincipalNome,
+        idElement: document.getElementById('nome_pm'),
+        nomeElement: document.getElementById('nome_pm_nome')
+    });
+    
+    if (pmPrincipalId) {
+        pmsEnvolvidos.push({
+            id: pmPrincipalId,
+            nome: pmPrincipalNome,
+            nome_completo: pmPrincipalNome // Usar o nome do campo como nome_completo
+        });
+    }
+    
+    // PMs Adicionais - usar dados do array pmsAdicionais que tem estrutura correta
+    pmsAdicionais.forEach((pm, index) => {
+        console.log(`🔍 PM Adicional ${index} debug:`, pm);
+        
+        if (pm.id) {
+            pmsEnvolvidos.push({
+                id: pm.id,
+                nome: pm.nome,
+                nome_completo: pm.nome // pm.nome já contém o nome formatado completo
+            });
+        }
+    });
+    
+    console.log('🔍 PMs Envolvidos para motorista:', pmsEnvolvidos);
+    return pmsEnvolvidos;
+}
+
+// Função para atualizar o dropdown do motorista com apenas os PMs envolvidos
+function atualizarOpcoesMotorista() {
+    const pmsEnvolvidos = obterTodosPmsEnvolvidos();
+    const motoristaSelect = document.getElementById('motorista_sinistro');
+    
+    if (!motoristaSelect) return;
+    
+    // Limpar opções existentes
+    motoristaSelect.innerHTML = '';
+    
+    if (pmsEnvolvidos.length === 0) {
+        // Nenhum PM selecionado
+        motoristaSelect.innerHTML = '<option value="">Primeiro selecione os PMs envolvidos...</option>';
+        motoristaSelect.disabled = true;
+    } else {
+        // Adicionar opção padrão
+        motoristaSelect.innerHTML = '<option value="">Selecione o motorista...</option>';
+        
+        // Adicionar cada PM envolvido como opção
+        pmsEnvolvidos.forEach(pm => {
+            console.log('🔍 Adicionando PM ao select:', pm);
+            const option = document.createElement('option');
+            option.value = pm.id;
+            // Usar nome_completo se disponível, senão nome, senão fallback
+            const nomeExibir = pm.nome_completo || pm.nome || 'Nome não encontrado';
+            option.textContent = nomeExibir;
+            motoristaSelect.appendChild(option);
+        });
+        
+        motoristaSelect.disabled = false;
+    }
+    
+    // Adicionar event listener para atualizar o campo hidden quando motorista for selecionado
+    motoristaSelect.onchange = function() {
+        const motoristaIdField = document.getElementById('motorista_id');
+        if (motoristaIdField) {
+            motoristaIdField.value = this.value;
+        }
+        console.log('🚗 Motorista selecionado:', this.value, this.options[this.selectedIndex]?.text);
+    };
+    
+    // Se estamos editando e há um motorista pré-selecionado, definir o select
+    const motoristaIdAtual = document.getElementById('motorista_id')?.value;
+    if (motoristaIdAtual && motoristaSelect.querySelector(`option[value="${motoristaIdAtual}"]`)) {
+        motoristaSelect.value = motoristaIdAtual;
+    }
+    
+    console.log('✅ Opções de motorista atualizadas:', pmsEnvolvidos.length, 'PMs disponíveis');
+}
+
 // Array para armazenar transgressões selecionadas
 // Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
@@ -1089,6 +1179,11 @@ async function preencherFormularioEdicao(procedimento) {
         if (document.getElementById('nome_vitima')) document.getElementById('nome_vitima').value = procedimento.nome_vitima || '';
         if (document.getElementById('natureza_processo')) document.getElementById('natureza_processo').value = procedimento.natureza_processo || '';
         if (document.getElementById('natureza_procedimento')) document.getElementById('natureza_procedimento').value = procedimento.natureza_procedimento || '';
+        
+        // Preencher dados do motorista (sinistros de trânsito)
+        if (document.getElementById('motorista_id')) document.getElementById('motorista_id').value = procedimento.motorista_id || '';
+        // O select de motorista será atualizado quando os PMs forem carregados
+        
         if (document.getElementById('resumo_fatos')) document.getElementById('resumo_fatos').value = procedimento.resumo_fatos || '';
         if (document.getElementById('numero_portaria')) document.getElementById('numero_portaria').value = procedimento.numero_portaria || '';
         if (document.getElementById('numero_memorando')) document.getElementById('numero_memorando').value = procedimento.numero_memorando || '';
@@ -1612,8 +1707,15 @@ const fieldGroups = {
     nomeVitima: document.getElementById('group_nome_vitima'),
     // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
     naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+    motoristaSinistro: document.getElementById('group_motorista_sinistro'),
     infracao: document.getElementById('group_infracao'),
 };
+
+// Debug: Verificar se os elementos existem
+console.log('🔍 Debug FieldGroups - Verificando elementos:');
+console.log('naturezaProcedimento element:', document.getElementById('group_natureza_procedimento'));
+console.log('motoristaSinistro element:', document.getElementById('group_motorista_sinistro'));
+console.log('natureza_procedimento select:', document.getElementById('natureza_procedimento'));
 
 // Mapeamento dos campos de input/select
 const fields = {
@@ -1685,6 +1787,29 @@ function updateFormVisibility() {
     const showNaturezaProcedimento = tipoGeral === 'procedimento';
     // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
     toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
+    
+    // 3. Lógica para Motorista (apenas para sinistros de trânsito em procedimentos)
+    const naturezaProcedimento = document.getElementById('natureza_procedimento')?.value || '';
+    const isSinistroTransito = naturezaProcedimento.toLowerCase().includes('sinistro de trânsito') || 
+                               naturezaProcedimento.toLowerCase().includes('sinistro de transito');
+    const showMotorista = tipoGeral === 'procedimento' && isSinistroTransito;
+    
+    console.log('🚗 Debug Motorista:', {
+        tipoGeral,
+        naturezaProcedimento,
+        isSinistroTransito,
+        showMotorista,
+        fieldExists: !!fieldGroups.motoristaSinistro,
+        elementoMotorista: fieldGroups.motoristaSinistro
+    });
+    
+    if (showMotorista) {
+        console.log('✅ Deveria mostrar campo de motorista');
+    } else {
+        console.log('❌ Campo de motorista não deveria ser mostrado');
+    }
+    
+    toggleGroup(fieldGroups.motoristaSinistro, showMotorista);
     
     // Lógica para Infração (apenas para PADS) - sem depender da natureza principal
     const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS';
@@ -1926,6 +2051,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         nomeVitima: document.getElementById('group_nome_vitima'),
         // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
         naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+        motoristaSinistro: document.getElementById('group_motorista_sinistro'),  // ADICIONADO!
         infracao: document.getElementById('group_infracao'),
     };
 
@@ -1969,6 +2095,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Função principal que atualiza a visibilidade de todo o formulário
     function updateFormVisibility() {
+        console.log('🔄 updateFormVisibility SEGUNDA FUNÇÃO chamada (linha 2006)');
         const tipoGeral = fields.tipoGeral.value;
         const tipoProcedimento = fields.tipoProcedimento ? fields.tipoProcedimento.value : '';
         const tipoProcesso = fields.tipoProcesso ? fields.tipoProcesso.value : '';
@@ -2078,6 +2205,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             // toggleBotaoIndiciosPmPrincipal(false);
         }
+        
+        // 6. Lógica para Motorista (apenas para sinistros de trânsito em procedimentos)
+        const naturezaProcedimento = document.getElementById('natureza_procedimento')?.value || '';
+        const isSinistroTransito = naturezaProcedimento.toLowerCase().includes('sinistro de trânsito') || 
+                                   naturezaProcedimento.toLowerCase().includes('sinistro de transito');
+        const showMotorista = tipoGeral === 'procedimento' && isSinistroTransito;
+        
+        console.log('🚗 Debug Motorista (SEGUNDA FUNÇÃO):', {
+            tipoGeral,
+            naturezaProcedimento,
+            isSinistroTransito,
+            showMotorista,
+            fieldExists: !!fieldGroups.motoristaSinistro,
+            elementoMotorista: fieldGroups.motoristaSinistro
+        });
+        
+        if (showMotorista) {
+            console.log('✅ Deveria mostrar campo de motorista (SEGUNDA FUNÇÃO)');
+            // Atualizar opções de motorista quando campo é mostrado
+            atualizarOpcoesMotorista();
+        } else {
+            console.log('❌ Campo de motorista não deveria ser mostrado (SEGUNDA FUNÇÃO)');
+        }
+        
+        toggleGroup(fieldGroups.motoristaSinistro, showMotorista);
     }
 
     // Função específica para controlar a lógica do número de controle
@@ -2218,6 +2370,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (fields.statusPm) fields.statusPm.addEventListener('change', updateFormVisibility);
     if (fields.numeroControleDiferente) fields.numeroControleDiferente.addEventListener('change', updateNumeroControleLogic);
     
+    // Event listener para natureza do procedimento (controlar campo motorista)
+    const naturezaProcedimentoSelect = document.getElementById('natureza_procedimento');
+    console.log('🔧 Configurando event listener para natureza procedimento:', {
+        elemento: naturezaProcedimentoSelect,
+        existe: !!naturezaProcedimentoSelect
+    });
+    
+    if (naturezaProcedimentoSelect) {
+        naturezaProcedimentoSelect.addEventListener('change', function() {
+            console.log('🔄 Natureza do procedimento mudou:', naturezaProcedimentoSelect.value);
+            console.log('🚗 Debug Motorista - Valor atual:', this.value);
+            console.log('🚗 Debug Motorista - Testando sinistro:', this.value.includes('Sinistro de trânsito'));
+            updateFormVisibility();
+        });
+        console.log('✅ Event listener adicionado para natureza do procedimento');
+    } else {
+        console.error('❌ Elemento natureza_procedimento não encontrado');
+    }
+    
     // Event listener para checkbox de conclusão
     const concluidoCheckbox = document.getElementById('concluido');
     if (concluidoCheckbox) {
@@ -2255,6 +2426,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnBuscarPm').onclick = function() {
         abrirModalBuscaUsuario('pm');
     };
+    
+    // Botão de busca de motorista removido - agora é um select direto
     
     // Botão para adicionar mais PMs (procedimentos)
     document.getElementById('btnAdicionarMaisPm').onclick = function() {
@@ -2343,6 +2516,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const nome_vitima = document.getElementById('nome_vitima')?.value?.toUpperCase() || null;
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
+    const motorista_responsavel_id = document.getElementById('motorista_id')?.value || null;
     const transgressoes_ids = document.getElementById('transgressoes_ids')?.value || null;
     const resumo_fatos = document.getElementById('resumo_fatos')?.value || null;
     const numero_portaria = document.getElementById('numero_portaria')?.value || null;
@@ -2416,6 +2590,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     // Validação de PM principal obrigatório quando há status_pm
     if (status_pm && !nome_pm_id) {
         showAlert('É obrigatório selecionar o PM envolvido!', 'error');
+        return;
+    }
+
+    // Validação de motorista obrigatório para sinistros de trânsito
+    const natureza_proc_value = document.getElementById('natureza_procedimento')?.value || '';
+    const isSinistroTransito = natureza_proc_value.toLowerCase().includes('sinistro de trânsito');
+    const motorista_id = document.getElementById('motorista_id')?.value || null;
+    
+    if (tipo_geral === 'procedimento' && isSinistroTransito && !motorista_id) {
+        showAlert('É obrigatório selecionar o motorista responsável para sinistros de trânsito!', 'error');
+        document.getElementById('btnBuscarMotorista')?.focus();
         return;
     }
 
@@ -2501,6 +2686,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 nome_vitima,
                 natureza_processo,
                 natureza_procedimento,
+                motorista_responsavel_id,
                 resumo_fatos,
                 numero_portaria,
                 numero_memorando,
@@ -2548,6 +2734,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 nome_vitima,
                 natureza_processo,
                 natureza_procedimento,
+                motorista_responsavel_id,
                 resumo_fatos,
                 numero_portaria,
                 numero_memorando,
@@ -2681,6 +2868,9 @@ function removerPmAdicional(index) {
     
     // Reindexar os campos restantes
     reindexarPmsAdicionais();
+    
+    // Atualizar opções de motorista após remoção
+    atualizarOpcoesMotorista();
 }
 
 function reindexarPmsAdicionais() {
@@ -2754,6 +2944,7 @@ async function buscarUsuariosModal() {
     try {
         // Busca todos os usuários ativos
         usuarios = await safeListarTodosUsuarios();
+        
         if (termo) {
             const termoLower = termo.toLowerCase();
             usuarios = usuarios.filter(u =>
@@ -2816,6 +3007,9 @@ async function buscarUsuariosModal() {
                     // Mostrar botão de indícios para PM principal em procedimentos
                     toggleBotaoIndiciosPmPrincipal(true);
                 }
+                
+                // Atualizar opções de motorista quando PM principal mudou
+                atualizarOpcoesMotorista();
             } else if (campoBuscaUsuario === 'pm_adicional') {
                 // PM adicional
                 const index = window.campoPmAdicionalIndex;
@@ -2827,6 +3021,9 @@ async function buscarUsuariosModal() {
                     pmsAdicionais[index].id = id;
                     pmsAdicionais[index].nome = texto;
                 }
+                
+                // Atualizar opções de motorista quando PM adicional mudou
+                atualizarOpcoesMotorista();
             }
             fecharModalBuscaUsuario();
         };
