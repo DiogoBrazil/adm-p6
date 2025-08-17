@@ -99,6 +99,217 @@ function atualizarOpcoesMotorista() {
 // Novo formato: [{id: "8", inciso: "V", texto: "...", natureza: "leve"}, ...]
 let transgressoesSelecionadas = [];
 
+// ============================================
+// FUNÇÕES DE VALIDAÇÃO DE DATAS SEQUENCIAIS
+// ============================================
+
+/**
+ * Exibe o modal de validação de datas com mensagem personalizada
+ * @param {string} mensagem - Mensagem de erro a ser exibida
+ */
+function exibirModalValidacaoData(mensagem) {
+    const modal = document.getElementById('modalValidacaoData');
+    const mensagemElement = document.getElementById('mensagemValidacaoData');
+    const content = modal.querySelector('.modal-validacao-content');
+    
+    if (!modal || !mensagemElement || !content) {
+        console.error('Elementos do modal de validação não encontrados');
+        return;
+    }
+    
+    // Definir mensagem
+    mensagemElement.textContent = mensagem;
+    
+    // Remover classes de animação anteriores
+    content.classList.remove('closing');
+    
+    // Mostrar modal
+    modal.classList.add('show');
+}
+
+/**
+ * Fecha o modal de validação de datas com animação
+ */
+function fecharModalValidacaoData() {
+    const modal = document.getElementById('modalValidacaoData');
+    const content = modal.querySelector('.modal-validacao-content');
+    
+    if (!modal || !content) return;
+    
+    // Adicionar animação de saída
+    content.classList.add('closing');
+    
+    // Remover modal após animação
+    setTimeout(() => {
+        modal.classList.remove('show');
+        content.classList.remove('closing');
+    }, 300);
+}
+
+/**
+ * Converte string de data em objeto Date para comparação
+ * @param {string} dataString - Data no formato YYYY-MM-DD
+ * @returns {Date|null} Objeto Date ou null se inválida
+ */
+function converterStringParaData(dataString) {
+    if (!dataString || dataString.trim() === '') {
+        return null;
+    }
+    
+    const data = new Date(dataString + 'T00:00:00'); // Adiciona hora para evitar problemas de timezone
+    return isNaN(data.getTime()) ? null : data;
+}
+
+/**
+ * Formata data para exibição no formato brasileiro
+ * @param {string} dataString - Data no formato YYYY-MM-DD
+ * @returns {string} Data formatada DD/MM/YYYY
+ */
+function formatarDataParaExibicao(dataString) {
+    const data = converterStringParaData(dataString);
+    if (!data) return dataString;
+    
+    return data.toLocaleDateString('pt-BR');
+}
+
+/**
+ * Valida a sequência temporal das datas do formulário
+ * @returns {object} {valido: boolean, erro: string}
+ */
+function validarSequenciaDatas() {
+    const dataInstauracao = document.getElementById('data_instauracao')?.value;
+    const dataRecebimento = document.getElementById('data_recebimento')?.value;
+    const dataRemessa = document.getElementById('data_remessa_encarregado')?.value;
+    const dataJulgamento = document.getElementById('data_julgamento')?.value;
+    const dataConclusao = document.getElementById('data_conclusao')?.value;
+    const concluido = document.getElementById('concluido')?.checked;
+    
+    // Converter strings para objetos Date
+    const dtInstauracao = converterStringParaData(dataInstauracao);
+    const dtRecebimento = converterStringParaData(dataRecebimento);
+    const dtRemessa = converterStringParaData(dataRemessa);
+    const dtJulgamento = converterStringParaData(dataJulgamento);
+    const dtConclusao = converterStringParaData(dataConclusao);
+    
+    // 1. Data de Instauração vs Data de Recebimento
+    if (dtInstauracao && dtRecebimento) {
+        if (dtInstauracao > dtRecebimento) {
+            return {
+                valido: false,
+                erro: `A Data de Instauração (${formatarDataParaExibicao(dataInstauracao)}) não pode ser posterior à Data de Recebimento (${formatarDataParaExibicao(dataRecebimento)}).`
+            };
+        }
+    }
+    
+    // 2. Data de Recebimento vs Data de Remessa
+    if (dtRecebimento && dtRemessa) {
+        if (dtRecebimento > dtRemessa) {
+            return {
+                valido: false,
+                erro: `A Data de Recebimento (${formatarDataParaExibicao(dataRecebimento)}) não pode ser posterior à Data de Remessa (${formatarDataParaExibicao(dataRemessa)}).`
+            };
+        }
+    }
+    
+    // 3. Data de Remessa vs Data de Julgamento (quando ambas preenchidas)
+    if (dtRemessa && dtJulgamento) {
+        if (dtRemessa > dtJulgamento) {
+            return {
+                valido: false,
+                erro: `A Data de Remessa (${formatarDataParaExibicao(dataRemessa)}) não pode ser posterior à Data de Julgamento (${formatarDataParaExibicao(dataJulgamento)}).`
+            };
+        }
+    }
+    
+    // 4. Data de Recebimento vs Data de Julgamento (quando remessa não preenchida)
+    if (dtRecebimento && dtJulgamento && !dtRemessa) {
+        if (dtRecebimento > dtJulgamento) {
+            return {
+                valido: false,
+                erro: `A Data de Recebimento (${formatarDataParaExibicao(dataRecebimento)}) não pode ser posterior à Data de Julgamento (${formatarDataParaExibicao(dataJulgamento)}).`
+            };
+        }
+    }
+    
+    // 5. Data de Julgamento vs Data de Conclusão (quando ambas preenchidas)
+    if (dtJulgamento && dtConclusao && concluido) {
+        if (dtJulgamento > dtConclusao) {
+            return {
+                valido: false,
+                erro: `A Data de Julgamento (${formatarDataParaExibicao(dataJulgamento)}) não pode ser posterior à Data de Conclusão (${formatarDataParaExibicao(dataConclusao)}).`
+            };
+        }
+    }
+    
+    // 6. Data de Remessa vs Data de Conclusão (quando julgamento não preenchido)
+    if (dtRemessa && dtConclusao && concluido && !dtJulgamento) {
+        if (dtRemessa > dtConclusao) {
+            return {
+                valido: false,
+                erro: `A Data de Remessa (${formatarDataParaExibicao(dataRemessa)}) não pode ser posterior à Data de Conclusão (${formatarDataParaExibicao(dataConclusao)}).`
+            };
+        }
+    }
+    
+    // 7. Data de Recebimento vs Data de Conclusão (quando remessa e julgamento não preenchidos)
+    if (dtRecebimento && dtConclusao && concluido && !dtRemessa && !dtJulgamento) {
+        if (dtRecebimento > dtConclusao) {
+            return {
+                valido: false,
+                erro: `A Data de Recebimento (${formatarDataParaExibicao(dataRecebimento)}) não pode ser posterior à Data de Conclusão (${formatarDataParaExibicao(dataConclusao)}).`
+            };
+        }
+    }
+    
+    return { valido: true, erro: null };
+}
+
+/**
+ * Adiciona listeners de validação aos campos de data
+ */
+function configurarValidacaoDatas() {
+    // Remover validação em tempo real - apenas validar no submit
+    // A validação principal acontece na função validarSequenciaDatas() 
+    // que é chamada no submit do formulário
+    
+    const camposDatas = [
+        'data_instauracao',
+        'data_recebimento', 
+        'data_remessa_encarregado',
+        'data_julgamento',
+        'data_conclusao'
+    ];
+    
+    // Apenas configurar limpeza de estilos de erro quando focar nos campos
+    camposDatas.forEach(campoId => {
+        const campo = document.getElementById(campoId);
+        if (campo) {
+            // Apenas remover destaque quando o campo receber foco
+            campo.addEventListener('focus', function() {
+                this.style.borderColor = '';
+                this.style.boxShadow = '';
+            });
+        }
+    });
+    
+    // Configurar botão de fechar do modal de validação
+    const btnFecharModal = document.getElementById('btnFecharModalValidacao');
+    if (btnFecharModal) {
+        btnFecharModal.addEventListener('click', fecharModalValidacaoData);
+    }
+    
+    // Fechar modal ao clicar no overlay
+    const modalValidacao = document.getElementById('modalValidacaoData');
+    if (modalValidacao) {
+        modalValidacao.addEventListener('click', function(e) {
+            // Fechar apenas se clicar no overlay (fundo), não no conteúdo
+            if (e.target === modalValidacao) {
+                fecharModalValidacaoData();
+            }
+        });
+    }
+}
+
 // Array para armazenar indícios por PM específico
 // Formato: {pm_id: {categoria: "categoria", crimes: [...], rdpm: [...], art29: [...]}}
 let indiciosPorPM = {};
@@ -462,6 +673,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await carregarMunicipios();
     // Carregar opções de indícios
     await carregarOpcoesIndicios();
+
+    // Configurar validações de datas sequenciais
+    configurarValidacaoDatas();
 
     // Ativar controles pós-resumo (remessa/julgamento/solução/indícios)
     wireNovosControlesPosResumo();
@@ -2444,6 +2658,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 document.getElementById('processForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    // VALIDAÇÃO 1: Sequência de datas
+    const resultadoValidacaoDatas = validarSequenciaDatas();
+    if (!resultadoValidacaoDatas.valido) {
+        exibirModalValidacaoData(resultadoValidacaoDatas.erro);
+        
+        // Destacar campos de data com erro
+        const camposDatas = ['data_instauracao', 'data_recebimento', 'data_remessa_encarregado', 'data_julgamento', 'data_conclusao'];
+        camposDatas.forEach(campoId => {
+            const campo = document.getElementById(campoId);
+            if (campo && campo.value) {
+                campo.style.borderColor = '#e74c3c';
+                campo.style.boxShadow = '0 0 0 2px rgba(231, 76, 60, 0.2)';
+            }
+        });
+        
+        return; // Impede o envio do formulário
+    }
     
     // Validar campos com máscara antes de submeter
     const rgfInput = document.getElementById('numero_rgf');
