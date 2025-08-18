@@ -3,155 +3,1083 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Início - Sistema de Gestão</title>
+    <title>Menu Sidebar - P6/7ºBPM</title>
     <script type="text/javascript" src="/eel.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="static/css/theme.css">
-    <link rel="stylesheet" href="static/css/dashboard_layout.css">
-    <link rel="stylesheet" href="static/css/users.css">
-    <link rel="stylesheet" href="static/css/pro-sidebar.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* Sidebar Container */
+        .sidebar {
+            width: 320px;
+            height: 100vh;
+            background: linear-gradient(180deg, #0f4c75 0%, #1e6ba8 50%, #2eb872 100%);
+            position: fixed;
+            left: 0;
+            top: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 5px 0 20px rgba(0, 0, 0, 0.2);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .sidebar.collapsed {
+            width: 70px;
+        }
+
+        /* Logo Section - Agora User Section */
+        .logo-section {
+            padding: 25px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .sidebar.collapsed .logo-section {
+            padding: 15px 10px;
+            justify-content: center;
+            background: transparent;
+            border-bottom: none;
+        }
+
+        .logo-section .user-info {
+            display: flex;
+            align-items: center;
+            color: white;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+
+        .sidebar.collapsed .logo-section .user-info {
+            opacity: 0;
+            width: 0;
+            overflow: hidden;
+            display: none;
+        }
+
+        .logo-section .user-avatar {
+            min-width: 40px;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .logo-section .user-avatar svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        .logo-section .user-details {
+            flex: 1;
+            transition: opacity 0.3s;
+        }
+
+        .logo-section .user-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .logo-section .user-role {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* Botão de Logout */
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 75, 75, 0.2);
+            color: #ff6b6b;
+            transform: scale(1.05);
+        }
+
+        .logout-btn:active {
+            transform: scale(0.95);
+        }
+
+        .logout-btn svg {
+            transition: transform 0.3s;
+        }
+
+        .logout-btn:hover svg {
+            transform: translateX(2px);
+        }
+
+        /* Toggle Button */
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+
+        .sidebar.collapsed .toggle-btn {
+            background: linear-gradient(135deg, #2eb872, #0f4c75);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .sidebar.collapsed .toggle-btn:hover {
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+        }
+
+        .toggle-btn svg {
+            transition: transform 0.3s;
+        }
+
+        .toggle-btn:hover svg {
+            transform: scale(1.1);
+        }
+
+        /* Animação dos ícones */
+        .shrink-icon, .expand-icon {
+            transition: opacity 0.3s;
+        }
+
+        /* Menu Items */
+        .menu {
+            padding: 20px 0;
+            position: relative;
+            z-index: 10;
+        }
+
+        .sidebar.collapsed .menu {
+            padding-top: 10px;
+        }
+
+        .menu-item {
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        .menu-link {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            color: rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .menu-link::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, rgba(46, 184, 114, 0.3), rgba(15, 76, 117, 0.3));
+            transition: width 0.3s;
+        }
+
+        .menu-link:hover::before {
+            width: 100%;
+        }
+
+        .menu-link:hover {
+            color: white;
+            padding-left: 25px;
+        }
+
+        .menu-link.active {
+            background: rgba(255, 255, 255, 0.15);
+            border-left: 4px solid #2eb872;
+            color: white;
+        }
+
+        .menu-icon {
+            min-width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+        }
+
+        .menu-text {
+            flex: 1;
+            transition: opacity 0.3s;
+        }
+
+        .sidebar.collapsed .menu-text {
+            opacity: 0;
+            width: 0;
+            overflow: hidden;
+        }
+
+        .menu-arrow {
+            transition: transform 0.3s;
+            margin-left: auto;
+        }
+
+        .menu-arrow.rotated {
+            transform: rotate(180deg);
+        }
+
+        .sidebar.collapsed .menu-arrow {
+            display: none;
+        }
+
+        /* Dropdown Menu - Nível 1 */
+        .dropdown {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+            background: rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 15;
+        }
+
+        .dropdown.open {
+            max-height: 800px;
+            transition: max-height 0.4s ease-in;
+        }
+
+        .dropdown-item {
+            padding: 12px 20px 12px 60px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .dropdown-item::before {
+            content: '•';
+            position: absolute;
+            left: 40px;
+            color: #2eb872;
+            font-size: 20px;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            padding-left: 65px;
+        }
+
+        .dropdown-item .sub-arrow {
+            margin-left: auto;
+            transition: transform 0.3s;
+            font-size: 12px;
+        }
+
+        .dropdown-item .sub-arrow.rotated {
+            transform: rotate(180deg);
+        }
+
+        /* Dropdown Menu - Nível 2 (Subdropdown) */
+        .subdropdown {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out;
+            background: rgba(0, 0, 0, 0.15);
+            position: relative;
+            z-index: 20;
+        }
+
+        .subdropdown.open {
+            max-height: 500px;
+            transition: max-height 0.4s ease-in;
+        }
+
+        .subdropdown-item {
+            padding: 10px 20px 10px 80px;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            display: block;
+            transition: all 0.3s;
+            position: relative;
+            font-size: 14px;
+        }
+
+        .subdropdown-item::before {
+            content: '→';
+            position: absolute;
+            left: 60px;
+            color: #1e6ba8;
+            font-size: 14px;
+        }
+
+        .subdropdown-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            padding-left: 85px;
+        }
+
+        .sidebar.collapsed .dropdown,
+        .sidebar.collapsed .subdropdown {
+            display: none;
+        }
+
+        /* Remover estilos antigos da user-section do main-content */
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            color: white;
+            white-space: nowrap;
+        }
+
+        .user-avatar {
+            min-width: 40px;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            flex-shrink: 0;
+        }
+
+        .user-avatar svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .user-role {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* Main Content - Ajustar padding para user section no topo */
+        .main-content {
+            margin-left: 320px;
+            padding: 40px;
+            padding-top: 40px;
+            width: calc(100% - 320px);
+            transition: all 0.3s;
+            color: white;
+            position: relative;
+        }
+
+        .main-content.expanded {
+            margin-left: 70px;
+            width: calc(100% - 70px);
+            padding-top: 40px;
+        }
+
+        /* Dashboard Icon */
+        .dashboard-icon {
+            font-size: 22px;
+        }
+
+        /* Tooltips for collapsed sidebar */
+        .sidebar.collapsed .menu-item {
+            position: relative;
+        }
+
+        .sidebar.collapsed .menu-link:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 70px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            white-space: nowrap;
+            font-size: 14px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        /* Remover tooltips do usuário quando recolhido */
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+                z-index: 1000;
+            }
+
+            .sidebar:not(.collapsed) {
+                width: 320px;
+                z-index: 1000;
+            }
+
+            .main-content {
+                margin-left: 70px;
+                width: calc(100% - 70px);
+                padding-top: 40px;
+            }
+
+            .main-content.expanded {
+                margin-left: 70px;
+                padding-top: 40px;
+            }
+
+            /* Ajustes do botão de logout no mobile */
+            .logout-btn {
+                width: 32px;
+                height: 32px;
+                padding: 6px;
+                margin-left: 8px;
+            }
+
+            .logout-btn svg {
+                width: 16px;
+                height: 16px;
+            }
+
+            /* Usuário oculto no mobile responsivo */
+        }
+
+        /* Scrollbar Styling */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Card styles for main content */
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            z-index: 1;
+        }
+
+        /* Chart Stats */
+        .chart-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            z-index: 1;
+            position: relative;
+        }
+
+        .chart-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+        }
+
+        .stat-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* Global Loader */
+        .global-loader {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(4px);
+        }
+
+        .global-loader.hidden {
+            display: none;
+        }
+
+        .global-loader .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #10b981;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <div class="app-layout">
-        <aside id="sidebar" class="sidebar collapsed break-point-sm has-bg-image">
-            <a id="btn-collapse" class="sidebar-collapser"><i class="ri-arrow-left-s-line"></i></a>
-            <div class="image-wrapper">
-                <img src="static/images/sidebar-bg.jpg" alt="sidebar background" />
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <!-- User Section -->
+        <div class="logo-section">
+            <div class="user-info">
+                <div class="user-avatar">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="8" r="3.5" fill="white"/>
+                        <path d="M12 14c-4.42 0-8 2.58-8 5.75V22h16v-2.25c0-3.17-3.58-5.75-8-5.75z" fill="white"/>
+                    </svg>
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="userName">Carregando...</div>
+                    <div class="user-role" id="userEmail">usuário</div>
+                </div>
+                <button class="logout-btn" title="Sair do Sistema" onclick="realizarLogout()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16,17 21,12 16,7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                </button>
             </div>
-            <div class="sidebar-layout">
-                <div class="sidebar-header">
-                    <!-- Header removido conforme solicitado -->
-                </div>
-                <div class="sidebar-content">
-                    <nav class="menu open-current-submenu">
-                        <ul>
-                            <li class="menu-item">
-                                <a href="user_list.html">
-                                    <span class="menu-icon">
-                                        <i class="ri-user-fill"></i>
-                                    </span>
-                                    <span class="menu-title">Usuários</span>
-                                </a>
-                            </li>
-                            <li class="menu-item">
-                                <a href="procedure_list.html">
-                                    <span class="menu-icon">
-                                        <i class="ri-folder-open-fill"></i>
-                                    </span>
-                                    <span class="menu-title">Processos/Procedimentos</span>
-                                </a>
-                            </li>
-                            <li class="menu-item sub-menu">
-                                <a href="#">
-                                    <span class="menu-icon">
-                                        <i class="ri-bar-chart-2-fill"></i>
-                                    </span>
-                                    <span class="menu-title">Estatísticas</span>
-                                </a>
-                                <div class="sub-menu-list">
-                                    <ul>
-                                        <li class="menu-item">
-                                            <a href="estatisticas_encarregados.html">
-                                                <span class="menu-title">Feitos por Encarregado</span>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </li>
-                            <li class="menu-item sub-menu">
-                                <a href="#">
-                                    <span class="menu-icon">
-                                        <i class="ri-scales-3-fill"></i>
-                                    </span>
-                                    <span class="menu-title">Base Legal</span>
-                                </a>
-                                <div class="sub-menu-list">
-                                    <ul>
-                                        <li class="menu-item">
-                                            <a href="crime_list.html">
-                                                <span class="menu-title">Crimes e Contravenções</span>
-                                            </a>
-                                        </li>
-                                        <li class="menu-item">
-                                            <a href="transgressao_list.html">
-                                                <span class="menu-title">Transgressões</span>
-                                            </a>
-                                        </li>
-                                        <li class="menu-item">
-                                            <a href="estatuto_art29.html">
-                                                <span class="menu-title">Art. 29 - Estatuto</span>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </li>
-                        </ul>
-                    </nav>
-                </div>
-            </div>
-        </aside>
-        <div class="main-content">
-            <header class="header">
-                <a id="btn-toggle" href="#" class="sidebar-toggler break-point-sm">
-                    <i class="ri-menu-line ri-xl"></i>
-                </a>
-                <div class="header-content">
-                    <div class="header-left">
-                        <div class="logo-dashboard">
-                            <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
-                            <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
-                        </div>
-                    </div>
-                    
-                    <div class="user-info">
-                        <div class="user-profile">
-                            <div class="user-avatar">
-                                <i class="fas fa-user-shield"></i>
-                            </div>
-                            <div class="user-details">
-                                <h3 id="userName">Carregando...</h3>
-                                <p id="userEmail">usuário</p>
-                            </div>
-                        </div>
-                        
-                        <button class="btn-logout" onclick="realizarLogout()">
-                            <i class="fas fa-sign-out-alt"></i>
-                            Sair
-                        </button>
-                    </div>
-                </div>
-            </header>
-            <main class="content">
-                <div id="alertContainer"></div>
-                
-                <div class="welcome-section">
-                    <div class="welcome-header">
-                        <h1>Bem-vindo ao Sistema de Gestão</h1>
-                        <p>Seção de Justiça e Disciplina - 7º BPM</p>
-                    </div>
-                    
-                    <div class="procedures-section">
-                        <h2 class="section-title">Processos e Procedimentos em Andamento</h2>
-                        <div class="stats-grid" id="statsGrid">
-                            <!-- Cards de processos em andamento serão inseridos aqui dinamicamente -->
-                        </div>
-                    </div>
-                </div>
-            </main>
+            <button class="toggle-btn" id="toggleBtn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="toggleIcon">
+                    <!-- Ícone de Shrink (chevrons apontando para esquerda) -->
+                    <path class="shrink-icon" d="M11 19l-7-7 7-7M18 19l-7-7 7-7"></path>
+                    <!-- Ícone de Expand (chevrons apontando para direita) -->
+                    <path class="expand-icon" d="M13 5l7 7-7 7M6 5l7 7-7 7" style="display: none;"></path>
+                </svg>
+            </button>
         </div>
-    </div>
+
+        <!-- Menu -->
+        <nav class="menu">
+            <!-- Usuários -->
+            <div class="menu-item">
+                <a href="#" class="menu-link" data-tooltip="Usuários" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">👥</span>
+                    <span class="menu-text">Usuários</span>
+                    <span class="menu-arrow">▼</span>
+                </a>
+                <div class="dropdown">
+                    <a href="#" class="dropdown-item">Cadastrar</a>
+                    <a href="user_list.html" class="dropdown-item">Listar</a>
+                </div>
+            </div>
+
+            <!-- Processos -->
+            <div class="menu-item">
+                <a href="#" class="menu-link" data-tooltip="Processos" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">📁</span>
+                    <span class="menu-text">Processos e Procedimentos</span>
+                    <span class="menu-arrow">▼</span>
+                </a>
+                <div class="dropdown">
+                    <a href="#" class="dropdown-item">Cadastrar</a>
+                    <a href="procedure_list.html" class="dropdown-item">Listar</a>
+                </div>
+            </div>
+
+            <!-- Estatísticas -->
+            <div class="menu-item">
+                <a href="#" class="menu-link" data-tooltip="Estatísticas" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">📊</span>
+                    <span class="menu-text">Estatísticas</span>
+                    <span class="menu-arrow">▼</span>
+                </a>
+                <div class="dropdown">
+                    <a href="#" class="dropdown-item">Dashboard Analítico</a>
+                    <a href="estatisticas_encarregados.html" class="dropdown-item">Feitos por Encarregado</a>
+                </div>
+            </div>
+
+            <!-- Relatórios -->
+            <div class="menu-item">
+                <a href="#" class="menu-link" data-tooltip="Relatórios" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">📋</span>
+                    <span class="menu-text">Relatórios</span>
+                    <span class="menu-arrow">▼</span>
+                </a>
+                <div class="dropdown">
+                    <a class="dropdown-item" onclick="toggleSubdropdown(this)">
+                        <span>Mapa Mensal</span>
+                        <span class="sub-arrow">▼</span>
+                    </a>
+                    <div class="subdropdown">
+                        <a href="#" class="subdropdown-item">Gerar Mapa Mensal</a>
+                        <a href="#" class="subdropdown-item">Mapas Anteriores</a>
+                        <a href="#" class="subdropdown-item">Consolidado Trimestral</a>
+                        <a href="#" class="subdropdown-item">Exportar Dados</a>
+                    </div>
+                    
+                    <a href="#" class="dropdown-item">Relatório Diário</a>
+                    <a href="#" class="dropdown-item">Relatório Semanal</a>
+                    <a href="#" class="dropdown-item">Relatório Anual</a>
+                </div>
+            </div>
+
+            <!-- Base Legal -->
+            <div class="menu-item">
+                <a href="#" class="menu-link" data-tooltip="Base Legal" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">⚖️</span>
+                    <span class="menu-text">Base Legal</span>
+                    <span class="menu-arrow">▼</span>
+                </a>
+                <div class="dropdown">
+                    <a class="dropdown-item" onclick="toggleSubdropdown(this)">
+                        <span>Crimes e Contravenções</span>
+                        <span class="sub-arrow">▼</span>
+                    </a>
+                    <div class="subdropdown">
+                        <a href="#" class="subdropdown-item">Cadastrar</a>
+                        <a href="crime_list.html" class="subdropdown-item">Listar</a>
+                    </div>
+                    
+                    <a class="dropdown-item" onclick="toggleSubdropdown(this)">
+                        <span>Transgressões do RDPM</span>
+                        <span class="sub-arrow">▼</span>
+                    </a>
+                    <div class="subdropdown">
+                        <a href="#" class="subdropdown-item">Cadastrar</a>
+                        <a href="transgressao_list.html" class="subdropdown-item">Listar</a>
+                    </div>
+                    
+                    <a class="dropdown-item" onclick="toggleSubdropdown(this)">
+                        <span>Transgressões do Estatuto</span>
+                        <span class="sub-arrow">▼</span>
+                    </a>
+                    <div class="subdropdown">
+                        <a href="#" class="subdropdown-item">Cadastrar</a>
+                        <a href="estatuto_art29.html" class="subdropdown-item">Listar</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <div id="alertContainer"></div>
+        <h1>Seção de Justiça e Disciplina - P6/7ºBPM</h1>
+
+        <div class="card" style="margin-top: 30px;">
+            <h2 style="margin-bottom: 30px; text-align: center;">Processos e Procedimentos em Andamento</h2>
+            
+            <!-- Gráfico de Barras -->
+            <div class="chart-container">
+                <canvas id="processChart"></canvas>
+            </div>
+            
+            <!-- Legenda com totais -->
+            <div class="chart-stats">
+                <div class="chart-stat-item">
+                    <span class="stat-dot" style="background: #2eb872;"></span>
+                    <span>Total Geral: <strong id="totalGeral">0</strong></span>
+                </div>
+                <div class="chart-stat-item">
+                    <span class="stat-dot" style="background: #1e6ba8;"></span>
+                    <span>Total em andamento: <strong id="tiposAtivos">0</strong></span>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <!-- Loader global (sobreposição) para transições como logout -->
     <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
         <div class="spinner"></div>
     </div>
-    
-    <!-- Overlay para sidebar mobile -->
-    <div id="overlay" class="sidebar-overlay"></div>
 
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="static/js/dashboard.js"></script>
-    <script src="static/js/pro-sidebar.js"></script>
+    <script>
+        // Toggle Sidebar
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const shrinkIcon = document.querySelector('.shrink-icon');
+        const expandIcon = document.querySelector('.expand-icon');
+
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('expanded');
+            
+            // Alternar ícones
+            if (sidebar.classList.contains('collapsed')) {
+                shrinkIcon.style.display = 'none';
+                expandIcon.style.display = 'block';
+            } else {
+                shrinkIcon.style.display = 'block';
+                expandIcon.style.display = 'none';
+            }
+        });
+
+        // Toggle Dropdown (Nível 1)
+        function toggleDropdown(element) {
+            const dropdown = element.nextElementSibling;
+            const arrow = element.querySelector('.menu-arrow');
+            
+            // Close other dropdowns
+            document.querySelectorAll('.dropdown.open').forEach(item => {
+                if (item !== dropdown) {
+                    item.classList.remove('open');
+                    item.previousElementSibling.querySelector('.menu-arrow').classList.remove('rotated');
+                    
+                    // Close all subdropdowns within
+                    item.querySelectorAll('.subdropdown.open').forEach(sub => {
+                        sub.classList.remove('open');
+                    });
+                    item.querySelectorAll('.sub-arrow.rotated').forEach(subArrow => {
+                        subArrow.classList.remove('rotated');
+                    });
+                }
+            });
+            
+            // Toggle current dropdown
+            dropdown.classList.toggle('open');
+            arrow.classList.toggle('rotated');
+        }
+
+        // Toggle Subdropdown (Nível 2)
+        function toggleSubdropdown(element) {
+            const subdropdown = element.nextElementSibling;
+            const subArrow = element.querySelector('.sub-arrow');
+            
+            // Close other subdropdowns at the same level
+            const parentDropdown = element.closest('.dropdown');
+            parentDropdown.querySelectorAll('.subdropdown.open').forEach(item => {
+                if (item !== subdropdown) {
+                    item.classList.remove('open');
+                }
+            });
+            parentDropdown.querySelectorAll('.sub-arrow.rotated').forEach(arrow => {
+                if (arrow !== subArrow) {
+                    arrow.classList.remove('rotated');
+                }
+            });
+            
+            // Toggle current subdropdown
+            subdropdown.classList.toggle('open');
+            subArrow.classList.toggle('rotated');
+        }
+
+        // Active Menu Item
+        document.querySelectorAll('.menu-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                if (!this.querySelector('.menu-arrow')) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all links
+                    document.querySelectorAll('.menu-link').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    
+                    // Add active class to clicked link
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        // Dropdown items click (non-subdropdown items)
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+            if (!item.querySelector('.sub-arrow')) {
+                item.addEventListener('click', function(e) {
+                    if (this.getAttribute('href') && this.getAttribute('href') !== '#') {
+                        // Se tem href válido, deixa navegar
+                        return true;
+                    }
+                    
+                    e.preventDefault();
+                    
+                    // Remove active class from all links
+                    document.querySelectorAll('.menu-link').forEach(link => {
+                        link.classList.remove('active');
+                    });
+                    
+                    // Add active class to parent menu
+                    this.closest('.menu-item').querySelector('.menu-link').classList.add('active');
+                });
+            }
+        });
+
+        // Subdropdown items click
+        document.querySelectorAll('.subdropdown-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                if (this.getAttribute('href') && this.getAttribute('href') !== '#') {
+                    // Se tem href válido, deixa navegar
+                    return true;
+                }
+                
+                e.preventDefault();
+                
+                // Remove active class from all links
+                document.querySelectorAll('.menu-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                
+                // Add active class to parent menu
+                this.closest('.menu-item').querySelector('.menu-link').classList.add('active');
+            });
+        });
+
+        // Responsive behavior
+        if (window.innerWidth <= 768) {
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('expanded');
+        }
+
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('collapsed');
+                mainContent.classList.add('expanded');
+            }
+        });
+
+        // Inicializar o gráfico com dados do backend
+        let processChart;
+        
+        async function initializeChart() {
+            try {
+                const resultado = await eel.obter_estatisticas_processos_andamento()();
+                
+                if (resultado.sucesso) {
+                    const processData = {};
+                    
+                    // Mapear dados do backend para o formato do gráfico
+                    Object.entries(resultado.andamento).forEach(([tipo, quantidade]) => {
+                        if (tipo !== 'TOTAL') {
+                            processData[tipo] = {
+                                name: getProcessName(tipo),
+                                count: quantidade,
+                                color: getProcessColor(tipo)
+                            };
+                        }
+                    });
+                    
+                    // Atualizar totais
+                    const totalGeral = resultado.total_processos || 0;
+                    const tiposAtivos = Object.values(resultado.andamento).filter(count => count > 0).length || 0;
+                    
+                    document.getElementById('totalGeral').textContent = totalGeral;
+                    document.getElementById('tiposAtivos').textContent = tiposAtivos;
+                    
+                    // Criar gráfico
+                    createChart(processData);
+                } else {
+                    console.error('Erro ao carregar dados:', resultado.erro);
+                    // Usar dados padrão em caso de erro
+                    createChart({});
+                }
+            } catch (error) {
+                console.error('Erro ao conectar com o backend:', error);
+                // Usar dados padrão em caso de erro
+                createChart({});
+            }
+        }
+        
+        function getProcessName(tipo) {
+            const names = {
+                'SR': 'Sindicâncias',
+                'SINDICANCIA': 'Sindicâncias',
+                'IPM': 'Inquérito Policial Militar',
+                'IPPM': 'Inquérito Policial Militar',
+                'PADS': 'Processo Apuratório Disciplinar Sumário',
+                'PAD': 'Processo Administrativo Disciplinar',
+                'CD': 'Conselho de Disciplina',
+                'CJ': 'Conselho de Justificação',
+                'FP': 'Feito Preliminar',
+                'FEITO_PRELIMINAR': 'Feito Preliminar'
+            };
+            return names[tipo] || tipo;
+        }
+        
+        function getProcessColor(tipo) {
+            const colors = {
+                'SR': '#2eb872',
+                'SINDICANCIA': '#2eb872',
+                'IPM': '#1e6ba8',
+                'IPPM': '#1e6ba8',
+                'PADS': '#0f4c75',
+                'PAD': '#3498db',
+                'CD': '#27ae60',
+                'CJ': '#16a085',
+                'FP': '#e67e22',
+                'FEITO_PRELIMINAR': '#e67e22'
+            };
+            return colors[tipo] || '#95a5a6';
+        }
+        
+        function createChart(processData) {
+            const ctx = document.getElementById('processChart').getContext('2d');
+            
+            const labels = Object.keys(processData);
+            const data = Object.values(processData).map(item => item.count || 0);
+            const backgroundColors = Object.values(processData).map(item => item.color || '#95a5a6');
+            const borderColors = backgroundColors.map(color => color);
+            
+            processChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Quantidade de Processos',
+                        data: data,
+                        backgroundColor: backgroundColors.map(color => color + '99'), // Adiciona transparência
+                        borderColor: borderColors,
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        hoverBackgroundColor: backgroundColors.map(color => color + 'CC')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            bodyFont: {
+                                size: 13
+                            },
+                            callbacks: {
+                                label: function(context) {
+                                    const label = processData[context.label]?.name || context.label;
+                                    const value = context.parsed.y;
+                                    const total = data.reduce((a, b) => a + b, 0);
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                    return [`${label}`, `Quantidade: ${value}`, `Percentual: ${percentage}%`];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                font: {
+                                    size: 12
+                                },
+                                stepSize: 1
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false,
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.8)',
+                                font: {
+                                    size: 14,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+        
+        // Inicializar quando a página carregar
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeChart();
+        });
+    </script>
 </body>
 </html>
