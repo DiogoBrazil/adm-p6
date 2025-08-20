@@ -1,5 +1,5 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; min-height: 100vh; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #64b5f6; min-height: 100vh; }
 .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
 .title { margin-bottom: 20px; font-size: 1.8rem; color: #333; }
 .form-section, .list-section { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); padding: 20px; margin-bottom: 30px; }

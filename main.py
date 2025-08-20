@@ -1159,8 +1159,8 @@ def obter_estatisticas_encarregados():
         # Primeiro, obter todos os encarregados
         cursor.execute('''
             SELECT id, posto_graduacao, matricula, nome
-            FROM encarregados 
-            WHERE ativo = 1
+            FROM usuarios 
+            WHERE ativo = 1 AND is_encarregado = 1
             ORDER BY posto_graduacao, nome
         ''')
         encarregados = cursor.fetchall()
@@ -1182,29 +1182,32 @@ def obter_estatisticas_encarregados():
             # SR e Sindicâncias (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND (tipo_detalhe = 'SR' OR tipo_detalhe = 'SINDICANCIA')
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['sr'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['sr'] = result[0] if result else 0
             
             # FP - Feito Preliminar (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND (tipo_detalhe = 'FP' OR tipo_detalhe = 'FEITO_PRELIMINAR')
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['fp'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['fp'] = result[0] if result else 0
             
             # IPM (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['ipm'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['ipm'] = result[0] if result else 0
             
             # Escrivão (quando foi escrivão em IPM)
             cursor.execute('''
@@ -1213,43 +1216,48 @@ def obter_estatisticas_encarregados():
                 AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['escrivao'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['escrivao'] = result[0] if result else 0
             
             # PADS (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND tipo_detalhe = 'PADS'
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['pads'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['pads'] = result[0] if result else 0
             
             # PAD (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND tipo_detalhe = 'PAD'
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['pad'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['pad'] = result[0] if result else 0
             
             # CD - Conselho de Disciplina (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND tipo_detalhe = 'CD'
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['cd'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['cd'] = result[0] if result else 0
             
             # CJ - Conselho de Justificação (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'encarregado'
+                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
                 AND tipo_detalhe = 'CJ'
                 AND ativo = 1
             ''', (enc_id,))
-            contadores['cj'] = cursor.fetchone()[0]
+            result = cursor.fetchone()
+            contadores['cj'] = result[0] if result else 0
             
             # Calcular total para este encarregado
             total_encarregado = sum(contadores.values())

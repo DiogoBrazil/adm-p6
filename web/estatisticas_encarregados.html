@@ -6,18 +6,460 @@
     <title>Feitos por Encarregado - Sistema de Gestão</title>
     <script type="text/javascript" src="/eel.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="static/css/theme.css">
-    <link rel="stylesheet" href="static/css/estatisticas.css">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    <style>
+        body {
+            background: #64b5f6 !important;
+        }
+
+        /* Container Principal */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeIn 0.5s ease-in;
+            padding: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+
+
+
+
+        /* Controles customizados */
+        .controls {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e9ecef;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 15px 12px 45px;
+            border: 2px solid #e0e6ed;
+            border-radius: 8px;
+            background: white;
+            color: #333;
+            font-size: 14px;
+            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: #999;
+        }
+
+        .search-input:focus {
+            outline: none;
+            background: white;
+            border-color: #2eb872;
+            box-shadow: 0 0 0 3px rgba(46, 184, 114, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: 2px solid #e0e6ed;
+            border-radius: 8px;
+            background: white;
+            color: #333;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:hover {
+            background: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn.active {
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+            color: white;
+            border-color: #2eb872;
+            box-shadow: 0 4px 15px rgba(46, 184, 114, 0.3);
+        }
+
+        .btn-export {
+            background: linear-gradient(135deg, #2eb872, #0f4c75);
+            color: white;
+            border-color: #2eb872;
+        }
+
+        .btn-export:hover {
+            background: linear-gradient(135deg, #27a968, #0e4168);
+        }
+
+        /* Tabela customizada */
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            max-height: 600px;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
+            position: relative;
+        }
+
+        .table-wrapper {
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Cabeçalho fixo */
+        .table-header {
+            position: relative;
+            z-index: 2;
+            background: white;
+            border-radius: 8px 8px 0 0;
+            overflow: hidden;
+            border-bottom: 3px solid #2eb872;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+        }
+
+        .header-table thead {
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+        }
+
+        .header-table tbody {
+            display: none; /* Garantir que nenhuma linha apareça no cabeçalho */
+        }
+
+        /* Corpo da tabela com scroll */
+        .table-body {
+            flex: 1;
+            overflow-y: auto;
+            border-radius: 0 0 8px 8px;
+            min-height: 200px;
+            max-height: 400px;
+        }
+
+        .body-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 0;
+        }
+
+        /* Scrollbar customizada */
+        .table-body::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-body::-webkit-scrollbar-track {
+            background: #f1f3f4;
+            border-radius: 4px;
+        }
+
+        .table-body::-webkit-scrollbar-thumb {
+            background: rgba(46, 184, 114, 0.6);
+            border-radius: 4px;
+        }
+
+        .table-body::-webkit-scrollbar-thumb:hover {
+            background: rgba(46, 184, 114, 0.8);
+        }
+
+        /* Estilos unificados para ambas as tabelas */
+        .header-table th, .body-table td {
+            width: 10%; /* Largura uniforme para alinhamento */
+            text-align: center;
+            padding: 15px;
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header-table th:first-child, .body-table td:first-child {
+            width: 20%; /* Coluna do encarregado mais larga */
+        }
+
+        .header-table th:last-child, .body-table td:last-child {
+            border-right: none;
+        }
+
+        th {
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.3s;
+            position: relative;
+            background: inherit;
+        }
+
+        th:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        th.sortable::after {
+            content: '↕';
+            position: absolute;
+            right: 10px;
+            opacity: 0.7;
+            font-size: 12px;
+        }
+
+        th.sorted-asc::after {
+            content: '↑';
+            opacity: 1;
+            color: #fff;
+        }
+
+        th.sorted-desc::after {
+            content: '↓';
+            opacity: 1;
+            color: #fff;
+        }
+
+        /* Estilos das células do corpo */
+        .body-table tbody tr {
+            transition: all 0.3s;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .body-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .body-table tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .body-table tbody tr:nth-child(even):hover {
+            background: #e9ecef;
+        }
+
+        .body-table td {
+            color: #333;
+            font-size: 14px;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .encarregado-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .encarregado-info {
+            display: flex;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .encarregado-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .process-count {
+            text-align: center;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #2eb872, #1e6ba8);
+            padding: 5px 10px;
+            border-radius: 6px;
+            min-width: 35px;
+            display: inline-block;
+        }
+
+        .process-count.zero {
+            opacity: 1;
+            background: rgba(108, 117, 125, 0.6);
+            color: white;
+            border: 1px solid rgba(108, 117, 125, 0.8);
+        }
+
+        .process-count.high {
+            background: rgba(231, 76, 60, 0.6);
+            color: white;
+            border: 1px solid rgba(231, 76, 60, 0.8);
+        }
+
+        .process-count.medium {
+            background: rgba(241, 196, 15, 0.6);
+            color: white;
+            border: 1px solid rgba(241, 196, 15, 0.8);
+        }
+
+        .process-count.low {
+            background: rgba(46, 184, 114, 0.6);
+            color: white;
+            border: 1px solid rgba(46, 184, 114, 0.8);
+        }
+
+        .total-cell {
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+            text-align: center;
+        }
+
+        /* Loading States */
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #e9ecef;
+            border-radius: 50%;
+            border-top: 3px solid #2eb872;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 10px;
+            }
+
+            .table-container {
+                padding: 10px;
+            }
+
+            th, td {
+                padding: 10px 5px;
+                font-size: 12px;
+            }
+
+            .process-count {
+                min-width: 28px;
+                padding: 3px 6px;
+                font-size: 12px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                min-width: auto;
+            }
+        }
+
+        /* Alert System */
+        #alertContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            max-width: 400px;
+        }
+
+        .alert {
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .alert.success {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+        }
+
+        .alert.error {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .alert.info {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    </style>
 </head>
 <body>
-    <!-- Header -->
     <header class="header">
         <div class="header-content">
-            <div class="header-left">
-                <div class="page-title">
-                    <h1><i class="fas fa-chart-bar"></i> Feitos por Encarregado</h1>
-                    <p>Estatísticas de processos e procedimentos por responsável</p>
-                </div>
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
             </div>
             
             <div class="user-info">
@@ -26,154 +468,100 @@
                         <i class="fas fa-user-shield"></i>
                     </div>
                     <div class="user-details">
-                        <h3 id="userName">-</h3>
-                        <p id="userEmail">-</p>
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
                     </div>
                 </div>
+                
                 <button class="btn-logout" onclick="realizarLogout()">
                     <i class="fas fa-sign-out-alt"></i>
-                    <span>Sair</span>
+                    Sair
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Conteúdo Principal -->
-    <main class="main-content">
+    <div class="main-container">
         <div id="alertContainer"></div>
         
-        <div class="page-container">
-            <!-- Filtros e Controles -->
-            <div class="controls-section">
-                <div class="actions">
-                    <!-- Área de Busca Simples -->
-                    <div class="search-area">
-                        <input type="text" id="searchInput" placeholder="Buscar por nome, matrícula ou posto...">
-                        <button id="clearSearch" class="btn-icon btn-clear" style="display: none;">
-                            <i class="fas fa-times"></i> Limpar
-                        </button>
-                    </div>
-                    
-                    <!-- Área de Ações -->
-                    <div class="main-actions">
-                        <button class="btn-icon btn-export" onclick="exportarDados()">
-                            <i class="fas fa-download"></i>
-                            <span>Exportar</span>
-                        </button>
-                        <button class="btn-icon btn-refresh" onclick="carregarEstatisticas()">
-                            <i class="fas fa-sync-alt"></i>
-                            <span>Atualizar</span>
-                        </button>
-                        <button class="btn-icon btn-home" onclick="window.location.href='dashboard.html'">
-                            <i class="fas fa-home"></i>
-                            <span>Início</span>
-                        </button>
-                    </div>
-                </div>
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-chart-bar"></i>
+                <h2>Feitos por Encarregado</h2>
             </div>
 
-            <!-- Tabela de Estatísticas -->
-            <div class="table-section">
+            <!-- Controles -->
+            <div class="controls">
+            <div class="search-box">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" class="search-input" id="searchInput" placeholder="Buscar por nome do encarregado...">
+            </div>
+            <div class="btn-group">
+                <button class="btn active" onclick="setView('all')">
+                    <i class="fas fa-eye"></i> Todos
+                </button>
+                <button class="btn" onclick="setView('active')">
+                    <i class="fas fa-check"></i> Com Processos
+                </button>
+                <button class="btn" onclick="setView('overloaded')">
+                    <i class="fas fa-exclamation-triangle"></i> Sobrecarregados
+                </button>
+            </div>
+            <button class="btn btn-export" onclick="exportData()">
+                <i class="fas fa-download"></i> Exportar
+            </button>
+        </div>
+
+        <!-- Tabela -->
+        <div class="table-container">
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-state">
+                <div class="spinner"></div>
+                <p>Carregando estatísticas...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 20px; opacity: 0.5;"></i>
+                <h3>Nenhum encarregado encontrado</h3>
+                <p>Não há dados para exibir no momento.</p>
+            </div>
+
+            <!-- Table with Fixed Header -->
+            <div class="table-wrapper" id="tableWrapper" style="display: none;">
+                <!-- Cabeçalho Fixo -->
                 <div class="table-header">
-                    <h2>Estatísticas Detalhadas</h2>
-                    <div class="table-info">
-                        <span id="totalRegistros">Carregando...</span>
-                    </div>
-                </div>
-                
-                <div class="table-container">
-                    <table class="stats-table" id="statsTable">
+                    <table class="header-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-column="nome">
-                                    <div class="th-content">
-                                        <span>PM</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="sr">
-                                    <div class="th-content">
-                                        <span>SR</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="fp">
-                                    <div class="th-content">
-                                        <span>FP</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="ipm">
-                                    <div class="th-content">
-                                        <span>IPM</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="escrivao">
-                                    <div class="th-content">
-                                        <span>Escrivão</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="pads">
-                                    <div class="th-content">
-                                        <span>PADS</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="pad">
-                                    <div class="th-content">
-                                        <span>PAD</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="cd">
-                                    <div class="th-content">
-                                        <span>CD</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="cj">
-                                    <div class="th-content">
-                                        <span>CJ</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
-                                <th class="sortable" data-column="total">
-                                    <div class="th-content">
-                                        <span>Total</span>
-                                        <i class="fas fa-sort sort-icon"></i>
-                                    </div>
-                                </th>
+                                <th class="sortable" onclick="sortTable('nome')">Encarregado</th>
+                                <th class="sortable" onclick="sortTable('sr')">SR</th>
+                                <th class="sortable" onclick="sortTable('fp')">FP</th>
+                                <th class="sortable" onclick="sortTable('ipm')">IPM</th>
+                                <th class="sortable" onclick="sortTable('escrivao')">Escrivão</th>
+                                <th class="sortable" onclick="sortTable('pads')">PADS</th>
+                                <th class="sortable" onclick="sortTable('pad')">PAD</th>
+                                <th class="sortable" onclick="sortTable('cd')">CD</th>
+                                <th class="sortable" onclick="sortTable('cj')">CJ</th>
+                                <th class="sortable" onclick="sortTable('total')">Total</th>
                             </tr>
                         </thead>
-                        <tbody id="statsTableBody">
-                            <!-- Dados serão inseridos dinamicamente -->
-                        </tbody>
                     </table>
                 </div>
                 
-                <!-- Loading State -->
-                <div id="loadingState" class="loading-state">
-                    <div class="spinner"></div>
-                    <p>Carregando estatísticas...</p>
-                </div>
-                
-                <!-- Empty State -->
-                <div id="emptyState" class="empty-state" style="display: none;">
-                    <i class="fas fa-chart-bar"></i>
-                    <h3>Nenhum dado encontrado</h3>
-                    <p>Não foram encontradas estatísticas para exibir.</p>
+                <!-- Corpo da Tabela com Scroll -->
+                <div class="table-body">
+                    <table class="body-table">
+                        <tbody id="tableBody">
+                            <!-- Dados serão inseridos via JavaScript -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-    </main>
-
-    <!-- Loader global overlay -->
-    <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
-        <div class="spinner"></div>
+        </div>
     </div>
 
-    <script src="static/js/estatisticas_encarregados.js"></script>
+    <script src="static/js/estatisticas_encarregados_new.js"></script>
 </body>
 </html>

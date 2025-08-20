@@ -78,9 +78,6 @@ async function carregarEstatisticas() {
                 enc.total = enc.sr + enc.fp + enc.ipm + enc.escrivao + enc.pads + enc.pad + enc.cd + enc.cj;
             });
             
-            // Atualizar cards de estatísticas
-            atualizarCardsEstatisticas(resultado.resumo || {});
-            
             // Renderizar tabela
             renderTable();
             
@@ -101,13 +98,6 @@ async function carregarEstatisticas() {
         emptyState.style.display = 'flex';
         tableWrapper.style.display = 'none';
     }
-}
-
-// Função para atualizar cards de estatísticas
-function atualizarCardsEstatisticas(resumo) {
-    document.getElementById('totalEncarregados').textContent = resumo.totalEncarregados || dadosEstatisticas.length;
-    document.getElementById('totalProcessos').textContent = resumo.totalProcessos || 0;
-    document.getElementById('maisAtivo').textContent = resumo.maisAtivo || 'N/A';
 }
 
 // Função para mudar visualização

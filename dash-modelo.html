@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menu Sidebar - P6/7ºBPM</title>
-    <script type="text/javascript" src="/eel.js"></script>
     <style>
         * {
             margin: 0;
@@ -14,7 +13,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #64b5f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
         }
@@ -534,12 +533,10 @@
             position: relative;
             height: 400px;
             margin-bottom: 30px;
-            padding: 25px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
             z-index: 1;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         /* Chart Stats */
@@ -548,60 +545,25 @@
             justify-content: center;
             gap: 40px;
             margin-bottom: 30px;
-            padding: 25px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 15px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
             z-index: 1;
             position: relative;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-            border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .chart-stat-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 17px;
-            font-weight: 600;
-            color: #2c3e50;
+            gap: 10px;
+            font-size: 16px;
         }
 
         .stat-dot {
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             display: inline-block;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        /* Global Loader */
-        .global-loader {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-            backdrop-filter: blur(4px);
-        }
-
-        .global-loader.hidden {
-            display: none;
-        }
-
-        .global-loader .spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #10b981;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -618,10 +580,10 @@
                     </svg>
                 </div>
                 <div class="user-details">
-                    <div class="user-name" id="userName">Carregando...</div>
-                    <div class="user-role" id="userEmail">usuário</div>
+                    <div class="user-name">Usuário</div>
+                    <div class="user-role">Administrador</div>
                 </div>
-                <button class="logout-btn" title="Sair do Sistema" onclick="realizarLogout()">
+                <button class="logout-btn" title="Sair do Sistema">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                         <polyline points="16,17 21,12 16,7"/>
@@ -650,7 +612,7 @@
                 </a>
                 <div class="dropdown">
                     <a href="#" class="dropdown-item">Cadastrar</a>
-                    <a href="user_list.html" class="dropdown-item">Listar</a>
+                    <a href="#" class="dropdown-item">Listar</a>
                 </div>
             </div>
 
@@ -662,8 +624,9 @@
                     <span class="menu-arrow">▼</span>
                 </a>
                 <div class="dropdown">
+                    
                     <a href="#" class="dropdown-item">Cadastrar</a>
-                    <a href="procedure_list.html" class="dropdown-item">Listar</a>
+                    <a href="#" class="dropdown-item">Listar</a>
                 </div>
             </div>
 
@@ -676,7 +639,7 @@
                 </a>
                 <div class="dropdown">
                     <a href="#" class="dropdown-item">Dashboard Analítico</a>
-                    <a href="estatisticas_encarregados.html" class="dropdown-item">Feitos por Encarregado</a>
+                    <a href="#" class="dropdown-item">Produtividade</a>
                 </div>
             </div>
 
@@ -719,7 +682,7 @@
                     </a>
                     <div class="subdropdown">
                         <a href="#" class="subdropdown-item">Cadastrar</a>
-                        <a href="crime_list.html" class="subdropdown-item">Listar</a>
+                        <a href="#" class="subdropdown-item">Listar</a>
                     </div>
                     
                     <a class="dropdown-item" onclick="toggleSubdropdown(this)">
@@ -728,7 +691,7 @@
                     </a>
                     <div class="subdropdown">
                         <a href="#" class="subdropdown-item">Cadastrar</a>
-                        <a href="transgressao_list.html" class="subdropdown-item">Listar</a>
+                        <a href="#" class="subdropdown-item">Listar</a>
                     </div>
                     
                     <a class="dropdown-item" onclick="toggleSubdropdown(this)">
@@ -737,8 +700,10 @@
                     </a>
                     <div class="subdropdown">
                         <a href="#" class="subdropdown-item">Cadastrar</a>
-                        <a href="estatuto_art29.html" class="subdropdown-item">Listar</a>
+                        <a href="#" class="subdropdown-item">Listar</a>
                     </div>
+                    
+                    <!-- <a href="#" class="dropdown-item">Biblioteca Jurídica</a> -->
                 </div>
             </div>
         </nav>
@@ -746,7 +711,6 @@
 
     <!-- Main Content -->
     <main class="main-content" id="mainContent">
-        <div id="alertContainer"></div>
         <h1>Seção de Justiça e Disciplina - P6/7ºBPM</h1>
 
         <div class="card" style="margin-top: 30px;">
@@ -771,13 +735,7 @@
         </div>
     </main>
 
-    <!-- Loader global (sobreposição) para transições como logout -->
-    <div id="globalLoader" class="global-loader hidden" aria-hidden="true">
-        <div class="spinner"></div>
-    </div>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-    <script src="static/js/dashboard.js"></script>
     <script>
         // Toggle Sidebar
         const sidebar = document.getElementById('sidebar');
@@ -866,15 +824,22 @@
             });
         });
 
+        // Logout button functionality
+        document.querySelector('.logout-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Mostrar confirmação antes de sair
+            if (confirm('Tem certeza que deseja sair do sistema?')) {
+                // Aqui você pode adicionar a lógica de logout
+                alert('Saindo do sistema...');
+                // window.location.href = '/logout'; // Exemplo de redirecionamento
+            }
+        });
+
         // Dropdown items click (non-subdropdown items)
         document.querySelectorAll('.dropdown-item').forEach(item => {
             if (!item.querySelector('.sub-arrow')) {
                 item.addEventListener('click', function(e) {
-                    if (this.getAttribute('href') && this.getAttribute('href') !== '#') {
-                        // Se tem href válido, deixa navegar
-                        return true;
-                    }
-                    
                     e.preventDefault();
                     
                     // Remove active class from all links
@@ -891,11 +856,6 @@
         // Subdropdown items click
         document.querySelectorAll('.subdropdown-item').forEach(item => {
             item.addEventListener('click', function(e) {
-                if (this.getAttribute('href') && this.getAttribute('href') !== '#') {
-                    // Se tem href válido, deixa navegar
-                    return true;
-                }
-                
                 e.preventDefault();
                 
                 // Remove active class from all links
@@ -922,172 +882,156 @@
             }
         });
 
-        // Inicializar o gráfico com dados do backend
-        let processChart;
-        
-        async function initializeChart() {
-            try {
-                const resultado = await eel.obter_estatisticas_processos_andamento()();
-                
-                if (resultado.sucesso) {
-                    const processData = {};
-                    
-                    // Mapear dados do backend para o formato do gráfico
-                    Object.entries(resultado.andamento).forEach(([tipo, quantidade]) => {
-                        if (tipo !== 'TOTAL') {
-                            processData[tipo] = {
-                                name: getProcessName(tipo),
-                                count: quantidade,
-                                color: getProcessColor(tipo)
-                            };
-                        }
-                    });
-                    
-                    // Atualizar totais
-                    const totalGeral = resultado.total_processos || 0;
-                    const tiposAtivos = Object.values(resultado.andamento).filter(count => count > 0).length || 0;
-                    
-                    document.getElementById('totalGeral').textContent = totalGeral;
-                    document.getElementById('tiposAtivos').textContent = tiposAtivos;
-                    
-                    // Criar gráfico
-                    createChart(processData);
-                } else {
-                    console.error('Erro ao carregar dados:', resultado.erro);
-                    // Usar dados padrão em caso de erro
-                    createChart({});
-                }
-            } catch (error) {
-                console.error('Erro ao conectar com o backend:', error);
-                // Usar dados padrão em caso de erro
-                createChart({});
+        // Dados dos processos/procedimentos
+        const processData = {
+            'SR': { 
+                name: 'Sindicâncias', 
+                count: 8,
+                color: '#2eb872'
+            },
+            'IPM': { 
+                name: 'Inquérito Policial Militar', 
+                count: 5,
+                color: '#1e6ba8'
+            },
+            'PADS': { 
+                name: 'Processo Apuratório Disciplinar Sumário', 
+                count: 12,
+                color: '#0f4c75'
+            },
+            'PAD': { 
+                name: 'Processo Administrativo Disciplinar', 
+                count: 3,
+                color: '#3498db'
+            },
+            'CD': { 
+                name: 'Conselho de Disciplina', 
+                count: 2,
+                color: '#27ae60'
+            },
+            'CJ': { 
+                name: 'Conselho de Justificação', 
+                count: 1,
+                color: '#16a085'
             }
-        }
+        };
+
+        // Calcular totais
+        const totalGeral = Object.values(processData).reduce((sum, item) => sum + item.count, 0);
+        const tiposAtivos = Object.values(processData).filter(item => item.count > 0).length;
+
+        // Atualizar totais na página
+        document.getElementById('totalGeral').textContent = totalGeral;
+        document.getElementById('tiposAtivos').textContent = tiposAtivos;
+
+        // Configurar o gráfico
+        const ctx = document.getElementById('processChart').getContext('2d');
         
-        function getProcessName(tipo) {
-            const names = {
-                'SR': 'Sindicâncias',
-                'SINDICANCIA': 'Sindicâncias',
-                'IPM': 'Inquérito Policial Militar',
-                'IPPM': 'Inquérito Policial Militar',
-                'PADS': 'Processo Apuratório Disciplinar Sumário',
-                'PAD': 'Processo Administrativo Disciplinar',
-                'CD': 'Conselho de Disciplina',
-                'CJ': 'Conselho de Justificação',
-                'FP': 'Feito Preliminar',
-                'FEITO_PRELIMINAR': 'Feito Preliminar'
-            };
-            return names[tipo] || tipo;
-        }
+        // Gradientes para as barras
+        const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient1.addColorStop(0, 'rgba(46, 184, 114, 0.8)');
+        gradient1.addColorStop(1, 'rgba(46, 184, 114, 0.2)');
         
-        function getProcessColor(tipo) {
-            const colors = {
-                'SR': '#2eb872',
-                'SINDICANCIA': '#2eb872',
-                'IPM': '#1e6ba8',
-                'IPPM': '#1e6ba8',
-                'PADS': '#0f4c75',
-                'PAD': '#3498db',
-                'CD': '#27ae60',
-                'CJ': '#16a085',
-                'FP': '#e67e22',
-                'FEITO_PRELIMINAR': '#e67e22'
-            };
-            return colors[tipo] || '#95a5a6';
-        }
-        
-        function createChart(processData) {
-            const ctx = document.getElementById('processChart').getContext('2d');
-            
-            const labels = Object.keys(processData);
-            const data = Object.values(processData).map(item => item.count || 0);
-            const backgroundColors = Object.values(processData).map(item => item.color || '#95a5a6');
-            const borderColors = backgroundColors.map(color => color);
-            
-            processChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Quantidade de Processos',
-                        data: data,
-                        backgroundColor: backgroundColors, // Cores sólidas, sem transparência
-                        borderColor: borderColors.map(color => color), // Bordas com a mesma cor
-                        borderWidth: 3, // Borda mais espessa
-                        borderRadius: 12, // Bordas mais arredondadas
-                        hoverBackgroundColor: backgroundColors.map(color => color + 'EE'), // Leve transparência no hover
-                        hoverBorderWidth: 4 // Borda ainda mais espessa no hover
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
+        const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient2.addColorStop(0, 'rgba(30, 107, 168, 0.8)');
+        gradient2.addColorStop(1, 'rgba(30, 107, 168, 0.2)');
+
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(processData),
+                datasets: [{
+                    label: 'Quantidade de Processos',
+                    data: Object.values(processData).map(item => item.count),
+                    backgroundColor: [
+                        'rgba(46, 184, 114, 0.6)',
+                        'rgba(30, 107, 168, 0.6)',
+                        'rgba(15, 76, 117, 0.6)',
+                        'rgba(52, 152, 219, 0.6)',
+                        'rgba(39, 174, 96, 0.6)',
+                        'rgba(22, 160, 133, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgba(46, 184, 114, 1)',
+                        'rgba(30, 107, 168, 1)',
+                        'rgba(15, 76, 117, 1)',
+                        'rgba(52, 152, 219, 1)',
+                        'rgba(39, 174, 96, 1)',
+                        'rgba(22, 160, 133, 1)'
+                    ],
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    hoverBackgroundColor: [
+                        'rgba(46, 184, 114, 0.8)',
+                        'rgba(30, 107, 168, 0.8)',
+                        'rgba(15, 76, 117, 0.8)',
+                        'rgba(52, 152, 219, 0.8)',
+                        'rgba(39, 174, 96, 0.8)',
+                        'rgba(22, 160, 133, 0.8)'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
                         },
-                        tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                            padding: 12,
-                            titleFont: {
+                        bodyFont: {
+                            size: 13
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                const label = processData[context.label].name;
+                                const value = context.parsed.y;
+                                const percentage = ((value / totalGeral) * 100).toFixed(1);
+                                return [`${label}`, `Quantidade: ${value}`, `Percentual: ${percentage}%`];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            font: {
+                                size: 12
+                            },
+                            stepSize: 1
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            font: {
                                 size: 14,
                                 weight: 'bold'
-                            },
-                            bodyFont: {
-                                size: 13
-                            },
-                            callbacks: {
-                                label: function(context) {
-                                    const label = processData[context.label]?.name || context.label;
-                                    const value = context.parsed.y;
-                                    const total = data.reduce((a, b) => a + b, 0);
-                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                                    return [`${label}`, `Quantidade: ${value}`, `Percentual: ${percentage}%`];
-                                }
                             }
                         }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(100, 100, 100, 0.3)', // Grid mais visível
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#2c3e50', // Texto escuro para contraste
-                                font: {
-                                    size: 13,
-                                    weight: 'bold'
-                                },
-                                stepSize: 1
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false,
-                                drawBorder: false
-                            },
-                            ticks: {
-                                color: '#2c3e50', // Texto escuro para contraste
-                                font: {
-                                    size: 13,
-                                    weight: 'bold'
-                                }
-                            }
-                        }
-                    },
-                    animation: {
-                        duration: 1500,
-                        easing: 'easeInOutQuart'
                     }
+                },
+                animation: {
+                    duration: 1500,
+                    easing: 'easeInOutQuart'
                 }
-            });
-        }
-        
-        // Inicializar quando a página carregar
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeChart();
+            }
         });
     </script>
 </body>
