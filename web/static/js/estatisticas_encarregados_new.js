@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // Inicializar funcionalidades
         inicializarEventListeners();
+        
+        // Atualizar indicador de filtros (caso haja filtros persistidos)
+        atualizarIndicadorFiltros();
     }
 });
 
@@ -494,17 +497,34 @@ function renderTableWithFilters() {
 
 // Função para atualizar indicador de filtros ativos
 function atualizarIndicadorFiltros() {
-    const botaoFiltro = document.querySelector('.btn-filter');
-    if (!botaoFiltro) return;
+    const toggleBtn = document.getElementById('filterToggle');
+    if (!toggleBtn) return;
     
-    const temFiltros = filtrosAtivos.encarregado || filtrosAtivos.tipoFeito;
+    let filtrosAplicados = 0;
     
-    if (temFiltros) {
-        botaoFiltro.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
-        botaoFiltro.innerHTML = '<i class="fas fa-filter"></i> Filtros Ativos';
+    // Contar quantos filtros estão ativos
+    Object.values(filtrosAtivos).forEach(valor => {
+        if (valor && valor.trim()) filtrosAplicados++;
+    });
+    
+    // Remover indicador anterior
+    const indicadorExistente = toggleBtn.querySelector('.filter-indicator');
+    if (indicadorExistente) {
+        indicadorExistente.remove();
+    }
+    
+    // Adicionar novo indicador se houver filtros ativos
+    if (filtrosAplicados > 0) {
+        const indicador = document.createElement('span');
+        indicador.className = 'filter-indicator';
+        indicador.textContent = filtrosAplicados;
+        toggleBtn.appendChild(indicador);
+        
+        // Mudar cor do botão para indicar filtros ativos
+        toggleBtn.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
     } else {
-        botaoFiltro.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
-        botaoFiltro.innerHTML = '<i class="fas fa-filter"></i> Filtros';
+        // Resetar aparência original
+        toggleBtn.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
     }
 }
 

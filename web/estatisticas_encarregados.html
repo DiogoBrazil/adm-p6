@@ -30,100 +30,158 @@
 
 
 
-        /* Controles customizados */
-        .controls {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
+        /* Layout dos controles - baseado na procedure_list */
+        .actions {
             display: flex;
-            flex-wrap: wrap;
             gap: 15px;
-            align-items: center;
+            flex-wrap: wrap;
             justify-content: space-between;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e9ecef;
-        }
-
-        .search-box {
-            flex: 1;
-            min-width: 250px;
-            position: relative;
-            display: flex;
             align-items: center;
-            gap: 10px;
+            margin: 30px 0 20px 0;
+            padding: 15px 0;
         }
 
-        .search-input {
+        .search-area {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            min-height: 44px;
+            width: 100%;
+            justify-content: flex-start;
+        }
+
+        .search-area input[type="text"] {
             flex: 1;
-            padding: 12px 15px 12px 45px;
+            min-width: 300px;
+            max-width: 450px;
+            padding: 12px 16px;
             border: 2px solid #e0e6ed;
             border-radius: 8px;
+            font-size: 14px;
+            height: 44px;
+            box-sizing: border-box;
             background: white;
             color: #333;
-            font-size: 14px;
-            transition: all 0.3s;
+            transition: all 0.3s ease;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
-        .search-input::placeholder {
+        .search-area input[type="text"]::placeholder {
             color: #999;
         }
 
-        .search-input:focus {
+        .search-area input[type="text"]:focus {
             outline: none;
             background: white;
             border-color: #2eb872;
             box-shadow: 0 0 0 3px rgba(46, 184, 114, 0.1);
         }
 
-        .search-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #666;
-            z-index: 1;
+        /* Responsividade das ações */
+        @media (max-width: 768px) {
+            .actions {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .search-area {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .search-area input[type="text"] {
+                min-width: 250px;
+                max-width: 100%;
+            }
+        }
+
+        /* Botão Início */
+        .btn-home {
+            background: linear-gradient(135deg, #17a2b8, #138496);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(23, 162, 184, 0.2);
+            min-width: 100px;
+            justify-content: center;
+            text-decoration: none;
+        }
+
+        .btn-home:hover {
+            background: linear-gradient(135deg, #138496, #0e6b7a);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+            color: white;
+            text-decoration: none;
         }
 
         /* Botão limpar */
         .btn-clear {
-            background: #dc3545;
+            background: linear-gradient(135deg, #dc3545, #c82333);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.2);
+            min-width: 100px;
+            justify-content: center;
         }
 
         .btn-clear:hover {
-            background: #c82333;
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #c82333, #a71e2a);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
         }
 
         /* Botão filtros */
         .btn-filter {
-            background: #007bff;
+            background: linear-gradient(135deg, #007bff, #0056b3);
             color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+            min-width: 100px;
+            justify-content: center;
         }
 
         .btn-filter:hover {
-            background: #0056b3;
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #0056b3, #004085);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+        }
+
+        /* Indicador de filtros ativos */
+        .filter-indicator {
+            background-color: #28a745;
+            color: white;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 10px;
+            margin-left: 5px;
         }
 
         /* Modal de Filtros */
@@ -430,25 +488,43 @@
         }
 
         .btn {
-            padding: 10px 20px;
+            padding: 12px 20px;
             border: 2px solid #e0e6ed;
             border-radius: 8px;
             background: white;
             color: #333;
             font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-weight: 500;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            min-width: 100px;
+            justify-content: center;
         }
 
         .btn:hover {
             background: #f8f9fa;
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Estilo base para botões com ícone */
+        .btn-icon {
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 100px;
+            justify-content: center;
+            border: none;
         }
 
         .btn.active {
@@ -459,13 +535,27 @@
         }
 
         .btn-export {
-            background: linear-gradient(135deg, #2eb872, #0f4c75);
+            background: linear-gradient(135deg, #28a745, #20c997);
             color: white;
-            border-color: #2eb872;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+            min-width: 100px;
+            justify-content: center;
         }
 
         .btn-export:hover {
-            background: linear-gradient(135deg, #27a968, #0e4168);
+            background: linear-gradient(135deg, #218838, #1ea085);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
         }
 
         /* Tabela customizada */
@@ -832,17 +922,23 @@
             </div>
 
             <!-- Controles -->
-            <div class="controls">
-            <div class="search-box">
-                <i class="fas fa-search search-icon"></i>
-                <input type="text" class="search-input" id="searchInput" placeholder="Buscar por nome do encarregado...">
-                <button onclick="limparBusca()" id="clearButton" class="btn-icon btn-clear" style="display: none;"><i class="fas fa-times"></i> Limpar</button>
-                <button onclick="abrirModalFiltros()" id="filterToggle" class="btn-icon btn-filter"><i class="fas fa-filter"></i> Filtros</button>
+            <div class="actions">
+                <div class="search-area">
+                    <input type="text" id="searchInput" placeholder="Buscar por nome do encarregado...">
+                    <button class="btn-clear" id="clearButton" onclick="limparBusca()" style="display: none;">
+                        <i class="fas fa-eraser"></i> Limpar
+                    </button>
+                    <button class="btn-filter" id="filterToggle" onclick="abrirModalFiltros()">
+                        <i class="fas fa-filter"></i> Filtros
+                    </button>
+                    <button class="btn-export" onclick="exportData()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                    <a href="dashboard.html" class="btn-home">
+                        <i class="fas fa-home"></i> Início
+                    </a>
+                </div>
             </div>
-            <button class="btn btn-export" onclick="exportData()">
-                <i class="fas fa-download"></i> Exportar
-            </button>
-        </div>
 
         <!-- Tabela -->
         <div class="table-container">
