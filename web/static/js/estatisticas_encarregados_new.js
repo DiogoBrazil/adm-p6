@@ -5,7 +5,6 @@ let usuarioLogado = null;
 let dadosEstatisticas = [];
 let dadosFiltrados = [];
 let currentSort = { field: 'nome', order: 'asc' };
-let currentView = 'all';
 
 // Event listeners principais
 document.addEventListener('DOMContentLoaded', async function() {
@@ -100,33 +99,14 @@ async function carregarEstatisticas() {
     }
 }
 
-// Função para mudar visualização
-function setView(view) {
-    currentView = view;
-    
-    // Atualizar botões
-    document.querySelectorAll('.btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.closest('.btn').classList.add('active');
-    
-    renderTable();
-}
-
 // Função para renderizar a tabela
 function renderTable() {
     const tableBody = document.getElementById('tableBody');
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     
-    // Filtrar dados
+    // Filtrar dados apenas por busca
     dadosFiltrados = dadosEstatisticas.filter(enc => {
-        const matchesSearch = enc.nome.toLowerCase().includes(searchTerm);
-        
-        if (currentView === 'all') return matchesSearch;
-        if (currentView === 'active') return matchesSearch && enc.total > 0;
-        if (currentView === 'overloaded') return matchesSearch && enc.total > 7;
-        
-        return matchesSearch;
+        return enc.nome.toLowerCase().includes(searchTerm);
     });
 
     // Ordenar dados
@@ -232,8 +212,33 @@ function exportData() {
 function inicializarEventListeners() {
     // Busca em tempo real
     const searchInput = document.getElementById('searchInput');
+    const clearButton = document.getElementById('clearButton');
+    
     if (searchInput) {
-        searchInput.addEventListener('input', renderTable);
+        searchInput.addEventListener('input', function() {
+            // Mostrar/esconder botão limpar
+            if (this.value.trim() !== '') {
+                clearButton.style.display = 'flex';
+            } else {
+                clearButton.style.display = 'none';
+            }
+            
+            // Renderizar tabela
+            renderTable();
+        });
+    }
+}
+
+// Função para limpar busca
+function limparBusca() {
+    const searchInput = document.getElementById('searchInput');
+    const clearButton = document.getElementById('clearButton');
+    
+    if (searchInput) {
+        searchInput.value = '';
+        clearButton.style.display = 'none';
+        renderTable();
+        searchInput.focus();
     }
 }
 
@@ -280,3 +285,244 @@ window.addEventListener('load', () => {
         sortTable('total');
     }
 });
+
+// ===== FUNCIONALIDADES DE FILTROS VIA MODAL =====
+
+// Filtros aplicados via modal
+let filtrosAtivos = {
+    encarregado: '',
+    tipoFeito: ''
+};
+
+// Função para abrir modal de filtros
+function abrirModalFiltros() {
+    console.log('Abrindo modal de filtros');
+    
+    // Popular dropdown de encarregados
+    popularDropdownEncarregados();
+    
+    // Mostrar modal
+    const modal = document.getElementById('modal-filtros');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+// Função para fechar modal de filtros
+function fecharModalFiltros() {
+    console.log('Fechando modal de filtros');
+    const modal = document.getElementById('modal-filtros');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Função para popular dropdown de encarregados
+function popularDropdownEncarregados() {
+    const select = document.getElementById('filtro-encarregado');
+    if (!select || !dadosEstatisticas) return;
+    
+    // Limpar opções existentes exceto a primeira
+    select.innerHTML = '<option value="">Todos os Encarregados</option>';
+    
+    // Obter lista única de encarregados
+    const encarregados = [...new Set(dadosEstatisticas.map(item => item.nome))];
+    
+    // Adicionar opções
+    encarregados.forEach(encarregado => {
+        if (encarregado) {
+            const option = document.createElement('option');
+            option.value = encarregado;
+            option.textContent = encarregado;
+            if (filtrosAtivos.encarregado === encarregado) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        }
+    });
+}
+
+// Função para aplicar filtros do modal
+function aplicarFiltrosModal() {
+    console.log('Aplicando filtros do modal');
+    
+    // Obter valores dos filtros
+    const encarregadoSelect = document.getElementById('filtro-encarregado');
+    const tipoFeitoSelect = document.getElementById('filtro-tipo-feito');
+    
+    if (encarregadoSelect && tipoFeitoSelect) {
+        filtrosAtivos.encarregado = encarregadoSelect.value;
+        filtrosAtivos.tipoFeito = tipoFeitoSelect.value;
+        
+        console.log('Filtros aplicados:', filtrosAtivos);
+        
+        // Aplicar filtros
+        aplicarFiltros();
+        
+        // Fechar modal
+        fecharModalFiltros();
+        
+        // Atualizar indicador de filtros ativos
+        atualizarIndicadorFiltros();
+    }
+}
+
+// Função para limpar filtros do modal
+function limparFiltrosModal() {
+    console.log('Limpando filtros do modal');
+    
+    // Resetar filtros
+    filtrosAtivos.encarregado = '';
+    filtrosAtivos.tipoFeito = '';
+    
+    // Resetar selects
+    const encarregadoSelect = document.getElementById('filtro-encarregado');
+    const tipoFeitoSelect = document.getElementById('filtro-tipo-feito');
+    
+    if (encarregadoSelect) encarregadoSelect.value = '';
+    if (tipoFeitoSelect) tipoFeitoSelect.value = '';
+    
+    // Aplicar filtros (sem filtros = mostrar todos)
+    aplicarFiltros();
+    
+    // Fechar modal
+    fecharModalFiltros();
+    
+    // Atualizar indicador de filtros ativos
+    atualizarIndicadorFiltros();
+}
+
+// Função para aplicar filtros aos dados
+function aplicarFiltros() {
+    if (!dadosEstatisticas) return;
+    
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    // Começar com todos os dados
+    dadosFiltrados = [...dadosEstatisticas];
+    
+    // Aplicar filtro de busca
+    if (searchTerm) {
+        dadosFiltrados = dadosFiltrados.filter(enc => 
+            enc.nome.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    // Aplicar filtro por encarregado específico
+    if (filtrosAtivos.encarregado) {
+        dadosFiltrados = dadosFiltrados.filter(enc => 
+            enc.nome === filtrosAtivos.encarregado
+        );
+    }
+    
+    // Aplicar filtro por tipo de feito (mostrar apenas encarregados que têm esse tipo)
+    if (filtrosAtivos.tipoFeito) {
+        dadosFiltrados = dadosFiltrados.filter(enc => {
+            // Mapear tipo de feito para propriedade
+            const tipoMap = {
+                'SR': 'sr',
+                'FP': 'fp', 
+                'IPM': 'ipm',
+                'Escrivão': 'escrivao',
+                'PADs': 'pads',
+                'PAD': 'pad',
+                'CD': 'cd',
+                'CJ': 'cj'
+            };
+            
+            const propriedade = tipoMap[filtrosAtivos.tipoFeito];
+            return propriedade && enc[propriedade] > 0;
+        });
+    }
+    
+    console.log(`Dados filtrados: ${dadosFiltrados.length} de ${dadosEstatisticas.length}`);
+    
+    // Renderizar tabela com dados filtrados
+    renderTableWithFilters();
+}
+
+// Função para renderizar tabela com filtros aplicados
+function renderTableWithFilters() {
+    const tableBody = document.getElementById('tableBody');
+    
+    // Ordenar dados filtrados
+    dadosFiltrados.sort((a, b) => {
+        let aVal = a[currentSort.field];
+        let bVal = b[currentSort.field];
+        
+        if (typeof aVal === 'string') {
+            aVal = aVal.toLowerCase();
+            bVal = bVal.toLowerCase();
+        }
+        
+        if (currentSort.order === 'asc') {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+
+    // Renderizar linhas
+    tableBody.innerHTML = dadosFiltrados.map(enc => {
+        return `
+            <tr>
+                <td>
+                    <div class="encarregado-cell">
+                        <div class="encarregado-info">
+                            <span class="encarregado-name">${enc.nome}</span>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="process-count ${getCountClass(enc.sr, 3)}">${enc.sr}</span></td>
+                <td><span class="process-count ${getCountClass(enc.fp, 2)}">${enc.fp}</span></td>
+                <td><span class="process-count ${getCountClass(enc.ipm, 2)}">${enc.ipm}</span></td>
+                <td><span class="process-count ${getCountClass(enc.escrivao, 2)}">${enc.escrivao}</span></td>
+                <td><span class="process-count ${getCountClass(enc.pads, 3)}">${enc.pads}</span></td>
+                <td><span class="process-count ${getCountClass(enc.pad, 1)}">${enc.pad}</span></td>
+                <td><span class="process-count ${getCountClass(enc.cd, 1)}">${enc.cd}</span></td>
+                <td><span class="process-count ${getCountClass(enc.cj, 1)}">${enc.cj}</span></td>
+                <td class="total-cell">${enc.total}</td>
+            </tr>
+        `;
+    }).join('');
+    
+    // Atualizar contadores
+    updateTableInfo();
+}
+
+// Função para atualizar indicador de filtros ativos
+function atualizarIndicadorFiltros() {
+    const botaoFiltro = document.querySelector('.btn-filter');
+    if (!botaoFiltro) return;
+    
+    const temFiltros = filtrosAtivos.encarregado || filtrosAtivos.tipoFeito;
+    
+    if (temFiltros) {
+        botaoFiltro.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+        botaoFiltro.innerHTML = '<i class="fas fa-filter"></i> Filtros Ativos';
+    } else {
+        botaoFiltro.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
+        botaoFiltro.innerHTML = '<i class="fas fa-filter"></i> Filtros';
+    }
+}
+
+// Função para fechar modal clicando no backdrop
+function fecharModalPorBackdrop(event) {
+    if (event.target.id === 'modal-filtros') {
+        fecharModalFiltros();
+    }
+}
+
+// Atualizar função renderTable para usar os filtros
+const renderTableOriginal = renderTable;
+renderTable = function() {
+    aplicarFiltros();
+};
+
+// Função para atualizar informações da tabela
+function updateTableInfo() {
+    // Esta função pode ser expandida para mostrar contadores de registros filtrados
+    console.log(`Mostrando ${dadosFiltrados.length} de ${dadosEstatisticas.length} encarregados`);
+}

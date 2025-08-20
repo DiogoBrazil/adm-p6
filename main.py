@@ -1182,7 +1182,7 @@ def obter_estatisticas_encarregados():
             # SR e Sindicâncias (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND (tipo_detalhe = 'SR' OR tipo_detalhe = 'SINDICANCIA')
                 AND ativo = 1
             ''', (enc_id,))
@@ -1192,7 +1192,7 @@ def obter_estatisticas_encarregados():
             # FP - Feito Preliminar (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND (tipo_detalhe = 'FP' OR tipo_detalhe = 'FEITO_PRELIMINAR')
                 AND ativo = 1
             ''', (enc_id,))
@@ -1202,7 +1202,7 @@ def obter_estatisticas_encarregados():
             # IPM (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
                 AND ativo = 1
             ''', (enc_id,))
@@ -1222,7 +1222,7 @@ def obter_estatisticas_encarregados():
             # PADS (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND tipo_detalhe = 'PADS'
                 AND ativo = 1
             ''', (enc_id,))
@@ -1232,7 +1232,7 @@ def obter_estatisticas_encarregados():
             # PAD (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND tipo_detalhe = 'PAD'
                 AND ativo = 1
             ''', (enc_id,))
@@ -1242,7 +1242,7 @@ def obter_estatisticas_encarregados():
             # CD - Conselho de Disciplina (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND tipo_detalhe = 'CD'
                 AND ativo = 1
             ''', (enc_id,))
@@ -1252,7 +1252,7 @@ def obter_estatisticas_encarregados():
             # CJ - Conselho de Justificação (como responsável)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? AND responsavel_tipo = 'usuario'
+                WHERE responsavel_id = ? 
                 AND tipo_detalhe = 'CJ'
                 AND ativo = 1
             ''', (enc_id,))

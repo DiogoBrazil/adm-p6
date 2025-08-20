@@ -49,10 +49,13 @@
             flex: 1;
             min-width: 250px;
             position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .search-input {
-            width: 100%;
+            flex: 1;
             padding: 12px 15px 12px 45px;
             border: 2px solid #e0e6ed;
             border-radius: 8px;
@@ -80,12 +83,350 @@
             top: 50%;
             transform: translateY(-50%);
             color: #666;
+            z-index: 1;
         }
 
-        .btn-group {
+        /* Botão limpar */
+        .btn-clear {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
             display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-clear:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+        }
+
+        /* Botão filtros */
+        .btn-filter {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-filter:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        /* Modal de Filtros */
+        .modal-filtros {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            display: none; /* Escondido por padrão */
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(3px);
+            padding: 20px;
+        }
+
+        .modal-content-filtros {
+            background: white;
+            border-radius: 16px;
+            max-width: 520px;
+            width: 100%;
+            min-height: 400px;
+            max-height: 85vh;
+            overflow: visible;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            animation: modalFadeIn 0.4s ease-out;
+            border: none;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-header-filtros {
+            padding: 28px 32px 24px 32px;
+            border-bottom: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #2eb872 0%, #1e6ba8 100%);
+            color: white;
+            border-radius: 16px 16px 0 0;
+            position: relative;
+        }
+
+        .modal-header-filtros::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-header-filtros h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            letter-spacing: -0.02em;
+        }
+
+        .modal-header-filtros h3 i {
+            font-size: 18px;
+        }
+
+        .btn-close-modal {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-close-modal:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .modal-body-filtros {
+            padding: 32px;
+            background: #fafbfc;
+            min-height: 200px;
+            flex: 1;
+        }
+
+        .filtros-grid-modal {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            width: 100%;
+        }
+
+        .filter-group-modal {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 80px;
+        }
+
+        .filter-group-modal label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
             gap: 10px;
-            flex-wrap: wrap;
+            margin-bottom: 4px;
+        }
+
+        .filter-group-modal label i {
+            color: #2eb872;
+            font-size: 14px;
+        }
+
+        .filter-select-modal {
+            padding: 16px 18px;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            font-size: 15px;
+            background: white;
+            transition: all 0.3s ease;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 16px center;
+            background-repeat: no-repeat;
+            background-size: 16px;
+            padding-right: 45px;
+            cursor: pointer;
+            min-height: 50px;
+            width: 100%;
+        }
+
+        .filter-select-modal:focus {
+            border-color: #2eb872;
+            box-shadow: 0 0 0 4px rgba(46, 184, 114, 0.12);
+            background-color: white;
+        }
+
+        .filter-select-modal:hover {
+            border-color: #b8c5d1;
+        }
+
+        .modal-footer-filtros {
+            padding: 24px 32px 32px 32px;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 16px;
+            justify-content: flex-end;
+            background: white;
+            border-radius: 0 0 16px 16px;
+        }
+
+        .modal-footer-filtros .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 130px;
+            justify-content: center;
+            letter-spacing: -0.01em;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2eb872 0%, #1e6ba8 100%);
+            color: white;
+            border: 2px solid transparent;
+            box-shadow: 0 4px 12px rgba(46, 184, 114, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #27a968 0%, #1a5d8a 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 184, 114, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            border: 2px solid transparent;
+            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.25);
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.35);
+        }
+
+        .btn-outline-secondary {
+            background: white;
+            color: #6c757d;
+            border: 2px solid #dee2e6;
+            box-shadow: 0 2px 8px rgba(108, 117, 125, 0.1);
+        }
+
+        .btn-outline-secondary:hover {
+            background: #f8f9fa;
+            color: #495057;
+            border-color: #adb5bd;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(108, 117, 125, 0.2);
+        }
+
+        /* Responsividade do modal */
+        @media (max-width: 900px) {
+            .filtros-grid-modal {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .modal-filtros {
+                padding: 15px;
+            }
+            
+            .modal-content-filtros {
+                width: 100%;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+            
+            .modal-header-filtros,
+            .modal-body-filtros,
+            .modal-footer-filtros {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+            
+            .modal-header-filtros {
+                padding-top: 24px;
+                padding-bottom: 20px;
+            }
+            
+            .modal-body-filtros {
+                padding-top: 24px;
+                padding-bottom: 24px;
+            }
+            
+            .modal-footer-filtros {
+                flex-direction: column;
+                gap: 12px;
+                padding-top: 20px;
+                padding-bottom: 24px;
+            }
+            
+            .modal-footer-filtros .btn {
+                width: 100%;
+                min-width: auto;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .modal-filtros {
+                padding: 10px;
+            }
+            
+            .modal-header-filtros h3 {
+                font-size: 18px;
+            }
+            
+            .modal-header-filtros,
+            .modal-body-filtros,
+            .modal-footer-filtros {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
         }
 
         .btn {
@@ -495,17 +836,8 @@
             <div class="search-box">
                 <i class="fas fa-search search-icon"></i>
                 <input type="text" class="search-input" id="searchInput" placeholder="Buscar por nome do encarregado...">
-            </div>
-            <div class="btn-group">
-                <button class="btn active" onclick="setView('all')">
-                    <i class="fas fa-eye"></i> Todos
-                </button>
-                <button class="btn" onclick="setView('active')">
-                    <i class="fas fa-check"></i> Com Processos
-                </button>
-                <button class="btn" onclick="setView('overloaded')">
-                    <i class="fas fa-exclamation-triangle"></i> Sobrecarregados
-                </button>
+                <button onclick="limparBusca()" id="clearButton" class="btn-icon btn-clear" style="display: none;"><i class="fas fa-times"></i> Limpar</button>
+                <button onclick="abrirModalFiltros()" id="filterToggle" class="btn-icon btn-filter"><i class="fas fa-filter"></i> Filtros</button>
             </div>
             <button class="btn btn-export" onclick="exportData()">
                 <i class="fas fa-download"></i> Exportar
@@ -559,6 +891,60 @@
                 </div>
             </div>
         </div>
+        </div>
+    </div>
+
+    <!-- Modal de Filtros -->
+    <div id="modal-filtros" class="modal-filtros" style="display: none;" onclick="fecharModalPorBackdrop(event)">
+        <div class="modal-content-filtros" onclick="event.stopPropagation()">
+            <div class="modal-header-filtros">
+                <h3><i class="fas fa-filter"></i> Filtros Avançados</h3>
+                <button type="button" class="btn-close-modal" onclick="fecharModalFiltros()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body-filtros">
+                <div class="filtros-grid-modal">
+                    <div class="filter-group-modal">
+                        <label for="filtro-encarregado">
+                            <i class="fas fa-user"></i> Encarregado
+                        </label>
+                        <select id="filtro-encarregado" class="filter-select-modal">
+                            <option value="">Todos os Encarregados</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group-modal">
+                        <label for="filtro-tipo-feito">
+                            <i class="fas fa-file-alt"></i> Tipo de Feito
+                        </label>
+                        <select id="filtro-tipo-feito" class="filter-select-modal">
+                            <option value="">Todos os Tipos</option>
+                            <option value="SR">SR</option>
+                            <option value="FP">FP</option>
+                            <option value="IPM">IPM</option>
+                            <option value="Escrivão">Escrivão</option>
+                            <option value="PADs">PADs</option>
+                            <option value="PAD">PAD</option>
+                            <option value="CD">CD</option>
+                            <option value="CJ">CJ</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer-filtros">
+                <button type="button" class="btn btn-primary" onclick="aplicarFiltrosModal()">
+                    <i class="fas fa-check"></i> Aplicar Filtros
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="limparFiltrosModal()">
+                    <i class="fas fa-eraser"></i> Limpar Filtros
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="fecharModalFiltros()">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
         </div>
     </div>
 
