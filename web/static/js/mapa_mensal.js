@@ -111,136 +111,293 @@ function exibirResultados(resultado) {
         return;
     }
     
-    // Atualizar título e informações do mapa
-    document.getElementById('tituloMapa').innerHTML = 
-        `<i class="bi bi-file-earmark-text"></i> Mapa Mensal - ${meta.tipo_processo} - ${meta.mes_nome}/${meta.ano}`;
+    // Atualizar título
+    document.getElementById('tituloMapa').innerHTML = `
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Mapa Mensal - ${meta.tipo_processo} - ${meta.mes_nome}/${meta.ano}
+    `;
     
     // Informações do mapa
     document.getElementById('infoMapa').innerHTML = `
-        <div class="info-item">
-            <span class="info-label">Período:</span> ${meta.mes_nome} de ${meta.ano}
-        </div>
-        <div class="info-item">
-            <span class="info-label">Tipo:</span> ${meta.tipo_processo}
-        </div>
-        <div class="info-item">
-            <span class="info-label">Data de Geração:</span> ${meta.data_geracao}
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-label">Período</div>
+                <div class="info-value">${meta.mes_nome}/${meta.ano}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Tipo</div>
+                <div class="info-value">${meta.tipo_processo}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Data de Geração</div>
+                <div class="info-value">${meta.data_geracao}</div>
+            </div>
         </div>
     `;
     
     // Estatísticas
     document.getElementById('estatisticasMapa').innerHTML = `
-        <div class="row text-center">
+        <div class="row g-3">
             <div class="col-4">
-                <div class="fw-bold text-primary fs-4">${meta.total_processos}</div>
-                <small class="text-muted">Total</small>
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_processos}</div>
+                    <div class="stats-label">Total</div>
+                </div>
             </div>
             <div class="col-4">
-                <div class="fw-bold text-success fs-4">${meta.total_concluidos}</div>
-                <small class="text-muted">Concluídos</small>
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_andamento}</div>
+                    <div class="stats-label">Em Andamento</div>
+                </div>
             </div>
             <div class="col-4">
-                <div class="fw-bold text-warning fs-4">${meta.total_andamento}</div>
-                <small class="text-muted">Em Andamento</small>
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_concluidos}</div>
+                    <div class="stats-label">Concluídos</div>
+                </div>
             </div>
         </div>
     `;
     
-    // Lista de processos
-    const listaProcessos = document.getElementById('listaProcessos');
-    listaProcessos.innerHTML = '';
-    
-    dados.forEach((processo, index) => {
-        const cardProcesso = criarCardProcesso(processo, meta.tipo_processo, index + 1);
-        listaProcessos.appendChild(cardProcesso);
-    });
+    // Gerar tabela
+    gerarTabelaProcessos(dados, meta.tipo_processo);
     
     // Mostrar resultados
     document.getElementById('resultados').classList.remove('d-none');
     document.getElementById('estadoVazio').classList.add('d-none');
 }
 
-function criarCardProcesso(processo, tipoProcesso, numero) {
-    const card = document.createElement('div');
-    card.className = 'card card-processo';
+function gerarTabelaProcessos(processos, tipoProcesso) {
+    const corpoTabela = document.getElementById('corpoTabelaProcessos');
+    corpoTabela.innerHTML = '';
+    
+    processos.forEach((processo, index) => {
+        const linha = criarLinhaProcesso(processo, tipoProcesso, index + 1);
+        corpoTabela.appendChild(linha);
+        
+        // Criar linha de detalhes (inicialmente oculta)
+        const linhaDetalhes = criarLinhaDetalhes(processo, tipoProcesso);
+        corpoTabela.appendChild(linhaDetalhes);
+    });
+}
+
+function criarLinhaProcesso(processo, tipoProcesso, numero) {
+    const linha = document.createElement('tr');
+    linha.className = 'processo-linha';
+    linha.dataset.processoId = processo.id;
     
     const statusClass = processo.concluido ? 'status-concluido' : 'status-andamento';
-    const statusIcon = processo.concluido ? 'check-circle' : 'clock';
+    const statusIcon = processo.concluido ? 'check-circle-fill' : 'clock-fill';
+    const statusTexto = processo.concluido ? 'Concluído' : 'Em Andamento';
     
-    // Determinar campos específicos por tipo
-    let camposEspecificos = '';
-    let numeroDocumento = '';
+    // Gerar lista de PMs (máximo 2 visíveis)
+    const pmsHtml = processo.pms_envolvidos.slice(0, 2).map(pm => 
+        `<span class="pm-badge">${pm.posto_graduacao || ''} ${pm.nome}</span>`
+    ).join(' ');
+    const pmsMais = processo.pms_envolvidos.length > 2 ? 
+        `<span class="pm-badge">+${processo.pms_envolvidos.length - 2}</span>` : '';
     
+    // Gerar solução resumida
+    const solucaoHtml = criarSolucaoResumida(processo, tipoProcesso);
+    
+    linha.innerHTML = `
+        <td data-label="#">${numero}</td>
+        <td data-label="Número">
+            <div class="processo-numero">${processo.numero}/${processo.ano}</div>
+            <small class="text-muted">${getDescricaoNumero(processo, tipoProcesso)}</small>
+        </td>
+        <td data-label="Status">
+            <span class="status-badge ${statusClass}">
+                <i class="bi bi-${statusIcon} me-1"></i>${statusTexto}
+            </span>
+        </td>
+        <td data-label="Encarregado">
+            <div class="fw-semibold">${processo.responsavel.completo || 'Não informado'}</div>
+        </td>
+        <td data-label="PMs Envolvidos">
+            <div class="pms-container">
+                ${pmsHtml}${pmsMais}
+            </div>
+        </td>
+        <td data-label="Solução">
+            ${solucaoHtml}
+        </td>
+        <td data-label="Ações">
+            <button class="expand-btn" onclick="toggleDetalhes(this)" title="Ver detalhes">
+                <i class="bi bi-eye"></i>
+            </button>
+        </td>
+    `;
+    
+    return linha;
+}
+
+function criarLinhaDetalhes(processo, tipoProcesso) {
+    const linha = document.createElement('tr');
+    linha.className = 'details-row d-none';
+    linha.dataset.processoId = processo.id;
+    
+    linha.innerHTML = `
+        <td colspan="7">
+            <div class="details-content">
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Data de Instauração</div>
+                        <div class="info-value">${formatarData(processo.data_instauracao)}</div>
+                    </div>
+                    ${processo.data_conclusao ? `
+                        <div class="info-card">
+                            <div class="info-label">Data de Conclusão</div>
+                            <div class="info-value">${formatarData(processo.data_conclusao)}</div>
+                        </div>
+                    ` : ''}
+                    ${getNumeroDocumento(processo, tipoProcesso)}
+                    ${processo.numero_rgf ? `
+                        <div class="info-card">
+                            <div class="info-label">Número do RGF</div>
+                            <div class="info-value">${processo.numero_rgf}</div>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                ${processo.resumo_fatos ? `
+                    <div class="info-card">
+                        <div class="info-label">Resumo dos Fatos</div>
+                        <div class="info-value">${processo.resumo_fatos}</div>
+                    </div>
+                ` : ''}
+                
+                ${criarSecaoEnvolvidos(processo.pms_envolvidos, tipoProcesso)}
+                ${criarSecaoIndicios(processo.indicios)}
+                ${criarSecaoSolucaoCompleta(processo, tipoProcesso)}
+                ${criarSecaoMovimentacao(processo.ultima_movimentacao)}
+            </div>
+        </td>
+    `;
+    
+    return linha;
+}
+
+function criarSolucaoResumida(processo, tipoProcesso) {
+    if (!processo.concluido) {
+        return '<span class="text-muted">-</span>';
+    }
+    
+    const cor = getCorSolucao(processo.solucao_final, tipoProcesso);
+    const badgeClass = cor.includes('success') ? 'bg-success' : 
+                       cor.includes('warning') ? 'bg-warning' : 
+                       cor.includes('danger') ? 'bg-danger' : 'bg-secondary';
+    
+    return `<span class="solucao-badge ${badgeClass} text-white">${processo.solucao_final || 'Não informado'}</span>`;
+}
+
+function getDescricaoNumero(processo, tipoProcesso) {
     switch (tipoProcesso) {
         case 'SR':
         case 'IPM':
-            numeroDocumento = processo.numero_portaria ? 
-                `<div class="info-item">
-                    <span class="info-label">Número da Portaria:</span> ${processo.numero_portaria}/${processo.ano}
-                </div>` : '';
-            break;
+            return processo.numero_portaria ? `Portaria ${processo.numero_portaria}/${processo.ano}` : '';
         case 'PADS':
-            numeroDocumento = processo.numero_memorando ? 
-                `<div class="info-item">
-                    <span class="info-label">Número do Memorando:</span> ${processo.numero_memorando}/${processo.ano}
-                </div>` : '';
-            break;
+            return processo.numero_memorando ? `Memorando ${processo.numero_memorando}/${processo.ano}` : '';
         case 'PAD':
         case 'CD':
         case 'CJ':
-            numeroDocumento = processo.numero_portaria ? 
-                `<div class="info-item">
-                    <span class="info-label">Número da Portaria:</span> ${processo.numero_portaria}/${processo.ano}
-                </div>` : '';
-            break;
+            return processo.numero_portaria ? `Portaria ${processo.numero_portaria}/${processo.ano}` : '';
+        default:
+            return '';
+    }
+}
+
+function getNumeroDocumento(processo, tipoProcesso) {
+    switch (tipoProcesso) {
+        case 'SR':
+        case 'IPM':
+        case 'PAD':
+        case 'CD':
+        case 'CJ':
+            return processo.numero_portaria ? `
+                <div class="info-card">
+                    <div class="info-label">Número da Portaria</div>
+                    <div class="info-value">${processo.numero_portaria}/${processo.ano}</div>
+                </div>
+            ` : '';
+        case 'PADS':
+            return processo.numero_memorando ? `
+                <div class="info-card">
+                    <div class="info-label">Número do Memorando</div>
+                    <div class="info-value">${processo.numero_memorando}/${processo.ano}</div>
+                </div>
+            ` : '';
+        default:
+            return '';
+    }
+}
+
+function criarSecaoEnvolvidos(pmsEnvolvidos, tipoProcesso) {
+    if (!pmsEnvolvidos || pmsEnvolvidos.length === 0) {
+        return '';
     }
     
-    card.innerHTML = `
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h6 class="mb-0">
-                <strong>${numero}. ${processo.numero}/${processo.ano}</strong>
-            </h6>
-            <span class="badge ${statusClass}">
-                <i class="bi bi-${statusIcon}"></i> ${processo.status}
-            </span>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="section-title">Informações Básicas</h6>
-                    ${numeroDocumento}
-                    ${processo.numero_rgf ? `
-                        <div class="info-item">
-                            <span class="info-label">Número do RGF:</span> ${processo.numero_rgf}
-                        </div>
-                    ` : ''}
-                    <div class="info-item">
-                        <span class="info-label">Encarregado:</span> ${processo.responsavel.completo || 'Não informado'}
-                    </div>
-                    ${processo.nome_vitima ? `
-                        <div class="info-item">
-                            <span class="info-label">Vítima/Ofendido:</span> ${processo.nome_vitima}
-                        </div>
-                    ` : ''}
-                </div>
-                <div class="col-md-6">
-                    <h6 class="section-title">${getTituloEnvolvidos(tipoProcesso)}</h6>
-                    ${criarListaEnvolvidos(processo.pms_envolvidos, tipoProcesso)}
-                </div>
-            </div>
-            
-            <div class="mt-3">
-                <h6 class="section-title">Resumo dos Fatos</h6>
-                <p class="mb-0">${processo.resumo_fatos || 'Não informado'}</p>
-            </div>
-            
-            ${criarSecaoIndicios(processo.indicios)}
-            ${criarSecaoSolucao(processo, tipoProcesso)}
-            ${criarSecaoMovimentacao(processo.ultima_movimentacao)}
+    const titulo = getTituloEnvolvidos(tipoProcesso);
+    const envolvidos = pmsEnvolvidos.map(pm => `
+        <div class="pm-badge">${pm.posto_graduacao || ''} ${pm.nome}</div>
+        ${criarIndiciosPM(pm.indicios)}
+    `).join('');
+    
+    return `
+        <div class="info-card">
+            <div class="info-label">${titulo}</div>
+            <div class="info-value">${envolvidos}</div>
         </div>
     `;
+}
+
+function criarSecaoSolucaoCompleta(processo, tipoProcesso) {
+    if (!processo.concluido) {
+        return '';
+    }
     
-    return card;
+    const labelSolucao = getTipoSolucaoLabel(tipoProcesso);
+    const cor = getCorSolucao(processo.solucao_final, tipoProcesso);
+    
+    return `
+        <div class="info-card">
+            <div class="info-label">Solução Final</div>
+            <div class="info-value">
+                ${processo.data_conclusao ? `
+                    <div class="mb-2">
+                        <strong>Data de Conclusão:</strong> ${formatarData(processo.data_conclusao)}
+                    </div>
+                ` : ''}
+                <div class="mb-2">
+                    <strong>${labelSolucao}:</strong> 
+                    <span class="solucao-badge ${cor}">${processo.solucao_final || 'Não informado'}</span>
+                </div>
+                ${processo.penalidade_tipo ? `
+                    <div class="mb-2">
+                        <strong>Penalidade:</strong> ${processo.penalidade_tipo}
+                        ${processo.penalidade_dias ? ` (${processo.penalidade_dias} dias)` : ''}
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function toggleDetalhes(botao) {
+    const linha = botao.closest('tr');
+    const processoId = linha.dataset.processoId;
+    const linhaDetalhes = linha.nextElementSibling;
+    const icone = botao.querySelector('i');
+    
+    if (linhaDetalhes.classList.contains('d-none')) {
+        linhaDetalhes.classList.remove('d-none');
+        icone.className = 'bi bi-eye-slash';
+        botao.title = 'Ocultar detalhes';
+    } else {
+        linhaDetalhes.classList.add('d-none');
+        icone.className = 'bi bi-eye';
+        botao.title = 'Ver detalhes';
+    }
 }
 
 function getTituloEnvolvidos(tipoProcesso) {
@@ -533,6 +690,324 @@ function mostrarLoading(mostrar) {
 function ocultarResultados() {
     document.getElementById('resultados').classList.add('d-none');
     document.getElementById('estadoVazio').classList.add('d-none');
+}
+
+// Função para gerar PDF
+async function gerarPDF() {
+    try {
+        // Mostrar loading
+        const botaoGerar = document.querySelector('button[onclick="gerarPDF()"]');
+        const textoOriginal = botaoGerar.innerHTML;
+        botaoGerar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Gerando PDF...';
+        botaoGerar.disabled = true;
+
+        // Obter dados atuais
+        const tituloMapa = document.getElementById('tituloMapa').textContent;
+        const infoMapa = document.getElementById('infoMapa');
+        const estatisticas = document.getElementById('estatisticasMapa');
+        
+        // Criar conteúdo do PDF
+        const pdfContent = criarConteudoPDF(tituloMapa, infoMapa, estatisticas);
+        
+        // Gerar PDF usando jsPDF
+        await gerarDocumentoPDF(pdfContent, tituloMapa);
+        
+        // Restaurar botão
+        botaoGerar.innerHTML = textoOriginal;
+        botaoGerar.disabled = false;
+        
+    } catch (error) {
+        console.error('Erro ao gerar PDF:', error);
+        alert('Erro ao gerar PDF. Tente novamente.');
+        
+        // Restaurar botão
+        const botaoGerar = document.querySelector('button[onclick="gerarPDF()"]');
+        botaoGerar.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i> Gerar PDF';
+        botaoGerar.disabled = false;
+    }
+}
+
+function criarConteudoPDF(titulo, infoMapa, estatisticas) {
+    // Obter dados da tabela
+    const tabela = document.getElementById('tabelaProcessos');
+    const linhas = tabela.querySelectorAll('tbody tr.processo-linha');
+    
+    let processosData = [];
+    linhas.forEach((linha, index) => {
+        const processoId = linha.dataset.processoId;
+        
+        // Extrair dados da linha principal
+        const colunas = linha.querySelectorAll('td');
+        const numero = colunas[0].textContent.trim();
+        const numeroProcesso = colunas[1].querySelector('.processo-numero')?.textContent.trim() || '';
+        const descricao = colunas[1].querySelector('small')?.textContent.trim() || '';
+        const statusElement = colunas[2].querySelector('.status-badge');
+        const status = statusElement ? statusElement.textContent.trim().replace(/.*\s/, '') : '';
+        const encarregado = colunas[3].textContent.trim();
+        
+        // Extrair PMs de forma mais robusta
+        const pmBadges = colunas[4].querySelectorAll('.pm-badge');
+        const pmsArray = Array.from(pmBadges).map(badge => {
+            let texto = badge.textContent.trim();
+            // Remover prefixos como "+2" se existirem
+            if (texto.startsWith('+')) {
+                return `+${texto.slice(1)} outros`;
+            }
+            return texto;
+        });
+        
+        const solucaoElement = colunas[5].querySelector('.solucao-badge');
+        const solucao = solucaoElement ? solucaoElement.textContent.trim() : 
+                       colunas[5].textContent.trim() !== '-' ? colunas[5].textContent.trim() : 'Não finalizado';
+        
+        processosData.push({
+            numero,
+            numeroProcesso,
+            descricao,
+            status,
+            encarregado,
+            pmsEnvolvidos: pmsArray.join(', ') || 'Nenhum PM informado',
+            solucao
+        });
+    });
+    
+    return {
+        titulo: titulo.replace(/.*Mapa Mensal - /, ''),
+        info: extrairInfoMapa(infoMapa),
+        stats: extrairEstatisticas(estatisticas),
+        processos: processosData
+    };
+}
+
+function extrairInfoMapa(infoElement) {
+    const cards = infoElement.querySelectorAll('.info-card');
+    let info = {};
+    
+    cards.forEach(card => {
+        const label = card.querySelector('.info-label').textContent.trim();
+        const value = card.querySelector('.info-value').textContent.trim();
+        info[label] = value;
+    });
+    
+    return info;
+}
+
+function extrairEstatisticas(statsElement) {
+    const cards = statsElement.querySelectorAll('.stats-card');
+    let stats = {};
+    
+    cards.forEach(card => {
+        const number = card.querySelector('.stats-number').textContent.trim();
+        const label = card.querySelector('.stats-label').textContent.trim();
+        stats[label] = number;
+    });
+    
+    return stats;
+}
+
+async function gerarDocumentoPDF(content, titulo) {
+    const { jsPDF } = window.jspdf;
+    
+    // Criar PDF em orientação paisagem (horizontal)
+    const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+    });
+    
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const contentWidth = pageWidth - (margin * 2);
+    
+    let currentY = margin;
+    
+    // Header com gradiente simulado
+    pdf.setFillColor(30, 60, 114); // Cor do gradiente
+    pdf.rect(margin, currentY, contentWidth, 25, 'F');
+    
+    // Título
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(16);
+    pdf.setFont(undefined, 'bold');
+    pdf.text('MAPA MENSAL DE PROCESSOS E PROCEDIMENTOS', pageWidth / 2, currentY + 10, { align: 'center' });
+    
+    pdf.setFontSize(12);
+    pdf.setFont(undefined, 'normal');
+    pdf.text(content.titulo, pageWidth / 2, currentY + 18, { align: 'center' });
+    
+    currentY += 35;
+    
+    // Informações e Estatísticas
+    pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(10);
+    
+    // Informações em três colunas
+    const infoWidth = contentWidth / 3;
+    let infoX = margin;
+    
+    Object.entries(content.info).forEach(([label, value]) => {
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`${label}:`, infoX, currentY);
+        pdf.setFont(undefined, 'normal');
+        pdf.text(value, infoX, currentY + 5);
+        infoX += infoWidth;
+    });
+    
+    currentY += 15;
+    
+    // Estatísticas
+    pdf.setFont(undefined, 'bold');
+    pdf.setFontSize(12);
+    pdf.text('ESTATÍSTICAS', margin, currentY);
+    currentY += 8;
+    
+    const statsWidth = contentWidth / 3;
+    let statsX = margin;
+    
+    Object.entries(content.stats).forEach(([label, value]) => {
+        // Box para estatística
+        pdf.setFillColor(248, 249, 250);
+        pdf.rect(statsX, currentY - 5, statsWidth - 5, 15, 'F');
+        pdf.setDrawColor(42, 82, 152);
+        pdf.rect(statsX, currentY - 5, statsWidth - 5, 15);
+        
+        pdf.setTextColor(42, 82, 152);
+        pdf.setFontSize(14);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(value, statsX + (statsWidth - 5) / 2, currentY + 2, { align: 'center' });
+        
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(8);
+        pdf.setFont(undefined, 'normal');
+        pdf.text(label.toUpperCase(), statsX + (statsWidth - 5) / 2, currentY + 8, { align: 'center' });
+        
+        statsX += statsWidth;
+    });
+    
+    currentY += 25;
+    
+    // Tabela de processos
+    pdf.setFont(undefined, 'bold');
+    pdf.setFontSize(12);
+    pdf.text('PROCESSOS/PROCEDIMENTOS', margin, currentY);
+    currentY += 10;
+    
+    // Cabeçalho da tabela
+    const colWidths = [15, 35, 25, 60, 80, 35]; // Larguras das colunas
+    const headers = ['#', 'Número', 'Status', 'Encarregado', 'PMs Envolvidos', 'Solução'];
+    
+    pdf.setFillColor(42, 82, 152);
+    pdf.rect(margin, currentY, contentWidth, 8, 'F');
+    
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(9);
+    pdf.setFont(undefined, 'bold');
+    
+    let colX = margin;
+    headers.forEach((header, index) => {
+        pdf.text(header, colX + 2, currentY + 6);
+        colX += colWidths[index];
+    });
+    
+    currentY += 8;
+    
+    // Dados da tabela
+    pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(8);
+    pdf.setFont(undefined, 'normal');
+    
+    content.processos.forEach((processo, index) => {
+        // Verificar se precisa de nova página
+        if (currentY > pageHeight - 40) {
+            pdf.addPage();
+            currentY = margin;
+            
+            // Repetir cabeçalho na nova página
+            pdf.setFillColor(42, 82, 152);
+            pdf.rect(margin, currentY, contentWidth, 8, 'F');
+            
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'bold');
+            
+            colX = margin;
+            headers.forEach((header, headerIndex) => {
+                pdf.text(header, colX + 2, currentY + 6);
+                colX += colWidths[headerIndex];
+            });
+            
+            currentY += 8;
+            pdf.setTextColor(0, 0, 0);
+            pdf.setFontSize(8);
+            pdf.setFont(undefined, 'normal');
+        }
+        
+        // Calcular altura necessária para a linha
+        const linhaAltura = Math.max(12, 
+            Math.ceil(pdf.splitTextToSize(processo.descricao, colWidths[1] - 4).length) * 3,
+            Math.ceil(pdf.splitTextToSize(processo.encarregado, colWidths[3] - 4).length) * 3,
+            Math.ceil(pdf.splitTextToSize(processo.pmsEnvolvidos, colWidths[4] - 4).length) * 3
+        );
+        
+        // Linha zebrada
+        if (index % 2 === 0) {
+            pdf.setFillColor(248, 249, 250);
+            pdf.rect(margin, currentY, contentWidth, linhaAltura, 'F');
+        }
+        
+        // Bordas
+        pdf.setDrawColor(222, 226, 230);
+        pdf.rect(margin, currentY, contentWidth, linhaAltura);
+        
+        // Separadores verticais
+        colX = margin;
+        colWidths.forEach((width, colIndex) => {
+            if (colIndex < colWidths.length - 1) {
+                pdf.line(colX + width, currentY, colX + width, currentY + linhaAltura);
+            }
+            colX += width;
+        });
+        
+        // Dados
+        colX = margin;
+        const dados = [
+            processo.numero,
+            processo.numeroProcesso + '\n' + processo.descricao,
+            processo.status,
+            processo.encarregado,
+            processo.pmsEnvolvidos,
+            processo.solucao
+        ];
+        
+        dados.forEach((dado, colIndex) => {
+            const lines = pdf.splitTextToSize(dado, colWidths[colIndex] - 4);
+            pdf.text(lines, colX + 2, currentY + 4);
+            colX += colWidths[colIndex];
+        });
+        
+        currentY += linhaAltura;
+    });
+    
+    // Footer
+    const totalPages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        
+        const footerY = pageHeight - 15;
+        pdf.setDrawColor(42, 82, 152);
+        pdf.line(margin, footerY, pageWidth - margin, footerY);
+        
+        pdf.setFontSize(8);
+        pdf.setTextColor(102, 117, 127);
+        pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, margin, footerY + 8);
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth / 2, footerY + 8, { align: 'center' });
+        pdf.text('Sistema ADM-P6', pageWidth - margin, footerY + 8, { align: 'right' });
+    }
+    
+    // Salvar PDF
+    const nomeArquivo = `Mapa_Mensal_${content.titulo.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(nomeArquivo);
 }
 
 function mostrarEstadoVazio() {
