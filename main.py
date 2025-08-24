@@ -5563,5 +5563,441 @@ def buscar_art29_para_indicios(termo=''):
         print(f"❌ Erro ao buscar infrações Art. 29: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao buscar infrações: {str(e)}"}
 
+# ===============================
+# GERAÇÃO DE MAPA MENSAL
+# ===============================
+
+@eel.expose
+def gerar_mapa_mensal(mes, ano, tipo_processo):
+    """Gera o mapa mensal para um tipo específico de processo/procedimento"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Validar parâmetros
+        if not mes or not ano or not tipo_processo:
+            return {"sucesso": False, "mensagem": "Parâmetros inválidos"}
+        
+        # Converter para inteiros
+        mes = int(mes)
+        ano = int(ano)
+        
+        # Definir data de início e fim do mês
+        data_inicio = f"{ano}-{mes:02d}-01"
+        if mes == 12:
+            data_fim = f"{ano + 1}-01-01"
+        else:
+            data_fim = f"{ano}-{mes + 1:02d}-01"
+        
+        # Query base para buscar processos/procedimentos do mês
+        # Regra: 
+        # - Processos EM ANDAMENTO: instaurados até o mês selecionado (inclusive)
+        # - Processos CONCLUÍDOS: concluídos especificamente no mês selecionado
+        query_base = """
+            SELECT 
+                p.id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador,
+                p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
+                p.data_instauracao, p.data_conclusao, p.data_remessa_encarregado, p.data_julgamento,
+                p.resumo_fatos, p.nome_vitima, p.concluido, p.solucao_final, p.solucao_tipo, 
+                p.penalidade_tipo, p.penalidade_dias,
+                -- Dados do responsável/encarregado
+                COALESCE(u_resp.nome, 'Não informado') as responsavel_nome,
+                COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
+                COALESCE(u_resp.matricula, '') as responsavel_matricula,
+                -- Status e ano
+                CASE 
+                    WHEN p.concluido = 1 THEN 'Concluído'
+                    ELSE 'Em andamento'
+                END as status_processo,
+                p.ano_instauracao
+            FROM processos_procedimentos p
+            LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            WHERE p.ativo = 1 
+            AND p.tipo_detalhe = ?
+            AND (
+                -- Processos EM ANDAMENTO: instaurados até o mês selecionado
+                (p.concluido = 0 AND p.data_instauracao < ?) OR
+                -- Processos CONCLUÍDOS: concluídos especificamente no mês selecionado
+                (p.concluido = 1 AND p.data_conclusao >= ? AND p.data_conclusao < ?)
+            )
+            ORDER BY p.data_instauracao DESC, p.created_at DESC
+        """
+        
+        cursor.execute(query_base, (
+            tipo_processo, 
+            data_fim,     # Para processos em andamento: instaurados até o fim do mês selecionado
+            data_inicio,  # Para processos concluídos: início do mês selecionado
+            data_fim      # Para processos concluídos: fim do mês selecionado
+        ))
+        
+        processos = cursor.fetchall()
+        dados_mapa = []
+        
+        for processo in processos:
+            processo_id = processo[0]
+            
+            # Obter dados de PMs envolvidos
+            pms_envolvidos = _obter_pms_envolvidos_para_mapa(cursor, processo_id, processo[2])  # tipo_geral
+            
+            # Obter indícios (crimes/transgressões)
+            indicios = _obter_indicios_para_mapa(cursor, processo_id)
+            
+            # Obter última movimentação se em andamento
+            ultima_movimentacao = None
+            if not processo[15]:  # se não concluído
+                ultima_movimentacao = _obter_ultima_movimentacao(cursor, processo_id)
+            
+            # Montar dados do processo para o mapa
+            dados_processo = {
+                "id": processo[0],
+                "numero": processo[1],
+                "ano": processo[24] or (processo[9].split('-')[0] if processo[9] else ''),
+                "numero_portaria": processo[5],
+                "numero_memorando": processo[6], 
+                "numero_feito": processo[7],
+                "numero_rgf": processo[8],
+                "data_instauracao": processo[9],
+                "data_conclusao": processo[10],  # Adicionando data_conclusao
+                "resumo_fatos": processo[13],
+                "nome_vitima": processo[14],
+                "status": processo[23],
+                "concluido": bool(processo[15]),
+                "responsavel": {
+                    "nome": processo[20],
+                    "posto": processo[21],
+                    "matricula": processo[22],
+                    "completo": f"{processo[21]} {processo[22]} {processo[20]}".strip()
+                },
+                "pms_envolvidos": pms_envolvidos,
+                "indicios": indicios,
+                "solucao": {
+                    "data_remessa": processo[11],
+                    "data_julgamento": processo[12],
+                    "solucao_final": processo[16],
+                    "solucao_tipo": processo[17],
+                    "penalidade_tipo": processo[18],
+                    "penalidade_dias": processo[19]
+                },
+                "ultima_movimentacao": ultima_movimentacao
+            }
+            
+            dados_mapa.append(dados_processo)
+        
+        conn.close()
+        
+        # Informações do relatório
+        mes_nome = [
+            "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ][mes]
+        
+        return {
+            "sucesso": True,
+            "dados": dados_mapa,
+            "meta": {
+                "mes": mes,
+                "ano": ano,
+                "mes_nome": mes_nome,
+                "tipo_processo": tipo_processo,
+                "total_processos": len(dados_mapa),
+                "total_concluidos": len([p for p in dados_mapa if p["concluido"]]),
+                "total_andamento": len([p for p in dados_mapa if not p["concluido"]]),
+                "data_geracao": datetime.now().strftime("%d/%m/%Y às %H:%M")
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao gerar mapa mensal: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao gerar mapa: {str(e)}"}
+
+def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
+    """Obtém lista de PMs envolvidos para o mapa mensal"""
+    pms = []
+    
+    try:
+        if tipo_geral == "procedimento":
+            # Para procedimentos, buscar múltiplos PMs com seus indícios específicos
+            cursor.execute("""
+                SELECT 
+                    u.nome, u.posto_graduacao, u.matricula, 
+                    pme.status_pm as tipo_envolvimento,
+                    pme.id as pm_envolvido_id
+                FROM procedimento_pms_envolvidos pme
+                JOIN usuarios u ON pme.pm_id = u.id
+                WHERE pme.procedimento_id = ?
+                ORDER BY pme.ordem
+            """, (processo_id,))
+            
+            for row in cursor.fetchall():
+                pm_envolvido_id = row[4]
+                
+                # Buscar indícios específicos deste PM
+                indicios_pm = _obter_indicios_por_pm(cursor, pm_envolvido_id)
+                
+                pms.append({
+                    "nome": row[0],
+                    "posto_graduacao": row[1], 
+                    "matricula": row[2],
+                    "tipo_envolvimento": row[3] or "Envolvido",
+                    "completo": f"{row[1]} {row[2]} {row[0]}".strip(),
+                    "indicios": indicios_pm
+                })
+        else:
+            # Para processos, buscar PM único
+            cursor.execute("""
+                SELECT 
+                    p.status_pm,
+                    u.nome, u.posto_graduacao, u.matricula
+                FROM processos_procedimentos p
+                LEFT JOIN usuarios u ON p.nome_pm_id = u.id
+                WHERE p.id = ? AND u.id IS NOT NULL
+            """, (processo_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                pms.append({
+                    "nome": row[1],
+                    "posto_graduacao": row[2],
+                    "matricula": row[3], 
+                    "tipo_envolvimento": row[0] or "Acusado",
+                    "completo": f"{row[2]} {row[3]} {row[1]}".strip(),
+                    "indicios": {"categorias": [], "crimes": [], "transgressoes": [], "art29": []}
+                })
+                
+    except Exception as e:
+        print(f"Erro ao obter PMs envolvidos: {e}")
+    
+    return pms
+
+def _obter_indicios_por_pm(cursor, pm_envolvido_id):
+    """Obtém indícios específicos de um PM envolvido"""
+    indicios = {"categorias": [], "crimes": [], "transgressoes": [], "art29": []}
+    
+    try:
+        # Buscar o registro de indícios do PM
+        cursor.execute("""
+            SELECT id, categorias_indicios 
+            FROM pm_envolvido_indicios 
+            WHERE pm_envolvido_id = ? AND ativo = 1
+        """, (pm_envolvido_id,))
+        
+        pm_indicios = cursor.fetchone()
+        if not pm_indicios:
+            return indicios
+            
+        pm_indicios_id = pm_indicios[0]
+        categorias_json = pm_indicios[1]
+        
+        # Processar categorias de indícios
+        if categorias_json:
+            try:
+                import json
+                categorias = json.loads(categorias_json)
+                if isinstance(categorias, list):
+                    indicios["categorias"] = categorias
+            except:
+                pass
+        
+        # Buscar crimes específicos do PM
+        cursor.execute("""
+            SELECT c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, 
+                   c.paragrafo, c.inciso, c.alinea
+            FROM pm_envolvido_crimes pec
+            JOIN crimes_contravencoes c ON c.id = pec.crime_id
+            WHERE pec.pm_indicios_id = ?
+        """, (pm_indicios_id,))
+        
+        for row in cursor.fetchall():
+            indicios["crimes"].append({
+                "tipo": row[0],
+                "dispositivo": row[1],
+                "artigo": row[2],
+                "descricao": row[3],
+                "paragrafo": row[4],
+                "inciso": row[5],
+                "alinea": row[6],
+                "texto_completo": f"{row[1]} - Art. {row[2]}, {row[3] or ''}"
+            })
+        
+        # Buscar transgressões RDPM específicas do PM
+        cursor.execute("""
+            SELECT t.inciso, t.texto, t.gravidade
+            FROM pm_envolvido_rdpm per
+            JOIN transgressoes t ON t.id = per.transgressao_id
+            WHERE per.pm_indicios_id = ?
+        """, (pm_indicios_id,))
+        
+        for row in cursor.fetchall():
+            indicios["transgressoes"].append({
+                "inciso": row[0],
+                "texto": row[1],
+                "gravidade": row[2],
+                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+            })
+        
+        # Buscar infrações Art. 29 específicas do PM
+        cursor.execute("""
+            SELECT a.inciso, a.texto
+            FROM pm_envolvido_art29 pea
+            JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id
+            WHERE pea.pm_indicios_id = ?
+        """, (pm_indicios_id,))
+        
+        for row in cursor.fetchall():
+            indicios["art29"].append({
+                "inciso": row[0],
+                "texto": row[1],
+                "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]}"
+            })
+            
+    except Exception as e:
+        print(f"Erro ao obter indícios por PM: {e}")
+    
+    return indicios
+
+def _obter_indicios_para_mapa(cursor, processo_id):
+    """Obtém indícios de crimes e transgressões para o mapa mensal"""
+    indicios = {"crimes": [], "transgressoes": [], "art29": []}
+    
+    try:
+        # Crimes/contravenções
+        cursor.execute("""
+            SELECT c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, 
+                   c.paragrafo, c.inciso, c.alinea
+            FROM procedimentos_indicios_crimes pic
+            JOIN crimes_contravencoes c ON c.id = pic.crime_id
+            WHERE pic.procedimento_id = ?
+        """, (processo_id,))
+        
+        for row in cursor.fetchall():
+            indicios["crimes"].append({
+                "tipo": row[0],
+                "dispositivo": row[1],
+                "artigo": row[2],
+                "descricao": row[3],
+                "paragrafo": row[4],
+                "inciso": row[5],
+                "alinea": row[6],
+                "texto_completo": f"{row[1]} - Art. {row[2]}, {row[3] or ''}"
+            })
+        
+        # Transgressões RDPM
+        cursor.execute("""
+            SELECT t.inciso, t.texto, t.gravidade
+            FROM procedimentos_indicios_rdpm pir
+            JOIN transgressoes t ON t.id = pir.transgressao_id
+            WHERE pir.procedimento_id = ?
+        """, (processo_id,))
+        
+        for row in cursor.fetchall():
+            indicios["transgressoes"].append({
+                "inciso": row[0],
+                "texto": row[1],
+                "gravidade": row[2],
+                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+            })
+        
+        # Infrações Art. 29
+        cursor.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+        cols = [r[1] for r in cursor.fetchall()]
+        col_fk = 'art29_id' if 'art29_id' in cols else 'infracao_id'
+        
+        cursor.execute(f"""
+            SELECT a.inciso, a.texto
+            FROM procedimentos_indicios_art29 pia
+            JOIN infracoes_estatuto_art29 a ON a.id = pia.{col_fk}
+            WHERE pia.procedimento_id = ?
+        """, (processo_id,))
+        
+        for row in cursor.fetchall():
+            indicios["art29"].append({
+                "inciso": row[0],
+                "texto": row[1],
+                "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]}"
+            })
+            
+    except Exception as e:
+        print(f"Erro ao obter indícios: {e}")
+    
+    return indicios
+
+def _obter_ultima_movimentacao(cursor, processo_id):
+    """Obtém a última movimentação de um processo em andamento"""
+    try:
+        # Primeiro, tentar buscar na tabela andamentos_processo (sistema novo)
+        cursor.execute("""
+            SELECT data_movimentacao, tipo_andamento, descricao, destino_origem
+            FROM andamentos_processo
+            WHERE processo_id = ?
+            ORDER BY data_movimentacao DESC, created_at DESC
+            LIMIT 1
+        """, (processo_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return {
+                "data": row[0],
+                "tipo": row[1],
+                "descricao": row[2],
+                "destino": row[3]
+            }
+        
+        # Se não encontrou na tabela, buscar no campo JSON andamentos (sistema antigo)
+        cursor.execute("""
+            SELECT andamentos FROM processos_procedimentos WHERE id = ? AND ativo = 1
+        """, (processo_id,))
+        
+        result = cursor.fetchone()
+        if result and result[0]:
+            try:
+                import json
+                andamentos = json.loads(result[0])
+                if andamentos and len(andamentos) > 0:
+                    # Pegar o primeiro andamento (mais recente)
+                    ultimo_andamento = andamentos[0]
+                    return {
+                        "data": ultimo_andamento.get("data", "").split()[0],  # Pegar só a data, sem hora
+                        "tipo": "outro",  # Tipo padrão para andamentos JSON
+                        "descricao": ultimo_andamento.get("texto", ""),
+                        "destino": None
+                    }
+            except Exception as e:
+                print(f"Erro ao processar andamentos JSON: {e}")
+        
+    except Exception as e:
+        print(f"Erro ao obter última movimentação: {e}")
+    
+    return None
+
+@eel.expose
+def obter_tipos_processo_para_mapa():
+    """Obtém lista de tipos de processo/procedimento disponíveis para o mapa mensal"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT DISTINCT tipo_detalhe, COUNT(*) as total
+            FROM processos_procedimentos 
+            WHERE ativo = 1
+            GROUP BY tipo_detalhe
+            ORDER BY tipo_detalhe
+        """)
+        
+        tipos = []
+        for row in cursor.fetchall():
+            tipos.append({
+                "codigo": row[0],
+                "nome": row[0],
+                "total": row[1]
+            })
+        
+        conn.close()
+        return {"sucesso": True, "tipos": tipos}
+        
+    except Exception as e:
+        print(f"❌ Erro ao obter tipos de processo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro: {str(e)}"}
+
 if __name__ == "__main__":
     main()
