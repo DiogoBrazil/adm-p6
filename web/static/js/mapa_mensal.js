@@ -796,6 +796,7 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
         };
         
         processosData.push({
+            id: processoId, // Adicionar ID para busca posterior
             numero,
             numeroProcesso,
             descricao,
@@ -1018,7 +1019,16 @@ async function gerarDocumentoPDF(content, titulo) {
         pdf.setFont(undefined, 'normal');
         const solucaoInfo = [];
         
-        // Só mostrar Penalidade para PAD, PADS, CD, CJ
+        // Para IPM e SR concluídos, mostrar solução (Homologado, Avocado, Arquivado)
+        if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
+            // Buscar a solução dos dados originais
+            const dadosOriginais = window.dadosProcessos ? 
+                window.dadosProcessos.find(p => p.id == processo.id) : null;
+            const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
+            solucaoInfo.push(['Solução:', solucaoFinal || 'Não informado']);
+        }
+        
+        // Para PAD, PADS, CD, CJ mostrar penalidade
         if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
             solucaoInfo.push(['Penalidade:', processo.detalhes.solucaoCompleta.penalidade]);
         }
@@ -1039,6 +1049,95 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.setFont(undefined, 'normal');
             const wrappedResumo = pdf.splitTextToSize(processo.detalhes.resumoFatos, contentWidth - 10);
             pdf.text(wrappedResumo, margin + 5, resumoY + 5);
+        }
+        
+        // Indícios apontados para IPM e SR concluídos
+        if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
+            // Buscar dados de indícios dos dados originais usando o ID
+            const dadosOriginais = window.dadosProcessos ? 
+                window.dadosProcessos.find(p => p.id == processo.id) : null;
+            
+            if (dadosOriginais) {
+                const indiciosY = currentY + 35;
+                let indiciosTexto = [];
+                
+                // Verificar indícios gerais do processo
+                if (dadosOriginais.indicios) {
+                    // Crimes específicos do processo
+                    if (dadosOriginais.indicios.crimes && dadosOriginais.indicios.crimes.length > 0) {
+                        indiciosTexto.push('Crimes/Contravenções:');
+                        dadosOriginais.indicios.crimes.forEach(crime => {
+                            indiciosTexto.push(`• ${crime.texto_completo}`);
+                        });
+                    }
+                    
+                    // Transgressões RDPM do processo
+                    if (dadosOriginais.indicios.transgressoes && dadosOriginais.indicios.transgressoes.length > 0) {
+                        if (indiciosTexto.length > 0) indiciosTexto.push('');
+                        indiciosTexto.push('Transgressões RDPM:');
+                        dadosOriginais.indicios.transgressoes.forEach(trans => {
+                            indiciosTexto.push(`• ${trans.texto_completo}`);
+                        });
+                    }
+                    
+                    // Art. 29 do processo
+                    if (dadosOriginais.indicios.art29 && dadosOriginais.indicios.art29.length > 0) {
+                        if (indiciosTexto.length > 0) indiciosTexto.push('');
+                        indiciosTexto.push('Infrações Art. 29:');
+                        dadosOriginais.indicios.art29.forEach(art29 => {
+                            indiciosTexto.push(`• ${art29.texto_completo}`);
+                        });
+                    }
+                }
+                
+                // Verificar indícios específicos por PM envolvido
+                if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+                    dadosOriginais.pms_envolvidos.forEach(pm => {
+                        if (pm.indicios && pm.indicios.categorias && pm.indicios.categorias.length > 0) {
+                            if (indiciosTexto.length > 0) indiciosTexto.push('');
+                            indiciosTexto.push(`Apontamentos para ${pm.posto_graduacao || ''} ${pm.nome}:`);
+                            pm.indicios.categorias.forEach(categoria => {
+                                indiciosTexto.push(`• ${categoria}`);
+                            });
+                            
+                            // Crimes específicos do PM
+                            if (pm.indicios.crimes && pm.indicios.crimes.length > 0) {
+                                pm.indicios.crimes.forEach(crime => {
+                                    indiciosTexto.push(`  - Crime: ${crime.texto_completo}`);
+                                });
+                            }
+                            
+                            // Transgressões específicas do PM
+                            if (pm.indicios.transgressoes && pm.indicios.transgressoes.length > 0) {
+                                pm.indicios.transgressoes.forEach(trans => {
+                                    indiciosTexto.push(`  - Transgressão: ${trans.texto_completo}`);
+                                });
+                            }
+                            
+                            // Art. 29 específicas do PM
+                            if (pm.indicios.art29 && pm.indicios.art29.length > 0) {
+                                pm.indicios.art29.forEach(art29 => {
+                                    indiciosTexto.push(`  - Art. 29: ${art29.texto_completo}`);
+                                });
+                            }
+                        }
+                    });
+                }
+                
+                if (indiciosTexto.length > 0) {
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('INDÍCIOS APONTADOS:', margin + 5, indiciosY);
+                    pdf.setFont(undefined, 'normal');
+                    const wrappedIndicios = pdf.splitTextToSize(indiciosTexto.join('\n'), contentWidth - 10);
+                    pdf.text(wrappedIndicios, margin + 5, indiciosY + 5);
+                } else {
+                    // Se não há indícios específicos, mostrar uma mensagem padrão
+                    pdf.setFont(undefined, 'bold');
+                    pdf.text('INDÍCIOS APONTADOS:', margin + 5, indiciosY);
+                    pdf.setFont(undefined, 'normal');
+                    pdf.text('Conforme procedimento analisado.', margin + 5, indiciosY + 5);
+                }
+            }
         }
         
         // Última movimentação (se aplicável)
