@@ -171,6 +171,9 @@ function gerarTabelaProcessos(processos, tipoProcesso) {
     const corpoTabela = document.getElementById('corpoTabelaProcessos');
     corpoTabela.innerHTML = '';
     
+    // Armazenar dados originais globalmente para acesso posterior
+    window.dadosProcessos = processos;
+    
     processos.forEach((processo, index) => {
         const linha = criarLinhaProcesso(processo, tipoProcesso, index + 1);
         corpoTabela.appendChild(linha);
@@ -295,13 +298,13 @@ function getDescricaoNumero(processo, tipoProcesso) {
     switch (tipoProcesso) {
         case 'SR':
         case 'IPM':
-            return processo.numero_portaria ? `Portaria ${processo.numero_portaria}/${processo.ano}` : '';
+            return processo.numero_portaria ? `Portaria nº ${processo.numero_portaria}/${processo.ano}` : '';
         case 'PADS':
-            return processo.numero_memorando ? `Memorando ${processo.numero_memorando}/${processo.ano}` : '';
+            return processo.numero_memorando ? `Memorando nº ${processo.numero_memorando}/${processo.ano}` : '';
         case 'PAD':
         case 'CD':
         case 'CJ':
-            return processo.numero_portaria ? `Portaria ${processo.numero_portaria}/${processo.ano}` : '';
+            return processo.numero_portaria ? `Portaria nº ${processo.numero_portaria}/${processo.ano}` : '';
         default:
             return '';
     }
@@ -317,14 +320,14 @@ function getNumeroDocumento(processo, tipoProcesso) {
             return processo.numero_portaria ? `
                 <div class="info-card">
                     <div class="info-label">Número da Portaria</div>
-                    <div class="info-value">${processo.numero_portaria}/${processo.ano}</div>
+                    <div class="info-value">Portaria nº ${processo.numero_portaria}/${processo.ano}</div>
                 </div>
             ` : '';
         case 'PADS':
             return processo.numero_memorando ? `
                 <div class="info-card">
                     <div class="info-label">Número do Memorando</div>
-                    <div class="info-value">${processo.numero_memorando}/${processo.ano}</div>
+                    <div class="info-value">Memorando nº ${processo.numero_memorando}/${processo.ano}</div>
                 </div>
             ` : '';
         default:
@@ -728,13 +731,21 @@ async function gerarPDF() {
 }
 
 function criarConteudoPDF(titulo, infoMapa, estatisticas) {
-    // Obter dados da tabela
+    // Obter dados completos da tabela e dos dados originais armazenados
     const tabela = document.getElementById('tabelaProcessos');
     const linhas = tabela.querySelectorAll('tbody tr.processo-linha');
+    
+    // Extrair tipo de processo do título para usar na lógica
+    const tipoProcessoMatch = titulo.match(/Mapa Mensal - (\w+) -/);
+    window.tipoProcessoAtual = tipoProcessoMatch ? tipoProcessoMatch[1] : '';
     
     let processosData = [];
     linhas.forEach((linha, index) => {
         const processoId = linha.dataset.processoId;
+        
+        // Buscar dados originais do processo pelos dados armazenados globalmente
+        const dadosOriginais = window.dadosProcessos ? 
+            window.dadosProcessos.find(p => p.id == processoId) : null;
         
         // Extrair dados da linha principal
         const colunas = linha.querySelectorAll('td');
@@ -749,16 +760,40 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
         const pmBadges = colunas[4].querySelectorAll('.pm-badge');
         const pmsArray = Array.from(pmBadges).map(badge => {
             let texto = badge.textContent.trim();
-            // Remover prefixos como "+2" se existirem
             if (texto.startsWith('+')) {
-                return `+${texto.slice(1)} outros`;
+                return `${texto} outros`;
             }
             return texto;
         });
         
         const solucaoElement = colunas[5].querySelector('.solucao-badge');
         const solucao = solucaoElement ? solucaoElement.textContent.trim() : 
-                       colunas[5].textContent.trim() !== '-' ? colunas[5].textContent.trim() : 'Não finalizado';
+                       colunas[5].textContent.trim() !== '-' ? colunas[5].textContent.trim() : 'Não se aplica';
+        
+        // Extrair dados dos detalhes usando dados originais quando disponíveis
+        let detalhes = {
+            dataInstauracao: dadosOriginais?.data_instauracao ? 
+                formatarData(dadosOriginais.data_instauracao) : 'Não informado',
+            dataConclusao: status === 'Em Andamento' ? 'Não se aplica' : 
+                (dadosOriginais?.data_conclusao ? formatarData(dadosOriginais.data_conclusao) : 'Não informado'),
+            numeroPortaria: dadosOriginais?.numero_portaria ? 
+                `Portaria nº ${dadosOriginais.numero_portaria}/${dadosOriginais.ano}` : 
+                (dadosOriginais?.numero_memorando ? `Memorando nº ${dadosOriginais.numero_memorando}/${dadosOriginais.ano}` : 'Não informado'),
+            numeroControle: dadosOriginais?.numero || 'Não informado',
+            numeroRGF: dadosOriginais?.numero_rgf || 'Não informado',
+            resumoFatos: dadosOriginais?.resumo_fatos || 'Não informado',
+            tipoProcesso: window.tipoProcessoAtual || '', // Armazenar tipo para uso posterior
+            solucaoCompleta: {
+                dataRemessa: dadosOriginais?.solucao?.data_remessa ? 
+                    formatarData(dadosOriginais.solucao.data_remessa) : 'Não informado',
+                dataJulgamento: ['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual) ? 
+                    (dadosOriginais?.solucao?.data_julgamento ? formatarData(dadosOriginais.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
+                penalidade: ['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual) ? 
+                    (dadosOriginais?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica'
+            },
+            ultimaMovimentacao: status === 'Concluído' ? 'Não se aplica' : 
+                (dadosOriginais?.ultima_movimentacao || 'Não informado')
+        };
         
         processosData.push({
             numero,
@@ -767,7 +802,8 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
             status,
             encarregado,
             pmsEnvolvidos: pmsArray.join(', ') || 'Nenhum PM informado',
-            solucao
+            solucao,
+            detalhes
         });
     });
     
@@ -823,18 +859,14 @@ async function gerarDocumentoPDF(content, titulo) {
     let currentY = margin;
     
     // Header com gradiente simulado
-    pdf.setFillColor(30, 60, 114); // Cor do gradiente
+    pdf.setFillColor(30, 60, 114);
     pdf.rect(margin, currentY, contentWidth, 25, 'F');
     
     // Título
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(16);
     pdf.setFont(undefined, 'bold');
-    pdf.text('MAPA MENSAL DE PROCESSOS E PROCEDIMENTOS', pageWidth / 2, currentY + 10, { align: 'center' });
-    
-    pdf.setFontSize(12);
-    pdf.setFont(undefined, 'normal');
-    pdf.text(content.titulo, pageWidth / 2, currentY + 18, { align: 'center' });
+    pdf.text('MAPA MENSAL P6/7ºBPM', pageWidth / 2, currentY + 13, { align: 'center' });
     
     currentY += 35;
     
@@ -866,7 +898,6 @@ async function gerarDocumentoPDF(content, titulo) {
     let statsX = margin;
     
     Object.entries(content.stats).forEach(([label, value]) => {
-        // Box para estatística
         pdf.setFillColor(248, 249, 250);
         pdf.rect(statsX, currentY - 5, statsWidth - 5, 15, 'F');
         pdf.setDrawColor(42, 82, 152);
@@ -887,109 +918,143 @@ async function gerarDocumentoPDF(content, titulo) {
     
     currentY += 25;
     
-    // Tabela de processos
-    pdf.setFont(undefined, 'bold');
-    pdf.setFontSize(12);
-    pdf.text('PROCESSOS/PROCEDIMENTOS', margin, currentY);
-    currentY += 10;
-    
-    // Cabeçalho da tabela
-    const colWidths = [15, 35, 25, 60, 80, 35]; // Larguras das colunas
-    const headers = ['#', 'Número', 'Status', 'Encarregado', 'PMs Envolvidos', 'Solução'];
-    
-    pdf.setFillColor(42, 82, 152);
-    pdf.rect(margin, currentY, contentWidth, 8, 'F');
-    
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(9);
-    pdf.setFont(undefined, 'bold');
-    
-    let colX = margin;
-    headers.forEach((header, index) => {
-        pdf.text(header, colX + 2, currentY + 6);
-        colX += colWidths[index];
-    });
-    
-    currentY += 8;
-    
-    // Dados da tabela
-    pdf.setTextColor(0, 0, 0);
-    pdf.setFontSize(8);
-    pdf.setFont(undefined, 'normal');
-    
+    // Iterar sobre cada processo
     content.processos.forEach((processo, index) => {
-        // Verificar se precisa de nova página
-        if (currentY > pageHeight - 40) {
+        // Verificar se há espaço suficiente (aproximadamente 80mm para cada processo)
+        if (currentY > pageHeight - 90) {
             pdf.addPage();
-            currentY = margin;
-            
-            // Repetir cabeçalho na nova página
-            pdf.setFillColor(42, 82, 152);
-            pdf.rect(margin, currentY, contentWidth, 8, 'F');
-            
-            pdf.setTextColor(255, 255, 255);
-            pdf.setFontSize(9);
-            pdf.setFont(undefined, 'bold');
-            
-            colX = margin;
-            headers.forEach((header, headerIndex) => {
-                pdf.text(header, colX + 2, currentY + 6);
-                colX += colWidths[headerIndex];
-            });
-            
-            currentY += 8;
-            pdf.setTextColor(0, 0, 0);
-            pdf.setFontSize(8);
-            pdf.setFont(undefined, 'normal');
+            currentY = margin + 10;
         }
         
-        // Calcular altura necessária para a linha
-        const linhaAltura = Math.max(12, 
-            Math.ceil(pdf.splitTextToSize(processo.descricao, colWidths[1] - 4).length) * 3,
-            Math.ceil(pdf.splitTextToSize(processo.encarregado, colWidths[3] - 4).length) * 3,
-            Math.ceil(pdf.splitTextToSize(processo.pmsEnvolvidos, colWidths[4] - 4).length) * 3
-        );
+        // Card do processo
+        const cardHeight = 70; // Altura estimada do card
         
-        // Linha zebrada
-        if (index % 2 === 0) {
-            pdf.setFillColor(248, 249, 250);
-            pdf.rect(margin, currentY, contentWidth, linhaAltura, 'F');
-        }
+        // Fundo do card
+        pdf.setFillColor(248, 249, 250);
+        pdf.rect(margin, currentY, contentWidth, cardHeight, 'F');
         
-        // Bordas
-        pdf.setDrawColor(222, 226, 230);
-        pdf.rect(margin, currentY, contentWidth, linhaAltura);
+        // Borda do card
+        pdf.setDrawColor(42, 82, 152);
+        pdf.setLineWidth(0.5);
+        pdf.rect(margin, currentY, contentWidth, cardHeight);
         
-        // Separadores verticais
-        colX = margin;
-        colWidths.forEach((width, colIndex) => {
-            if (colIndex < colWidths.length - 1) {
-                pdf.line(colX + width, currentY, colX + width, currentY + linhaAltura);
-            }
-            colX += width;
-        });
+        // Header do processo
+        pdf.setFillColor(42, 82, 152);
+        pdf.rect(margin, currentY, contentWidth, 12, 'F');
         
-        // Dados
-        colX = margin;
-        const dados = [
-            processo.numero,
-            processo.numeroProcesso + '\n' + processo.descricao,
-            processo.status,
-            processo.encarregado,
-            processo.pmsEnvolvidos,
-            processo.solucao
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(11);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`${processo.numero}. ${processo.numeroProcesso}`, margin + 5, currentY + 8);
+        
+        // Status
+        const statusColor = processo.status === 'Concluído' ? [40, 167, 69] : [255, 193, 7];
+        pdf.setFillColor(...statusColor);
+        pdf.rect(pageWidth - margin - 40, currentY + 2, 35, 8, 'F');
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(8);
+        pdf.text(processo.status, pageWidth - margin - 37, currentY + 7);
+        
+        currentY += 15;
+        
+        // Conteúdo do card em colunas
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFontSize(9);
+        
+        // Coluna 1: Informações básicas
+        let col1X = margin + 5;
+        let col1Y = currentY;
+        
+        pdf.setFont(undefined, 'bold');
+        pdf.text('INFORMAÇÕES BÁSICAS', col1X, col1Y);
+        col1Y += 5;
+        
+        pdf.setFont(undefined, 'normal');
+        const infoBasicas = [
+            ['Documento/Número:', processo.detalhes.numeroPortaria],
+            ['Número de controle:', processo.detalhes.numeroControle],
+            ['Data Instauração:', processo.detalhes.dataInstauracao],
+            ['Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa]
         ];
         
-        dados.forEach((dado, colIndex) => {
-            const lines = pdf.splitTextToSize(dado, colWidths[colIndex] - 4);
-            pdf.text(lines, colX + 2, currentY + 4);
-            colX += colWidths[colIndex];
+        // Adicionar Data Julgamento para PAD, PADS, CD, CJ
+        if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
+            infoBasicas.push(['Data Julgamento:', processo.detalhes.solucaoCompleta.dataJulgamento]);
+        }
+        
+        // Continuar com as demais informações
+        infoBasicas.push(
+            ['Data Conclusão:', processo.detalhes.dataConclusao],
+            ['Número RGF:', processo.detalhes.numeroRGF],
+            ['Encarregado:', processo.encarregado]
+        );
+        
+        infoBasicas.forEach(([label, value]) => {
+            pdf.setFont(undefined, 'bold');
+            pdf.text(label, col1X, col1Y);
+            pdf.setFont(undefined, 'normal');
+            const wrappedValue = pdf.splitTextToSize(value, 85);
+            pdf.text(wrappedValue, col1X + 35, col1Y);
+            col1Y += Math.max(4, wrappedValue.length * 4);
         });
         
-        currentY += linhaAltura;
+        // Coluna 2: PMs Envolvidos e Solução
+        let col2X = margin + (contentWidth / 2) + 5;
+        let col2Y = currentY;
+        
+        pdf.setFont(undefined, 'bold');
+        pdf.text('PMS ENVOLVIDOS', col2X, col2Y);
+        col2Y += 5;
+        
+        pdf.setFont(undefined, 'normal');
+        const wrappedPMs = pdf.splitTextToSize(processo.pmsEnvolvidos, 85);
+        pdf.text(wrappedPMs, col2X, col2Y);
+        col2Y += Math.max(8, wrappedPMs.length * 4);
+        
+        pdf.setFont(undefined, 'bold');
+        pdf.text('SOLUÇÃO/RESULTADO', col2X, col2Y);
+        col2Y += 5;
+        
+        pdf.setFont(undefined, 'normal');
+        const solucaoInfo = [];
+        
+        // Só mostrar Penalidade para PAD, PADS, CD, CJ
+        if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
+            solucaoInfo.push(['Penalidade:', processo.detalhes.solucaoCompleta.penalidade]);
+        }
+        
+        solucaoInfo.forEach(([label, value]) => {
+            pdf.setFont(undefined, 'bold');
+            pdf.text(label, col2X, col2Y);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(value, col2X + 25, col2Y);
+            col2Y += 4;
+        });
+        
+        // Resumo dos fatos (ocupando toda a largura na parte inferior)
+        if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
+            const resumoY = currentY + 45;
+            pdf.setFont(undefined, 'bold');
+            pdf.text('RESUMO DOS FATOS:', margin + 5, resumoY);
+            pdf.setFont(undefined, 'normal');
+            const wrappedResumo = pdf.splitTextToSize(processo.detalhes.resumoFatos, contentWidth - 10);
+            pdf.text(wrappedResumo, margin + 5, resumoY + 5);
+        }
+        
+        // Última movimentação (se aplicável)
+        if (processo.status === 'Em Andamento' && processo.detalhes.ultimaMovimentacao !== 'Não informado') {
+            const movY = currentY + 55;
+            pdf.setFont(undefined, 'bold');
+            pdf.text('ÚLTIMA MOVIMENTAÇÃO:', margin + 5, movY);
+            pdf.setFont(undefined, 'normal');
+            const wrappedMov = pdf.splitTextToSize(processo.detalhes.ultimaMovimentacao, contentWidth - 10);
+            pdf.text(wrappedMov, margin + 5, movY + 5);
+        }
+        
+        currentY += cardHeight + 5; // Espaço entre cards
     });
     
-    // Footer
+    // Footer em todas as páginas
     const totalPages = pdf.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
         pdf.setPage(i);
@@ -1006,7 +1071,7 @@ async function gerarDocumentoPDF(content, titulo) {
     }
     
     // Salvar PDF
-    const nomeArquivo = `Mapa_Mensal_${content.titulo.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const nomeArquivo = `Mapa_Mensal_Detalhado_${content.titulo.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     pdf.save(nomeArquivo);
 }
 
