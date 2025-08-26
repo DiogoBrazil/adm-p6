@@ -1167,15 +1167,26 @@ async function gerarDocumentoPDF(content, titulo) {
     pdf.setTextColor(0, 0, 0);
     pdf.setFontSize(10);
     
-    // Informações em três colunas
+    // Informações em três colunas centralizadas
     const infoWidth = contentWidth / 3;
     let infoX = margin;
     
     Object.entries(content.info).forEach(([label, value]) => {
+        // Calcular a largura total do texto (label + valor)
         pdf.setFont(undefined, 'bold');
-        pdf.text(`${label}:`, infoX, currentY);
+        const labelWidth = pdf.getTextWidth(`${label}: `);
         pdf.setFont(undefined, 'normal');
-        pdf.text(value, infoX, currentY + 5);
+        const valueWidth = pdf.getTextWidth(value);
+        const totalWidth = labelWidth + valueWidth;
+        
+        // Centralizar dentro da coluna
+        const startX = infoX + (infoWidth - totalWidth) / 2;
+        
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`${label}:`, startX, currentY);
+        pdf.setFont(undefined, 'normal');
+        pdf.text(value, startX + labelWidth, currentY);
+        
         infoX += infoWidth;
     });
     
