@@ -986,6 +986,38 @@ async function gerarRelatorioHTMLParaImpressao(content) {
     }
 }
 
+// Função para formatar a última movimentação
+function formatarUltimaMovimentacao(movimentacao) {
+    if (!movimentacao) {
+        return 'Não informado';
+    }
+    
+    // Se for uma string, retornar diretamente
+    if (typeof movimentacao === 'string') {
+        return movimentacao;
+    }
+    
+    // Se for um objeto, formatar adequadamente
+    if (typeof movimentacao === 'object') {
+        let texto = '';
+        
+        // Adicionar apenas a descrição se existir
+        if (movimentacao.descricao) {
+            texto += movimentacao.descricao;
+        }
+        
+        // Adicionar destino se existir
+        if (movimentacao.destino) {
+            if (texto) texto += ' - ';
+            texto += `Destino: ${movimentacao.destino}`;
+        }
+        
+        return texto || 'Não informado';
+    }
+    
+    return 'Não informado';
+}
+
 function criarConteudoPDF(titulo, infoMapa, estatisticas) {
     // Obter dados completos da tabela e dos dados originais armazenados
     const tabela = document.getElementById('tabelaProcessos');
@@ -1049,7 +1081,7 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
                     (dadosOriginais?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica'
             },
             ultimaMovimentacao: status === 'Concluído' ? 'Não se aplica' : 
-                (dadosOriginais?.ultima_movimentacao || 'Não informado')
+                formatarUltimaMovimentacao(dadosOriginais?.ultima_movimentacao)
         };
         
         processosData.push({
