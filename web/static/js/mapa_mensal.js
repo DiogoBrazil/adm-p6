@@ -1269,7 +1269,8 @@ async function gerarDocumentoPDF(content, titulo) {
         pdf.setFontSize(fontSizeHeader);
         pdf.setFont(undefined, 'bold');
         const yPosTexto = currentY + (alturaHeader === 10 ? 7 : 8);
-        pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso}`, margin + 3, yPosTexto);
+        const tipoProcesso = window.tipoProcessoAtual || 'PROCESSO';
+        pdf.text(`${processo.numero}. ${tipoProcesso} Nº ${processo.numeroProcesso}`, margin + 3, yPosTexto);
         
         // Status no canto direito
         const statusColor = processo.status === 'Concluído' ? [40, 167, 69] : [255, 193, 7];
