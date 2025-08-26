@@ -286,12 +286,15 @@ function criarSolucaoResumida(processo, tipoProcesso) {
         return '<span class="text-muted">-</span>';
     }
     
-    const cor = getCorSolucao(processo.solucao_final, tipoProcesso);
+    // Buscar solução na estrutura correta
+    const solucaoFinal = processo.solucao_final || processo.solucao?.solucao_final || processo.solucao?.solucao_tipo;
+    
+    const cor = getCorSolucao(solucaoFinal, tipoProcesso);
     const badgeClass = cor.includes('success') ? 'bg-success' : 
                        cor.includes('warning') ? 'bg-warning' : 
                        cor.includes('danger') ? 'bg-danger' : 'bg-secondary';
     
-    return `<span class="solucao-badge ${badgeClass} text-white">${processo.solucao_final || 'Não informado'}</span>`;
+    return `<span class="solucao-badge ${badgeClass} text-white">${solucaoFinal || 'Não informado'}</span>`;
 }
 
 function getDescricaoNumero(processo, tipoProcesso) {
@@ -1419,7 +1422,7 @@ async function gerarDocumentoPDF(content, titulo) {
             if (['IPM', 'SR'].includes(window.tipoProcessoAtual)) {
                 const dadosOriginais = window.dadosProcessos ?
                     window.dadosProcessos.find(p => p.id == processo.id) : null;
-                const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
+                const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || dadosOriginais?.solucao?.solucao_tipo || processo.solucao;
                 linhasEsq.push(['Solução/Resultado:', solucaoFinal || 'Não informado', true]);
             }
             if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
