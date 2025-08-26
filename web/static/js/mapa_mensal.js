@@ -1218,7 +1218,7 @@ async function gerarDocumentoPDF(content, titulo) {
             currentY = margin + 10;
         }
         
-        currentY = renderizarProcesso(processo);
+        currentY = renderizarProcesso(processo, 10); // Espaçamento normal para concluídos
     });
     
     // Processar processos em andamento (2 por página)
@@ -1232,15 +1232,15 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.addPage();
             currentY = margin + 10;
         } else if (index > 0 && index % 2 === 1) {
-            // Segundo processo na mesma página - apenas adicionar espaçamento
-            currentY += 15;
+            // Segundo processo na mesma página - espaçamento reduzido para andamentos
+            currentY += 5; // Reduzido ainda mais
         }
         
-        currentY = renderizarProcesso(processo);
+        currentY = renderizarProcesso(processo, 5); // Espaçamento reduzido para andamentos
     });
     
     // Função local para renderizar cada processo
-    function renderizarProcesso(processo) {
+    function renderizarProcesso(processo, espacamento = 10) {
         // Título do processo
         pdf.setFillColor(42, 82, 152);
         pdf.rect(margin, currentY, contentWidth, 12, 'F');
@@ -1495,7 +1495,7 @@ async function gerarDocumentoPDF(content, titulo) {
         }
         
         // Atualizar currentY para o próximo processo e retornar
-        return tableY + 10; // Espaço menor entre processos
+        return tableY + espacamento; // Usar o espaçamento passado como parâmetro
     }
     
     // Footer em todas as páginas
