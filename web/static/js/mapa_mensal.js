@@ -1203,17 +1203,25 @@ async function gerarDocumentoPDF(content, titulo) {
         let tableY = currentY;
         
         // Função auxiliar para criar linha da tabela com 3 colunas (com quebra de página)
-        function criarLinhaTabela(label, valor, indicios = '', isBold = false) {
-            // Configurar fonte
+    function criarLinhaTabela(label, valor, indicios = '', isBold = false) {
+            // Configurar fonte base (poderá ser ajustada por célula)
+            const baseFontSize = isBold ? 9 : 8;
             pdf.setFont(undefined, isBold ? 'bold' : 'normal');
-            pdf.setFontSize(isBold ? 9 : 8);
+            pdf.setFontSize(baseFontSize);
 
             // Fundo alternado para melhor legibilidade
             pdf.setFillColor(248, 249, 250);
 
             // Quebrar texto se necessário
             const wrappedValue = pdf.splitTextToSize(valor || '', colWidths[1] - 6);
-            const wrappedIndicios = indicios ? pdf.splitTextToSize(indicios, colWidths[2] - 6) : [];
+            // Suporte a indicios como string ou como array de objetos { text, bold }
+            let wrappedIndicios = [];
+            if (Array.isArray(indicios)) {
+                wrappedIndicios = indicios.map(l => ({ text: l.text || '', bold: !!l.bold, single: !!l.single }));
+            } else if (indicios) {
+                const arr = pdf.splitTextToSize(indicios, colWidths[2] - 6);
+                wrappedIndicios = arr.map(t => ({ text: t, bold: false, single: false }));
+            }
             const cellHeight = Math.max(6, Math.max(wrappedValue.length, wrappedIndicios.length) * 3 + 3);
 
             // Verificar espaço e fazer quebra de página se necessário
@@ -1258,10 +1266,46 @@ async function gerarDocumentoPDF(content, titulo) {
 
             // Adicionar texto
             pdf.setTextColor(0, 0, 0);
+            // Label em negrito apenas para a linha "PMs Envolvidos:" (e conforme isBold para as demais)
+            const labelIsBold = label === 'PMs Envolvidos:' ? true : isBold;
+            const valueIsBold = label === 'PMs Envolvidos:' ? false : isBold;
+            pdf.setFont(undefined, labelIsBold ? 'bold' : 'normal');
             pdf.text(label, margin + 2, tableY + 4);
+            pdf.setFont(undefined, valueIsBold ? 'bold' : 'normal');
             pdf.text(wrappedValue, margin + colWidths[0] + 2, tableY + 4);
             if (wrappedIndicios.length) {
-                pdf.text(wrappedIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 4);
+                // Desenhar cada linha respeitando bold por linha; se for linha 'single', reduzir fonte para caber em uma linha
+                let lineY = tableY + 4;
+                wrappedIndicios.forEach((line) => {
+                    const { text, bold, single } = line;
+                    // Ajuste de fonte para caber em uma linha caso 'single'
+                    if (single) {
+                        // Tentar caber na largura em uma linha sem quebra
+                        const available = colWidths[2] - 6;
+                        // Começar da baseFontSize ou 8 e reduzir até 6
+                        let trySize = baseFontSize;
+                        if (trySize > 8) trySize = 8;
+                        pdf.setFont(undefined, bold ? 'bold' : 'normal');
+                        pdf.setFontSize(trySize);
+                        let w = pdf.getTextWidth(text);
+                        while (w > available && trySize > 6) {
+                            trySize -= 0.5;
+                            pdf.setFontSize(trySize);
+                            w = pdf.getTextWidth(text);
+                        }
+                        pdf.text(text, margin + colWidths[0] + colWidths[1] + 2, lineY);
+                        // Restaurar tamanho base
+                        pdf.setFontSize(baseFontSize);
+                    } else {
+                        pdf.setFont(undefined, bold ? 'bold' : 'normal');
+                        pdf.setFontSize(baseFontSize);
+                        pdf.text(text, margin + colWidths[0] + colWidths[1] + 2, lineY);
+                    }
+                    lineY += 3;
+                });
+                // Restaurar fonte para próxima célula
+                pdf.setFont(undefined, isBold ? 'bold' : 'normal');
+                pdf.setFontSize(baseFontSize);
             }
 
             tableY += cellHeight;
@@ -1301,32 +1345,43 @@ async function gerarDocumentoPDF(content, titulo) {
                 const linhasIndicios = [];
                 dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
                     const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
-                    linhasIndicios.push(`${nomePM.toUpperCase()}:`);
+                    linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
                     if (pm.indicios) {
                         const { categorias, crimes, transgressoes, art29 } = pm.indicios;
                         if ((categorias && categorias.length) || (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
                             if (categorias && categorias.length) {
-                                categorias.forEach(c => linhasIndicios.push(`• ${c}`));
+                                categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
                             }
                             if (crimes && crimes.length) {
-                                crimes.forEach(crime => linhasIndicios.push(`- Crime: ${crime.texto_completo}`));
+                                crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false, single: true }));
                             }
                             if (transgressoes && transgressoes.length) {
-                                transgressoes.forEach(t => linhasIndicios.push(`- Transgressão: ${t.texto_completo}`));
+                                transgressoes.forEach(t => linhasIndicios.push({ text: `- Transgressão: ${t.texto_completo}`, bold: false }));
                             }
                             if (art29 && art29.length) {
-                                art29.forEach(a => linhasIndicios.push(`- Art. 29: ${a.texto_completo}`));
+                                art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
                             }
                         } else {
-                            linhasIndicios.push('• Não houve');
+                            linhasIndicios.push({ text: '• Não houve', bold: false });
                         }
                     } else {
-                        linhasIndicios.push('• Não houve');
+                        linhasIndicios.push({ text: '• Não houve', bold: false });
                     }
                     // sem linha em branco entre PMs para otimizar espaço
                 });
-                const textoIndicios = linhasIndicios.join('\n');
-                indiciosWrappedLines = pdf.splitTextToSize(textoIndicios, colWidths[2] - 6);
+                // Agrupar por item e quebrar mantendo cada item indivisível entre linhas da tabela
+                const itensWrapped = [];
+                linhasIndicios.forEach(({ text, bold, single }) => {
+                    if (single) {
+                        // manter como um item de linha única; ajuste de fonte será feito na renderização
+                        itensWrapped.push([{ text, bold, single: true }]);
+                    } else {
+                        const parts = pdf.splitTextToSize(text, colWidths[2] - 6);
+                        const linhas = parts.map(p => ({ text: p, bold, single: false }));
+                        itensWrapped.push(linhas);
+                    }
+                });
+                indiciosWrappedLines = itensWrapped; // agora é um array de itens, cada item é um array de linhas {text,bold}
             }
         }
 
@@ -1342,41 +1397,54 @@ async function gerarDocumentoPDF(content, titulo) {
         linhasEsq.push(['Data Conclusão:', processo.detalhes.dataConclusao, false]);
         linhasEsq.push(['Número RGF:', processo.detalhes.numeroRGF, false]);
         linhasEsq.push(['Encarregado:', processo.encarregado, false]);
-        linhasEsq.push(['PMS ENVOLVIDOS:', processo.pmsEnvolvidos, true]);
+    linhasEsq.push(['PMs Envolvidos:', processo.pmsEnvolvidos, false]);
         if (processo.status === 'Concluído') {
             if (['IPM', 'SR'].includes(window.tipoProcessoAtual)) {
                 const dadosOriginais = window.dadosProcessos ?
                     window.dadosProcessos.find(p => p.id == processo.id) : null;
                 const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
-                linhasEsq.push(['SOLUÇÃO/RESULTADO:', solucaoFinal || 'Não informado', true]);
+                linhasEsq.push(['Solução/Resultado:', solucaoFinal || 'Não informado', true]);
             }
             if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-                linhasEsq.push(['SOLUÇÃO/RESULTADO:', processo.detalhes.solucaoCompleta.penalidade, true]);
+                linhasEsq.push(['Solução/Resultado:', processo.detalhes.solucaoCompleta.penalidade, true]);
             }
         }
         if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
-            linhasEsq.push(['RESUMO DOS FATOS:', processo.detalhes.resumoFatos, true]);
+            linhasEsq.push(['Resumo dos Fatos:', processo.detalhes.resumoFatos, true]);
         }
         if (processo.status === 'Em Andamento' && processo.detalhes.ultimaMovimentacao !== 'Não informado') {
             linhasEsq.push(['ÚLTIMA MOVIMENTAÇÃO:', processo.detalhes.ultimaMovimentacao, true]);
         }
 
-        // Distribuir as linhas de indícios desde a primeira linha da tabela
-        let idxInd = 0;
+        // Distribuir itens de indícios pelas linhas, sem quebrar um item entre linhas
+        let idxItem = 0;
         linhasEsq.forEach(([label, valor, negrito]) => {
             const wrappedValor = pdf.splitTextToSize(valor || '', colWidths[1] - 6);
-            const nLinhas = Math.max(1, wrappedValor.length);
-            const ate = Math.min(indiciosWrappedLines.length, idxInd + nLinhas);
-            const parteIndicios = ate > idxInd ? indiciosWrappedLines.slice(idxInd, ate).join('\n') : '';
-            idxInd = ate;
-            criarLinhaTabela(label, valor, parteIndicios, negrito);
+            const capacidade = Math.max(1, wrappedValor.length);
+            let linhasDireita = [];
+            let linhasUsadas = 0;
+            while (idxItem < indiciosWrappedLines.length) {
+                const item = indiciosWrappedLines[idxItem]; // array de linhas {text,bold}
+                const tamanhoItem = item.length;
+                // se cabe o item inteiro, adiciona; se não cabe e ainda não adicionou nada, adiciona mesmo assim (a linha crescerá)
+                if (linhasUsadas + tamanhoItem <= capacidade || linhasUsadas === 0) {
+                    linhasDireita.push(...item);
+                    linhasUsadas += tamanhoItem;
+                    idxItem++;
+                } else {
+                    break;
+                }
+                // Se já usamos pelo menos a capacidade, para nesta linha
+                if (linhasUsadas >= capacidade) break;
+            }
+            criarLinhaTabela(label, valor, linhasDireita, negrito);
         });
 
-        // Caso sobrem linhas de indícios, continuar adicionando linhas vazias à esquerda para completar
-        while (idxInd < indiciosWrappedLines.length) {
-            const parteIndicios = indiciosWrappedLines[idxInd];
-            idxInd += 1;
-            criarLinhaTabela(' ', ' ', parteIndicios, false);
+        // Caso sobrem itens, adicionar linhas extras para acomodar o restante
+        while (idxItem < indiciosWrappedLines.length) {
+            const item = indiciosWrappedLines[idxItem];
+            idxItem++;
+            criarLinhaTabela(' ', ' ', item, false);
         }
         
     // Atualizar currentY para o próximo processo
