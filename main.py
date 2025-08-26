@@ -5860,7 +5860,44 @@ def _obter_indicios_para_mapa(cursor, processo_id):
     indicios = {"crimes": [], "transgressoes": [], "art29": []}
     
     try:
-        # Crimes/contravenções
+        # Primeiro, buscar transgressões do campo JSON transgressoes_ids
+        cursor.execute("""
+            SELECT transgressoes_ids
+            FROM processos_procedimentos
+            WHERE id = ?
+        """, (processo_id,))
+        
+        resultado = cursor.fetchone()
+        if resultado and resultado[0]:
+            try:
+                import json
+                transgressoes_data = json.loads(resultado[0])
+                
+                if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
+                    primeiro_item = transgressoes_data[0]
+                    
+                    if isinstance(primeiro_item, dict):
+                        # Formato novo: pode ser RDPM ou Art. 29
+                        for trans_data in transgressoes_data:
+                            tipo = trans_data.get('tipo', 'rdpm')
+                            
+                            if tipo == 'rdpm':
+                                trans_id = trans_data.get('id')
+                                natureza = trans_data.get('natureza', 'leve')
+                                
+                                cursor.execute("SELECT id, inciso, texto, gravidade FROM transgressoes WHERE id = ? AND ativo = 1", (trans_id,))
+                                trans = cursor.fetchone()
+                                if trans:
+                                    indicios["transgressoes"].append({
+                                        "inciso": trans[1],
+                                        "texto": trans[2],
+                                        "gravidade": trans[3],
+                                        "texto_completo": f"Inciso {trans[1]} - {trans[2]} ({trans[3]})"
+                                    })
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        # Crimes/contravenções das tabelas de relacionamento
         cursor.execute("""
             SELECT c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, 
                    c.paragrafo, c.inciso, c.alinea
