@@ -709,11 +709,10 @@ async function gerarPDF() {
         const infoMapa = document.getElementById('infoMapa');
         const estatisticas = document.getElementById('estatisticasMapa');
         
-        // Criar conteúdo do PDF
-        const pdfContent = criarConteudoPDF(tituloMapa, infoMapa, estatisticas);
-        
-        // Gerar PDF usando jsPDF
-        await gerarDocumentoPDF(pdfContent, tituloMapa);
+    // Criar conteúdo estruturado a partir da página
+    const pdfContent = criarConteudoPDF(tituloMapa, infoMapa, estatisticas);
+    // Gerar e baixar PDF diretamente usando jsPDF
+    await gerarDocumentoPDF(pdfContent, tituloMapa);
         
         // Restaurar botão
         botaoGerar.innerHTML = textoOriginal;
@@ -727,6 +726,263 @@ async function gerarPDF() {
         const botaoGerar = document.querySelector('button[onclick="gerarPDF()"]');
         botaoGerar.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i> Gerar PDF';
         botaoGerar.disabled = false;
+    }
+}
+
+// Normaliza status lido do DOM (corrige caso venha só "Andamento")
+function normalizarStatus(status) {
+    if (!status) return '';
+    const s = status.toLowerCase();
+    if (s.includes('concl')) return 'Concluído';
+    return 'Em Andamento';
+}
+
+// Gera um HTML completo estilizado para impressão em modo paisagem
+async function gerarRelatorioHTMLParaImpressao(content) {
+    // Inferir tipo e período
+    const tipoAtual = (window.tipoProcessoAtual && String(window.tipoProcessoAtual)) || (content.titulo?.split(' - ')[0] || '').trim();
+    const periodo = content.info?.['Período'] || '';
+    const dataGeracao = content.info?.['Data de Geração'] || new Date().toLocaleString('pt-BR');
+
+    // Container e estilo
+    const containerId = 'print-mapa-mensal-container';
+    const styleId = 'print-mapa-mensal-style';
+
+    // Evitar múltiplos
+    document.getElementById(containerId)?.remove();
+    document.getElementById(styleId)?.remove();
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+        :root{ --bg:#f0f2f5; --border:#ddd; --muted:#606770; --primary:#004a99; }
+        *{ box-sizing: border-box; }
+        .pm-print-root{ font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:#fff; color:#1c1e21; }
+        .pm-page-container{ padding: 0 12mm; }
+        .pm-report-header{ text-align:center; border-bottom:2px solid #e0e0e0; padding: 0 0 6px 0; margin: 0 0 8px 0; }
+        .pm-report-header h1{ margin:0; font-size: 18px; color: var(--primary); }
+        .pm-report-header p{ margin:4px 0 0; color: var(--muted); font-size: 12px; }
+        .pm-stats-summary{ display:flex; gap:8px; justify-content: space-between; margin: 8px 0 12px 0; }
+        .pm-stat{ flex:1; text-align:center; background:#f7f7f7; border-radius:6px; padding:6px; }
+        .pm-stat h3{ margin:0; font-size: 16px; color:#333; }
+        .pm-stat p{ margin:0; font-size:10px; text-transform: uppercase; color:#555; }
+        .pm-process-card{ border: 1px solid var(--border); border-radius:8px; overflow:hidden; background:#fff; }
+        .pm-process-card + .pm-process-card{ margin-top: 6mm; }
+        .pm-card-header{ display:flex; justify-content: space-between; align-items:center; background:#e9ecef; color:#343a40; padding:8px 10px; border-bottom:1px solid var(--border); }
+        .pm-card-header h2{ margin:0; font-size: 14px; color: var(--primary); }
+        .pm-status{ padding:4px 10px; border-radius: 14px; font-size: 11px; font-weight:600; border:1px solid transparent; white-space:nowrap; }
+        .pm-status.concluido{ background:#d4edda; color:#155724; border-color:#c3e6cb; }
+        .pm-status.andamento{ background:#fff3cd; color:#856404; border-color:#ffeeba; }
+        .pm-card-body{ padding:10px; }
+        .pm-table{ width:100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 8px 0; }
+        .pm-table th, .pm-table td{ border:1px solid #e6e6e6; padding:6px 8px; vertical-align: top; font-size: 12px; }
+        .pm-table th{ width: 30%; background: #fafafa; color:#555; text-align:left; font-weight:600; }
+        .pm-table-condensed th{ width: 25%; }
+        .pm-value-block{ line-height: 1.4; }
+        .pm-value-block h4{ margin:2px 0 2px; font-size: 12px; font-weight:700; color:#222; }
+        .pm-muted{ color:#555; }
+        .pm-print-pages{ margin: 10px 0; }
+        .pm-print-page{ page-break-after: always; }
+        .pm-print-page:last-child{ page-break-after: auto; }
+        .pm-two-per-page{ display: grid; grid-template-rows: 1fr 1fr; gap: 6mm; min-height: calc(100vh - 24mm); }
+        @media print { @page { size: A4 landscape; margin: 12mm; } body{ background:#fff; }
+            #${containerId}{ display:block; }
+        }
+    `;
+
+    const container = document.createElement('div');
+    container.id = containerId;
+    container.className = 'pm-print-root';
+
+    const pageContainer = document.createElement('div');
+    pageContainer.className = 'pm-page-container';
+
+    // Header
+    const header = document.createElement('header');
+    header.className = 'pm-report-header';
+    header.innerHTML = `
+        <h1>Mapa Mensal de Procedimentos e Processos (${tipoAtual || '—'})</h1>
+        <p><strong>Período de Referência:</strong> ${periodo || '—'} | <strong>Gerado em:</strong> ${dataGeracao}</p>
+    `;
+
+    // Stats
+    const stats = document.createElement('section');
+    stats.className = 'pm-stats-summary';
+    const statsEntries = Object.entries(content.stats || {});
+    if (statsEntries.length) {
+        statsEntries.forEach(([label, value]) => {
+            const stat = document.createElement('div');
+            stat.className = 'pm-stat';
+            stat.innerHTML = `<h3>${value}</h3><p>${label}</p>`;
+            stats.appendChild(stat);
+        });
+    }
+
+    // Wrapper de páginas
+    const printWrapper = document.createElement('div');
+    printWrapper.className = 'pm-print-pages';
+
+    // Separar concluídos e andamentos
+    const processos = Array.isArray(content.processos) ? content.processos : [];
+    const concluidos = processos.filter(p => normalizarStatus(p.status) === 'Concluído');
+    const andamentos = processos.filter(p => normalizarStatus(p.status) === 'Em Andamento');
+
+    // Helpers de criação de elementos
+    const criarCardMetaTable = (p, tipo) => {
+        const table = document.createElement('table');
+        table.className = 'pm-table';
+        const linhas = [
+            ['Documento/Número', p.detalhes?.numeroPortaria || 'Não informado'],
+            ['Número de Controle', p.detalhes?.numeroControle || 'Não informado'],
+            ['Data de Instauração', p.detalhes?.dataInstauracao || 'Não informado'],
+            ['Data de Remessa', p.detalhes?.solucaoCompleta?.dataRemessa || 'Não informado'],
+        ];
+        if (['PAD','PADS','CD','CJ'].includes(tipo)) {
+            const dj = p.detalhes?.solucaoCompleta?.dataJulgamento || 'Não informado';
+            linhas.push(['Data de Julgamento', dj]);
+        }
+        linhas.push(['Data de Conclusão', p.detalhes?.dataConclusao || 'Não informado']);
+        linhas.push(['Número RGF', p.detalhes?.numeroRGF || 'Não informado']);
+        linhas.push(['Encarregado', p.encarregado || 'Não informado']);
+        linhas.push(['PMs Envolvidos', p.pmsEnvolvidos || 'Nenhum PM informado']);
+        table.innerHTML = linhas.map(([k,v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+        return table;
+    };
+
+    const getLabelSolucao = (tipo) => ['PAD','PADS','CD','CJ'].includes(tipo) ? 'DECISÃO FINAL' : 'SOLUÇÃO';
+
+    const montarIndiciosPMHTML = (procId, tipo) => {
+        if (!['IPM','SR'].includes(tipo)) return '';
+        const dadosOriginais = (window.dadosProcessos || []).find(p => String(p.id) === String(procId));
+        if (!dadosOriginais || !Array.isArray(dadosOriginais.pms_envolvidos)) return '';
+        const blocos = [];
+        dadosOriginais.pms_envolvidos.forEach(pm => {
+            const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+            const linhas = [];
+            if (pm.indicios) {
+                const { categorias, crimes, transgressoes, art29 } = pm.indicios;
+                if (categorias && categorias.length) {
+                    categorias.forEach(cat => linhas.push(`<div class="pm-muted">• ${cat}</div>`));
+                } else {
+                    linhas.push('<div class="pm-muted">• Não houve indícios.</div>');
+                }
+                if (crimes && crimes.length) {
+                    crimes.forEach(c => linhas.push(`<div class="pm-muted">• Crime: ${c.texto_completo}</div>`));
+                }
+                if (transgressoes && transgressoes.length) {
+                    transgressoes.forEach(t => linhas.push(`<div class="pm-muted">• Transgressão: ${t.texto_completo}</div>`));
+                }
+                if (art29 && art29.length) {
+                    art29.forEach(a => linhas.push(`<div class="pm-muted">• Art. 29: ${a.texto_completo}</div>`));
+                }
+            }
+            blocos.push(`<h4>${nomePM}:</h4>${linhas.join('')}`);
+        });
+        return blocos.join('');
+    };
+
+    const criarCardConcluido = (p, tipo) => {
+        const art = document.createElement('article');
+        art.className = 'pm-process-card pm-concluido';
+        const headerCard = document.createElement('div');
+        headerCard.className = 'pm-card-header';
+        headerCard.innerHTML = `
+            <h2>Processo/Procedimento Nº ${p.numeroProcesso}</h2>
+            <span class="pm-status concluido">Concluído</span>
+        `;
+        const body = document.createElement('div');
+        body.className = 'pm-card-body';
+    body.appendChild(criarCardMetaTable(p, tipo));
+
+        // Tabela condensada
+        const table = document.createElement('table');
+        table.className = 'pm-table pm-table-condensed';
+        const labelSolucao = getLabelSolucao(tipo);
+        const dadosOriginais = (window.dadosProcessos || []).find(x => String(x.id) === String(p.id));
+        const solucaoValor = ['PAD','PADS','CD','CJ'].includes(tipo)
+            ? (p.detalhes?.solucaoCompleta?.penalidade || p.solucao || 'Não informado')
+            : ((dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || p.solucao) || 'Não informado');
+
+        const linhas = [
+            ['RESUMO DOS FATOS', `<div class="pm-value-block">${p.detalhes?.resumoFatos || 'Não informado'}</div>`],
+            [labelSolucao, `<div class="pm-value-block">${solucaoValor}</div>`],
+        ];
+
+        // Índicios só para IPM/SR
+        if (['IPM','SR'].includes(tipo)) {
+            const indiciosHTML = montarIndiciosPMHTML(p.id, tipo);
+            if (indiciosHTML) {
+                linhas.push(['INDÍCIOS APONTADOS', `<div class="pm-value-block">${indiciosHTML}</div>`]);
+            }
+        }
+
+        table.innerHTML = linhas.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+
+        body.appendChild(table);
+        art.appendChild(headerCard);
+        art.appendChild(body);
+        return art;
+    };
+
+    const criarCardAndamento = (p, tipo) => {
+        const art = document.createElement('article');
+        art.className = 'pm-process-card pm-andamento';
+        const headerCard = document.createElement('div');
+        headerCard.className = 'pm-card-header';
+        headerCard.innerHTML = `
+            <h2>Processo/Procedimento Nº ${p.numeroProcesso}</h2>
+            <span class="pm-status andamento">Em Andamento</span>
+        `;
+        const body = document.createElement('div');
+        body.className = 'pm-card-body';
+        body.appendChild(criarCardMetaTable(p, tipo));
+        art.appendChild(headerCard);
+        art.appendChild(body);
+        return art;
+    };
+
+    // Páginas: concluídos 1 por página
+    concluidos.forEach(p => {
+        const page = document.createElement('div');
+        page.className = 'pm-print-page';
+        const card = criarCardConcluido(p, tipoAtual);
+        page.appendChild(card);
+        printWrapper.appendChild(page);
+    });
+
+    // Páginas: andamentos 2 por página
+    for (let i = 0; i < andamentos.length; i += 2) {
+        const page = document.createElement('div');
+    page.className = 'pm-print-page pm-two-per-page';
+    page.appendChild(criarCardAndamento(andamentos[i], tipoAtual));
+    if (andamentos[i + 1]) page.appendChild(criarCardAndamento(andamentos[i + 1], tipoAtual));
+        printWrapper.appendChild(page);
+    }
+
+    // Montar DOM final
+    pageContainer.appendChild(header);
+    pageContainer.appendChild(stats);
+    pageContainer.appendChild(printWrapper);
+    container.appendChild(pageContainer);
+    document.head.appendChild(style);
+    document.body.appendChild(container);
+
+    // Imprimir e limpar
+    await new Promise(resolve => setTimeout(resolve, 50)); // garantir render
+
+    const cleanup = () => {
+        document.getElementById(containerId)?.remove();
+        document.getElementById(styleId)?.remove();
+        window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+
+    if (typeof window.print === 'function') {
+        window.print();
+    } else {
+        // Se não houver print, lança para cair no fallback jsPDF
+        cleanup();
+        throw new Error('window.print não disponível');
     }
 }
 
@@ -752,8 +1008,9 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
         const numero = colunas[0].textContent.trim();
         const numeroProcesso = colunas[1].querySelector('.processo-numero')?.textContent.trim() || '';
         const descricao = colunas[1].querySelector('small')?.textContent.trim() || '';
-        const statusElement = colunas[2].querySelector('.status-badge');
-        const status = statusElement ? statusElement.textContent.trim().replace(/.*\s/, '') : '';
+    const statusElement = colunas[2].querySelector('.status-badge');
+    const statusRaw = statusElement ? statusElement.textContent.trim() : '';
+    const status = normalizarStatus(statusRaw);
         const encarregado = colunas[3].textContent.trim();
         
         // Extrair PMs de forma mais robusta
@@ -889,12 +1146,6 @@ async function gerarDocumentoPDF(content, titulo) {
     
     currentY += 15;
     
-    // Estatísticas
-    pdf.setFont(undefined, 'bold');
-    pdf.setFontSize(12);
-    pdf.text('ESTATÍSTICAS', margin, currentY);
-    currentY += 8;
-    
     const statsWidth = contentWidth / 3;
     let statsX = margin;
     
@@ -917,7 +1168,8 @@ async function gerarDocumentoPDF(content, titulo) {
         statsX += statsWidth;
     });
     
-    currentY += 25;
+    // Aproximar mais a tabela dos dados
+    currentY += 12;
     
     // Iterar sobre cada processo
     content.processos.forEach((processo, index) => {
@@ -950,34 +1202,68 @@ async function gerarDocumentoPDF(content, titulo) {
         const colWidths = [45, (contentWidth - 45) * 0.5, (contentWidth - 45) * 0.5]; // Label | Valor | Indícios
         let tableY = currentY;
         
-        // Função auxiliar para criar linha da tabela com 3 colunas
+        // Função auxiliar para criar linha da tabela com 3 colunas (com quebra de página)
         function criarLinhaTabela(label, valor, indicios = '', isBold = false) {
             // Configurar fonte
             pdf.setFont(undefined, isBold ? 'bold' : 'normal');
             pdf.setFontSize(isBold ? 9 : 8);
-            
+
             // Fundo alternado para melhor legibilidade
             pdf.setFillColor(248, 249, 250);
-            
+
             // Quebrar texto se necessário
-            const wrappedValue = pdf.splitTextToSize(valor, colWidths[1] - 6);
+            const wrappedValue = pdf.splitTextToSize(valor || '', colWidths[1] - 6);
             const wrappedIndicios = indicios ? pdf.splitTextToSize(indicios, colWidths[2] - 6) : [];
             const cellHeight = Math.max(6, Math.max(wrappedValue.length, wrappedIndicios.length) * 3 + 3);
-            
+
+            // Verificar espaço e fazer quebra de página se necessário
+            const footerReserve = 25; // espaço reservado para rodapé
+            if (tableY + cellHeight > pageHeight - footerReserve) {
+                pdf.addPage();
+                // Cabeçalho de continuação do processo
+                currentY = margin;
+                pdf.setFillColor(42, 82, 152);
+                pdf.rect(margin, currentY, contentWidth, 10, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(10);
+                pdf.setFont(undefined, 'bold');
+                pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso} (continuação)`, margin + 3, currentY + 7);
+                currentY += 12;
+
+                // Recriar cabeçalho da tabela
+                tableY = currentY;
+                pdf.setFont(undefined, 'bold');
+                pdf.setFontSize(9);
+                pdf.setFillColor(42, 82, 152);
+                pdf.rect(margin, tableY, colWidths[0], 8, 'F');
+                pdf.rect(margin + colWidths[0], tableY, colWidths[1], 8, 'F');
+                pdf.rect(margin + colWidths[0] + colWidths[1], tableY, colWidths[2], 8, 'F');
+                pdf.setTextColor(255, 255, 255);
+                pdf.text('CAMPO', margin + 2, tableY + 5);
+                pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
+                pdf.text('INDÍCIOS APONTADOS', margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
+                tableY += 8;
+                pdf.setTextColor(0, 0, 0);
+
+                // Reconfigurar fonte da linha atual
+                pdf.setFont(undefined, isBold ? 'bold' : 'normal');
+                pdf.setFontSize(isBold ? 9 : 8);
+            }
+
             // Desenhar células com borda
             pdf.setDrawColor(200, 200, 200);
             pdf.rect(margin, tableY, colWidths[0], cellHeight, 'FD');
             pdf.rect(margin + colWidths[0], tableY, colWidths[1], cellHeight, 'FD');
             pdf.rect(margin + colWidths[0] + colWidths[1], tableY, colWidths[2], cellHeight, 'FD');
-            
+
             // Adicionar texto
             pdf.setTextColor(0, 0, 0);
             pdf.text(label, margin + 2, tableY + 4);
             pdf.text(wrappedValue, margin + colWidths[0] + 2, tableY + 4);
-            if (indicios) {
+            if (wrappedIndicios.length) {
                 pdf.text(wrappedIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 4);
             }
-            
+
             tableY += cellHeight;
             return cellHeight;
         }
@@ -1003,114 +1289,98 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.setTextColor(0, 0, 0);
         }
         
-        // Criar cabeçalho da tabela
-        criarCabecalhoTabela();
+    // Criar cabeçalho da tabela (apenas uma vez)
+    criarCabecalhoTabela();
         
-        // Criar cabeçalho da tabela
-        criarCabecalhoTabela();
-        
-        // Preparar indícios para a terceira coluna (apenas para IPM e SR concluídos)
-        let indiciosTextoCompleto = '';
+        // Preparar conteúdo de indícios como fluxo contínuo na terceira coluna, começando na primeira linha
+        let indiciosWrappedLines = [];
         if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
-            const dadosOriginais = window.dadosProcessos ? 
+            const dadosOriginais = window.dadosProcessos ?
                 window.dadosProcessos.find(p => p.id == processo.id) : null;
-            
-            if (dadosOriginais) {
-                let indiciosArray = [];
-                
-                // Apontamentos Específicos por PM
-                if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
-                    dadosOriginais.pms_envolvidos.forEach((pm, pmIndex) => {
-                        const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
-                        
-                        if (pm.indicios && pm.indicios.categorias && pm.indicios.categorias.length > 0) {
-                            indiciosArray.push(`${nomePM.toUpperCase()}:`);
-                            
-                            pm.indicios.categorias.forEach(categoria => {
-                                indiciosArray.push(`  • ${categoria}`);
-                            });
-                            
-                            // Crimes específicos do PM
-                            if (pm.indicios.crimes && pm.indicios.crimes.length > 0) {
-                                pm.indicios.crimes.forEach(crime => {
-                                    indiciosArray.push(`    - Crime: ${crime.texto_completo}`);
-                                });
+            if (dadosOriginais && dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+                const linhasIndicios = [];
+                dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
+                    const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+                    linhasIndicios.push(`${nomePM.toUpperCase()}:`);
+                    if (pm.indicios) {
+                        const { categorias, crimes, transgressoes, art29 } = pm.indicios;
+                        if ((categorias && categorias.length) || (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
+                            if (categorias && categorias.length) {
+                                categorias.forEach(c => linhasIndicios.push(`• ${c}`));
                             }
-                            
-                            // Transgressões específicas do PM
-                            if (pm.indicios.transgressoes && pm.indicios.transgressoes.length > 0) {
-                                pm.indicios.transgressoes.forEach(trans => {
-                                    indiciosArray.push(`    - Transgressão: ${trans.texto_completo}`);
-                                });
+                            if (crimes && crimes.length) {
+                                crimes.forEach(crime => linhasIndicios.push(`- Crime: ${crime.texto_completo}`));
                             }
-                            
-                            // Art. 29 específicas do PM
-                            if (pm.indicios.art29 && pm.indicios.art29.length > 0) {
-                                pm.indicios.art29.forEach(art29 => {
-                                    indiciosArray.push(`    - Art. 29: ${art29.texto_completo}`);
-                                });
+                            if (transgressoes && transgressoes.length) {
+                                transgressoes.forEach(t => linhasIndicios.push(`- Transgressão: ${t.texto_completo}`));
                             }
-                            
-                            indiciosArray.push(''); // Espaço entre PMs
+                            if (art29 && art29.length) {
+                                art29.forEach(a => linhasIndicios.push(`- Art. 29: ${a.texto_completo}`));
+                            }
                         } else {
-                            // PM sem indícios específicos
-                            indiciosArray.push(`${nomePM.toUpperCase()}:`);
-                            indiciosArray.push(`  • Não houve indícios específicos`);
-                            indiciosArray.push(''); // Espaço entre PMs
+                            linhasIndicios.push('• Não houve');
                         }
-                    });
-                }
-                
-                indiciosTextoCompleto = indiciosArray.join('\n');
+                    } else {
+                        linhasIndicios.push('• Não houve');
+                    }
+                    // sem linha em branco entre PMs para otimizar espaço
+                });
+                const textoIndicios = linhasIndicios.join('\n');
+                indiciosWrappedLines = pdf.splitTextToSize(textoIndicios, colWidths[2] - 6);
             }
         }
-        
-        // INFORMAÇÕES BÁSICAS (sem título de seção)
-        criarLinhaTabela('Documento/Número:', processo.detalhes.numeroPortaria, '', false);
-        criarLinhaTabela('Número de controle:', processo.detalhes.numeroControle, '', false);
-        criarLinhaTabela('Data Instauração:', processo.detalhes.dataInstauracao, '', false);
-        criarLinhaTabela('Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa, '', false);
-        
-        // Adicionar Data Julgamento para PAD, PADS, CD, CJ
+
+        // Montar linhas da tabela (apenas 2 primeiras colunas), enquanto a 3ª é preenchida gradualmente
+        const linhasEsq = [];
+        linhasEsq.push(['Documento/Número:', processo.detalhes.numeroPortaria, false]);
+        linhasEsq.push(['Número de controle:', processo.detalhes.numeroControle, false]);
+        linhasEsq.push(['Data Instauração:', processo.detalhes.dataInstauracao, false]);
+        linhasEsq.push(['Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa, false]);
         if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-            criarLinhaTabela('Data Julgamento:', processo.detalhes.solucaoCompleta.dataJulgamento, '', false);
+            linhasEsq.push(['Data Julgamento:', processo.detalhes.solucaoCompleta.dataJulgamento, false]);
         }
-        
-        criarLinhaTabela('Data Conclusão:', processo.detalhes.dataConclusao, '', false);
-        criarLinhaTabela('Número RGF:', processo.detalhes.numeroRGF, '', false);
-        criarLinhaTabela('Encarregado:', processo.encarregado, '', false);
-        
-        // PMS ENVOLVIDOS - primeira linha com indícios se houver
-        criarLinhaTabela('PMS ENVOLVIDOS:', processo.pmsEnvolvidos, indiciosTextoCompleto, true);
-        
-        // SOLUÇÃO/RESULTADO (apenas para concluídos)
+        linhasEsq.push(['Data Conclusão:', processo.detalhes.dataConclusao, false]);
+        linhasEsq.push(['Número RGF:', processo.detalhes.numeroRGF, false]);
+        linhasEsq.push(['Encarregado:', processo.encarregado, false]);
+        linhasEsq.push(['PMS ENVOLVIDOS:', processo.pmsEnvolvidos, true]);
         if (processo.status === 'Concluído') {
-            // Para IPM e SR concluídos, mostrar solução
             if (['IPM', 'SR'].includes(window.tipoProcessoAtual)) {
-                const dadosOriginais = window.dadosProcessos ? 
+                const dadosOriginais = window.dadosProcessos ?
                     window.dadosProcessos.find(p => p.id == processo.id) : null;
                 const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
-                criarLinhaTabela('SOLUÇÃO/RESULTADO:', solucaoFinal || 'Não informado', '', true);
+                linhasEsq.push(['SOLUÇÃO/RESULTADO:', solucaoFinal || 'Não informado', true]);
             }
-            
-            // Para PAD, PADS, CD, CJ mostrar penalidade
             if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-                criarLinhaTabela('SOLUÇÃO/RESULTADO:', processo.detalhes.solucaoCompleta.penalidade, '', true);
+                linhasEsq.push(['SOLUÇÃO/RESULTADO:', processo.detalhes.solucaoCompleta.penalidade, true]);
             }
         }
-        
-        // RESUMO DOS FATOS
         if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
-            criarLinhaTabela('RESUMO DOS FATOS:', processo.detalhes.resumoFatos, '', true);
+            linhasEsq.push(['RESUMO DOS FATOS:', processo.detalhes.resumoFatos, true]);
         }
-        
-        // ÚLTIMA MOVIMENTAÇÃO (para processos em andamento)
         if (processo.status === 'Em Andamento' && processo.detalhes.ultimaMovimentacao !== 'Não informado') {
-            criarLinhaTabela('ÚLTIMA MOVIMENTAÇÃO:', processo.detalhes.ultimaMovimentacao, '', true);
+            linhasEsq.push(['ÚLTIMA MOVIMENTAÇÃO:', processo.detalhes.ultimaMovimentacao, true]);
+        }
+
+        // Distribuir as linhas de indícios desde a primeira linha da tabela
+        let idxInd = 0;
+        linhasEsq.forEach(([label, valor, negrito]) => {
+            const wrappedValor = pdf.splitTextToSize(valor || '', colWidths[1] - 6);
+            const nLinhas = Math.max(1, wrappedValor.length);
+            const ate = Math.min(indiciosWrappedLines.length, idxInd + nLinhas);
+            const parteIndicios = ate > idxInd ? indiciosWrappedLines.slice(idxInd, ate).join('\n') : '';
+            idxInd = ate;
+            criarLinhaTabela(label, valor, parteIndicios, negrito);
+        });
+
+        // Caso sobrem linhas de indícios, continuar adicionando linhas vazias à esquerda para completar
+        while (idxInd < indiciosWrappedLines.length) {
+            const parteIndicios = indiciosWrappedLines[idxInd];
+            idxInd += 1;
+            criarLinhaTabela(' ', ' ', parteIndicios, false);
         }
         
-        // Atualizar currentY para o próximo processo
-        currentY = tableY + 10; // Espaço menor entre processos
+    // Atualizar currentY para o próximo processo
+    currentY = tableY + 10; // Espaço menor entre processos
     });
     
     // Footer em todas as páginas
