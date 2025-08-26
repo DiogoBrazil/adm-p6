@@ -1222,7 +1222,7 @@ async function gerarDocumentoPDF(content, titulo) {
     const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
     const processosAndamento = content.processos.filter(p => p.status === 'Em Andamento');
     
-    // Processar processos concluídos (1 por página)
+    // Processar processos concluídos (1 por página para todos os tipos)
     processosConcluidos.forEach((processo, index) => {
         // Para concluídos, sempre quebra página (exceto o primeiro)
         if (index > 0) {
@@ -1404,6 +1404,15 @@ async function gerarDocumentoPDF(content, titulo) {
         
         // Preparar conteúdo de indícios como fluxo contínuo na terceira coluna, começando na primeira linha
         let indiciosWrappedLines = [];
+        
+        // Função para formatar transgressões
+        function formatarTransgressao(transgressao) {
+            const gravidade = transgressao.gravidade ? transgressao.gravidade.charAt(0).toUpperCase() + transgressao.gravidade.slice(1) : 'Leve';
+            const inciso = transgressao.inciso || 'I';
+            const tipo = transgressao.tipo === 'estatuto' ? 'do Estatuto' : 'do RDPM';
+            return `- ${gravidade} - Inciso ${inciso} ${tipo}`;
+        }
+        
         if ((['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') || 
             (['PADS', 'PAD', 'CD', 'CJ'].includes(window.tipoProcessoAtual))) {
             const dadosOriginais = window.dadosProcessos ?
@@ -1420,7 +1429,7 @@ async function gerarDocumentoPDF(content, titulo) {
                             crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}`, bold: false }));
                         }
                         if (transgressoes && transgressoes.length) {
-                            transgressoes.forEach(t => linhasIndicios.push({ text: `- ${t.texto_completo}`, bold: false }));
+                            transgressoes.forEach(t => linhasIndicios.push({ text: formatarTransgressao(t), bold: false }));
                         }
                         if (art29 && art29.length) {
                             art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
@@ -1444,7 +1453,7 @@ async function gerarDocumentoPDF(content, titulo) {
                                     crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false }));
                                 }
                                 if (transgressoes && transgressoes.length) {
-                                    transgressoes.forEach(t => linhasIndicios.push({ text: `- Transgressão: ${t.texto_completo}`, bold: false }));
+                                    transgressoes.forEach(t => linhasIndicios.push({ text: formatarTransgressao(t), bold: false }));
                                 }
                                 if (art29 && art29.length) {
                                     art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
