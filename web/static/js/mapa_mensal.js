@@ -1206,14 +1206,41 @@ async function gerarDocumentoPDF(content, titulo) {
     // Aproximar mais a tabela dos dados
     currentY += 12;
     
-    // Iterar sobre cada processo
-    content.processos.forEach((processo, index) => {
-        // Verificar se há espaço suficiente (aproximadamente 100mm para cada processo)
-        if (currentY > pageHeight - 110) {
+    // Separar processos por status
+    const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
+    const processosAndamento = content.processos.filter(p => p.status === 'Em Andamento');
+    
+    // Processar processos concluídos (1 por página)
+    processosConcluidos.forEach((processo, index) => {
+        // Para concluídos, sempre quebra página (exceto o primeiro)
+        if (index > 0) {
             pdf.addPage();
             currentY = margin + 10;
         }
         
+        currentY = renderizarProcesso(processo);
+    });
+    
+    // Processar processos em andamento (2 por página)
+    processosAndamento.forEach((processo, index) => {
+        // Para andamentos, verificar se precisa quebrar página (a cada 2 processos)
+        if (index > 0 && index % 2 === 0) {
+            pdf.addPage();
+            currentY = margin + 10;
+        } else if (index === 0 && processosConcluidos.length > 0) {
+            // Se há concluídos antes, quebrar página para começar os andamentos
+            pdf.addPage();
+            currentY = margin + 10;
+        } else if (index > 0 && index % 2 === 1) {
+            // Segundo processo na mesma página - apenas adicionar espaçamento
+            currentY += 15;
+        }
+        
+        currentY = renderizarProcesso(processo);
+    });
+    
+    // Função local para renderizar cada processo
+    function renderizarProcesso(processo) {
         // Título do processo
         pdf.setFillColor(42, 82, 152);
         pdf.rect(margin, currentY, contentWidth, 12, 'F');
@@ -1467,9 +1494,9 @@ async function gerarDocumentoPDF(content, titulo) {
             criarLinhaTabela(' ', ' ', item, false);
         }
         
-    // Atualizar currentY para o próximo processo
-    currentY = tableY + 10; // Espaço menor entre processos
-    });
+        // Atualizar currentY para o próximo processo e retornar
+        return tableY + 10; // Espaço menor entre processos
+    }
     
     // Footer em todas as páginas
     const totalPages = pdf.internal.getNumberOfPages();
