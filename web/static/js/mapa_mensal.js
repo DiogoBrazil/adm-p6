@@ -1203,8 +1203,8 @@ async function gerarDocumentoPDF(content, titulo) {
         statsX += statsWidth;
     });
     
-    // Aproximar mais a tabela dos dados
-    currentY += 12;
+    // Espaçamento adequado entre estatísticas e processos
+    currentY += 25;
     
     // Separar processos por status
     const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
