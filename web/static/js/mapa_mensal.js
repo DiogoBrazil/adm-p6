@@ -1244,33 +1244,43 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.addPage();
             currentY = margin + 10;
         } else if (index > 0 && index % 2 === 1) {
-            // Segundo processo na mesma página - espaçamento reduzido para andamentos
-            currentY += 5; // Reduzido ainda mais
+            // Segundo processo na mesma página - espaçamento bem reduzido para PADS andamentos
+            if (window.tipoProcessoAtual === 'PADS') {
+                currentY += 3; // Espaçamento mínimo para PADS
+            } else {
+                currentY += 5; // Espaçamento normal para outros tipos
+            }
         }
         
-        currentY = renderizarProcesso(processo, 5); // Espaçamento reduzido para andamentos
+        // Espaçamento final diferenciado por tipo
+        const espacamentoFinal = (window.tipoProcessoAtual === 'PADS' && processo.status === 'Em Andamento') ? 3 : 5;
+        currentY = renderizarProcesso(processo, espacamentoFinal);
     });
     
     // Função local para renderizar cada processo
     function renderizarProcesso(processo, espacamento = 10) {
-        // Título do processo
+        // Título do processo - altura reduzida para PADS em andamento
+        const alturaHeader = (window.tipoProcessoAtual === 'PADS' && processo.status === 'Em Andamento') ? 10 : 12;
         pdf.setFillColor(42, 82, 152);
-        pdf.rect(margin, currentY, contentWidth, 12, 'F');
+        pdf.rect(margin, currentY, contentWidth, alturaHeader, 'F');
         
         pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(11);
+        const fontSizeHeader = (window.tipoProcessoAtual === 'PADS' && processo.status === 'Em Andamento') ? 10 : 11;
+        pdf.setFontSize(fontSizeHeader);
         pdf.setFont(undefined, 'bold');
-        pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso}`, margin + 3, currentY + 8);
+        const yPosTexto = currentY + (alturaHeader === 10 ? 7 : 8);
+        pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso}`, margin + 3, yPosTexto);
         
         // Status no canto direito
         const statusColor = processo.status === 'Concluído' ? [40, 167, 69] : [255, 193, 7];
         pdf.setFillColor(...statusColor);
-        pdf.rect(pageWidth - margin - 45, currentY + 1, 40, 10, 'F');
+        const alturaStatus = alturaHeader - 2;
+        pdf.rect(pageWidth - margin - 45, currentY + 1, 40, alturaStatus, 'F');
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(8);
-        pdf.text(processo.status, pageWidth - margin - 42, currentY + 7);
+        pdf.text(processo.status, pageWidth - margin - 42, currentY + (alturaStatus === 8 ? 6 : 7));
         
-        currentY += 15;
+        currentY += alturaHeader + 3;
         
         // Configurações da tabela com 3 colunas
         const colWidths = [45, (contentWidth - 45) * 0.5, (contentWidth - 45) * 0.5]; // Label | Valor | Indícios
