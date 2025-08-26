@@ -915,7 +915,8 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         if (['IPM','SR'].includes(tipo)) {
             const indiciosHTML = montarIndiciosPMHTML(p.id, tipo);
             if (indiciosHTML) {
-                linhas.push(['INDÍCIOS APONTADOS', `<div class="pm-value-block">${indiciosHTML}</div>`]);
+                const tituloIndicios = tipoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+                linhas.push([tituloIndicios, `<div class="pm-value-block">${indiciosHTML}</div>`]);
             }
         }
 
@@ -1322,7 +1323,8 @@ async function gerarDocumentoPDF(content, titulo) {
                 pdf.setTextColor(255, 255, 255);
                 pdf.text('CAMPO', margin + 2, tableY + 5);
                 pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
-                pdf.text('INDÍCIOS APONTADOS', margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
+                const tituloIndicios = window.tipoProcessoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+                pdf.text(tituloIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
                 tableY += 8;
                 pdf.setTextColor(0, 0, 0);
 
@@ -1390,7 +1392,8 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.setTextColor(255, 255, 255);
             pdf.text('CAMPO', margin + 2, tableY + 5);
             pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
-            pdf.text('INDÍCIOS APONTADOS', margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
+            const tituloIndicios = window.tipoProcessoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+            pdf.text(tituloIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
             
             tableY += 8;
             pdf.setTextColor(0, 0, 0);
@@ -1401,37 +1404,61 @@ async function gerarDocumentoPDF(content, titulo) {
         
         // Preparar conteúdo de indícios como fluxo contínuo na terceira coluna, começando na primeira linha
         let indiciosWrappedLines = [];
-        if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
+        if ((['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') || 
+            (['PADS', 'PAD', 'CD', 'CJ'].includes(window.tipoProcessoAtual))) {
             const dadosOriginais = window.dadosProcessos ?
                 window.dadosProcessos.find(p => p.id == processo.id) : null;
-            if (dadosOriginais && dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+            if (dadosOriginais) {
                 const linhasIndicios = [];
-                dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
-                    const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
-                    linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
-                    if (pm.indicios) {
-                        const { categorias, crimes, transgressoes, art29 } = pm.indicios;
-                        if ((categorias && categorias.length) || (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
-                            if (categorias && categorias.length) {
-                                categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
-                            }
-                            if (crimes && crimes.length) {
-                                crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false }));
-                            }
-                            if (transgressoes && transgressoes.length) {
-                                transgressoes.forEach(t => linhasIndicios.push({ text: `- Transgressão: ${t.texto_completo}`, bold: false }));
-                            }
-                            if (art29 && art29.length) {
-                                art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
-                            }
-                        } else {
-                            linhasIndicios.push({ text: '• Não houve', bold: false });
+                
+                // Para PADS, mostrar transgressões do procedimento
+                if (window.tipoProcessoAtual === 'PADS' && dadosOriginais.indicios) {
+                    const { crimes, transgressoes, art29 } = dadosOriginais.indicios;
+                    
+                    if ((crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
+                        if (crimes && crimes.length) {
+                            crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}`, bold: false }));
+                        }
+                        if (transgressoes && transgressoes.length) {
+                            transgressoes.forEach(t => linhasIndicios.push({ text: `- ${t.texto_completo}`, bold: false }));
+                        }
+                        if (art29 && art29.length) {
+                            art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
                         }
                     } else {
                         linhasIndicios.push({ text: '• Não houve', bold: false });
                     }
-                    // sem linha em branco entre PMs para otimizar espaço
-                });
+                }
+                // Para IPM/SR, mostrar indícios por PM
+                else if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+                    dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
+                        const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+                        linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
+                        if (pm.indicios) {
+                            const { categorias, crimes, transgressoes, art29 } = pm.indicios;
+                            if ((categorias && categorias.length) || (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
+                                if (categorias && categorias.length) {
+                                    categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
+                                }
+                                if (crimes && crimes.length) {
+                                    crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false }));
+                                }
+                                if (transgressoes && transgressoes.length) {
+                                    transgressoes.forEach(t => linhasIndicios.push({ text: `- Transgressão: ${t.texto_completo}`, bold: false }));
+                                }
+                                if (art29 && art29.length) {
+                                    art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
+                                }
+                            } else {
+                                linhasIndicios.push({ text: '• Não houve', bold: false });
+                            }
+                        } else {
+                            linhasIndicios.push({ text: '• Não houve', bold: false });
+                        }
+                        // sem linha em branco entre PMs para otimizar espaço
+                    });
+                }
+                
                 // Agrupar por item e quebrar mantendo cada item indivisível entre linhas da tabela
                 const itensWrapped = [];
                 linhasIndicios.forEach(({ text, bold }) => {
@@ -1464,7 +1491,17 @@ async function gerarDocumentoPDF(content, titulo) {
                 linhasEsq.push(['Solução/Resultado:', solucaoFinal || 'Não informado', true]);
             }
             if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-                linhasEsq.push(['Solução/Resultado:', processo.detalhes.solucaoCompleta.penalidade, true]);
+                const dadosOriginais = window.dadosProcessos ?
+                    window.dadosProcessos.find(p => p.id == processo.id) : null;
+                const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || dadosOriginais?.solucao?.solucao_tipo || processo.detalhes.solucaoCompleta.resultado;
+                linhasEsq.push(['Solução/Resultado:', solucaoFinal || 'Não informado', true]);
+                
+                // Para PADS, mostrar também a penalidade se houver
+                if (window.tipoProcessoAtual === 'PADS' && dadosOriginais?.solucao?.penalidade_tipo) {
+                    const penalidade = dadosOriginais.solucao.penalidade_tipo;
+                    const dias = dadosOriginais.solucao.penalidade_dias ? ` (${dadosOriginais.solucao.penalidade_dias} dias)` : '';
+                    linhasEsq.push(['Tipo de Penalidade:', `${penalidade}${dias}`, true]);
+                }
             }
         }
         if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
