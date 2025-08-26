@@ -184,21 +184,39 @@ function gerarTabelaProcessos(processos, tipoProcesso) {
     });
 }
 
+function formatarPmParaExibicao(pm) {
+    // Garantir que temos os dados necessários
+    if (!pm) return 'PM não informado';
+    
+    // Combinar posto/graduação com nome, removendo espaços extras
+    const posto = pm.posto_graduacao ? pm.posto_graduacao.trim() : '';
+    const nome = pm.nome ? pm.nome.trim() : 'Nome não informado';
+    
+    // Se temos posto, usar junto com o nome
+    if (posto && posto !== '') {
+        return `${posto} ${nome}`;
+    }
+    
+    // Se não temos posto, usar apenas o nome
+    return nome;
+}
+
 function criarLinhaProcesso(processo, tipoProcesso, numero) {
     const linha = document.createElement('tr');
     linha.className = 'processo-linha';
     linha.dataset.processoId = processo.id;
     
-    const statusClass = processo.concluido ? 'status-concluido' : 'status-andamento';
+    // Definir status com classes melhoradas
+    const statusClass = processo.concluido ? 'status-badge concluido' : 'status-badge andamento';
     const statusIcon = processo.concluido ? 'check-circle-fill' : 'clock-fill';
     const statusTexto = processo.concluido ? 'Concluído' : 'Em Andamento';
     
-    // Gerar lista de PMs (máximo 2 visíveis)
+    // Gerar lista de PMs (máximo 2 visíveis) com formatação melhorada
     const pmsHtml = processo.pms_envolvidos.slice(0, 2).map(pm => 
-        `<span class="pm-badge">${pm.posto_graduacao || ''} ${pm.nome}</span>`
+        `<span class="pm-badge">${formatarPmParaExibicao(pm)}</span>`
     ).join(' ');
     const pmsMais = processo.pms_envolvidos.length > 2 ? 
-        `<span class="pm-badge">+${processo.pms_envolvidos.length - 2}</span>` : '';
+        `<span class="pm-badge">+${processo.pms_envolvidos.length - 2} mais</span>` : '';
     
     // Gerar solução resumida
     const solucaoHtml = criarSolucaoResumida(processo, tipoProcesso);
@@ -206,16 +224,23 @@ function criarLinhaProcesso(processo, tipoProcesso, numero) {
     linha.innerHTML = `
         <td data-label="#">${numero}</td>
         <td data-label="Número">
-            <div class="processo-numero">${processo.numero}/${processo.ano}</div>
-            <small class="text-muted">${getDescricaoNumero(processo, tipoProcesso)}</small>
+            <div class="d-flex flex-column">
+                <div class="processo-numero fw-bold">${processo.numero}/${processo.ano}</div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="tipo-badge">${tipoProcesso}</span>
+                    <small class="text-muted">${getDescricaoNumero(processo, tipoProcesso)}</small>
+                </div>
+            </div>
         </td>
         <td data-label="Status">
-            <span class="status-badge ${statusClass}">
+            <span class="${statusClass}">
                 <i class="bi bi-${statusIcon} me-1"></i>${statusTexto}
             </span>
         </td>
         <td data-label="Encarregado">
-            <div class="fw-semibold">${processo.responsavel.completo || 'Não informado'}</div>
+            <div class="fw-semibold text-truncate" title="${processo.responsavel.completo || 'Não informado'}">
+                ${processo.responsavel.completo || 'Não informado'}
+            </div>
         </td>
         <td data-label="PMs Envolvidos">
             <div class="pms-container">
@@ -345,7 +370,7 @@ function criarSecaoEnvolvidos(pmsEnvolvidos, tipoProcesso) {
     
     const titulo = getTituloEnvolvidos(tipoProcesso);
     const envolvidos = pmsEnvolvidos.map(pm => `
-        <div class="pm-badge">${pm.posto_graduacao || ''} ${pm.nome}</div>
+        <div class="pm-badge">${formatarPmParaExibicao(pm)}</div>
         ${criarIndiciosPM(pm.indicios)}
     `).join('');
     
@@ -860,7 +885,7 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         if (!dadosOriginais || !Array.isArray(dadosOriginais.pms_envolvidos)) return '';
         const blocos = [];
         dadosOriginais.pms_envolvidos.forEach(pm => {
-            const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+            const nomePM = formatarPmParaExibicao(pm);
             const linhas = [];
             if (pm.indicios) {
                 const { categorias, crimes, transgressoes, art29 } = pm.indicios;
@@ -1452,7 +1477,7 @@ async function gerarDocumentoPDF(content, titulo) {
                 // Para IPM/SR, mostrar indícios por PM
                 else if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
                     dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
-                        const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+                        const nomePM = formatarPmParaExibicao(pm);
                         linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
                         if (pm.indicios) {
                             const { categorias, crimes, transgressoes, art29 } = pm.indicios;
