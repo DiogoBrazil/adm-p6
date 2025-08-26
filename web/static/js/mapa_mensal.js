@@ -1266,8 +1266,19 @@ async function gerarDocumentoPDF(content, titulo) {
 
             // Adicionar texto
             pdf.setTextColor(0, 0, 0);
-            // Label em negrito apenas para a linha "PMs Envolvidos:" (e conforme isBold para as demais)
-            const labelIsBold = label === 'PMs Envolvidos:' ? true : isBold;
+            // Labels que devem sempre ficar em negrito na primeira coluna
+            const labelsSempreNegrito = new Set([
+                'PMs Envolvidos:',
+                'Encarregado:',
+                'Número RGF:',
+                'Data Conclusão:',
+                'Data Remessa:',
+                'Data Instauração:',
+                'Número de controle:',
+                'Documento/Número:'
+            ]);
+
+            const labelIsBold = labelsSempreNegrito.has(label) || isBold;
             const valueIsBold = label === 'PMs Envolvidos:' ? false : isBold;
             pdf.setFont(undefined, labelIsBold ? 'bold' : 'normal');
             pdf.text(label, margin + 2, tableY + 4);
