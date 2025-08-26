@@ -921,236 +921,196 @@ async function gerarDocumentoPDF(content, titulo) {
     
     // Iterar sobre cada processo
     content.processos.forEach((processo, index) => {
-        // Verificar se há espaço suficiente (aproximadamente 80mm para cada processo)
-        if (currentY > pageHeight - 90) {
+        // Verificar se há espaço suficiente (aproximadamente 100mm para cada processo)
+        if (currentY > pageHeight - 110) {
             pdf.addPage();
             currentY = margin + 10;
         }
         
-        // Card do processo
-        const cardHeight = 70; // Altura estimada do card
-        
-        // Fundo do card
-        pdf.setFillColor(248, 249, 250);
-        pdf.rect(margin, currentY, contentWidth, cardHeight, 'F');
-        
-        // Borda do card
-        pdf.setDrawColor(42, 82, 152);
-        pdf.setLineWidth(0.5);
-        pdf.rect(margin, currentY, contentWidth, cardHeight);
-        
-        // Header do processo
+        // Título do processo
         pdf.setFillColor(42, 82, 152);
         pdf.rect(margin, currentY, contentWidth, 12, 'F');
         
         pdf.setTextColor(255, 255, 255);
         pdf.setFontSize(11);
         pdf.setFont(undefined, 'bold');
-        pdf.text(`${processo.numero}. ${processo.numeroProcesso}`, margin + 5, currentY + 8);
+        pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso}`, margin + 3, currentY + 8);
         
-        // Status
+        // Status no canto direito
         const statusColor = processo.status === 'Concluído' ? [40, 167, 69] : [255, 193, 7];
         pdf.setFillColor(...statusColor);
-        pdf.rect(pageWidth - margin - 40, currentY + 2, 35, 8, 'F');
+        pdf.rect(pageWidth - margin - 45, currentY + 1, 40, 10, 'F');
         pdf.setTextColor(0, 0, 0);
         pdf.setFontSize(8);
-        pdf.text(processo.status, pageWidth - margin - 37, currentY + 7);
+        pdf.text(processo.status, pageWidth - margin - 42, currentY + 7);
         
         currentY += 15;
         
-        // Conteúdo do card em colunas
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(9);
+        // Configurações da tabela com 3 colunas
+        const colWidths = [45, (contentWidth - 45) * 0.5, (contentWidth - 45) * 0.5]; // Label | Valor | Indícios
+        let tableY = currentY;
         
-        // Coluna 1: Informações básicas
-        let col1X = margin + 5;
-        let col1Y = currentY;
-        
-        pdf.setFont(undefined, 'bold');
-        pdf.text('INFORMAÇÕES BÁSICAS', col1X, col1Y);
-        col1Y += 5;
-        
-        pdf.setFont(undefined, 'normal');
-        const infoBasicas = [
-            ['Documento/Número:', processo.detalhes.numeroPortaria],
-            ['Número de controle:', processo.detalhes.numeroControle],
-            ['Data Instauração:', processo.detalhes.dataInstauracao],
-            ['Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa]
-        ];
-        
-        // Adicionar Data Julgamento para PAD, PADS, CD, CJ
-        if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-            infoBasicas.push(['Data Julgamento:', processo.detalhes.solucaoCompleta.dataJulgamento]);
+        // Função auxiliar para criar linha da tabela com 3 colunas
+        function criarLinhaTabela(label, valor, indicios = '', isBold = false) {
+            // Configurar fonte
+            pdf.setFont(undefined, isBold ? 'bold' : 'normal');
+            pdf.setFontSize(isBold ? 9 : 8);
+            
+            // Fundo alternado para melhor legibilidade
+            pdf.setFillColor(248, 249, 250);
+            
+            // Quebrar texto se necessário
+            const wrappedValue = pdf.splitTextToSize(valor, colWidths[1] - 6);
+            const wrappedIndicios = indicios ? pdf.splitTextToSize(indicios, colWidths[2] - 6) : [];
+            const cellHeight = Math.max(6, Math.max(wrappedValue.length, wrappedIndicios.length) * 3 + 3);
+            
+            // Desenhar células com borda
+            pdf.setDrawColor(200, 200, 200);
+            pdf.rect(margin, tableY, colWidths[0], cellHeight, 'FD');
+            pdf.rect(margin + colWidths[0], tableY, colWidths[1], cellHeight, 'FD');
+            pdf.rect(margin + colWidths[0] + colWidths[1], tableY, colWidths[2], cellHeight, 'FD');
+            
+            // Adicionar texto
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(label, margin + 2, tableY + 4);
+            pdf.text(wrappedValue, margin + colWidths[0] + 2, tableY + 4);
+            if (indicios) {
+                pdf.text(wrappedIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 4);
+            }
+            
+            tableY += cellHeight;
+            return cellHeight;
         }
         
-        // Continuar com as demais informações
-        infoBasicas.push(
-            ['Data Conclusão:', processo.detalhes.dataConclusao],
-            ['Número RGF:', processo.detalhes.numeroRGF],
-            ['Encarregado:', processo.encarregado]
-        );
-        
-        infoBasicas.forEach(([label, value]) => {
+        // Função para criar cabeçalho da tabela de 3 colunas
+        function criarCabecalhoTabela() {
             pdf.setFont(undefined, 'bold');
-            pdf.text(label, col1X, col1Y);
-            pdf.setFont(undefined, 'normal');
-            const wrappedValue = pdf.splitTextToSize(value, 85);
-            pdf.text(wrappedValue, col1X + 35, col1Y);
-            col1Y += Math.max(4, wrappedValue.length * 4);
-        });
+            pdf.setFontSize(9);
+            pdf.setFillColor(42, 82, 152);
+            
+            // Desenhar cabeçalho
+            pdf.rect(margin, tableY, colWidths[0], 8, 'F');
+            pdf.rect(margin + colWidths[0], tableY, colWidths[1], 8, 'F');
+            pdf.rect(margin + colWidths[0] + colWidths[1], tableY, colWidths[2], 8, 'F');
+            
+            // Texto do cabeçalho
+            pdf.setTextColor(255, 255, 255);
+            pdf.text('CAMPO', margin + 2, tableY + 5);
+            pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
+            pdf.text('INDÍCIOS APONTADOS', margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
+            
+            tableY += 8;
+            pdf.setTextColor(0, 0, 0);
+        }
         
-        // Coluna 2: PMs Envolvidos e Solução
-        let col2X = margin + (contentWidth / 2) + 5;
-        let col2Y = currentY;
+        // Criar cabeçalho da tabela
+        criarCabecalhoTabela();
         
-        pdf.setFont(undefined, 'bold');
-        pdf.text('PMS ENVOLVIDOS', col2X, col2Y);
-        col2Y += 5;
+        // Criar cabeçalho da tabela
+        criarCabecalhoTabela();
         
-        pdf.setFont(undefined, 'normal');
-        const wrappedPMs = pdf.splitTextToSize(processo.pmsEnvolvidos, 85);
-        pdf.text(wrappedPMs, col2X, col2Y);
-        col2Y += Math.max(8, wrappedPMs.length * 4);
-        
-        pdf.setFont(undefined, 'bold');
-        pdf.text('SOLUÇÃO/RESULTADO', col2X, col2Y);
-        col2Y += 5;
-        
-        pdf.setFont(undefined, 'normal');
-        const solucaoInfo = [];
-        
-        // Para IPM e SR concluídos, mostrar solução (Homologado, Avocado, Arquivado)
+        // Preparar indícios para a terceira coluna (apenas para IPM e SR concluídos)
+        let indiciosTextoCompleto = '';
         if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
-            // Buscar a solução dos dados originais
-            const dadosOriginais = window.dadosProcessos ? 
-                window.dadosProcessos.find(p => p.id == processo.id) : null;
-            const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
-            solucaoInfo.push(['Solução:', solucaoFinal || 'Não informado']);
-        }
-        
-        // Para PAD, PADS, CD, CJ mostrar penalidade
-        if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
-            solucaoInfo.push(['Penalidade:', processo.detalhes.solucaoCompleta.penalidade]);
-        }
-        
-        solucaoInfo.forEach(([label, value]) => {
-            pdf.setFont(undefined, 'bold');
-            pdf.text(label, col2X, col2Y);
-            pdf.setFont(undefined, 'normal');
-            pdf.text(value, col2X + 25, col2Y);
-            col2Y += 4;
-        });
-        
-        // Resumo dos fatos (ocupando toda a largura na parte inferior)
-        if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
-            const resumoY = currentY + 45;
-            pdf.setFont(undefined, 'bold');
-            pdf.text('RESUMO DOS FATOS:', margin + 5, resumoY);
-            pdf.setFont(undefined, 'normal');
-            const wrappedResumo = pdf.splitTextToSize(processo.detalhes.resumoFatos, contentWidth - 10);
-            pdf.text(wrappedResumo, margin + 5, resumoY + 5);
-        }
-        
-        // Indícios apontados para IPM e SR concluídos
-        if (['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') {
-            // Buscar dados de indícios dos dados originais usando o ID
             const dadosOriginais = window.dadosProcessos ? 
                 window.dadosProcessos.find(p => p.id == processo.id) : null;
             
             if (dadosOriginais) {
-                const indiciosY = currentY + 35;
-                let indiciosTexto = [];
+                let indiciosArray = [];
                 
-                // Verificar indícios gerais do processo
-                if (dadosOriginais.indicios) {
-                    // Crimes específicos do processo
-                    if (dadosOriginais.indicios.crimes && dadosOriginais.indicios.crimes.length > 0) {
-                        indiciosTexto.push('Crimes/Contravenções:');
-                        dadosOriginais.indicios.crimes.forEach(crime => {
-                            indiciosTexto.push(`• ${crime.texto_completo}`);
-                        });
-                    }
-                    
-                    // Transgressões RDPM do processo
-                    if (dadosOriginais.indicios.transgressoes && dadosOriginais.indicios.transgressoes.length > 0) {
-                        if (indiciosTexto.length > 0) indiciosTexto.push('');
-                        indiciosTexto.push('Transgressões RDPM:');
-                        dadosOriginais.indicios.transgressoes.forEach(trans => {
-                            indiciosTexto.push(`• ${trans.texto_completo}`);
-                        });
-                    }
-                    
-                    // Art. 29 do processo
-                    if (dadosOriginais.indicios.art29 && dadosOriginais.indicios.art29.length > 0) {
-                        if (indiciosTexto.length > 0) indiciosTexto.push('');
-                        indiciosTexto.push('Infrações Art. 29:');
-                        dadosOriginais.indicios.art29.forEach(art29 => {
-                            indiciosTexto.push(`• ${art29.texto_completo}`);
-                        });
-                    }
-                }
-                
-                // Verificar indícios específicos por PM envolvido
+                // Apontamentos Específicos por PM
                 if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
-                    dadosOriginais.pms_envolvidos.forEach(pm => {
+                    dadosOriginais.pms_envolvidos.forEach((pm, pmIndex) => {
+                        const nomePM = `${pm.posto_graduacao || ''} ${pm.nome}`.trim();
+                        
                         if (pm.indicios && pm.indicios.categorias && pm.indicios.categorias.length > 0) {
-                            if (indiciosTexto.length > 0) indiciosTexto.push('');
-                            indiciosTexto.push(`Apontamentos para ${pm.posto_graduacao || ''} ${pm.nome}:`);
+                            indiciosArray.push(`${nomePM.toUpperCase()}:`);
+                            
                             pm.indicios.categorias.forEach(categoria => {
-                                indiciosTexto.push(`• ${categoria}`);
+                                indiciosArray.push(`  • ${categoria}`);
                             });
                             
                             // Crimes específicos do PM
                             if (pm.indicios.crimes && pm.indicios.crimes.length > 0) {
                                 pm.indicios.crimes.forEach(crime => {
-                                    indiciosTexto.push(`  - Crime: ${crime.texto_completo}`);
+                                    indiciosArray.push(`    - Crime: ${crime.texto_completo}`);
                                 });
                             }
                             
                             // Transgressões específicas do PM
                             if (pm.indicios.transgressoes && pm.indicios.transgressoes.length > 0) {
                                 pm.indicios.transgressoes.forEach(trans => {
-                                    indiciosTexto.push(`  - Transgressão: ${trans.texto_completo}`);
+                                    indiciosArray.push(`    - Transgressão: ${trans.texto_completo}`);
                                 });
                             }
                             
                             // Art. 29 específicas do PM
                             if (pm.indicios.art29 && pm.indicios.art29.length > 0) {
                                 pm.indicios.art29.forEach(art29 => {
-                                    indiciosTexto.push(`  - Art. 29: ${art29.texto_completo}`);
+                                    indiciosArray.push(`    - Art. 29: ${art29.texto_completo}`);
                                 });
                             }
+                            
+                            indiciosArray.push(''); // Espaço entre PMs
+                        } else {
+                            // PM sem indícios específicos
+                            indiciosArray.push(`${nomePM.toUpperCase()}:`);
+                            indiciosArray.push(`  • Não houve indícios específicos`);
+                            indiciosArray.push(''); // Espaço entre PMs
                         }
                     });
                 }
                 
-                if (indiciosTexto.length > 0) {
-                    pdf.setFont(undefined, 'bold');
-                    pdf.text('INDÍCIOS APONTADOS:', margin + 5, indiciosY);
-                    pdf.setFont(undefined, 'normal');
-                    const wrappedIndicios = pdf.splitTextToSize(indiciosTexto.join('\n'), contentWidth - 10);
-                    pdf.text(wrappedIndicios, margin + 5, indiciosY + 5);
-                } else {
-                    // Se não há indícios específicos, mostrar uma mensagem padrão
-                    pdf.setFont(undefined, 'bold');
-                    pdf.text('INDÍCIOS APONTADOS:', margin + 5, indiciosY);
-                    pdf.setFont(undefined, 'normal');
-                    pdf.text('Conforme procedimento analisado.', margin + 5, indiciosY + 5);
-                }
+                indiciosTextoCompleto = indiciosArray.join('\n');
             }
         }
         
-        // Última movimentação (se aplicável)
-        if (processo.status === 'Em Andamento' && processo.detalhes.ultimaMovimentacao !== 'Não informado') {
-            const movY = currentY + 55;
-            pdf.setFont(undefined, 'bold');
-            pdf.text('ÚLTIMA MOVIMENTAÇÃO:', margin + 5, movY);
-            pdf.setFont(undefined, 'normal');
-            const wrappedMov = pdf.splitTextToSize(processo.detalhes.ultimaMovimentacao, contentWidth - 10);
-            pdf.text(wrappedMov, margin + 5, movY + 5);
+        // INFORMAÇÕES BÁSICAS (sem título de seção)
+        criarLinhaTabela('Documento/Número:', processo.detalhes.numeroPortaria, '', false);
+        criarLinhaTabela('Número de controle:', processo.detalhes.numeroControle, '', false);
+        criarLinhaTabela('Data Instauração:', processo.detalhes.dataInstauracao, '', false);
+        criarLinhaTabela('Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa, '', false);
+        
+        // Adicionar Data Julgamento para PAD, PADS, CD, CJ
+        if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
+            criarLinhaTabela('Data Julgamento:', processo.detalhes.solucaoCompleta.dataJulgamento, '', false);
         }
         
-        currentY += cardHeight + 5; // Espaço entre cards
+        criarLinhaTabela('Data Conclusão:', processo.detalhes.dataConclusao, '', false);
+        criarLinhaTabela('Número RGF:', processo.detalhes.numeroRGF, '', false);
+        criarLinhaTabela('Encarregado:', processo.encarregado, '', false);
+        
+        // PMS ENVOLVIDOS - primeira linha com indícios se houver
+        criarLinhaTabela('PMS ENVOLVIDOS:', processo.pmsEnvolvidos, indiciosTextoCompleto, true);
+        
+        // SOLUÇÃO/RESULTADO (apenas para concluídos)
+        if (processo.status === 'Concluído') {
+            // Para IPM e SR concluídos, mostrar solução
+            if (['IPM', 'SR'].includes(window.tipoProcessoAtual)) {
+                const dadosOriginais = window.dadosProcessos ? 
+                    window.dadosProcessos.find(p => p.id == processo.id) : null;
+                const solucaoFinal = dadosOriginais?.solucao_final || dadosOriginais?.solucao?.solucao_final || processo.solucao;
+                criarLinhaTabela('SOLUÇÃO/RESULTADO:', solucaoFinal || 'Não informado', '', true);
+            }
+            
+            // Para PAD, PADS, CD, CJ mostrar penalidade
+            if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
+                criarLinhaTabela('SOLUÇÃO/RESULTADO:', processo.detalhes.solucaoCompleta.penalidade, '', true);
+            }
+        }
+        
+        // RESUMO DOS FATOS
+        if (processo.detalhes.resumoFatos && processo.detalhes.resumoFatos !== 'Não informado') {
+            criarLinhaTabela('RESUMO DOS FATOS:', processo.detalhes.resumoFatos, '', true);
+        }
+        
+        // ÚLTIMA MOVIMENTAÇÃO (para processos em andamento)
+        if (processo.status === 'Em Andamento' && processo.detalhes.ultimaMovimentacao !== 'Não informado') {
+            criarLinhaTabela('ÚLTIMA MOVIMENTAÇÃO:', processo.detalhes.ultimaMovimentacao, '', true);
+        }
+        
+        // Atualizar currentY para o próximo processo
+        currentY = tableY + 10; // Espaço menor entre processos
     });
     
     // Footer em todas as páginas
