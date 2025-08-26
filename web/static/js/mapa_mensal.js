@@ -1217,10 +1217,10 @@ async function gerarDocumentoPDF(content, titulo) {
             // Suporte a indicios como string ou como array de objetos { text, bold }
             let wrappedIndicios = [];
             if (Array.isArray(indicios)) {
-                wrappedIndicios = indicios.map(l => ({ text: l.text || '', bold: !!l.bold, single: !!l.single }));
+                wrappedIndicios = indicios.map(l => ({ text: l.text || '', bold: !!l.bold }));
             } else if (indicios) {
                 const arr = pdf.splitTextToSize(indicios, colWidths[2] - 6);
-                wrappedIndicios = arr.map(t => ({ text: t, bold: false, single: false }));
+                wrappedIndicios = arr.map(t => ({ text: t, bold: false }));
             }
             const cellHeight = Math.max(6, Math.max(wrappedValue.length, wrappedIndicios.length) * 3 + 3);
 
@@ -1274,33 +1274,12 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.setFont(undefined, valueIsBold ? 'bold' : 'normal');
             pdf.text(wrappedValue, margin + colWidths[0] + 2, tableY + 4);
             if (wrappedIndicios.length) {
-                // Desenhar cada linha respeitando bold por linha; se for linha 'single', reduzir fonte para caber em uma linha
+                // Desenhar cada linha respeitando bold por linha (quebras já calculadas)
                 let lineY = tableY + 4;
-                wrappedIndicios.forEach((line) => {
-                    const { text, bold, single } = line;
-                    // Ajuste de fonte para caber em uma linha caso 'single'
-                    if (single) {
-                        // Tentar caber na largura em uma linha sem quebra
-                        const available = colWidths[2] - 6;
-                        // Começar da baseFontSize ou 8 e reduzir até 6
-                        let trySize = baseFontSize;
-                        if (trySize > 8) trySize = 8;
-                        pdf.setFont(undefined, bold ? 'bold' : 'normal');
-                        pdf.setFontSize(trySize);
-                        let w = pdf.getTextWidth(text);
-                        while (w > available && trySize > 6) {
-                            trySize -= 0.5;
-                            pdf.setFontSize(trySize);
-                            w = pdf.getTextWidth(text);
-                        }
-                        pdf.text(text, margin + colWidths[0] + colWidths[1] + 2, lineY);
-                        // Restaurar tamanho base
-                        pdf.setFontSize(baseFontSize);
-                    } else {
-                        pdf.setFont(undefined, bold ? 'bold' : 'normal');
-                        pdf.setFontSize(baseFontSize);
-                        pdf.text(text, margin + colWidths[0] + colWidths[1] + 2, lineY);
-                    }
+                wrappedIndicios.forEach(({ text, bold }) => {
+                    pdf.setFont(undefined, bold ? 'bold' : 'normal');
+                    pdf.setFontSize(baseFontSize);
+                    pdf.text(text, margin + colWidths[0] + colWidths[1] + 2, lineY);
                     lineY += 3;
                 });
                 // Restaurar fonte para próxima célula
@@ -1353,7 +1332,7 @@ async function gerarDocumentoPDF(content, titulo) {
                                 categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
                             }
                             if (crimes && crimes.length) {
-                                crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false, single: true }));
+                                crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false }));
                             }
                             if (transgressoes && transgressoes.length) {
                                 transgressoes.forEach(t => linhasIndicios.push({ text: `- Transgressão: ${t.texto_completo}`, bold: false }));
@@ -1371,15 +1350,10 @@ async function gerarDocumentoPDF(content, titulo) {
                 });
                 // Agrupar por item e quebrar mantendo cada item indivisível entre linhas da tabela
                 const itensWrapped = [];
-                linhasIndicios.forEach(({ text, bold, single }) => {
-                    if (single) {
-                        // manter como um item de linha única; ajuste de fonte será feito na renderização
-                        itensWrapped.push([{ text, bold, single: true }]);
-                    } else {
-                        const parts = pdf.splitTextToSize(text, colWidths[2] - 6);
-                        const linhas = parts.map(p => ({ text: p, bold, single: false }));
-                        itensWrapped.push(linhas);
-                    }
+                linhasIndicios.forEach(({ text, bold }) => {
+                    const parts = pdf.splitTextToSize(text, colWidths[2] - 6);
+                    const linhas = parts.map(p => ({ text: p, bold }));
+                    itensWrapped.push(linhas);
                 });
                 indiciosWrappedLines = itensWrapped; // agora é um array de itens, cada item é um array de linhas {text,bold}
             }
