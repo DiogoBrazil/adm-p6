@@ -10,6 +10,7 @@ function inicializarMapaMensal() {
     // Inicializar elementos da página
     inicializarAnos();
     carregarTiposProcesso();
+    carregarMapasAnteriores();
     
     // Event listeners
     document.getElementById('filtroMapaForm').addEventListener('submit', function(e) {
@@ -89,6 +90,9 @@ async function gerarMapaMensal() {
         if (resultado.sucesso) {
             console.log(`✅ Mapa gerado: ${resultado.dados.length} processos encontrados`);
             exibirResultados(resultado);
+            
+            // Salvar o mapa automaticamente
+            salvarMapaAutomaticamente(resultado);
         } else {
             console.error('❌ Erro ao gerar mapa:', resultado.mensagem);
             mostrarAlerta('Erro ao gerar mapa: ' + resultado.mensagem, 'danger');
@@ -1647,4 +1651,156 @@ function mostrarAlerta(mensagem, tipo = 'info') {
             bsAlert.close();
         }
     }, 5000);
+}
+
+// ===============================
+// FUNÇÕES PARA MAPAS ANTERIORES
+// ===============================
+
+async function carregarMapasAnteriores() {
+    try {
+        console.log('📋 Carregando mapas anteriores...');
+        
+        document.getElementById('loadingMapasAnteriores').classList.remove('d-none');
+        
+        const resultado = await eel.listar_mapas_anteriores()();
+        
+        if (resultado.sucesso) {
+            exibirMapasAnteriores(resultado.mapas);
+            console.log(`✅ ${resultado.mapas.length} mapas anteriores carregados`);
+        } else {
+            console.error('❌ Erro ao carregar mapas:', resultado.mensagem);
+            mostrarEstadoVazioMapas();
+        }
+    } catch (error) {
+        console.error('❌ Erro ao carregar mapas anteriores:', error);
+        mostrarEstadoVazioMapas();
+    } finally {
+        document.getElementById('loadingMapasAnteriores').classList.add('d-none');
+    }
+}
+
+function exibirMapasAnteriores(mapas) {
+    const container = document.getElementById('listaMapasAnteriores');
+    
+    if (mapas.length === 0) {
+        mostrarEstadoVazioMapas();
+        return;
+    }
+    
+    let html = '';
+    
+    mapas.forEach(mapa => {
+        const dataFormatada = formatarDataHora(mapa.data_geracao);
+        
+        html += `
+            <div class="mapa-anterior-item">
+                <div class="mapa-info">
+                    <div class="mapa-detalhes">
+                        <div class="mapa-titulo">${mapa.titulo}</div>
+                        <div class="mapa-meta">
+                            <i class="bi bi-person me-1"></i>${mapa.usuario_nome} • 
+                            <i class="bi bi-calendar me-1"></i>${dataFormatada}
+                        </div>
+                        <div class="mapa-stats">
+                            <span class="mapa-stat">
+                                <i class="bi bi-list-ol me-1"></i>${mapa.total_processos} Total
+                            </span>
+                            <span class="mapa-stat">
+                                <i class="bi bi-check-circle me-1"></i>${mapa.total_concluidos} Concluídos
+                            </span>
+                            <span class="mapa-stat">
+                                <i class="bi bi-clock me-1"></i>${mapa.total_andamento} Em Andamento
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mapa-acoes">
+                        <button class="btn btn-primary btn-sm" onclick="visualizarMapaAnterior('${mapa.id}')">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function mostrarEstadoVazioMapas() {
+    const container = document.getElementById('listaMapasAnteriores');
+    container.innerHTML = `
+        <div class="estado-vazio-mapas">
+            <i class="bi bi-file-earmark-text"></i>
+            <h6>Nenhum mapa anterior encontrado</h6>
+            <p class="mb-0">Gere um mapa mensal para que apareça aqui.</p>
+        </div>
+    `;
+}
+
+async function salvarMapaAutomaticamente(dadosResultado) {
+    try {
+        console.log('💾 Salvando mapa automaticamente...');
+        
+        const resultado = await eel.salvar_mapa_mensal(dadosResultado)();
+        
+        if (resultado.sucesso) {
+            console.log('✅ Mapa salvo com sucesso');
+            // Recarregar lista de mapas anteriores
+            carregarMapasAnteriores();
+        } else {
+            console.warn('⚠️ Erro ao salvar mapa:', resultado.mensagem);
+        }
+    } catch (error) {
+        console.error('❌ Erro ao salvar mapa automaticamente:', error);
+    }
+}
+
+async function visualizarMapaAnterior(mapaId) {
+    try {
+        console.log(`📄 Visualizando mapa: ${mapaId}`);
+        
+        // Mostrar loading no botão
+        const botao = event.target.closest('button');
+        const textoOriginal = botao.innerHTML;
+        botao.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Carregando...';
+        botao.disabled = true;
+        
+        const resultado = await eel.obter_dados_mapa_salvo(mapaId)();
+        
+        if (resultado.sucesso) {
+            // Gerar PDF com os dados salvos
+            await gerarDocumentoPDF(resultado.dados_mapa, resultado.titulo);
+        } else {
+            mostrarAlerta('Erro ao carregar mapa: ' + resultado.mensagem, 'danger');
+        }
+        
+        // Restaurar botão
+        botao.innerHTML = textoOriginal;
+        botao.disabled = false;
+        
+    } catch (error) {
+        console.error('❌ Erro ao visualizar mapa anterior:', error);
+        mostrarAlerta('Erro ao visualizar mapa anterior.', 'danger');
+        
+        // Restaurar botão em caso de erro
+        const botao = event.target.closest('button');
+        botao.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF';
+        botao.disabled = false;
+    }
+}
+
+function formatarDataHora(dataString) {
+    try {
+        const data = new Date(dataString);
+        return data.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        return dataString;
+    }
 }

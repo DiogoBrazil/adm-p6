@@ -5710,6 +5710,164 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
         print(f"❌ Erro ao gerar mapa mensal: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao gerar mapa: {str(e)}"}
 
+@eel.expose
+def salvar_mapa_mensal(dados_mapa, usuario_id=None):
+    """Salva um mapa mensal gerado para acesso posterior"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Obter informações do usuário logado se não fornecido
+        if not usuario_id:
+            resultado_usuario = obter_usuario_logado()
+            if not resultado_usuario or not resultado_usuario.get("logado"):
+                return {"sucesso": False, "mensagem": "Usuário não logado"}
+            
+            usuario_dados = resultado_usuario.get("usuario", {})
+            usuario_id = usuario_dados.get("id")
+            usuario_nome = usuario_dados.get("nome")
+            
+            if not usuario_id:
+                return {"sucesso": False, "mensagem": "ID do usuário não encontrado"}
+        else:
+            # Buscar nome do usuário
+            cursor.execute("SELECT nome FROM usuarios WHERE id = ?", (usuario_id,))
+            resultado = cursor.fetchone()
+            if not resultado:
+                return {"sucesso": False, "mensagem": "Usuário não encontrado"}
+            usuario_nome = resultado[0]
+        
+        # Gerar ID único para o mapa
+        mapa_id = str(uuid.uuid4())
+        
+        # Extrair informações dos dados do mapa
+        meta = dados_mapa.get("meta", {})
+        
+        # Determinar período
+        if "mes" in meta and "ano" in meta:
+            # Formato antigo (mês/ano)
+            mes = int(meta["mes"])
+            ano = int(meta["ano"])
+            periodo_inicio = f"{ano}-{mes:02d}-01"
+            if mes == 12:
+                periodo_fim = f"{ano + 1}-01-01"
+            else:
+                periodo_fim = f"{ano}-{mes + 1:02d}-01"
+            periodo_descricao = f"{meta.get('mes_nome', '')}/{ano}"
+        else:
+            # Formato novo (data início/fim)
+            periodo_inicio = meta.get("data_inicio", "")
+            periodo_fim = meta.get("data_fim", "")
+            periodo_descricao = meta.get("periodo_descricao", "")
+        
+        # Gerar título do mapa
+        titulo = f"Mapa {meta.get('tipo_processo', '')} - {periodo_descricao}"
+        
+        # Preparar dados para inserção
+        dados_json = json.dumps(dados_mapa, ensure_ascii=False)
+        nome_arquivo = f"Mapa_{meta.get('tipo_processo', '')}_{periodo_descricao.replace('/', '_').replace(' ', '_')}.pdf"
+        
+        # Inserir no banco
+        cursor.execute("""
+            INSERT INTO mapas_salvos (
+                id, titulo, tipo_processo, periodo_inicio, periodo_fim, 
+                periodo_descricao, total_processos, total_concluidos, 
+                total_andamento, usuario_id, usuario_nome, dados_mapa, nome_arquivo
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            mapa_id, titulo, meta.get("tipo_processo", ""), periodo_inicio, periodo_fim,
+            periodo_descricao, meta.get("total_processos", 0), meta.get("total_concluidos", 0),
+            meta.get("total_andamento", 0), usuario_id, usuario_nome, dados_json, nome_arquivo
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "sucesso": True, 
+            "mensagem": "Mapa salvo com sucesso",
+            "mapa_id": mapa_id
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao salvar mapa: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao salvar mapa: {str(e)}"}
+
+@eel.expose
+def listar_mapas_anteriores():
+    """Lista todos os mapas salvos anteriormente"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                id, titulo, tipo_processo, periodo_descricao,
+                total_processos, total_concluidos, total_andamento,
+                usuario_nome, data_geracao, nome_arquivo
+            FROM mapas_salvos 
+            WHERE ativo = 1 
+            ORDER BY data_geracao DESC
+        """)
+        
+        mapas = cursor.fetchall()
+        conn.close()
+        
+        # Formatar dados para o frontend
+        mapas_formatados = []
+        for mapa in mapas:
+            mapas_formatados.append({
+                "id": mapa[0],
+                "titulo": mapa[1],
+                "tipo_processo": mapa[2],
+                "periodo_descricao": mapa[3],
+                "total_processos": mapa[4],
+                "total_concluidos": mapa[5],
+                "total_andamento": mapa[6],
+                "usuario_nome": mapa[7],
+                "data_geracao": mapa[8],
+                "nome_arquivo": mapa[9]
+            })
+        
+        return {"sucesso": True, "mapas": mapas_formatados}
+        
+    except Exception as e:
+        print(f"❌ Erro ao listar mapas anteriores: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao listar mapas: {str(e)}"}
+
+@eel.expose
+def obter_dados_mapa_salvo(mapa_id):
+    """Obtém os dados completos de um mapa salvo para regenerar o PDF"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT dados_mapa, titulo, nome_arquivo
+            FROM mapas_salvos 
+            WHERE id = ? AND ativo = 1
+        """, (mapa_id,))
+        
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        if not resultado:
+            return {"sucesso": False, "mensagem": "Mapa não encontrado"}
+        
+        # Deserializar dados JSON
+        dados_mapa = json.loads(resultado[0])
+        
+        return {
+            "sucesso": True,
+            "dados_mapa": dados_mapa,
+            "titulo": resultado[1],
+            "nome_arquivo": resultado[2]
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao obter dados do mapa: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao obter dados: {str(e)}"}
+
 def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
     """Obtém lista de PMs envolvidos para o mapa mensal"""
     pms = []
