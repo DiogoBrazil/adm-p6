@@ -13,25 +13,19 @@ function inicializarMapaMensal() {
     carregarMapasAnteriores();
     
     // Event listeners
-    const form = document.getElementById('filtroMapaForm');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            gerarMapaMensal();
-        });
-    }
+    document.getElementById('filtroMapaForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        gerarMapaMensal();
+    });
     
     // Definir mês e ano atuais como padrão
     const hoje = new Date();
-    const mesEl = document.getElementById('mes');
-    const anoEl = document.getElementById('ano');
-    if (mesEl) mesEl.value = hoje.getMonth() + 1;
-    if (anoEl) anoEl.value = hoje.getFullYear();
+    document.getElementById('mes').value = hoje.getMonth() + 1;
+    document.getElementById('ano').value = hoje.getFullYear();
 }
 
 function inicializarAnos() {
     const selectAno = document.getElementById('ano');
-    if (!selectAno) return;
     const anoAtual = new Date().getFullYear();
     
     // Adicionar anos de 2020 até ano atual + 1
@@ -51,7 +45,6 @@ async function carregarTiposProcesso() {
         
         if (resultado.sucesso) {
             const selectTipo = document.getElementById('tipoProcesso');
-            if (!selectTipo) return; // página pode não ter filtros
             
             // Limpar opções existentes (exceto a primeira)
             selectTipo.innerHTML = '<option value="">Selecione...</option>';
@@ -96,20 +89,19 @@ async function gerarMapaMensal() {
         
         if (resultado.sucesso) {
             console.log(`✅ Mapa gerado: ${resultado.dados.length} processos encontrados`);
-            // Não exibe mais o bloco de resultados; apenas salva e atualiza a lista
-            await salvarMapaAutomaticamente(resultado);
-            mostrarAlerta('Mapa gerado e salvo. Veja em "Mapas Anteriores" para visualizar o PDF.', 'success');
-            // Garantir que os resultados permaneçam ocultos
-            ocultarResultados();
+            exibirResultados(resultado);
+            
+            // Salvar o mapa automaticamente
+            salvarMapaAutomaticamente(resultado);
         } else {
             console.error('❌ Erro ao gerar mapa:', resultado.mensagem);
             mostrarAlerta('Erro ao gerar mapa: ' + resultado.mensagem, 'danger');
-            ocultarResultados();
+            mostrarEstadoVazio();
         }
     } catch (error) {
         console.error('❌ Erro ao gerar mapa mensal:', error);
         mostrarAlerta('Erro ao gerar mapa mensal.', 'danger');
-        ocultarResultados();
+        mostrarEstadoVazio();
     } finally {
         mostrarLoading(false);
     }
@@ -119,26 +111,64 @@ function exibirResultados(resultado) {
     const { dados, meta } = resultado;
     
     if (dados.length === 0) {
-        ocultarResultados();
+        mostrarEstadoVazio();
         return;
     }
     
-    // Mantemos a geração de dados em memória para PDF, mas não renderizamos a seção
+    // Atualizar título
+    document.getElementById('tituloMapa').innerHTML = `
+        <i class="bi bi-file-earmark-text me-2"></i>
+        Mapa Mensal - ${meta.tipo_processo} - ${meta.mes_nome}/${meta.ano}
+    `;
+    
+    // Informações do mapa
+    document.getElementById('infoMapa').innerHTML = `
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-label">Período</div>
+                <div class="info-value">${meta.mes_nome}/${meta.ano}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Tipo</div>
+                <div class="info-value">${meta.tipo_processo}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Data de Geração</div>
+                <div class="info-value">${meta.data_geracao}</div>
+            </div>
+        </div>
+    `;
+    
+    // Estatísticas
+    document.getElementById('estatisticasMapa').innerHTML = `
+        <div class="row g-3">
+            <div class="col-4">
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_processos}</div>
+                    <div class="stats-label">Total</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_andamento}</div>
+                    <div class="stats-label">Em Andamento</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="stats-card">
+                    <div class="stats-number">${meta.total_concluidos}</div>
+                    <div class="stats-label">Concluídos</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Armazenar dados originais globalmente para acesso posterior (para geração de PDF)
     window.dadosProcessos = dados;
-    ocultarResultados();
-}
-
-function gerarTabelaProcessos(processos, tipoProcesso) {
-    const corpoTabela = document.getElementById('corpoTabelaProcessos');
-    corpoTabela.innerHTML = '';
     
-    // Armazenar dados originais globalmente para acesso posterior
-    window.dadosProcessos = processos;
-    
-    processos.forEach((processo, index) => {
-        const linha = criarLinhaProcesso(processo, tipoProcesso, index + 1);
-        corpoTabela.appendChild(linha);
-    });
+    // Mostrar resultados
+    document.getElementById('resultados').classList.remove('d-none');
+    document.getElementById('estadoVazio').classList.add('d-none');
 }
 
 function formatarPmParaExibicao(pm) {
@@ -206,13 +236,62 @@ function criarLinhaProcesso(processo, tipoProcesso, numero) {
         </td>
         <td data-label="Solução">
             ${solucaoHtml}
-    </td>
+        </td>
+        <td data-label="Ações">
+            <button class="expand-btn" onclick="toggleDetalhes(this)" title="Ver detalhes">
+                <i class="bi bi-eye"></i>
+            </button>
+        </td>
     `;
     
     return linha;
 }
 
-// detalhes removidos
+function criarLinhaDetalhes(processo, tipoProcesso) {
+    const linha = document.createElement('tr');
+    linha.className = 'details-row d-none';
+    linha.dataset.processoId = processo.id;
+    
+    linha.innerHTML = `
+        <td colspan="7">
+            <div class="details-content">
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Data de Instauração</div>
+                        <div class="info-value">${formatarData(processo.data_instauracao)}</div>
+                    </div>
+                    ${processo.data_conclusao ? `
+                        <div class="info-card">
+                            <div class="info-label">Data de Conclusão</div>
+                            <div class="info-value">${formatarData(processo.data_conclusao)}</div>
+                        </div>
+                    ` : ''}
+                    ${getNumeroDocumento(processo, tipoProcesso)}
+                    ${processo.numero_rgf ? `
+                        <div class="info-card">
+                            <div class="info-label">Número do RGF</div>
+                            <div class="info-value">${processo.numero_rgf}</div>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                ${processo.resumo_fatos ? `
+                    <div class="info-card">
+                        <div class="info-label">Resumo dos Fatos</div>
+                        <div class="info-value">${processo.resumo_fatos}</div>
+                    </div>
+                ` : ''}
+                
+                ${criarSecaoEnvolvidos(processo.pms_envolvidos, tipoProcesso)}
+                ${criarSecaoIndicios(processo.indicios)}
+                ${criarSecaoSolucaoCompleta(processo, tipoProcesso)}
+                ${criarSecaoMovimentacao(processo.ultima_movimentacao)}
+            </div>
+        </td>
+    `;
+    
+    return linha;
+}
 
 function criarSolucaoResumida(processo, tipoProcesso) {
     if (!processo.concluido) {
@@ -322,7 +401,22 @@ function criarSecaoSolucaoCompleta(processo, tipoProcesso) {
     `;
 }
 
-// toggleDetalhes removido
+function toggleDetalhes(botao) {
+    const linha = botao.closest('tr');
+    const processoId = linha.dataset.processoId;
+    const linhaDetalhes = linha.nextElementSibling;
+    const icone = botao.querySelector('i');
+    
+    if (linhaDetalhes.classList.contains('d-none')) {
+        linhaDetalhes.classList.remove('d-none');
+        icone.className = 'bi bi-eye-slash';
+        botao.title = 'Ocultar detalhes';
+    } else {
+        linhaDetalhes.classList.add('d-none');
+        icone.className = 'bi bi-eye';
+        botao.title = 'Ver detalhes';
+    }
+}
 
 function getTituloEnvolvidos(tipoProcesso) {
     switch (tipoProcesso) {
@@ -604,14 +698,16 @@ function formatarData(data) {
 
 function mostrarLoading(mostrar) {
     const loading = document.getElementById('loading');
-    if (!loading) return;
-    if (mostrar) loading.classList.remove('d-none');
-    else loading.classList.add('d-none');
+    if (mostrar) {
+        loading.classList.remove('d-none');
+    } else {
+        loading.classList.add('d-none');
+    }
 }
 
 function ocultarResultados() {
-    document.getElementById('resultados')?.classList.add('d-none');
-    document.getElementById('estadoVazio')?.classList.add('d-none');
+    document.getElementById('resultados').classList.add('d-none');
+    document.getElementById('estadoVazio').classList.add('d-none');
 }
 
 // Função para gerar PDF
@@ -943,6 +1039,8 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
     const tabela = document.getElementById('tabelaProcessos');
     const linhas = tabela.querySelectorAll('tbody tr.processo-linha');
     
+    console.log('📊 Linhas encontradas na tabela:', linhas.length);
+    
     // Extrair tipo de processo do título para usar na lógica
     const tipoProcessoMatch = titulo.match(/Mapa Mensal - (\w+) -/);
     window.tipoProcessoAtual = tipoProcessoMatch ? tipoProcessoMatch[1] : '';
@@ -960,9 +1058,9 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
         const numero = colunas[0].textContent.trim();
         const numeroProcesso = colunas[1].querySelector('.processo-numero')?.textContent.trim() || '';
         const descricao = colunas[1].querySelector('small')?.textContent.trim() || '';
-    const statusElement = colunas[2].querySelector('.status-badge');
-    const statusRaw = statusElement ? statusElement.textContent.trim() : '';
-    const status = normalizarStatus(statusRaw);
+        const statusElement = colunas[2].querySelector('.status-badge');
+        const statusRaw = statusElement ? statusElement.textContent.trim() : '';
+        const status = normalizarStatus(statusRaw);
         const encarregado = colunas[3].textContent.trim();
         
         // Extrair PMs de forma mais robusta
@@ -1016,6 +1114,8 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
             detalhes
         });
     });
+    
+    console.log('📊 Total de processos processados para PDF:', processosData.length);
     
     return {
         titulo: titulo.replace(/.*Mapa Mensal - /, ''),
@@ -1088,92 +1188,109 @@ async function gerarDocumentoPDF(content, titulo) {
     const infoWidth = contentWidth / 3;
     let infoX = margin;
     
-    const infoObj = content.info || {};
-    Object.entries(infoObj).forEach(([label, value]) => {
-        // Calcular a largura total do texto (label + valor)
-        pdf.setFont(undefined, 'bold');
-        const labelWidth = pdf.getTextWidth(`${label}: `);
-        pdf.setFont(undefined, 'normal');
-        const valueWidth = pdf.getTextWidth(value);
-        const totalWidth = labelWidth + valueWidth;
-        
-        // Centralizar dentro da coluna
-        const startX = infoX + (infoWidth - totalWidth) / 2;
-        
-        pdf.setFont(undefined, 'bold');
-        pdf.text(`${label}:`, startX, currentY);
-        pdf.setFont(undefined, 'normal');
-        pdf.text(value, startX + labelWidth, currentY);
-        
-        infoX += infoWidth;
-    });
+    if (content.info && typeof content.info === 'object') {
+        Object.entries(content.info).forEach(([label, value]) => {
+            // Calcular a largura total do texto (label + valor)
+            pdf.setFont(undefined, 'bold');
+            const labelWidth = pdf.getTextWidth(`${label}: `);
+            pdf.setFont(undefined, 'normal');
+            const valueStr = String(value || '');
+            const valueWidth = pdf.getTextWidth(valueStr);
+            const totalWidth = labelWidth + valueWidth;
+            
+            // Centralizar dentro da coluna
+            const startX = infoX + (infoWidth - totalWidth) / 2;
+            
+            pdf.setFont(undefined, 'bold');
+            pdf.text(`${label}:`, startX, currentY);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(valueStr, startX + labelWidth, currentY);
+            
+            infoX += infoWidth;
+        });
+    }
     
     currentY += 15;
     
     const statsWidth = contentWidth / 3;
     let statsX = margin;
     
-    const statsObj = content.stats || {};
-    Object.entries(statsObj).forEach(([label, value]) => {
-        pdf.setFillColor(248, 249, 250);
-        pdf.rect(statsX, currentY - 5, statsWidth - 5, 15, 'F');
-        pdf.setDrawColor(42, 82, 152);
-        pdf.rect(statsX, currentY - 5, statsWidth - 5, 15);
-        
-        pdf.setTextColor(42, 82, 152);
-        pdf.setFontSize(14);
-        pdf.setFont(undefined, 'bold');
-        pdf.text(value, statsX + (statsWidth - 5) / 2, currentY + 2, { align: 'center' });
-        
-        pdf.setTextColor(0, 0, 0);
-        pdf.setFontSize(8);
-        pdf.setFont(undefined, 'normal');
-        pdf.text(label.toUpperCase(), statsX + (statsWidth - 5) / 2, currentY + 8, { align: 'center' });
-        
-        statsX += statsWidth;
-    });
+    if (content.stats && typeof content.stats === 'object') {
+        Object.entries(content.stats).forEach(([label, value]) => {
+            pdf.setFillColor(248, 249, 250);
+            pdf.rect(statsX, currentY - 5, statsWidth - 5, 15, 'F');
+            pdf.setDrawColor(42, 82, 152);
+            pdf.rect(statsX, currentY - 5, statsWidth - 5, 15);
+            
+            pdf.setTextColor(42, 82, 152);
+            pdf.setFontSize(14);
+            pdf.setFont(undefined, 'bold');
+            const valueStr = String(value || '0');
+            pdf.text(valueStr, statsX + (statsWidth - 5) / 2, currentY + 2, { align: 'center' });
+            
+            pdf.setTextColor(0, 0, 0);
+            pdf.setFontSize(8);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(label.toUpperCase(), statsX + (statsWidth - 5) / 2, currentY + 8, { align: 'center' });
+            
+            statsX += statsWidth;
+        });
+    }
     
     // Espaçamento adequado entre estatísticas e processos
     currentY += 25;
     
-    // Separar processos por status
-    const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
-    const processosAndamento = content.processos.filter(p => p.status === 'Em Andamento');
-    
-    // Processar processos concluídos (1 por página para todos os tipos)
-    processosConcluidos.forEach((processo, index) => {
-        // Para concluídos, sempre quebra página (exceto o primeiro)
-        if (index > 0) {
-            pdf.addPage();
-            currentY = margin + 10;
-        }
+    // Verificar se existem processos
+    if (!content.processos || !Array.isArray(content.processos)) {
+        // Se não há processos, adicionar uma mensagem
+        pdf.setTextColor(102, 117, 127);
+        pdf.setFontSize(12);
+        pdf.text('Nenhum processo encontrado para este período.', pageWidth / 2, currentY + 20, { align: 'center' });
+    } else {
+        console.log('📊 Processos para PDF:', content.processos.length, 'processos encontrados');
         
-        currentY = renderizarProcesso(processo, 10); // Espaçamento normal para concluídos
-    });
-    
-    // Processar processos em andamento (2 por página)
-    processosAndamento.forEach((processo, index) => {
-        // Para andamentos, verificar se precisa quebrar página (a cada 2 processos)
-        if (index > 0 && index % 2 === 0) {
-            pdf.addPage();
-            currentY = margin + 10;
-        } else if (index === 0 && processosConcluidos.length > 0) {
-            // Se há concluídos antes, quebrar página para começar os andamentos
-            pdf.addPage();
-            currentY = margin + 10;
-        } else if (index > 0 && index % 2 === 1) {
-            // Segundo processo na mesma página - espaçamento bem reduzido para PADS andamentos
-            if (window.tipoProcessoAtual === 'PADS') {
-                currentY += 3; // Espaçamento mínimo para PADS
-            } else {
-                currentY += 5; // Espaçamento normal para outros tipos
+        // Separar processos por status
+        const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
+        const processosAndamento = content.processos.filter(p => p.status === 'Em Andamento');
+        
+        console.log('✅ Processos concluídos:', processosConcluidos.length);
+        console.log('⏳ Processos em andamento:', processosAndamento.length);
+        
+        // Processar processos concluídos (1 por página para todos os tipos)
+        processosConcluidos.forEach((processo, index) => {
+            // Para concluídos, sempre quebra página (exceto o primeiro)
+            if (index > 0) {
+                pdf.addPage();
+                currentY = margin + 10;
             }
-        }
+            
+            currentY = renderizarProcesso(processo, 10); // Espaçamento normal para concluídos
+        });
         
-        // Espaçamento final diferenciado por tipo
-        const espacamentoFinal = (window.tipoProcessoAtual === 'PADS' && processo.status === 'Em Andamento') ? 3 : 5;
-        currentY = renderizarProcesso(processo, espacamentoFinal);
-    });
+        // Processar processos em andamento (2 por página)
+        processosAndamento.forEach((processo, index) => {
+            // Para andamentos, verificar se precisa quebrar página (a cada 2 processos)
+            if (index > 0 && index % 2 === 0) {
+                pdf.addPage();
+                currentY = margin + 10;
+            } else if (index === 0 && processosConcluidos.length > 0) {
+                // Se há concluídos antes, quebrar página para começar os andamentos
+                pdf.addPage();
+                currentY = margin + 10;
+            } else if (index > 0 && index % 2 === 1) {
+                // Segundo processo na mesma página - espaçamento bem reduzido para PADS andamentos
+                if (window.tipoProcessoAtual === 'PADS') {
+                    currentY += 3; // Espaçamento mínimo para PADS
+                } else {
+                    currentY += 5; // Espaçamento normal para outros tipos
+                }
+            }
+            
+            // Espaçamento final diferenciado por tipo
+            const espacamentoFinal = (window.tipoProcessoAtual === 'PADS' && processo.status === 'Em Andamento') ? 3 : 5;
+            currentY = renderizarProcesso(processo, espacamentoFinal);
+        });
+    }
     
     // Função local para renderizar cada processo
     function renderizarProcesso(processo, espacamento = 10) {
@@ -1551,6 +1668,8 @@ async function carregarMapasAnteriores() {
         console.log('📋 Carregando mapas anteriores...');
         
         document.getElementById('loadingMapasAnteriores').classList.remove('d-none');
+        document.getElementById('listaMapasAnteriores').classList.add('d-none');
+        document.getElementById('semMapasAnteriores').classList.add('d-none');
         
         const resultado = await eel.listar_mapas_anteriores()();
         
@@ -1583,48 +1702,47 @@ function exibirMapasAnteriores(mapas) {
         const dataFormatada = formatarDataHora(mapa.data_geracao);
         
         html += `
-            <div class="mapa-anterior-item">
+            <div class="mapa-item">
+                <div class="mapa-icon">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
                 <div class="mapa-info">
-                    <div class="mapa-detalhes">
-                        <div class="mapa-titulo">${mapa.titulo}</div>
-                        <div class="mapa-meta">
-                            <i class="bi bi-person me-1"></i>${mapa.usuario_nome} • 
-                            <i class="bi bi-calendar me-1"></i>${dataFormatada}
-                        </div>
-                        <div class="mapa-stats">
-                            <span class="mapa-stat">
-                                <i class="bi bi-list-ol me-1"></i>${mapa.total_processos} Total
-                            </span>
-                            <span class="mapa-stat">
-                                <i class="bi bi-check-circle me-1"></i>${mapa.total_concluidos} Concluídos
-                            </span>
-                            <span class="mapa-stat">
-                                <i class="bi bi-clock me-1"></i>${mapa.total_andamento} Em Andamento
-                            </span>
-                        </div>
+                    <div class="mapa-titulo">${mapa.titulo}</div>
+                    <div class="mapa-meta">
+                        <i class="bi bi-person me-1"></i>${mapa.usuario_nome} • 
+                        <i class="bi bi-calendar me-1"></i>${dataFormatada}
                     </div>
-                    <div class="mapa-acoes">
-                        <button class="btn btn-primary btn-sm" onclick="visualizarMapaAnterior('${mapa.id}', this)">
-                            <i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF
-                        </button>
+                    <div class="mapa-stats">
+                        <span class="mapa-stat">
+                            <i class="bi bi-list-ol me-1"></i>${mapa.total_processos} Total
+                        </span>
+                        <span class="mapa-stat">
+                            <i class="bi bi-check-circle me-1"></i>${mapa.total_concluidos} Concluídos
+                        </span>
+                        <span class="mapa-stat">
+                            <i class="bi bi-clock me-1"></i>${mapa.total_andamento} Em Andamento
+                        </span>
                     </div>
+                </div>
+                <div class="mapa-acoes">
+                    <button class="btn btn-primary btn-sm" onclick="visualizarMapaAnterior('${mapa.id}', event)">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF
+                    </button>
                 </div>
             </div>
         `;
     });
     
     container.innerHTML = html;
+    container.classList.remove('d-none');
 }
 
 function mostrarEstadoVazioMapas() {
     const container = document.getElementById('listaMapasAnteriores');
-    container.innerHTML = `
-        <div class="estado-vazio-mapas">
-            <i class="bi bi-file-earmark-text"></i>
-            <h6>Nenhum mapa anterior encontrado</h6>
-            <p class="mb-0">Gere um mapa mensal para que apareça aqui.</p>
-        </div>
-    `;
+    const semMapas = document.getElementById('semMapasAnteriores');
+    
+    container.classList.add('d-none');
+    semMapas.classList.remove('d-none');
 }
 
 async function salvarMapaAutomaticamente(dadosResultado) {
@@ -1645,126 +1763,112 @@ async function salvarMapaAutomaticamente(dadosResultado) {
     }
 }
 
-// Constrói o payload esperado por gerarDocumentoPDF a partir do JSON salvo no banco
-function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
-    // Se já estiver no formato novo, apenas retornar
-    if (mapaSalvo && Array.isArray(mapaSalvo.processos) && mapaSalvo.info && mapaSalvo.stats) {
-        // Configurar contexto auxiliar usado no gerador
-        window.tipoProcessoAtual = mapaSalvo.titulo?.split(' - ')?.[0] || mapaSalvo.meta?.tipo_processo || '';
-        window.dadosProcessos = mapaSalvo.processosOriginais || [];
-        return mapaSalvo;
-    }
-
-    const meta = mapaSalvo?.meta || {};
-    const dados = mapaSalvo?.dados || [];
-
-    // Disponibiliza dados originais para trechos do gerador que consultam o array completo
-    window.tipoProcessoAtual = meta.tipo_processo || '';
-    window.dadosProcessos = dados;
-
-    // Montar info e stats na mesma forma usada pelo gerador atual
-    const info = {
-        'Período': meta.mes_nome && meta.ano ? `${meta.mes_nome}/${meta.ano}` : (meta.periodo_descricao || '—'),
-        'Tipo': meta.tipo_processo || '—',
-        'Data de Geração': meta.data_geracao || new Date().toLocaleString('pt-BR')
-    };
-
-    const stats = {
-        'Total': String(meta.total_processos ?? dados.length ?? 0),
-        'Em Andamento': String(meta.total_andamento ?? (dados.filter(p => !p.concluido).length)),
-        'Concluídos': String(meta.total_concluidos ?? (dados.filter(p => p.concluido).length))
-    };
-
-    // Montar processos na estrutura consumida por gerarDocumentoPDF
-    const processos = dados.map((p, idx) => {
-        const status = p.concluido ? 'Concluído' : 'Em Andamento';
-        const numeroProc = `${p.numero}/${p.ano || (p.data_instauracao ? String(p.data_instauracao).slice(0,4) : '')}`;
-        const encarregado = p?.responsavel?.completo || 'Não informado';
-        const pmsStr = (Array.isArray(p.pms_envolvidos) ? p.pms_envolvidos.map(formatarPmParaExibicao) : []).join(', ') || 'Nenhum PM informado';
-
-        // Documento/número: Portaria ou Memorando conforme tipo
-        let documentoNumero = 'Não informado';
-        if (meta.tipo_processo === 'PADS' && p.numero_memorando) {
-            documentoNumero = `Memorando nº ${p.numero_memorando}/${p.ano || ''}`;
-        } else if (p.numero_portaria) {
-            documentoNumero = `Portaria nº ${p.numero_portaria}/${p.ano || ''}`;
-        }
-
-        const detalhes = {
-            numeroPortaria: documentoNumero,
-            numeroControle: p.numero || 'Não informado',
-            dataInstauracao: p.data_instauracao ? formatarData(p.data_instauracao) : 'Não informado',
-            dataConclusao: status === 'Em Andamento' ? 'Não se aplica' : (p.data_conclusao ? formatarData(p.data_conclusao) : 'Não informado'),
-            numeroRGF: p.numero_rgf || 'Não informado',
-            resumoFatos: p.resumo_fatos || 'Não informado',
-            solucaoCompleta: {
-                dataRemessa: p?.solucao?.data_remessa ? formatarData(p.solucao.data_remessa) : 'Não informado',
-                dataJulgamento: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? (p?.solucao?.data_julgamento ? formatarData(p.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
-                penalidade: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? (p?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica',
-            }
-        };
-
-        const solucao = p.solucao_final || p?.solucao?.solucao_final || p?.solucao?.solucao_tipo || 'Não informado';
-
-        return {
-            id: p.id,
-            numero: String(idx + 1),
-            numeroProcesso: numeroProc,
-            descricao: '',
-            status,
-            encarregado,
-            pmsEnvolvidos: pmsStr,
-            solucao,
-            detalhes
-        };
-    });
-
-    return {
-        titulo: `${meta.tipo_processo || ''} - ${meta.mes_nome || ''}/${meta.ano || ''}`,
-        info,
-        stats,
-        processos
-    };
-}
-
-async function visualizarMapaAnterior(mapaId, botaoEl) {
+async function visualizarMapaAnterior(mapaId, event) {
     try {
         console.log(`📄 Visualizando mapa: ${mapaId}`);
         
-        // Mostrar loading no botão (sem depender de event)
-        const botao = botaoEl instanceof HTMLElement ? botaoEl : null;
-        const textoOriginal = botao ? botao.innerHTML : null;
-        if (botao) {
-            botao.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Carregando...';
-            botao.disabled = true;
-        }
+        // Mostrar loading no botão
+        const botao = event ? event.target.closest('button') : document.querySelector(`button[onclick="visualizarMapaAnterior('${mapaId}', event)"]`);
+        const textoOriginal = botao.innerHTML;
+        botao.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Carregando...';
+        botao.disabled = true;
         
         const resultado = await eel.obter_dados_mapa_salvo(mapaId)();
         
         if (resultado.sucesso) {
-            // Normalizar dados salvos para o formato consumido pelo gerador e criar PDF idêntico ao atual
-            const conteudo = construirConteudoPDFDeMapaSalvo(resultado.dados_mapa);
-            await gerarDocumentoPDF(conteudo, resultado.titulo);
+            // Converter dados salvos para o formato esperado pelo PDF
+            const dadosConvertidos = converterDadosSalvosParaPDF(resultado.dados_mapa);
+            
+            // Gerar PDF com os dados convertidos
+            await gerarDocumentoPDF(dadosConvertidos, resultado.titulo);
         } else {
             mostrarAlerta('Erro ao carregar mapa: ' + resultado.mensagem, 'danger');
         }
         
         // Restaurar botão
-        if (botao) {
-            botao.innerHTML = textoOriginal;
-            botao.disabled = false;
-        }
+        botao.innerHTML = textoOriginal;
+        botao.disabled = false;
         
     } catch (error) {
         console.error('❌ Erro ao visualizar mapa anterior:', error);
         mostrarAlerta('Erro ao visualizar mapa anterior.', 'danger');
         
         // Restaurar botão em caso de erro
-        if (botaoEl instanceof HTMLElement) {
-            botaoEl.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF';
-            botaoEl.disabled = false;
+        const botao = event ? event.target.closest('button') : document.querySelector(`button[onclick="visualizarMapaAnterior('${mapaId}', event)"]`);
+        if (botao) {
+            botao.innerHTML = '<i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF';
+            botao.disabled = false;
         }
     }
+}
+
+function converterDadosSalvosParaPDF(dadosSalvos) {
+    // Os dados salvos têm a estrutura: { dados: [...], meta: {...} }
+    const dados = dadosSalvos.dados || [];
+    const meta = dadosSalvos.meta || {};
+    
+    // Armazenar dados globalmente para uso nas funções de PDF
+    window.dadosProcessos = dados;
+    window.tipoProcessoAtual = meta.tipo_processo;
+    
+    // Construir informações do mapa
+    const info = {
+        'Tipo de Processo': meta.tipo_processo || '',
+        'Período': meta.mes_nome && meta.ano ? `${meta.mes_nome}/${meta.ano}` : meta.periodo_descricao || '',
+        'Data de Geração': meta.data_geracao || new Date().toLocaleString('pt-BR')
+    };
+    
+    // Construir estatísticas
+    const stats = {
+        'total': meta.total_processos || 0,
+        'concluidos': meta.total_concluidos || 0,
+        'andamento': meta.total_andamento || 0
+    };
+    
+    // Converter processos para o formato esperado
+    const processos = dados.map((processo, index) => {
+        return {
+            id: processo.id,
+            numero: index + 1,
+            numeroProcesso: `${processo.numero}/${processo.ano}`,
+            descricao: processo.numero_portaria ? 
+                `Portaria nº ${processo.numero_portaria}/${processo.ano}` : 
+                (processo.numero_memorando ? `Memorando nº ${processo.numero_memorando}/${processo.ano}` : ''),
+            status: processo.concluido ? 'Concluído' : 'Em Andamento',
+            encarregado: processo.responsavel?.completo || 'Não informado',
+            pmsEnvolvidos: processo.pms_envolvidos?.map(pm => pm.completo).join(', ') || 'Nenhum PM informado',
+            solucao: processo.concluido ? 
+                (processo.solucao?.solucao_tipo || 'Concluído') : 
+                'Em Andamento',
+            detalhes: {
+                dataInstauracao: formatarData(processo.data_instauracao),
+                dataConclusao: processo.data_conclusao ? formatarData(processo.data_conclusao) : 'Não se aplica',
+                numeroPortaria: processo.numero_portaria ? 
+                    `Portaria nº ${processo.numero_portaria}/${processo.ano}` : 
+                    (processo.numero_memorando ? `Memorando nº ${processo.numero_memorando}/${processo.ano}` : 'Não informado'),
+                numeroControle: processo.numero || 'Não informado',
+                numeroRGF: processo.numero_rgf || 'Não informado',
+                resumoFatos: processo.resumo_fatos || 'Não informado',
+                tipoProcesso: meta.tipo_processo || '',
+                solucaoCompleta: {
+                    dataRemessa: processo.solucao?.data_remessa ? 
+                        formatarData(processo.solucao.data_remessa) : 'Não informado',
+                    dataJulgamento: ['PAD', 'PADS', 'CD', 'CJ'].includes(meta.tipo_processo) ? 
+                        (processo.solucao?.data_julgamento ? formatarData(processo.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
+                    resultado: processo.solucao?.solucao_final || processo.solucao?.solucao_tipo || 'Não informado'
+                },
+                ultimaMovimentacao: processo.status === 'Concluído' ? 'Não se aplica' : 
+                    formatarUltimaMovimentacao(processo.ultima_movimentacao)
+            }
+        };
+    });
+    
+    return {
+        titulo: meta.tipo_processo ? `${meta.tipo_processo} - ${info.Período}` : info.Período,
+        info: info,
+        stats: stats,
+        processos: processos
+    };
 }
 
 function formatarDataHora(dataString) {
