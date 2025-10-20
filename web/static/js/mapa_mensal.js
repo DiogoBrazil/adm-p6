@@ -10,7 +10,11 @@ function inicializarMapaMensal() {
     // Inicializar elementos da página
     inicializarAnos();
     carregarTiposProcesso();
-    carregarMapasAnteriores();
+    
+    // Só carrega mapas anteriores se estiver na página de mapas anteriores
+    if (document.getElementById('listaMapas')) {
+        carregarMapasAnteriores();
+    }
     
     // Event listeners
     const form = document.getElementById('filtroMapaForm');
@@ -91,25 +95,41 @@ async function gerarMapaMensal() {
         // Mostrar loading
         mostrarLoading(true);
         ocultarResultados();
+        ocultarDownloadContainer();
         
         const resultado = await eel.gerar_mapa_mensal(mes, ano, tipoProcesso)();
         
         if (resultado.sucesso) {
             console.log(`✅ Mapa gerado: ${resultado.dados.length} processos encontrados`);
-            // Não exibe mais o bloco de resultados; apenas salva e atualiza a lista
-            await salvarMapaAutomaticamente(resultado);
-            mostrarAlerta('Mapa gerado e salvo. Veja em "Mapas Anteriores" para visualizar o PDF.', 'success');
+            
+            // Salvar mapa automaticamente
+            const salvamento = await salvarMapaAutomaticamente(resultado);
+            
+            if (salvamento && salvamento.sucesso) {
+                // Armazenar dados globalmente para uso no download
+                window.ultimoMapaGerado = resultado;
+                
+                // Exibir botão de download
+                exibirDownloadContainer();
+                
+                mostrarAlerta('Mapa gerado com sucesso! Clique no botão para fazer o download.', 'success');
+            } else {
+                mostrarAlerta('Mapa gerado, mas houve erro ao salvar. Tente gerar novamente.', 'warning');
+            }
+            
             // Garantir que os resultados permaneçam ocultos
             ocultarResultados();
         } else {
             console.error('❌ Erro ao gerar mapa:', resultado.mensagem);
             mostrarAlerta('Erro ao gerar mapa: ' + resultado.mensagem, 'danger');
             ocultarResultados();
+            ocultarDownloadContainer();
         }
     } catch (error) {
         console.error('❌ Erro ao gerar mapa mensal:', error);
         mostrarAlerta('Erro ao gerar mapa mensal.', 'danger');
         ocultarResultados();
+        ocultarDownloadContainer();
     } finally {
         mostrarLoading(false);
     }
@@ -1550,7 +1570,11 @@ async function carregarMapasAnteriores() {
     try {
         console.log('📋 Carregando mapas anteriores...');
         
-        document.getElementById('loadingMapasAnteriores').classList.remove('d-none');
+        // Suportar ambos os IDs (página de mapas ou seção na página de geração)
+        const loadingEl = document.getElementById('loadingMapas') || document.getElementById('loadingMapasAnteriores');
+        if (loadingEl) {
+            loadingEl.classList.remove('d-none');
+        }
         
         const resultado = await eel.listar_mapas_anteriores()();
         
@@ -1565,12 +1589,20 @@ async function carregarMapasAnteriores() {
         console.error('❌ Erro ao carregar mapas anteriores:', error);
         mostrarEstadoVazioMapas();
     } finally {
-        document.getElementById('loadingMapasAnteriores').classList.add('d-none');
+        const loadingEl = document.getElementById('loadingMapas') || document.getElementById('loadingMapasAnteriores');
+        if (loadingEl) {
+            loadingEl.classList.add('d-none');
+        }
     }
 }
 
 function exibirMapasAnteriores(mapas) {
-    const container = document.getElementById('listaMapasAnteriores');
+    const container = document.getElementById('listaMapas') || document.getElementById('listaMapasAnteriores');
+    
+    if (!container) {
+        console.error('Container de mapas não encontrado');
+        return;
+    }
     
     if (mapas.length === 0) {
         mostrarEstadoVazioMapas();
@@ -1583,31 +1615,42 @@ function exibirMapasAnteriores(mapas) {
         const dataFormatada = formatarDataHora(mapa.data_geracao);
         
         html += `
-            <div class="mapa-anterior-item">
-                <div class="mapa-info">
-                    <div class="mapa-detalhes">
-                        <div class="mapa-titulo">${mapa.titulo}</div>
-                        <div class="mapa-meta">
-                            <i class="bi bi-person me-1"></i>${mapa.usuario_nome} • 
-                            <i class="bi bi-calendar me-1"></i>${dataFormatada}
-                        </div>
-                        <div class="mapa-stats">
-                            <span class="mapa-stat">
-                                <i class="bi bi-list-ol me-1"></i>${mapa.total_processos} Total
-                            </span>
-                            <span class="mapa-stat">
-                                <i class="bi bi-check-circle me-1"></i>${mapa.total_concluidos} Concluídos
-                            </span>
-                            <span class="mapa-stat">
-                                <i class="bi bi-clock me-1"></i>${mapa.total_andamento} Em Andamento
-                            </span>
-                        </div>
+            <div class="mapa-card">
+                <div class="mapa-header">
+                    <div>
+                        <h3 class="mapa-titulo">${mapa.titulo}</h3>
+                        <span class="mapa-tipo">${mapa.tipo_processo}</span>
                     </div>
                     <div class="mapa-acoes">
                         <button class="btn btn-primary btn-sm" onclick="visualizarMapaAnterior('${mapa.id}', this)">
                             <i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF
                         </button>
                     </div>
+                </div>
+                <div class="mapa-info">
+                    <div class="mapa-info-item">
+                        <i class="bi bi-calendar3"></i>
+                        <span><strong>Período:</strong> ${mapa.periodo_descricao}</span>
+                    </div>
+                    <div class="mapa-info-item">
+                        <i class="bi bi-person"></i>
+                        <span><strong>Gerado por:</strong> ${mapa.usuario_nome}</span>
+                    </div>
+                    <div class="mapa-info-item">
+                        <i class="bi bi-clock"></i>
+                        <span><strong>Data:</strong> ${dataFormatada}</span>
+                    </div>
+                </div>
+                <div class="mapa-stats">
+                    <span class="mapa-stat total">
+                        <i class="bi bi-list-ol"></i> ${mapa.total_processos} Total
+                    </span>
+                    <span class="mapa-stat concluidos">
+                        <i class="bi bi-check-circle-fill"></i> ${mapa.total_concluidos} Concluídos
+                    </span>
+                    <span class="mapa-stat andamento">
+                        <i class="bi bi-clock-fill"></i> ${mapa.total_andamento} Em Andamento
+                    </span>
                 </div>
             </div>
         `;
@@ -1617,7 +1660,13 @@ function exibirMapasAnteriores(mapas) {
 }
 
 function mostrarEstadoVazioMapas() {
-    const container = document.getElementById('listaMapasAnteriores');
+    const container = document.getElementById('listaMapas') || document.getElementById('listaMapasAnteriores');
+    
+    if (!container) {
+        console.error('Container de mapas não encontrado');
+        return;
+    }
+    
     container.innerHTML = `
         <div class="estado-vazio-mapas">
             <i class="bi bi-file-earmark-text"></i>
@@ -1635,14 +1684,148 @@ async function salvarMapaAutomaticamente(dadosResultado) {
         
         if (resultado.sucesso) {
             console.log('✅ Mapa salvo com sucesso');
-            // Recarregar lista de mapas anteriores
-            carregarMapasAnteriores();
+            return resultado;
         } else {
             console.warn('⚠️ Erro ao salvar mapa:', resultado.mensagem);
+            return null;
         }
     } catch (error) {
         console.error('❌ Erro ao salvar mapa automaticamente:', error);
+        return null;
     }
+}
+
+function exibirDownloadContainer() {
+    const container = document.getElementById('downloadContainer');
+    if (container) {
+        container.classList.remove('d-none');
+        // Scroll suave até o container
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function ocultarDownloadContainer() {
+    const container = document.getElementById('downloadContainer');
+    if (container) {
+        container.classList.add('d-none');
+    }
+}
+
+async function downloadMapaGerado() {
+    try {
+        if (!window.ultimoMapaGerado) {
+            mostrarAlerta('Nenhum mapa foi gerado ainda.', 'warning');
+            return;
+        }
+        
+        console.log('📥 Iniciando download do mapa...');
+        
+        // Desabilitar botão durante o download
+        const btnDownload = document.getElementById('btnDownloadMapa');
+        const textoOriginal = btnDownload.innerHTML;
+        btnDownload.disabled = true;
+        btnDownload.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Gerando PDF...';
+        
+        // Construir conteúdo para PDF
+        const conteudo = construirConteudoPDFParaDownload(window.ultimoMapaGerado);
+        
+        // Gerar e baixar PDF
+        await gerarDocumentoPDF(conteudo, conteudo.titulo);
+        
+        // Remover o container de download após sucesso
+        ocultarDownloadContainer();
+        
+        // Limpar dados globais
+        window.ultimoMapaGerado = null;
+        
+        mostrarAlerta('Download concluído! O mapa está salvo e pode ser acessado em "Mapas Anteriores".', 'success');
+        
+    } catch (error) {
+        console.error('❌ Erro ao fazer download:', error);
+        mostrarAlerta('Erro ao gerar PDF para download.', 'danger');
+        
+        // Restaurar botão em caso de erro
+        const btnDownload = document.getElementById('btnDownloadMapa');
+        if (btnDownload) {
+            btnDownload.disabled = false;
+            btnDownload.innerHTML = '<i class="bi bi-download me-2"></i>Baixar Mapa em PDF';
+        }
+    }
+}
+
+function construirConteudoPDFParaDownload(dadosResultado) {
+    const { dados, meta } = dadosResultado;
+    
+    // Disponibiliza dados originais para o gerador
+    window.tipoProcessoAtual = meta.tipo_processo || '';
+    window.dadosProcessos = dados;
+    
+    // Montar info e stats
+    const info = {
+        'Período': meta.mes_nome && meta.ano ? `${meta.mes_nome}/${meta.ano}` : (meta.periodo_descricao || '—'),
+        'Tipo': meta.tipo_processo || '—',
+        'Data de Geração': meta.data_geracao || new Date().toLocaleString('pt-BR')
+    };
+    
+    const stats = {
+        'Total': String(meta.total_processos ?? dados.length ?? 0),
+        'Em Andamento': String(meta.total_andamento ?? 0),
+        'Concluídos': String(meta.total_concluidos ?? 0)
+    };
+    
+    // Montar processos
+    const processos = dados.map((p, idx) => {
+        const status = p.concluido ? 'Concluído' : 'Em Andamento';
+        const numeroProc = `${p.numero}/${p.ano || (p.data_instauracao ? String(p.data_instauracao).slice(0,4) : '')}`;
+        const encarregado = p?.responsavel?.completo || 'Não informado';
+        const pmsStr = (Array.isArray(p.pms_envolvidos) ? p.pms_envolvidos.map(formatarPmParaExibicao) : []).join(', ') || 'Nenhum PM informado';
+        
+        // Documento/número
+        let documentoNumero = 'Não informado';
+        if (meta.tipo_processo === 'PADS' && p.numero_memorando) {
+            documentoNumero = `Memorando nº ${p.numero_memorando}/${p.ano || ''}`;
+        } else if (p.numero_portaria) {
+            documentoNumero = `Portaria nº ${p.numero_portaria}/${p.ano || ''}`;
+        }
+        
+        const detalhes = {
+            numeroPortaria: documentoNumero,
+            numeroControle: p.numero || 'Não informado',
+            dataInstauracao: p.data_instauracao ? formatarData(p.data_instauracao) : 'Não informado',
+            dataConclusao: status === 'Em Andamento' ? 'Não se aplica' : (p.data_conclusao ? formatarData(p.data_conclusao) : 'Não informado'),
+            numeroRGF: p.numero_rgf || 'Não informado',
+            resumoFatos: p.resumo_fatos || 'Não informado',
+            ultimaMovimentacao: p.ultima_movimentacao ? formatarUltimaMovimentacao(p.ultima_movimentacao) : 'Não informado',
+            solucaoCompleta: {
+                dataRemessa: p?.solucao?.data_remessa ? formatarData(p.solucao.data_remessa) : 'Não informado',
+                dataJulgamento: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? 
+                    (p?.solucao?.data_julgamento ? formatarData(p.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
+                penalidade: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? 
+                    (p?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica',
+            }
+        };
+        
+        const solucao = p.solucao_final || p?.solucao?.solucao_final || p?.solucao?.solucao_tipo || 'Não informado';
+        
+        return {
+            id: p.id,
+            numero: String(idx + 1),
+            numeroProcesso: numeroProc,
+            descricao: '',
+            status,
+            encarregado,
+            pmsEnvolvidos: pmsStr,
+            solucao,
+            detalhes
+        };
+    });
+    
+    return {
+        titulo: `${meta.tipo_processo || ''} - ${meta.mes_nome || ''}/${meta.ano || ''}`,
+        info,
+        stats,
+        processos
+    };
 }
 
 // Constrói o payload esperado por gerarDocumentoPDF a partir do JSON salvo no banco
