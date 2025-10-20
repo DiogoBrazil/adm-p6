@@ -1,5 +1,12 @@
 // mapa_mensal.js - JavaScript para funcionalidade do Mapa Mensal
 
+// Variáveis globais para paginação e filtro de mapas anteriores
+let todosOsMapas = [];
+let mapasFiltrados = [];
+let paginaAtualMapas = 1;
+const mapasPorPagina = 3;
+let timeoutBusca = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     inicializarMapaMensal();
 });
@@ -14,6 +21,7 @@ function inicializarMapaMensal() {
     // Só carrega mapas anteriores se estiver na página de mapas anteriores
     if (document.getElementById('listaMapas')) {
         carregarMapasAnteriores();
+        configurarEventosBuscaMapas();
     }
     
     // Event listeners
@@ -31,6 +39,116 @@ function inicializarMapaMensal() {
     const anoEl = document.getElementById('ano');
     if (mesEl) mesEl.value = hoje.getMonth() + 1;
     if (anoEl) anoEl.value = hoje.getFullYear();
+}
+
+function configurarEventosBuscaMapas() {
+    const searchInput = document.getElementById('searchInput');
+    if (!searchInput) return;
+    
+    // Evento de digitação com debounce
+    searchInput.addEventListener('input', function(e) {
+        const termo = e.target.value.trim();
+        
+        // Mostrar/ocultar botão limpar
+        const btnLimpar = document.getElementById('btnLimpar');
+        if (btnLimpar) {
+            if (termo) {
+                btnLimpar.classList.remove('d-none');
+            } else {
+                btnLimpar.classList.add('d-none');
+            }
+        }
+        
+        // Debounce da busca
+        if (timeoutBusca) {
+            clearTimeout(timeoutBusca);
+        }
+        
+        timeoutBusca = setTimeout(() => {
+            filtrarMapas(termo);
+        }, 300);
+    });
+    
+    // Configurar botões de paginação
+    const btnPrev = document.getElementById('btnPrevPage');
+    const btnNext = document.getElementById('btnNextPage');
+    
+    if (btnPrev) {
+        btnPrev.addEventListener('click', () => {
+            if (paginaAtualMapas > 1) {
+                paginaAtualMapas--;
+                renderizarMapasPaginados();
+            }
+        });
+    }
+    
+    if (btnNext) {
+        btnNext.addEventListener('click', () => {
+            const totalPaginas = Math.ceil(mapasFiltrados.length / mapasPorPagina);
+            if (paginaAtualMapas < totalPaginas) {
+                paginaAtualMapas++;
+                renderizarMapasPaginados();
+            }
+        });
+    }
+}
+
+function limparBusca() {
+    const searchInput = document.getElementById('searchInput');
+    const btnLimpar = document.getElementById('btnLimpar');
+    const searchInfo = document.getElementById('searchInfo');
+    
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    if (btnLimpar) {
+        btnLimpar.classList.add('d-none');
+    }
+    
+    if (searchInfo) {
+        searchInfo.classList.add('d-none');
+    }
+    
+    // Resetar filtro
+    mapasFiltrados = [...todosOsMapas];
+    paginaAtualMapas = 1;
+    renderizarMapasPaginados();
+}
+
+function filtrarMapas(termo) {
+    if (!termo) {
+        mapasFiltrados = [...todosOsMapas];
+    } else {
+        const termoLower = termo.toLowerCase();
+        mapasFiltrados = todosOsMapas.filter(mapa => {
+            // Buscar em: título, tipo_processo, periodo_descricao
+            const titulo = (mapa.titulo || '').toLowerCase();
+            const tipo = (mapa.tipo_processo || '').toLowerCase();
+            const periodo = (mapa.periodo_descricao || '').toLowerCase();
+            
+            return titulo.includes(termoLower) || 
+                   tipo.includes(termoLower) || 
+                   periodo.includes(termoLower);
+        });
+    }
+    
+    // Atualizar info de busca
+    const searchInfo = document.getElementById('searchInfo');
+    const searchInfoText = document.getElementById('searchInfoText');
+    
+    if (searchInfo && searchInfoText) {
+        if (termo && mapasFiltrados.length !== todosOsMapas.length) {
+            searchInfo.classList.remove('d-none');
+            searchInfoText.textContent = `${mapasFiltrados.length} mapa(s) encontrado(s) de ${todosOsMapas.length} total`;
+        } else {
+            searchInfo.classList.add('d-none');
+        }
+    }
+    
+    // Resetar para primeira página
+    paginaAtualMapas = 1;
+    renderizarMapasPaginados();
 }
 
 function inicializarAnos() {
@@ -1579,7 +1697,12 @@ async function carregarMapasAnteriores() {
         const resultado = await eel.listar_mapas_anteriores()();
         
         if (resultado.sucesso) {
-            exibirMapasAnteriores(resultado.mapas);
+            // Armazenar mapas globalmente
+            todosOsMapas = resultado.mapas;
+            mapasFiltrados = [...todosOsMapas];
+            paginaAtualMapas = 1;
+            
+            renderizarMapasPaginados();
             console.log(`✅ ${resultado.mapas.length} mapas anteriores carregados`);
         } else {
             console.error('❌ Erro ao carregar mapas:', resultado.mensagem);
@@ -1593,6 +1716,57 @@ async function carregarMapasAnteriores() {
         if (loadingEl) {
             loadingEl.classList.add('d-none');
         }
+    }
+}
+
+function renderizarMapasPaginados() {
+    if (mapasFiltrados.length === 0) {
+        mostrarEstadoVazioMapas();
+        ocultarPaginacao();
+        return;
+    }
+    
+    // Calcular índices da página atual
+    const inicio = (paginaAtualMapas - 1) * mapasPorPagina;
+    const fim = inicio + mapasPorPagina;
+    const mapasDaPagina = mapasFiltrados.slice(inicio, fim);
+    
+    // Renderizar mapas da página
+    exibirMapasAnteriores(mapasDaPagina);
+    
+    // Atualizar controles de paginação
+    atualizarPaginacao();
+}
+
+function atualizarPaginacao() {
+    const totalPaginas = Math.ceil(mapasFiltrados.length / mapasPorPagina);
+    const paginationContainer = document.getElementById('paginationContainer');
+    const pageInfo = document.getElementById('pageInfo');
+    const btnPrev = document.getElementById('btnPrevPage');
+    const btnNext = document.getElementById('btnNextPage');
+    
+    if (!paginationContainer || !pageInfo || !btnPrev || !btnNext) return;
+    
+    // Mostrar/ocultar paginação
+    if (totalPaginas > 1) {
+        paginationContainer.classList.remove('d-none');
+    } else {
+        paginationContainer.classList.add('d-none');
+        return;
+    }
+    
+    // Atualizar texto
+    pageInfo.textContent = `Página ${paginaAtualMapas} de ${totalPaginas}`;
+    
+    // Atualizar botões
+    btnPrev.disabled = paginaAtualMapas === 1;
+    btnNext.disabled = paginaAtualMapas === totalPaginas;
+}
+
+function ocultarPaginacao() {
+    const paginationContainer = document.getElementById('paginationContainer');
+    if (paginationContainer) {
+        paginationContainer.classList.add('d-none');
     }
 }
 

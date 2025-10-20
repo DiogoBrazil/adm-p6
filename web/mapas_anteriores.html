@@ -186,6 +186,49 @@
             padding: 3rem;
         }
         
+        /* Estilos da busca */
+        .search-container {
+            max-width: 100%;
+        }
+        
+        .input-group-text {
+            background: white;
+            border-right: none;
+        }
+        
+        .form-control:focus {
+            border-color: #1e3c72;
+            box-shadow: 0 0 0 0.2rem rgba(30, 60, 114, 0.25);
+        }
+        
+        /* Paginação */
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            padding: 2rem 0 1rem;
+            border-top: 1px solid #e9ecef;
+            margin-top: 2rem;
+        }
+        
+        .page-info {
+            font-weight: 500;
+            color: #495057;
+            padding: 0 1rem;
+            min-width: 120px;
+            text-align: center;
+        }
+        
+        .pagination-controls .btn {
+            min-width: 100px;
+        }
+        
+        .pagination-controls .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         @media (max-width: 768px) {
             .mapa-header {
                 flex-direction: column;
@@ -216,10 +259,16 @@
                     </h1>
                     <p>Visualize e baixe mapas mensais gerados anteriormente</p>
                 </div>
-                <a href="mapa_mensal.html" class="btn-voltar">
-                    <i class="bi bi-arrow-left"></i>
-                    Gerar Novo Mapa
-                </a>
+                <div class="d-flex gap-2">
+                    <a href="dashboard.html" class="btn-voltar">
+                        <i class="bi bi-house-door"></i>
+                        Início
+                    </a>
+                    <a href="mapa_mensal.html" class="btn-voltar">
+                        <i class="bi bi-plus-circle"></i>
+                        Gerar Novo Mapa
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -227,6 +276,37 @@
     <div class="main-container">
         <!-- Alert Container -->
         <div id="alertContainer"></div>
+        
+        <!-- Barra de Pesquisa -->
+        <div class="card card-modern mb-3">
+            <div class="card-body">
+                <div class="search-container">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            class="form-control border-start-0" 
+                            placeholder="Buscar por tipo de mapa (ex: IPM, PAD, SR) ou período..."
+                            autocomplete="off"
+                        >
+                        <button 
+                            id="btnLimpar" 
+                            class="btn btn-outline-secondary d-none" 
+                            onclick="limparBusca()"
+                        >
+                            <i class="bi bi-x-circle me-1"></i>Limpar
+                        </button>
+                    </div>
+                    <div id="searchInfo" class="mt-2 text-muted small d-none">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <span id="searchInfoText"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <!-- Lista de Mapas -->
         <div class="card card-modern">
@@ -242,6 +322,19 @@
                 <!-- Lista -->
                 <div id="listaMapas">
                     <!-- Será preenchido dinamicamente -->
+                </div>
+                
+                <!-- Paginação -->
+                <div id="paginationContainer" class="d-none">
+                    <div class="pagination-controls">
+                        <button id="btnPrevPage" class="btn btn-outline-primary" disabled>
+                            <i class="bi bi-chevron-left me-1"></i>Anterior
+                        </button>
+                        <span id="pageInfo" class="page-info">Página 1 de 1</span>
+                        <button id="btnNextPage" class="btn btn-outline-primary" disabled>
+                            Próxima<i class="bi bi-chevron-right ms-1"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
