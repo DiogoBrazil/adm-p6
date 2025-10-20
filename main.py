@@ -700,49 +700,60 @@ usuario_logado = None
 
 @eel.expose
 def obter_usuario_por_id(user_id, user_type):
-    """Retorna os dados atuais de um usuário para edição"""
+    """Retorna os dados atuais de um usuário para edição/visualização"""
     conn = db_manager.get_connection()
     cursor = conn.cursor()
-    user = None
-    if user_type == 'operador':
+    
+    try:
+        # Buscar na tabela unificada usuarios
         cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, profile, created_at, updated_at, ativo
-            FROM operadores WHERE id = ?
+            SELECT id, tipo_usuario, posto_graduacao, matricula, nome, 
+                   is_encarregado, is_operador, email, perfil, 
+                   created_at, updated_at, ativo
+            FROM usuarios 
+            WHERE id = ?
         ''', (user_id,))
+        
         row = cursor.fetchone()
         if row:
+            # Determinar vínculos
+            vinculos = []
+            if row[5]:  # is_encarregado
+                vinculos.append("Encarregado")
+            if row[6]:  # is_operador
+                perfil_texto = f"Operador ({row[8]})" if row[8] else "Operador"
+                vinculos.append(perfil_texto)
+            
+            vinculo_texto = " / ".join(vinculos) if vinculos else "Sem vínculo"
+            
             user = {
                 "id": row[0],
-                "posto_graduacao": row[1],
-                "matricula": row[2],
-                "nome": row[3],
-                "email": row[4],
-                "profile": row[5],
-                "created_at": row[6],
-                "updated_at": row[7],
-                "ativo": bool(row[8]),
-                "tipo": "operador"
+                "tipo_usuario": row[1],
+                "posto_graduacao": row[2],
+                "matricula": row[3],
+                "nome": row[4],
+                "is_encarregado": bool(row[5]),
+                "is_operador": bool(row[6]),
+                "email": row[7],
+                "profile": row[8],  # Mantém 'profile' para compatibilidade
+                "perfil": row[8],
+                "created_at": row[9],
+                "updated_at": row[10],
+                "ativo": bool(row[11]),
+                "tipo": user_type,  # Mantém o tipo passado para compatibilidade
+                "vinculo_texto": vinculo_texto
             }
-    elif user_type == 'encarregado':
-        cursor.execute('''
-            SELECT id, posto_graduacao, matricula, nome, email, created_at, updated_at, ativo
-            FROM encarregados WHERE id = ?
-        ''', (user_id,))
-        row = cursor.fetchone()
-        if row:
-            user = {
-                "id": row[0],
-                "posto_graduacao": row[1],
-                "matricula": row[2],
-                "nome": row[3],
-                "email": row[4],
-                "created_at": row[5],
-                "updated_at": row[6],
-                "ativo": bool(row[7]),
-                "tipo": "encarregado"
-            }
-    conn.close()
-    return user
+            
+            conn.close()
+            return user
+        
+        conn.close()
+        return None
+        
+    except Exception as e:
+        print(f"Erro ao obter usuário por ID: {e}")
+        conn.close()
+        return None
 
 @eel.expose
 def fazer_login(email, senha):
@@ -4384,6 +4395,119 @@ def obter_estatisticas_usuario(user_id, user_type):
         
     except Exception as e:
         print(f"Erro ao obter estatísticas do usuário: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_processos_usuario_responsavel(user_id):
+    """Obtém lista de processos/procedimentos onde o usuário é responsável (encarregado)"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, tipo, tipo_detalhe, numero_processo, objeto, 
+                   data_instauracao, status, conclusao_data
+            FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1
+            ORDER BY data_instauracao DESC
+        """, (user_id,))
+        
+        processos = []
+        for row in cursor.fetchall():
+            processos.append({
+                "id": row[0],
+                "tipo": row[1],
+                "tipo_detalhe": row[2],
+                "numero_processo": row[3],
+                "objeto": row[4],
+                "data_instauracao": row[5],
+                "status": row[6],
+                "conclusao_data": row[7]
+            })
+        
+        conn.close()
+        return {"sucesso": True, "processos": processos}
+        
+    except Exception as e:
+        print(f"Erro ao obter processos como responsável: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_processos_usuario_escrivao(user_id):
+    """Obtém lista de processos/procedimentos onde o usuário é escrivão"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, tipo, tipo_detalhe, numero_processo, objeto, 
+                   data_instauracao, status, conclusao_data
+            FROM processos_procedimentos 
+            WHERE escrivao_id = ? AND ativo = 1
+            ORDER BY data_instauracao DESC
+        """, (user_id,))
+        
+        processos = []
+        for row in cursor.fetchall():
+            processos.append({
+                "id": row[0],
+                "tipo": row[1],
+                "tipo_detalhe": row[2],
+                "numero_processo": row[3],
+                "objeto": row[4],
+                "data_instauracao": row[5],
+                "status": row[6],
+                "conclusao_data": row[7]
+            })
+        
+        conn.close()
+        return {"sucesso": True, "processos": processos}
+        
+    except Exception as e:
+        print(f"Erro ao obter processos como escrivão: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_processos_usuario_envolvido(user_id):
+    """Obtém lista de processos/procedimentos onde o usuário é envolvido (sindicado, acusado, indiciado, investigado)"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Buscar processos onde é PM envolvido direto
+        cursor.execute("""
+            SELECT DISTINCT p.id, p.tipo, p.tipo_detalhe, p.numero_processo, p.objeto, 
+                   p.data_instauracao, p.status, p.conclusao_data, 
+                   COALESCE(ppe.status_pm, p.status_pm) as status_envolvido
+            FROM processos_procedimentos p
+            LEFT JOIN procedimento_pms_envolvidos ppe ON p.id = ppe.procedimento_id AND ppe.pm_id = ?
+            WHERE p.ativo = 1 
+            AND (p.nome_pm_id = ? OR ppe.pm_id = ?)
+            AND (
+                LOWER(COALESCE(ppe.status_pm, p.status_pm)) IN ('sindicado', 'acusado', 'indiciado', 'investigado')
+            )
+            ORDER BY p.data_instauracao DESC
+        """, (user_id, user_id, user_id))
+        
+        processos = []
+        for row in cursor.fetchall():
+            processos.append({
+                "id": row[0],
+                "tipo": row[1],
+                "tipo_detalhe": row[2],
+                "numero_processo": row[3],
+                "objeto": row[4],
+                "data_instauracao": row[5],
+                "status": row[6],
+                "conclusao_data": row[7],
+                "status_envolvido": row[8]
+            })
+        
+        conn.close()
+        return {"sucesso": True, "processos": processos}
+        
+    except Exception as e:
+        print(f"Erro ao obter processos como envolvido: {e}")
         return {"sucesso": False, "erro": str(e)}
 
 def main():
