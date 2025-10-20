@@ -165,9 +165,6 @@ async function loadUserData() {
         // Carregar estatísticas
         await loadUserStats();
         
-        // Carregar listas de processos
-        await loadUserProcesses();
-        
     } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error);
         showAlert('Erro ao carregar dados do usuário!', 'error');
@@ -287,9 +284,9 @@ function updateDetailedStats(stats) {
             gradient: 'linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%)'
         },
         { 
-            label: 'Atestado Origem', 
-            value: stats.encarregado_atestado_origem, 
-            desc: 'Encarregado de AO', 
+            label: 'PAD', 
+            value: stats.encarregado_pad, 
+            desc: 'Encarregado de PAD', 
             gradient: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)'
         },
         { 
@@ -393,147 +390,6 @@ function updateDetailedStats(stats) {
         
         statsGrid.appendChild(statElement);
     });
-}
-
-// Função para carregar processos do usuário
-async function loadUserProcesses() {
-    try {
-        console.log('Carregando processos para usuário:', currentUserId);
-        
-        // Carregar processos como responsável (encarregado)
-        const responsavelResult = await eel.obter_processos_usuario_responsavel(currentUserId)();
-        console.log('Processos como responsável:', responsavelResult);
-        if (responsavelResult.sucesso) {
-            displayProcessos('responsavel', responsavelResult.processos);
-        }
-        
-        // Carregar processos como escrivão
-        const escrivaoResult = await eel.obter_processos_usuario_escrivao(currentUserId)();
-        console.log('Processos como escrivão:', escrivaoResult);
-        if (escrivaoResult.sucesso) {
-            displayProcessos('escrivao', escrivaoResult.processos);
-        }
-        
-        // Carregar processos como envolvido
-        const envolvidoResult = await eel.obter_processos_usuario_envolvido(currentUserId)();
-        console.log('Processos como envolvido:', envolvidoResult);
-        if (envolvidoResult.sucesso) {
-            displayProcessos('envolvido', envolvidoResult.processos);
-        }
-        
-    } catch (error) {
-        console.error('Erro ao carregar processos do usuário:', error);
-    }
-}
-
-// Função para exibir lista de processos
-function displayProcessos(tipo, processos) {
-    console.log(`Exibindo processos do tipo ${tipo}:`, processos);
-    
-    const cardId = `${tipo}Card`;
-    const listId = `${tipo}List`;
-    
-    const card = document.getElementById(cardId);
-    const list = document.getElementById(listId);
-    
-    console.log(`Card ID: ${cardId}, encontrado:`, card);
-    console.log(`List ID: ${listId}, encontrado:`, list);
-    
-    if (!card || !list) {
-        console.error(`Card ou lista não encontrada para tipo ${tipo}`);
-        return;
-    }
-    
-    // Mostrar card
-    card.style.display = 'block';
-    
-    // Limpar lista
-    list.innerHTML = '';
-    
-    if (processos.length === 0) {
-        list.innerHTML = `
-            <div class="no-processes">
-                <i class="fas fa-folder-open"></i>
-                <p>Nenhum processo/procedimento encontrado</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Adicionar cada processo
-    processos.forEach(processo => {
-        const item = createProcessItem(processo, tipo);
-        list.appendChild(item);
-    });
-}
-
-// Função para criar elemento de processo
-function createProcessItem(processo, tipo) {
-    const div = document.createElement('div');
-    div.className = 'process-item';
-    
-    // Adicionar classe específica para envolvidos
-    if (tipo === 'envolvido' && processo.status_envolvido) {
-        div.classList.add('envolvido');
-        div.classList.add(processo.status_envolvido.toLowerCase());
-    }
-    
-    // Determinar badge do tipo de processo
-    const tipoClass = processo.tipo_detalhe ? processo.tipo_detalhe.toLowerCase().replace(/\s+/g, '-') : 'processo';
-    const tipoBadgeClass = getTipoBadgeClass(processo.tipo_detalhe);
-    
-    // Criar HTML
-    div.innerHTML = `
-        <div class="process-header">
-            <div class="process-title">
-                <i class="fas fa-folder"></i>
-                ${processo.numero_processo || 'Sem número'}
-            </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <span class="process-badge ${tipoBadgeClass}">${processo.tipo_detalhe || processo.tipo}</span>
-                ${tipo === 'envolvido' && processo.status_envolvido ? 
-                    `<span class="process-badge ${processo.status_envolvido.toLowerCase()}">${processo.status_envolvido}</span>` 
-                    : ''}
-            </div>
-        </div>
-        <div class="process-details">
-            <div class="process-detail">
-                <strong>Objeto:</strong>
-                <span>${processo.objeto || 'Não informado'}</span>
-            </div>
-            <div class="process-detail">
-                <strong>Instauração:</strong>
-                <span>${formatDate(processo.data_instauracao)}</span>
-            </div>
-            <div class="process-detail">
-                <strong>Status:</strong>
-                <span>${processo.status || 'Não informado'}</span>
-            </div>
-            ${processo.conclusao_data ? `
-                <div class="process-detail">
-                    <strong>Conclusão:</strong>
-                    <span>${formatDate(processo.conclusao_data)}</span>
-                </div>
-            ` : ''}
-        </div>
-    `;
-    
-    return div;
-}
-
-// Função auxiliar para determinar classe do badge
-function getTipoBadgeClass(tipoDetalhe) {
-    if (!tipoDetalhe) return 'processo';
-    
-    const tipo = tipoDetalhe.toUpperCase();
-    
-    if (tipo === 'IPM') return 'ipm';
-    if (tipo === 'PADS') return 'pads';
-    if (tipo === 'SR' || tipo === 'SV') return 'sindicancia';
-    if (tipo === 'AO') return 'atestado';
-    if (tipo === 'FP') return 'feito';
-    
-    return 'processo';
 }
 
 // Função para editar usuário atual

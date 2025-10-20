@@ -4276,7 +4276,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             "encarregado_sindicancia": 0,  # SR e SV
             "encarregado_pads": 0,
             "encarregado_ipm": 0,
-            "encarregado_atestado_origem": 0,  # AO
+            "encarregado_pad": 0,  # PAD
             "encarregado_feito_preliminar": 0,  # FP
             "escrivao": 0,
             "envolvido_sindicado": 0,
@@ -4316,6 +4316,14 @@ def obter_estatisticas_usuario(user_id, user_type):
             AND tipo_detalhe = 'FP'
         """, (user_id,))
         estatisticas["encarregado_feito_preliminar"] = cursor.fetchone()[0]
+        
+        # 5. Encarregado de PAD
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = ? AND ativo = 1 
+            AND tipo_detalhe = 'PAD'
+        """, (user_id,))
+        estatisticas["encarregado_pad"] = cursor.fetchone()[0]
         
         # 6. Escrivão
         cursor.execute("""
@@ -4405,8 +4413,8 @@ def obter_processos_usuario_responsavel(user_id):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, tipo, tipo_detalhe, numero_processo, objeto, 
-                   data_instauracao, status, conclusao_data
+            SELECT id, tipo_geral, tipo_detalhe, numero, resumo_fatos, 
+                   data_instauracao, status_pm, data_conclusao
             FROM processos_procedimentos 
             WHERE responsavel_id = ? AND ativo = 1
             ORDER BY data_instauracao DESC
@@ -4440,8 +4448,8 @@ def obter_processos_usuario_escrivao(user_id):
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT id, tipo, tipo_detalhe, numero_processo, objeto, 
-                   data_instauracao, status, conclusao_data
+            SELECT id, tipo_geral, tipo_detalhe, numero, resumo_fatos, 
+                   data_instauracao, status_pm, data_conclusao
             FROM processos_procedimentos 
             WHERE escrivao_id = ? AND ativo = 1
             ORDER BY data_instauracao DESC
@@ -4476,8 +4484,8 @@ def obter_processos_usuario_envolvido(user_id):
         
         # Buscar processos onde é PM envolvido direto
         cursor.execute("""
-            SELECT DISTINCT p.id, p.tipo, p.tipo_detalhe, p.numero_processo, p.objeto, 
-                   p.data_instauracao, p.status, p.conclusao_data, 
+            SELECT DISTINCT p.id, p.tipo_geral, p.tipo_detalhe, p.numero, p.resumo_fatos, 
+                   p.data_instauracao, p.status_pm, p.data_conclusao, 
                    COALESCE(ppe.status_pm, p.status_pm) as status_envolvido
             FROM processos_procedimentos p
             LEFT JOIN procedimento_pms_envolvidos ppe ON p.id = ppe.procedimento_id AND ppe.pm_id = ?
