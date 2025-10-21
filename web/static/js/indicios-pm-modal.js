@@ -313,47 +313,49 @@ class IndiciosPMModal {
      * Abre o modal para um PM específico
      */
     async abrir(pmEnvolvidoId, pmData) {
-        console.log('🔧 Abrindo modal de indícios para PM:', pmData);
+        console.log('🔧 Abrindo modal de indícios para PM:', pmEnvolvidoId);
+        console.log('📋 Dados existentes recebidos:', pmData);
         
         this.currentPMEnvolvidoId = pmEnvolvidoId;
         this.currentPMData = pmData;
 
         // Atualizar informações do PM no modal
-        document.getElementById('pmNomeCompleto').textContent = pmData.nome_completo || 'PM não identificado';
+        const nomePM = pmData?.nome_completo || 'PM não identificado';
+        document.getElementById('pmNomeCompleto').textContent = nomePM;
 
-        // Limpar seleções anteriores
-        this.selectedIndicios = {
-            categorias: [],
-            crimes: [],
-            rdpm: [],
-            art29: []
-        };
-
-        // Carregar indícios existentes
-        await this.carregarIndiciosExistentes();
+        // Se pmData contém indícios existentes, usá-los diretamente
+        if (pmData && (pmData.categorias || pmData.crimes || pmData.rdpm || pmData.art29)) {
+            console.log('✅ Usando dados de indícios recebidos via parâmetro');
+            this.selectedIndicios = {
+                categorias: Array.isArray(pmData.categorias) ? [...pmData.categorias] : 
+                           (pmData.categorias ? [pmData.categorias] : []),
+                crimes: Array.isArray(pmData.crimes) ? [...pmData.crimes] : [],
+                rdpm: Array.isArray(pmData.rdpm) ? [...pmData.rdpm] : [],
+                art29: Array.isArray(pmData.art29) ? [...pmData.art29] : []
+            };
+            
+            // Atualizar visualização com os dados carregados
+            this.atualizarVisualizacao();
+            console.log('✅ Indícios carregados no modal:', this.selectedIndicios);
+        } else {
+            console.log('ℹ️ Sem dados existentes, iniciando vazio');
+            // Limpar seleções anteriores
+            this.selectedIndicios = {
+                categorias: [],
+                crimes: [],
+                rdpm: [],
+                art29: []
+            };
+        }
 
         // Mostrar modal
         this.modalElement.style.display = 'block';
     }
 
     async carregarIndiciosExistentes() {
-        try {
-            console.log('📋 Carregando indícios existentes para PM:', this.currentPMEnvolvidoId);
-            
-            const resultado = await eel.carregar_indicios_pm_envolvido(this.currentPMEnvolvidoId)();
-            
-            if (resultado.sucesso) {
-                this.selectedIndicios = resultado.indicios;
-                this.atualizarVisualizacao();
-                console.log('✅ Indícios carregados:', this.selectedIndicios);
-            } else {
-                console.warn('⚠️ Erro ao carregar indícios:', resultado.mensagem);
-                this.showToast('Aviso', resultado.mensagem || 'Erro ao carregar indícios existentes', 'warning');
-            }
-        } catch (error) {
-            console.error('❌ Erro ao carregar indícios:', error);
-            this.showToast('Erro', 'Erro ao carregar indícios existentes', 'error');
-        }
+        // Método mantido para compatibilidade, mas não é mais usado
+        // Os dados já são carregados via parâmetro na função abrir()
+        console.log('⚠️ carregarIndiciosExistentes() está deprecated - dados já carregados via parâmetro');
     }
 
     carregarDadosIniciais() {

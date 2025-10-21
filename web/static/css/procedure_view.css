@@ -640,6 +640,80 @@
     }
 }
 
+/* Estilos para seção de indícios por PM */
+.indicio-pm-section {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(16, 185, 129, 0.02) 100%);
+    border-left: 4px solid #10b981;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.indicio-pm-section h4 {
+    color: #10b981;
+    margin-bottom: 15px;
+}
+
+.indicio-pm-section .info-list {
+    margin-left: 20px;
+    margin-bottom: 10px;
+}
+
+.indicio-pm-section .mb-2 {
+    margin-bottom: 15px;
+}
+
+.indicio-pm-section .mb-2:last-child {
+    margin-bottom: 0;
+}
+
+/* Tabela de indícios por PM */
+.indicios-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.indicios-table thead {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.indicios-table thead th {
+    color: white;
+    font-weight: 600;
+    padding: 12px 15px;
+    text-align: left;
+    border: none;
+}
+
+.indicios-table tbody tr {
+    border-bottom: 1px solid #e5e7eb;
+    transition: background-color 0.2s ease;
+}
+
+.indicios-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.indicios-table tbody tr:hover {
+    background-color: #f0fdf4;
+}
+
+.indicios-table tbody td {
+    padding: 15px;
+    vertical-align: top;
+    border: none;
+}
+
+.indicios-table tbody td:first-child {
+    font-weight: 600;
+    color: #059669;
+    background: linear-gradient(90deg, #f0fdf4 0%, transparent 100%);
+}
 
 
 

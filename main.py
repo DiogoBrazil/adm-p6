@@ -841,7 +841,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         
         # Buscar o registro principal de indícios
         cursor.execute("""
-            SELECT id, categoria
+            SELECT id, categorias_indicios, categoria
             FROM pm_envolvido_indicios 
             WHERE pm_envolvido_id = ? AND ativo = 1
         """, (pm_envolvido_id,))
@@ -851,7 +851,21 @@ def buscar_indicios_por_pm(pm_envolvido_id):
             conn.close()
             return None
             
-        indicios_id, categoria = indicios_result
+        indicios_id, categorias_json, categoria_texto = indicios_result
+        
+        # Parse das categorias do JSON
+        categorias = []
+        if categorias_json:
+            try:
+                import json
+                categorias = json.loads(categorias_json)
+                if not isinstance(categorias, list):
+                    categorias = [str(categorias)]
+            except:
+                if categoria_texto:
+                    categorias = [categoria_texto]
+        elif categoria_texto:
+            categorias = [categoria_texto]
         
         # Buscar crimes associados
         crimes = []
@@ -864,15 +878,19 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         """, (indicios_id,))
         
         for row in cursor.fetchall():
+            codigo = f"{row[2]} Art. {row[3]}"
+            if row[5]:  # parágrafo
+                codigo += f" §{row[5]}"
+            if row[6]:  # inciso
+                codigo += f" {row[6]}"
+            if row[7]:  # alínea
+                codigo += f" {row[7]}"
+                
             crimes.append({
                 "id": row[0],
                 "tipo": row[1],
-                "dispositivo_legal": row[2], 
-                "artigo": row[3],
-                "descricao_artigo": row[4],
-                "paragrafo": row[5] or "",
-                "inciso": row[6] or "",
-                "alinea": row[7] or ""
+                "codigo": codigo,
+                "descricao": row[4] or ""
             })
         
         # Buscar transgressões RDPM associadas
@@ -887,7 +905,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         for row in cursor.fetchall():
             rdpm.append({
                 "id": row[0],
-                "gravidade": row[1],
+                "natureza": row[1],
                 "inciso": row[2],
                 "texto": row[3]
             })
@@ -911,7 +929,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         conn.close()
         
         return {
-            "categoria": categoria,
+            "categorias": categorias,
             "crimes": crimes,
             "rdpm": rdpm,
             "art29": art29
@@ -919,6 +937,8 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         
     except Exception as e:
         print(f"Erro ao buscar indícios do PM {pm_envolvido_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 @eel.expose
@@ -2457,8 +2477,10 @@ def obter_procedimento_completo(procedimento_id):
         # Tentar obter transgressões detalhadas reutilizando a função existente
         trans_info = obter_processo(procedimento_id)
         trans_sel = []
+        indicios_por_pm = {}
         if isinstance(trans_info, dict) and trans_info.get('transgressoes_selecionadas') is not None:
             trans_sel = trans_info.get('transgressoes_selecionadas')
+            indicios_por_pm = trans_info.get('indicios_por_pm', {})
 
         # Carregar indícios já usando a função obter_processo para consolidar
         proc_edicao = obter_processo(procedimento_id) or {}
@@ -2502,7 +2524,8 @@ def obter_procedimento_completo(procedimento_id):
             "penalidade_tipo": row[32],
             "penalidade_dias": row[33],
             "indicios_categorias": row[34],
-            "indicios": indicios
+            "indicios": indicios,
+            "indicios_por_pm": indicios_por_pm
         }
 
         return {"sucesso": True, "procedimento": procedimento}
@@ -2596,6 +2619,7 @@ def obter_envolvidos_procedimento(procedimento_id):
             pms = buscar_pms_envolvidos(procedimento_id)
             for pm in pms:
                 envolvidos.append({
+                    "usuario_id": pm.get("id"),  # ID do usuário para vincular com indícios
                     "nome": pm.get("nome"),
                     "posto_graduacao": pm.get("posto_graduacao"),
                     "matricula": pm.get("matricula"),
@@ -2606,12 +2630,11 @@ def obter_envolvidos_procedimento(procedimento_id):
             cursor.execute(
                 """
                 SELECT p.status_pm, p.nome_pm_id,
-                       COALESCE(o.nome, e.nome, '') as nome,
-                       COALESCE(o.posto_graduacao, e.posto_graduacao, '') as posto,
-                       COALESCE(o.matricula, e.matricula, '') as matricula
+                       COALESCE(u.nome, '') as nome,
+                       COALESCE(u.posto_graduacao, '') as posto,
+                       COALESCE(u.matricula, '') as matricula
                 FROM processos_procedimentos p
-                LEFT JOIN operadores o ON p.nome_pm_id = o.id
-                LEFT JOIN encarregados e ON p.nome_pm_id = e.id AND o.id IS NULL
+                LEFT JOIN usuarios u ON p.nome_pm_id = u.id
                 WHERE p.id = ? AND p.ativo = 1
                 """,
                 (procedimento_id,)
@@ -2619,6 +2642,7 @@ def obter_envolvidos_procedimento(procedimento_id):
             row = cursor.fetchone()
             if row and (row[2] or row[3] or row[4]):
                 envolvidos.append({
+                    "usuario_id": row[1],  # Incluir usuario_id para consistência
                     "nome": row[2],
                     "posto_graduacao": row[3],
                     "matricula": row[4],
@@ -5331,12 +5355,11 @@ def listar_pms_envolvidos_com_indicios(procedimento_id):
         # Buscar PMs envolvidos
         cursor.execute("""
             SELECT pme.id, pme.pm_id, pme.pm_tipo, pme.ordem, pme.status_pm,
-                   COALESCE(o.nome, e.nome, '') as nome,
-                   COALESCE(o.posto_graduacao, e.posto_graduacao, '') as posto,
-                   COALESCE(o.matricula, e.matricula, '') as matricula
+                   COALESCE(u.nome, '') as nome,
+                   COALESCE(u.posto_graduacao, '') as posto,
+                   COALESCE(u.matricula, '') as matricula
             FROM procedimento_pms_envolvidos pme
-            LEFT JOIN operadores o ON pme.pm_id = o.id AND pme.pm_tipo = 'operador'
-            LEFT JOIN encarregados e ON pme.pm_id = e.id AND pme.pm_tipo = 'encarregado'
+            LEFT JOIN usuarios u ON pme.pm_id = u.id
             WHERE pme.procedimento_id = ?
             ORDER BY pme.ordem
         """, (procedimento_id,))

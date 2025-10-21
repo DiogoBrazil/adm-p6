@@ -1539,20 +1539,34 @@ async function preencherFormularioEdicao(procedimento) {
             procedimento.pms_envolvidos.forEach((pm, index) => {
                 if (pm.indicios) {
                     console.log(`📋 PM ${pm.nome_completo} tem indícios:`, pm.indicios);
+                    
+                    // Usar 'categorias' (plural) que é o formato correto retornado pela função
+                    const categorias = pm.indicios.categorias || pm.indicios.categoria || [];
+                    
+                    // Se categorias for string, converter para array
+                    const categoriasArray = Array.isArray(categorias) ? categorias : 
+                                           (categorias ? [categorias] : []);
+                    
                     indiciosPorPM[pm.id] = {
-                        categoria: pm.indicios.categoria || '',
+                        categorias: categoriasArray,
                         crimes: pm.indicios.crimes || [],
                         rdpm: pm.indicios.rdpm || [],
                         art29: pm.indicios.art29 || []
                     };
                     
                     // Mostrar indicador visual nos botões de indícios se houver dados
-                    const totalIndicios = (pm.indicios.crimes?.length || 0) + 
+                    const totalCategorias = categoriasArray.length;
+                    const totalIndicios = totalCategorias + 
+                                         (pm.indicios.crimes?.length || 0) + 
                                          (pm.indicios.rdpm?.length || 0) + 
                                          (pm.indicios.art29?.length || 0);
                     
                     if (totalIndicios > 0) {
                         console.log(`✅ PM ${pm.nome_completo} tem ${totalIndicios} indícios carregados`);
+                        console.log(`   - Categorias: ${categoriasArray.join(', ')}`);
+                        console.log(`   - Crimes: ${pm.indicios.crimes?.length || 0}`);
+                        console.log(`   - RDPM: ${pm.indicios.rdpm?.length || 0}`);
+                        console.log(`   - Art.29: ${pm.indicios.art29?.length || 0}`);
                     }
                 } else {
                     console.log(`ℹ️ PM ${pm.nome_completo} não tem indícios`);
@@ -1812,14 +1826,14 @@ async function preencherFormularioEdicao(procedimento) {
                     }
                     
                     // Só adicionar se tiver pelo menos uma categoria ou indícios
-                    const temCategorias = dadosIndicios.categoria && dadosIndicios.categoria.trim();
+                    const temCategorias = (dadosIndicios.categorias && dadosIndicios.categorias.length > 0);
                     const temCrimes = dadosIndicios.crimes && dadosIndicios.crimes.length > 0;
                     const temRdpm = dadosIndicios.rdpm && dadosIndicios.rdpm.length > 0;
                     const temArt29 = dadosIndicios.art29 && dadosIndicios.art29.length > 0;
                     
                     console.log(`🔍 PM ${pmNome} (${pmId}):`, {
                         temCategorias, temCrimes, temRdpm, temArt29,
-                        categoria: dadosIndicios.categoria,
+                        categorias: dadosIndicios.categorias,
                         crimes: dadosIndicios.crimes?.length || 0,
                         rdpm: dadosIndicios.rdpm?.length || 0,
                         art29: dadosIndicios.art29?.length || 0
@@ -1828,13 +1842,13 @@ async function preencherFormularioEdicao(procedimento) {
                     if (temCategorias || temCrimes || temRdpm || temArt29) {
                         // Preparar crimes para exibição
                         const crimesFormatados = (dadosIndicios.crimes || []).map(crime => {
-                            const base = `${crime.tipo || ''} ${crime.dispositivo_legal || ''}${crime.artigo ? ' art. ' + crime.artigo : ''}`.trim();
-                            const compl = [crime.paragrafo, crime.inciso, crime.alinea].filter(Boolean).join(' ');
-                            const desc = crime.descricao_artigo ? ` - ${crime.descricao_artigo}` : '';
-                            const label = [base, compl].filter(Boolean).join(' ') + desc;
+                            // Usar o formato 'codigo' que já vem montado do backend
+                            const codigo = crime.codigo || '';
+                            const desc = crime.descricao ? ` - ${crime.descricao}` : '';
+                            const label = codigo + desc;
                             return {
                                 id: crime.id,
-                                nome: label
+                                nome: label || crime.tipo || 'Crime'
                             };
                         });
 
@@ -1862,7 +1876,7 @@ async function preencherFormularioEdicao(procedimento) {
                         const indicioItem = {
                             pmId: pmId,
                             pmNome: pmNome,
-                            categorias: temCategorias ? [dadosIndicios.categoria] : [],
+                            categorias: dadosIndicios.categorias || [],
                             crimes: crimesFormatados,
                             transgressoes: transgressoesFormatadas,
                             // Manter dados originais para compatibilidade

@@ -535,7 +535,7 @@ function loadTransgressoes(data) {
 }
 
 // Função para carregar indícios
-function loadIndicios(data) {
+async function loadIndicios(data) {
     const container = document.getElementById('indiciosContainer');
     if (!container) return;
 
@@ -543,19 +543,126 @@ function loadIndicios(data) {
     const crimes = Array.isArray(indicios.crimes) ? indicios.crimes : [];
     const rdpm = Array.isArray(indicios.rdpm) ? indicios.rdpm : [];
     const art29 = Array.isArray(indicios.art29) ? indicios.art29 : [];
+    const indiciosPorPm = data.indicios_por_pm || {};
 
-    const total = crimes.length + rdpm.length + art29.length;
+    const total = crimes.length + rdpm.length + art29.length + Object.keys(indiciosPorPm).length;
     if (total === 0) {
         container.innerHTML = '<p class="empty-state">Nenhum indício registrado</p>';
         return;
     }
 
     const sec = [];
+    
+    // Indícios por PM Envolvido (mais importante - mostrar primeiro)
+    if (Object.keys(indiciosPorPm).length > 0) {
+        // Buscar dados dos PMs envolvidos
+        let pmsEnvolvidos = [];
+        try {
+            const resultado = await eel.obter_envolvidos_procedimento(data.id)();
+            if (resultado.sucesso && resultado.envolvidos) {
+                pmsEnvolvidos = resultado.envolvidos;
+            }
+        } catch (error) {
+            console.error('Erro ao buscar PMs envolvidos:', error);
+        }
+        
+        // Criar tabela de indícios por PM
+        let tabelaHTML = `
+            <div class="info-section indicio-pm-section">
+                <h4><i class="fas fa-fingerprint"></i> Indícios por PM Envolvido</h4>
+                <div class="table-responsive">
+                    <table class="table indicios-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30%;">PM</th>
+                                <th style="width: 70%;">Indícios</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        for (const [pmId, pmIndicios] of Object.entries(indiciosPorPm)) {
+            const categorias = pmIndicios.categorias || [];
+            const crimespm = pmIndicios.crimes || [];
+            const rdpmpm = pmIndicios.rdpm || [];
+            const art29pm = pmIndicios.art29 || [];
+            
+            if (categorias.length > 0 || crimespm.length > 0 || rdpmpm.length > 0 || art29pm.length > 0) {
+                // Encontrar o nome do PM
+                const pm = pmsEnvolvidos.find(p => p.usuario_id === pmId);
+                const nomePM = pm ? `${pm.posto_graduacao || ''} ${pm.nome || ''}`.trim() : 'PM Desconhecido';
+                
+                let conteudo = '';
+                
+                // Categorias gerais
+                if (categorias.length > 0) {
+                    conteudo += `<div class="mb-2"><strong>Categoria:</strong> ${categorias.join(', ')}</div>`;
+                }
+                
+                // Crimes específicos
+                if (crimespm.length > 0) {
+                    const listCrimes = crimespm.map(c => `
+                        <li><strong>${c.codigo || 'N/A'}</strong> - ${c.descricao || ''}</li>
+                    `).join('');
+                    conteudo += `
+                        <div class="mb-2">
+                            <strong>Crimes/Contravenções:</strong>
+                            <ul class="info-list">${listCrimes}</ul>
+                        </div>
+                    `;
+                }
+                
+                // RDPM específicas
+                if (rdpmpm.length > 0) {
+                    const listRdpm = rdpmpm.map(r => `
+                        <li>Inciso ${r.inciso || '-'}: ${r.texto || ''}${r.natureza ? ` [${r.natureza}]` : ''}</li>
+                    `).join('');
+                    conteudo += `
+                        <div class="mb-2">
+                            <strong>RDPM:</strong>
+                            <ul class="info-list">${listRdpm}</ul>
+                        </div>
+                    `;
+                }
+                
+                // Art. 29 específicas
+                if (art29pm.length > 0) {
+                    const listArt29 = art29pm.map(a => `
+                        <li>Art. 29 - Inciso ${a.inciso || '-'}: ${a.texto || ''}</li>
+                    `).join('');
+                    conteudo += `
+                        <div class="mb-2">
+                            <strong>Estatuto (Art. 29):</strong>
+                            <ul class="info-list">${listArt29}</ul>
+                        </div>
+                    `;
+                }
+                
+                tabelaHTML += `
+                    <tr>
+                        <td><strong>${nomePM}</strong></td>
+                        <td>${conteudo}</td>
+                    </tr>
+                `;
+            }
+        }
+        
+        tabelaHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        sec.push(tabelaHTML);
+    }
+    
+    // Indícios gerais do procedimento
     if (crimes.length) {
         const list = crimes.map(c => `<li><strong>${c.codigo || 'N/A'}</strong> - ${c.descricao || ''}</li>`).join('');
         sec.push(`
         <div class="info-section">
-            <h4><i class="fas fa-scale-balanced"></i> Crimes/Contravenções</h4>
+            <h4><i class="fas fa-scale-balanced"></i> Crimes/Contravenções (Geral)</h4>
             <ul class="info-list">${list}</ul>
         </div>`);
     }
@@ -563,7 +670,7 @@ function loadIndicios(data) {
         const list = rdpm.map(r => `<li>Inciso ${r.inciso || '-'}: ${r.texto || ''}${r.natureza ? ` [${r.natureza}]` : ''}</li>`).join('');
         sec.push(`
         <div class="info-section">
-            <h4><i class="fas fa-gavel"></i> RDPM</h4>
+            <h4><i class="fas fa-gavel"></i> RDPM (Geral)</h4>
             <ul class="info-list">${list}</ul>
         </div>`);
     }
@@ -571,13 +678,13 @@ function loadIndicios(data) {
         const list = art29.map(a => `<li>Art. 29 - Inciso ${a.inciso || '-'}: ${a.texto || ''}</li>`).join('');
         sec.push(`
         <div class="info-section">
-            <h4><i class="fas fa-book"></i> Estatuto (Art. 29)</h4>
+            <h4><i class="fas fa-book"></i> Estatuto - Art. 29 (Geral)</h4>
             <ul class="info-list">${list}</ul>
         </div>`);
     }
 
-    // Categorias livres (JSON texto)
-    if (data.indicios_categorias) {
+    // Categorias livres (JSON texto) - campo legado
+    if (data.indicios_categorias && Object.keys(indiciosPorPm).length === 0) {
         let catText = '';
         try {
             const cats = JSON.parse(data.indicios_categorias);
