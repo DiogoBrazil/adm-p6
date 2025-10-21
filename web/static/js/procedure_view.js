@@ -336,15 +336,15 @@ async function loadHistoricoEncarregados(procedureId) {
                                 </div>
                                 <div class="historico-substituicao">
                                     <div class="encarregado-anterior">
-                                        <span class="encarregado-nome">${registro.encarregado_anterior.posto_graduacao || ''} ${registro.encarregado_anterior.nome || ''}</span>
-                                        <span class="encarregado-matricula">${registro.encarregado_anterior.matricula || ''}</span>
+                                        <span class="encarregado-nome">${registro.encarregado_anterior ? (registro.encarregado_anterior.posto_graduacao || '') + ' ' + (registro.encarregado_anterior.nome || '') : 'N/A'}</span>
+                                        ${registro.encarregado_anterior ? `<span class="encarregado-matricula">${registro.encarregado_anterior.matricula || ''}</span>` : ''}
                                     </div>
                                     <div class="seta-substituicao">
                                         <i class="fas fa-arrow-right"></i>
                                     </div>
                                     <div class="novo-encarregado">
-                                        <span class="encarregado-nome">${registro.novo_encarregado.posto_graduacao || ''} ${registro.novo_encarregado.nome || ''}</span>
-                                        <span class="encarregado-matricula">${registro.novo_encarregado.matricula || ''}</span>
+                                        <span class="encarregado-nome">${registro.novo_encarregado ? (registro.novo_encarregado.posto_graduacao || '') + ' ' + (registro.novo_encarregado.nome || '') : 'N/A'}</span>
+                                        ${registro.novo_encarregado ? `<span class="encarregado-matricula">${registro.novo_encarregado.matricula || ''}</span>` : ''}
                                     </div>
                                 </div>
                                 ${registro.justificativa ? `
@@ -414,18 +414,79 @@ async function loadEnvolvidos(procedureId) {
     }
 }
 
-// Função para carregar observações
-function loadObservacoes(data) {
+// Função para carregar andamentos do processo
+async function loadObservacoes(data) {
     const container = document.getElementById('observacoesContainer');
     
-    if (data.observacoes && data.observacoes.trim()) {
+    try {
+        // Buscar andamentos do processo
+        const resultado = await eel.listar_andamentos_processo(data.id)();
+        
+        if (resultado.sucesso && resultado.andamentos && resultado.andamentos.length > 0) {
+            const andamentosHTML = resultado.andamentos.map((andamento, index) => {
+                const dataFormatada = andamento.data ? formatDate(andamento.data) : '-';
+                const usuarioNome = andamento.usuario_nome || 'Sistema';
+                
+                return `
+                    <div class="andamento-item">
+                        <div class="andamento-header">
+                            <span class="andamento-numero">#${resultado.andamentos.length - index}</span>
+                            <span class="andamento-data">
+                                <i class="fas fa-calendar"></i> ${dataFormatada}
+                            </span>
+                            <span class="andamento-usuario">
+                                <i class="fas fa-user"></i> ${usuarioNome}
+                            </span>
+                        </div>
+                        <div class="andamento-content">
+                            ${andamento.descricao || 'Sem descrição'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = `<div class="andamentos-list">${andamentosHTML}</div>`;
+        } else {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>Nenhum andamento registrado para este processo</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar andamentos:', error);
         container.innerHTML = `
-            <div class="info-section">
-                <p>${data.observacoes}</p>
+            <div class="empty-state error">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>Erro ao carregar andamentos</p>
             </div>
         `;
-    } else {
-        container.innerHTML = '<p class="empty-state">Nenhuma observação registrada</p>';
+    }
+}
+
+// Função auxiliar para formatar data
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    
+    try {
+        // Se for apenas data (YYYY-MM-DD), formatar sem hora
+        if (dateString.length === 10 && dateString.includes('-')) {
+            const [year, month, day] = dateString.split('-');
+            return `${day}/${month}/${year}`;
+        }
+        
+        // Caso contrário, usar formatação completa
+        const date = new Date(dateString);
+        return date.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        return dateString;
     }
 }
 
