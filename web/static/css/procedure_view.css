@@ -421,41 +421,76 @@
     }
 }
 
-/* Estilos para Andamentos do Processo */
-.andamentos-list {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 10px 0;
-}
-
-.andamento-item {
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    border-radius: 12px;
-    padding: 0;
-    border-left: 5px solid #10b981;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+/* Estilos para Andamentos do Processo - Tabela */
+.andamentos-table {
+    width: 100%;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
 }
 
-.andamento-item:hover {
-    transform: translateX(8px);
-    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.2);
-    border-left-color: #059669;
+.andamentos-table thead {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
 }
 
-.andamento-header {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    padding: 15px 20px 12px;
+.andamentos-table thead th {
+    padding: 16px 20px;
+    font-weight: 600;
+    text-align: center;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    vertical-align: middle;
+}
+
+.andamentos-table thead th:last-child {
+    border-right: none;
+}
+
+.andamentos-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.andamentos-table thead th:last-child {
+    border-top-right-radius: 8px;
+}
+
+.andamentos-table tbody tr {
+    transition: all 0.3s ease;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.andamentos-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.andamentos-table tbody tr:hover {
     background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);
-    border-bottom: 1px solid rgba(16, 185, 129, 0.1);
-    flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+.andamentos-table tbody td {
+    padding: 18px 20px;
+    vertical-align: middle;
+    font-size: 0.9rem;
+    color: #2d3748;
+    text-align: center;
+    border-right: 1px solid #e9ecef;
+}
+
+.andamentos-table tbody td:last-child {
+    border-right: none;
+    text-align: left;
 }
 
 .andamento-numero {
+    display: inline-block;
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
     padding: 6px 14px;
@@ -468,48 +503,53 @@
     text-align: center;
 }
 
-.andamento-data,
-.andamento-usuario {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
-    color: #495057;
-    font-weight: 500;
-}
-
 .andamento-data {
-    padding: 4px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 12px;
     background: rgba(16, 185, 129, 0.08);
     border-radius: 8px;
-}
-
-.andamento-usuario {
-    padding: 4px 12px;
-    background: rgba(59, 130, 246, 0.08);
-    border-radius: 8px;
-    margin-left: auto;
+    font-weight: 500;
+    color: #495057;
+    white-space: nowrap;
 }
 
 .andamento-data i {
     color: #10b981;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
+}
+
+.andamento-usuario {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: 8px;
+    font-weight: 500;
+    color: #495057;
 }
 
 .andamento-usuario i {
     color: #3b82f6;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
 }
 
 .andamento-content {
+    line-height: 1.6;
     color: #2d3748;
-    line-height: 1.7;
-    padding: 18px 20px;
-    background: white;
     white-space: pre-wrap;
     word-wrap: break-word;
-    font-size: 0.95rem;
-    letter-spacing: 0.2px;
+    text-align: left;
+    padding-left: 10px;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .empty-state {
@@ -539,43 +579,67 @@
     color: #dc3545;
 }
 
-/* Animação de entrada para andamentos */
-@keyframes slideInRight {
+/* Animação de entrada para linhas */
+@keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateX(-20px);
+        transform: translateY(10px);
     }
     to {
         opacity: 1;
-        transform: translateX(0);
+        transform: translateY(0);
     }
 }
 
-.andamento-item {
-    animation: slideInRight 0.4s ease-out forwards;
+.andamento-row {
+    animation: fadeInUp 0.4s ease-out forwards;
+    opacity: 0;
 }
 
-.andamento-item:nth-child(1) { animation-delay: 0.05s; }
-.andamento-item:nth-child(2) { animation-delay: 0.1s; }
-.andamento-item:nth-child(3) { animation-delay: 0.15s; }
-.andamento-item:nth-child(4) { animation-delay: 0.2s; }
-.andamento-item:nth-child(5) { animation-delay: 0.25s; }
+.andamento-row:nth-child(1) { animation-delay: 0.05s; }
+.andamento-row:nth-child(2) { animation-delay: 0.1s; }
+.andamento-row:nth-child(3) { animation-delay: 0.15s; }
+.andamento-row:nth-child(4) { animation-delay: 0.2s; }
+.andamento-row:nth-child(5) { animation-delay: 0.25s; }
+.andamento-row:nth-child(6) { animation-delay: 0.3s; }
+.andamento-row:nth-child(7) { animation-delay: 0.35s; }
+.andamento-row:nth-child(8) { animation-delay: 0.4s; }
 
 /* Responsive */
-@media (max-width: 768px) {
-    .andamento-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
-    
-    .andamento-usuario {
-        margin-left: 0;
-    }
-    
-    .andamento-item:hover {
-        transform: translateX(4px);
+@media (max-width: 992px) {
+    .andamentos-table thead th,
+    .andamentos-table tbody td {
+        padding: 14px 16px;
+        font-size: 0.85rem;
     }
 }
+
+@media (max-width: 768px) {
+    .andamentos-table {
+        font-size: 0.8rem;
+    }
+    
+    .andamentos-table thead th,
+    .andamentos-table tbody td {
+        padding: 12px;
+    }
+    
+    .andamento-numero {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+    }
+    
+    .andamento-data,
+    .andamento-usuario {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+    
+    .andamento-content {
+        font-size: 0.85rem;
+    }
+}
+
+
 
 

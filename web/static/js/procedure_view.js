@@ -423,29 +423,49 @@ async function loadObservacoes(data) {
         const resultado = await eel.listar_andamentos_processo(data.id)();
         
         if (resultado.sucesso && resultado.andamentos && resultado.andamentos.length > 0) {
-            const andamentosHTML = resultado.andamentos.map((andamento, index) => {
-                const dataFormatada = andamento.data ? formatDate(andamento.data) : '-';
-                const usuarioNome = andamento.usuario_nome || 'Sistema';
-                
-                return `
-                    <div class="andamento-item">
-                        <div class="andamento-header">
-                            <span class="andamento-numero">#${resultado.andamentos.length - index}</span>
-                            <span class="andamento-data">
-                                <i class="fas fa-calendar"></i> ${dataFormatada}
-                            </span>
-                            <span class="andamento-usuario">
-                                <i class="fas fa-user"></i> ${usuarioNome}
-                            </span>
-                        </div>
-                        <div class="andamento-content">
-                            ${andamento.descricao || 'Sem descrição'}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            const andamentosHTML = `
+                <div class="table-responsive">
+                    <table class="table andamentos-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">#</th>
+                                <th style="width: 150px;">Data</th>
+                                <th style="width: 200px;">Responsável</th>
+                                <th>Descrição</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${resultado.andamentos.map((andamento, index) => {
+                                const dataFormatada = andamento.data ? formatDate(andamento.data) : '-';
+                                const usuarioNome = andamento.usuario_nome || 'Sistema';
+                                
+                                return `
+                                    <tr class="andamento-row">
+                                        <td>
+                                            <span class="andamento-numero">#${resultado.andamentos.length - index}</span>
+                                        </td>
+                                        <td>
+                                            <span class="andamento-data">
+                                                <i class="fas fa-calendar"></i> ${dataFormatada}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="andamento-usuario">
+                                                <i class="fas fa-user"></i> ${usuarioNome}
+                                            </span>
+                                        </td>
+                                        <td class="andamento-content">
+                                            ${andamento.descricao || 'Sem descrição'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
             
-            container.innerHTML = `<div class="andamentos-list">${andamentosHTML}</div>`;
+            container.innerHTML = andamentosHTML;
         } else {
             container.innerHTML = `
                 <div class="empty-state">
@@ -476,16 +496,19 @@ function formatDate(dateString) {
             return `${day}/${month}/${year}`;
         }
         
-        // Caso contrário, usar formatação completa
-        const date = new Date(dateString);
-        return date.toLocaleDateString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        // Se for data com hora (YYYY-MM-DD HH:MM:SS), extrair apenas a data
+        if (dateString.includes(' ')) {
+            const datePart = dateString.split(' ')[0];
+            const [year, month, day] = datePart.split('-');
+            return `${day}/${month}/${year}`;
+        }
+        
+        // Fallback: tentar criar objeto Date (evitando problema de timezone)
+        const [year, month, day] = dateString.substring(0, 10).split('-');
+        return `${day}/${month}/${year}`;
+        
     } catch (error) {
+        console.error('Erro ao formatar data:', error, dateString);
         return dateString;
     }
 }
@@ -573,18 +596,6 @@ function loadIndicios(data) {
     }
 
     container.innerHTML = sec.join('');
-}
-
-// Função para formatar data
-function formatDate(dateString) {
-    if (!dateString) return null;
-    
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('pt-BR');
-    } catch (error) {
-        return dateString;
-    }
 }
 
 // Função para editar procedimento atual
