@@ -2815,18 +2815,56 @@ def atualizar_processo(
         if tipo_geral == 'procedimento' and pms_envolvidos is not None:
             print(f"📝 Atualizando PMs envolvidos para procedimento: {pms_envolvidos}")
 
-            # Remover PMs antigos
-            cursor.execute("DELETE FROM procedimento_pms_envolvidos WHERE procedimento_id = ?", (processo_id,))
-
-            # Inserir novos PMs
+            # Buscar PMs existentes
+            cursor.execute("SELECT id, pm_id FROM procedimento_pms_envolvidos WHERE procedimento_id = ?", (processo_id,))
+            pms_existentes = {row[1]: row[0] for row in cursor.fetchall()}  # {pm_id: pm_envolvido_id}
+            
+            print(f"📋 PMs existentes no banco: {list(pms_existentes.keys())}")
+            
+            # IDs dos PMs que estão sendo enviados
+            pms_novos_ids = set()
+            
+            # Atualizar ou inserir PMs
             for i, pm in enumerate(pms_envolvidos):
                 if pm.get('id'):  # Verifica se o PM tem ID válido
+                    pm_id = pm['id']
+                    pms_novos_ids.add(pm_id)
                     pm_tipo = 'operador' if pm.get('tipo') == 'operador' else 'encarregado'
                     status_pm_env = pm.get('status_pm', status_pm)
+                    
+                    if pm_id in pms_existentes:
+                        # PM já existe, fazer UPDATE mantendo o ID
+                        pm_envolvido_id = pms_existentes[pm_id]
+                        cursor.execute("""
+                            UPDATE procedimento_pms_envolvidos 
+                            SET pm_tipo = ?, ordem = ?, status_pm = ?
+                            WHERE id = ?
+                        """, (pm_tipo, i + 1, status_pm_env, pm_envolvido_id))
+                        print(f"✅ PM {pm_id} atualizado (mantido ID {pm_envolvido_id})")
+                    else:
+                        # PM novo, fazer INSERT
+                        novo_id = str(uuid.uuid4())
+                        cursor.execute("""
+                            INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (novo_id, processo_id, pm_id, pm_tipo, i + 1, status_pm_env))
+                        print(f"➕ PM {pm_id} adicionado (novo ID {novo_id})")
+            
+            # Remover PMs que não estão mais na lista (mas manter os indícios vinculados)
+            pms_para_remover = set(pms_existentes.keys()) - pms_novos_ids
+            if pms_para_remover:
+                print(f"🗑️ Removendo PMs que não estão mais na lista: {pms_para_remover}")
+                for pm_id in pms_para_remover:
+                    pm_envolvido_id = pms_existentes[pm_id]
+                    # Marcar indícios como inativos em vez de deletar
                     cursor.execute("""
-                        INSERT INTO procedimento_pms_envolvidos (id, procedimento_id, pm_id, pm_tipo, ordem, status_pm)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (str(uuid.uuid4()), processo_id, pm['id'], pm_tipo, i + 1, status_pm_env))
+                        UPDATE pm_envolvido_indicios 
+                        SET ativo = 0 
+                        WHERE pm_envolvido_id = ?
+                    """, (pm_envolvido_id,))
+                    # Deletar o PM
+                    cursor.execute("DELETE FROM procedimento_pms_envolvidos WHERE id = ?", (pm_envolvido_id,))
+
 
         # Substituir indícios (se fornecidos)
         def _parse_ids(lista_ids):
@@ -2880,9 +2918,11 @@ def atualizar_processo(
             print(f"Aviso: falha ao atualizar indícios do procedimento {processo_id}: {_e}")
 
         # ======== PROCESSAR INDÍCIOS POR PM (MIGRAÇÃO 015) ========
+        # Processar inline para evitar "database locked" (reusar cursor existente)
         try:
             if indicios_por_pm and isinstance(indicios_por_pm, dict):
-                print(f"🔧 Processando indícios por PM: {len(indicios_por_pm)} PMs")
+                print(f"🔧 Processando indícios por PM via formulário: {len(indicios_por_pm)} PMs")
+                import json
                 
                 for pm_id, dados_indicios in indicios_por_pm.items():
                     if not dados_indicios:
@@ -2901,72 +2941,76 @@ def atualizar_processo(
                         
                     pm_envolvido_id = pm_envolvido_result[0]
                     
-                    # Chamar função para salvar indícios deste PM
-                    try:
-                        from uuid import uuid4
+                    # Salvar indícios inline (para reusar cursor e evitar database locked)
+                    print(f"📝 Salvando indícios para PM {pm_id}")
+                    
+                    # Buscar ID do registro de indícios existente (se houver)
+                    cursor.execute("SELECT id FROM pm_envolvido_indicios WHERE pm_envolvido_id = ? AND ativo = 1", (pm_envolvido_id,))
+                    indicios_registro = cursor.fetchone()
+                    
+                    if indicios_registro:
+                        # Atualizar registro existente
+                        pm_indicios_id = indicios_registro[0]
+                        print(f"� Atualizando registro de indícios existente: {pm_indicios_id}")
                         
-                        # Limpar indícios existentes deste PM primeiro
-                        # Buscar o ID do registro principal de indícios
-                        cursor.execute("SELECT id FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
-                        indicios_existentes = cursor.fetchone()
-                        if indicios_existentes:
-                            indicios_main_id = indicios_existentes[0]
-                            # Limpar registros dependentes usando pm_indicios_id
-                            cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = ?", (indicios_main_id,))
-                            cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_indicios_id = ?", (indicios_main_id,))
-                            cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_indicios_id = ?", (indicios_main_id,))
+                        # Limpar apenas os vínculos de crimes/rdpm/art29
+                        cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = ?", (pm_indicios_id,))
+                        cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_indicios_id = ?", (pm_indicios_id,))
+                        cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_indicios_id = ?", (pm_indicios_id,))
+                    else:
+                        # Criar novo registro de indícios
+                        pm_indicios_id = str(uuid.uuid4())
+                        print(f"➕ Criando novo registro de indícios: {pm_indicios_id}")
                         
-                        # Limpar registro principal
-                        cursor.execute("DELETE FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
-                        
-                        categoria = dados_indicios.get('categoria', '')
-                        if categoria:
-                            # Inserir registro principal
-                            indicios_main_id = str(uuid4())
-                            # Converter categoria em array JSON para categorias_indicios
-                            import json
-                            categorias_array = [cat.strip() for cat in categoria.split(',') if cat.strip()]
-                            categorias_json = json.dumps(categorias_array)
-                            
-                            cursor.execute("""
-                                INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
-                                VALUES (?, ?, ?, ?, ?)
-                            """, (indicios_main_id, pm_envolvido_id, processo_id, categoria, categorias_json))
-                            
-                            # Inserir crimes
-                            crimes = dados_indicios.get('crimes', [])
-                            for crime in crimes:
-                                crime_id = crime.get('id') if isinstance(crime, dict) else crime
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
-                                    VALUES (?, ?, ?)
-                                """, (str(uuid4()), indicios_main_id, crime_id))
-                            
-                            # Inserir transgressões RDPM
-                            rdpm = dados_indicios.get('rdpm', [])
-                            for trans in rdpm:
-                                trans_id = trans.get('id') if isinstance(trans, dict) else trans
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
-                                    VALUES (?, ?, ?)
-                                """, (str(uuid4()), indicios_main_id, trans_id))
-                            
-                            # Inserir infrações Art. 29
-                            art29 = dados_indicios.get('art29', [])
-                            for infracao in art29:
-                                infracao_id = infracao.get('id') if isinstance(infracao, dict) else infracao
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
-                                    VALUES (?, ?, ?)
-                                """, (str(uuid4()), indicios_main_id, infracao_id))
-                            
-                            print(f"✅ Indícios salvos para PM {pm_id}: {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
-                            
-                    except Exception as e:
-                        print(f"❌ Erro ao salvar indícios do PM {pm_id}: {e}")
+                        cursor.execute("""
+                            INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categorias_indicios, categoria, ativo)
+                            VALUES (?, ?, ?, '[]', '', 1)
+                        """, (pm_indicios_id, pm_envolvido_id, processo_id))
+                    
+                    # Atualizar categorias no registro principal
+                    categorias = dados_indicios.get('categorias', [])
+                    categorias_json = json.dumps(categorias, ensure_ascii=False)
+                    primeira_categoria = categorias[0] if categorias else ''
+                    
+                    cursor.execute("""
+                        UPDATE pm_envolvido_indicios 
+                        SET categorias_indicios = ?, categoria = ?
+                        WHERE id = ?
+                    """, (categorias_json, primeira_categoria, pm_indicios_id))
+                    
+                    # Salvar crimes/contravenções
+                    crimes = dados_indicios.get('crimes', [])
+                    for crime in crimes:
+                        crime_id = crime.get('id') if isinstance(crime, dict) else crime
+                        cursor.execute("""
+                            INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
+                            VALUES (?, ?, ?)
+                        """, (str(uuid.uuid4()), pm_indicios_id, crime_id))
+                    
+                    # Salvar transgressões RDPM
+                    rdpm = dados_indicios.get('rdpm', [])
+                    for trans in rdpm:
+                        trans_id = trans.get('id') if isinstance(trans, dict) else trans
+                        cursor.execute("""
+                            INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
+                            VALUES (?, ?, ?)
+                        """, (str(uuid.uuid4()), pm_indicios_id, trans_id))
+                    
+                    # Salvar infrações Art. 29
+                    art29 = dados_indicios.get('art29', [])
+                    for infracao in art29:
+                        art29_id = infracao.get('id') if isinstance(infracao, dict) else infracao
+                        cursor.execute("""
+                            INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
+                            VALUES (?, ?, ?)
+                        """, (str(uuid.uuid4()), pm_indicios_id, art29_id))
+                    
+                    print(f"✅ Indícios salvos para PM {pm_id}: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
                         
         except Exception as _e:
             print(f"Aviso: falha ao processar indícios por PM: {_e}")
+            import traceback
+            traceback.print_exc()
 
         conn.commit()
         conn.close()
@@ -5169,12 +5213,19 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
         {
             'categorias': ['categoria1', 'categoria2'],
             'crimes': [{'id': 'crime_id1'}, {'id': 'crime_id2'}],
-            'rdpm': [{'id': 'trans_id1', 'natureza': 'grave'}, {'id': 'trans_id2', 'natureza': 'leve'}],
+            'rdpm': [{'id': 'trans_id1'}, {'id': 'trans_id2'}],
             'art29': [{'id': 'art29_id1'}, {'id': 'art29_id2'}]
         }
     """
+    import json
     try:
-        print(f"💾 Salvando indícios para PM envolvido: {pm_envolvido_id}")
+        print("="*80)
+        print("� FUNÇÃO salvar_indicios_pm_envolvido CHAMADA!")
+        print("="*80)
+        print(f"💾 PM Envolvido ID: {pm_envolvido_id}")
+        print(f"📋 Tipo dos dados recebidos: {type(indicios_data)}")
+        print(f"📋 Dados recebidos completos:")
+        print(json.dumps(indicios_data, indent=2, ensure_ascii=False))
         
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -5188,61 +5239,84 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
         
         procedimento_id = pm_data[0]
         
-        # Limpar indícios existentes para este PM
-        cursor.execute("DELETE FROM pm_envolvido_indicios WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
-        cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
-        cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
-        cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_envolvido_id = ?", (pm_envolvido_id,))
+        # Buscar ID do registro de indícios existente (se houver)
+        cursor.execute("SELECT id FROM pm_envolvido_indicios WHERE pm_envolvido_id = ? AND ativo = 1", (pm_envolvido_id,))
+        indicios_registro = cursor.fetchone()
         
-        # Salvar categorias de indícios
+        if indicios_registro:
+            # Atualizar registro existente
+            pm_indicios_id = indicios_registro[0]
+            print(f"🔄 Atualizando registro de indícios existente: {pm_indicios_id}")
+            
+            # Limpar apenas os vínculos de crimes/rdpm/art29
+            cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = ?", (pm_indicios_id,))
+            cursor.execute("DELETE FROM pm_envolvido_rdpm WHERE pm_indicios_id = ?", (pm_indicios_id,))
+            cursor.execute("DELETE FROM pm_envolvido_art29 WHERE pm_indicios_id = ?", (pm_indicios_id,))
+        else:
+            # Criar novo registro de indícios
+            pm_indicios_id = str(uuid.uuid4())
+            print(f"➕ Criando novo registro de indícios: {pm_indicios_id}")
+            
+            cursor.execute("""
+                INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categorias_indicios, categoria, ativo)
+                VALUES (?, ?, ?, '[]', '', 1)
+            """, (pm_indicios_id, pm_envolvido_id, procedimento_id))
+        
+        # Atualizar categorias no registro principal
+        import json
         categorias = indicios_data.get('categorias', [])
-        if categorias:
-            for categoria in categorias:
-                # Converter categoria em array JSON para categorias_indicios
-                import json
-                categorias_array = [categoria] if isinstance(categoria, str) else categoria
-                categorias_json = json.dumps(categorias_array)
-                
-                cursor.execute("""
-                    INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, categoria, categorias_json))
+        categorias_json = json.dumps(categorias, ensure_ascii=False)
+        primeira_categoria = categorias[0] if categorias else ''
+        
+        cursor.execute("""
+            UPDATE pm_envolvido_indicios 
+            SET categorias_indicios = ?, categoria = ?
+            WHERE id = ?
+        """, (categorias_json, primeira_categoria, pm_indicios_id))
         
         # Salvar crimes/contravenções
         crimes = indicios_data.get('crimes', [])
-        if crimes:
-            for crime in crimes:
-                cursor.execute("""
-                    INSERT INTO pm_envolvido_crimes (id, pm_envolvido_id, procedimento_id, crime_id)
-                    VALUES (?, ?, ?, ?)
-                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, crime['id']))
+        print(f"📋 Crimes recebidos ({len(crimes)}): {crimes}")
+        for crime in crimes:
+            crime_id = crime.get('id') if isinstance(crime, dict) else crime
+            print(f"  - Inserindo crime ID: {crime_id}")
+            cursor.execute("""
+                INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
+                VALUES (?, ?, ?)
+            """, (str(uuid.uuid4()), pm_indicios_id, crime_id))
         
         # Salvar transgressões RDPM
         rdpm = indicios_data.get('rdpm', [])
-        if rdpm:
-            for trans in rdpm:
-                cursor.execute("""
-                    INSERT INTO pm_envolvido_rdpm (id, pm_envolvido_id, procedimento_id, transgressao_id, natureza)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, trans['id'], trans.get('natureza', 'leve')))
+        print(f"📋 RDPM recebidas ({len(rdpm)}): {rdpm}")
+        for trans in rdpm:
+            trans_id = trans.get('id') if isinstance(trans, dict) else trans
+            print(f"  - Inserindo RDPM ID: {trans_id}")
+            cursor.execute("""
+                INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
+                VALUES (?, ?, ?)
+            """, (str(uuid.uuid4()), pm_indicios_id, trans_id))
         
         # Salvar infrações Art. 29
         art29 = indicios_data.get('art29', [])
-        if art29:
-            for infracao in art29:
-                cursor.execute("""
-                    INSERT INTO pm_envolvido_art29 (id, pm_envolvido_id, procedimento_id, art29_id)
-                    VALUES (?, ?, ?, ?)
-                """, (str(uuid.uuid4()), pm_envolvido_id, procedimento_id, infracao['id']))
+        print(f"📋 Art.29 recebidas ({len(art29)}): {art29}")
+        for infracao in art29:
+            art29_id = infracao.get('id') if isinstance(infracao, dict) else infracao
+            print(f"  - Inserindo Art.29 ID: {art29_id}")
+            cursor.execute("""
+                INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
+                VALUES (?, ?, ?)
+            """, (str(uuid.uuid4()), pm_indicios_id, art29_id))
         
         conn.commit()
         conn.close()
         
-        print(f"✅ Indícios salvos para PM envolvido: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
+        print(f"✅ Indícios salvos: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
         return {"sucesso": True, "mensagem": "Indícios salvos com sucesso"}
         
     except Exception as e:
         print(f"❌ Erro ao salvar indícios do PM: {e}")
+        import traceback
+        traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao salvar indícios: {str(e)}"}
 
 @eel.expose

@@ -362,9 +362,12 @@ class IndiciosPMModal {
             // Coletar seleções dos checkboxes
             this.coletarSelecoes();
 
-            console.log('💾 Salvando indícios:', this.selectedIndicios);
+            console.log('MODAL: Iniciando salvamento de indicios');
+            console.log('PM Envolvido ID:', this.currentPMEnvolvidoId);
+            console.log('Dados completos:', JSON.stringify(this.selectedIndicios, null, 2));
 
             const resultado = await eel.salvar_indicios_pm_envolvido(this.currentPMEnvolvidoId, this.selectedIndicios)();
+            console.log('Resposta recebida:', resultado);
             
             if (resultado.sucesso) {
                 this.showToast('Sucesso', 'Indícios salvos com sucesso!', 'success');

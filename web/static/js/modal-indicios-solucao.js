@@ -816,12 +816,67 @@ class ModalIndiciosSolucao {
         }
         
         // Criar estrutura de dados compatível com o backend
+        const novosCrimes = this.crimesSelecionados.map(crime => ({ id: crime.id }));
+        const novosRdpm = this.transgressoesSelecionadas.filter(t => t.tipo === 'rdpm').map(trans => ({ id: trans.id }));
+        const novosArt29 = this.transgressoesSelecionadas.filter(t => t.tipo === 'estatuto').map(trans => ({ id: trans.id }));
+        
+        // Buscar dados existentes para fazer merge
+        const dadosExistentes = (typeof indiciosPorPM !== 'undefined' && indiciosPorPM[pmSelecionado]) 
+            ? indiciosPorPM[pmSelecionado] 
+            : { categorias: [], crimes: [], rdpm: [], art29: [] };
+        
+        console.log('📋 Dados existentes do PM:', dadosExistentes);
+        console.log('📋 Novos dados sendo adicionados:', { categorias, crimes: novosCrimes.length, rdpm: novosRdpm.length, art29: novosArt29.length });
+        
+        // Merge: combinar categorias (sem duplicatas)
+        const categoriasExistentes = Array.isArray(dadosExistentes.categorias) 
+            ? dadosExistentes.categorias 
+            : (dadosExistentes.categorias ? [dadosExistentes.categorias] : []);
+        
+        const categoriasUnicas = [...new Set([...categoriasExistentes, ...categorias])];
+        
+        // Merge: combinar crimes (evitar duplicatas por ID)
+        const crimesExistentes = Array.isArray(dadosExistentes.crimes) ? dadosExistentes.crimes : [];
+        const crimesUnicos = [...crimesExistentes];
+        novosCrimes.forEach(novoCrime => {
+            if (!crimesUnicos.some(c => c.id === novoCrime.id)) {
+                crimesUnicos.push(novoCrime);
+            }
+        });
+        
+        // Merge: combinar RDPM (evitar duplicatas por ID)
+        const rdpmExistentes = Array.isArray(dadosExistentes.rdpm) ? dadosExistentes.rdpm : [];
+        const rdpmUnicos = [...rdpmExistentes];
+        novosRdpm.forEach(novoRdpm => {
+            if (!rdpmUnicos.some(r => r.id === novoRdpm.id)) {
+                rdpmUnicos.push(novoRdpm);
+            }
+        });
+        
+        // Merge: combinar Art29 (evitar duplicatas por ID)
+        const art29Existentes = Array.isArray(dadosExistentes.art29) ? dadosExistentes.art29 : [];
+        const art29Unicos = [...art29Existentes];
+        novosArt29.forEach(novoArt29 => {
+            if (!art29Unicos.some(a => a.id === novoArt29.id)) {
+                art29Unicos.push(novoArt29);
+            }
+        });
+        
+        // Criar objeto com dados mesclados
         const dadosBackend = {
-            categoria: categorias.join(', '), // Backend espera string única
-            crimes: this.crimesSelecionados.map(crime => ({ id: crime.id })),
-            rdpm: this.transgressoesSelecionadas.filter(t => t.tipo === 'rdpm').map(trans => ({ id: trans.id })),
-            art29: this.transgressoesSelecionadas.filter(t => t.tipo === 'estatuto').map(trans => ({ id: trans.id }))
+            categorias: categoriasUnicas,
+            crimes: crimesUnicos,
+            rdpm: rdpmUnicos,
+            art29: art29Unicos
         };
+        
+        console.log('✅ Dados após merge:', dadosBackend);
+        console.log('📊 Total final:', {
+            categorias: dadosBackend.categorias.length,
+            crimes: dadosBackend.crimes.length,
+            rdpm: dadosBackend.rdpm.length,
+            art29: dadosBackend.art29.length
+        });
         
         // Atualizar variável global
         if (typeof indiciosPorPM !== 'undefined') {

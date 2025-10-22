@@ -824,7 +824,15 @@ class IndiciosPMModal {
             btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
             btnSalvar.disabled = true;
 
-            console.log('💾 Salvando indícios:', this.selectedIndicios);
+            console.log('💾 Salvando indícios do modal...');
+            console.log('📋 PM Envolvido ID:', this.currentPMEnvolvidoId);
+            console.log('📋 Dados completos sendo enviados:', JSON.stringify(this.selectedIndicios, null, 2));
+            console.log('📊 Resumo:', {
+                categorias: this.selectedIndicios.categorias?.length || 0,
+                crimes: this.selectedIndicios.crimes?.length || 0,
+                rdpm: this.selectedIndicios.rdpm?.length || 0,
+                art29: this.selectedIndicios.art29?.length || 0
+            });
 
             const resultado = await eel.salvar_indicios_pm_envolvido(this.currentPMEnvolvidoId, this.selectedIndicios)();
             

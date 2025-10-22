@@ -4306,11 +4306,12 @@ async function abrirIndiciosPM(index, tipo) {
         console.log(`📋 Encontrados dados existentes para PM ${pmNome}:`, dadosExistentes);
     }
     
-    // Abrir modal passando dados existentes se houver
-    if (window.modalIndiciosSolucao) {
-        await window.modalIndiciosSolucao.abrir(pmId, dadosExistentes);
+    // Abrir modal NOVO (PM-específico) passando pm_envolvido_id
+    if (window.indiciosPMModal) {
+        console.log(`🔧 Abrindo modal novo com pmEnvolvidoId=${pmEnvolvidoId}, pmNome=${pmNome}`);
+        await window.indiciosPMModal.abrir(pmEnvolvidoId, pmNome);
     } else {
-        console.error('❌ Modal de indícios não está disponível');
+        console.error('❌ Modal de indícios PM não está disponível');
         showAlert('Modal de indícios não está disponível', 'error');
     }
 }
