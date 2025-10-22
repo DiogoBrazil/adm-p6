@@ -6035,6 +6035,43 @@ def obter_dados_mapa_salvo(mapa_id):
         print(f"❌ Erro ao obter dados do mapa: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao obter dados: {str(e)}"}
 
+@eel.expose
+def excluir_mapa_salvo(mapa_id):
+    """Exclui um mapa salvo (soft delete)"""
+    try:
+        print(f"🗑️ Excluindo mapa ID: {mapa_id}")
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Verificar se o mapa existe
+        cursor.execute("""
+            SELECT id, titulo FROM mapas_salvos 
+            WHERE id = ? AND ativo = 1
+        """, (mapa_id,))
+        
+        mapa = cursor.fetchone()
+        if not mapa:
+            conn.close()
+            return {"sucesso": False, "mensagem": "Mapa não encontrado"}
+        
+        # Fazer soft delete (marcar como inativo)
+        cursor.execute("""
+            UPDATE mapas_salvos 
+            SET ativo = 0
+            WHERE id = ?
+        """, (mapa_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Mapa excluído com sucesso: {mapa[1]}")
+        return {"sucesso": True, "mensagem": "Mapa excluído com sucesso"}
+        
+    except Exception as e:
+        print(f"❌ Erro ao excluir mapa: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao excluir mapa: {str(e)}"}
+
 def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
     """Obtém lista de PMs envolvidos para o mapa mensal"""
     pms = []

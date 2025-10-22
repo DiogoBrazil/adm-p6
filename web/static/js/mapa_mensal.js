@@ -1805,6 +1805,9 @@ function exibirMapasAnteriores(mapas) {
                         <button class="btn btn-primary btn-sm" onclick="visualizarMapaAnterior('${mapa.id}', this)">
                             <i class="bi bi-file-earmark-pdf me-1"></i>Visualizar PDF
                         </button>
+                        <button class="btn btn-danger btn-sm mt-2" onclick="confirmarExclusaoMapa('${mapa.id}', '${mapa.titulo.replace(/'/g, "\\'")}')">
+                            <i class="bi bi-trash me-1"></i>Excluir Mapa
+                        </button>
                     </div>
                 </div>
                 <div class="mapa-info">
@@ -2144,3 +2147,130 @@ function formatarDataHora(dataString) {
         return dataString;
     }
 }
+
+// ============================================
+// EXCLUSÃO DE MAPAS
+// ============================================
+
+let mapaParaExcluir = null;
+
+function confirmarExclusaoMapa(mapaId, mapaTitulo) {
+    console.log('🗑️ Solicitando confirmação de exclusão:', { mapaId, mapaTitulo });
+    
+    mapaParaExcluir = mapaId;
+    
+    // Criar modal se não existir
+    let modal = document.getElementById('modalExclusaoMapa');
+    if (!modal) {
+        criarModalExclusaoMapa();
+        modal = document.getElementById('modalExclusaoMapa');
+    }
+    
+    // Preencher informações do mapa
+    const tituloElement = document.getElementById('mapaExclusaoTitulo');
+    if (tituloElement) {
+        tituloElement.textContent = mapaTitulo;
+    }
+    
+    // Exibir modal
+    modal.style.display = 'flex';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.right = '0';
+    modal.style.bottom = '0';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+}
+
+function criarModalExclusaoMapa() {
+    const modalHTML = `
+        <div id="modalExclusaoMapa" class="modal-exclusao-overlay" onclick="fecharModalSeClicarFora(event)">
+            <div class="modal-exclusao-content" onclick="event.stopPropagation()">
+                <div class="modal-exclusao-header">
+                    <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                    <h3>Confirmar Exclusão</h3>
+                </div>
+                <div class="modal-exclusao-body">
+                    <p>Tem certeza que deseja excluir este mapa mensal?</p>
+                    <div class="mapa-exclusao-info">
+                        <strong id="mapaExclusaoTitulo"></strong>
+                    </div>
+                    <p class="text-warning mt-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Esta ação não pode ser desfeita!
+                    </p>
+                </div>
+                <div class="modal-exclusao-footer">
+                    <button class="btn btn-secondary" onclick="fecharModalExclusaoMapa()">
+                        <i class="bi bi-x-circle me-1"></i>Cancelar
+                    </button>
+                    <button class="btn btn-danger" id="btnConfirmarExclusaoMapa" onclick="excluirMapa()">
+                        <i class="bi bi-trash me-1"></i>Excluir
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+function fecharModalSeClicarFora(event) {
+    if (event.target.id === 'modalExclusaoMapa') {
+        fecharModalExclusaoMapa();
+    }
+}
+
+function fecharModalExclusaoMapa() {
+    const modal = document.getElementById('modalExclusaoMapa');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    mapaParaExcluir = null;
+}
+
+async function excluirMapa() {
+    if (!mapaParaExcluir) {
+        console.error('❌ Nenhum mapa selecionado para exclusão');
+        return;
+    }
+    
+    console.log(`🗑️ Excluindo mapa ID: ${mapaParaExcluir}`);
+    
+    const btnConfirmar = document.getElementById('btnConfirmarExclusaoMapa');
+    const originalText = btnConfirmar ? btnConfirmar.innerHTML : '';
+    
+    try {
+        // Loading state
+        if (btnConfirmar) {
+            btnConfirmar.disabled = true;
+            btnConfirmar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Excluindo...';
+        }
+        
+        const resultado = await eel.excluir_mapa_salvo(mapaParaExcluir)();
+        
+        if (resultado.sucesso) {
+            mostrarAlerta('✅ Mapa excluído com sucesso!', 'success');
+            
+            // Fechar modal
+            fecharModalExclusaoMapa();
+            
+            // Recarregar lista de mapas
+            await carregarMapasAnteriores();
+        } else {
+            mostrarAlerta('❌ Erro ao excluir mapa: ' + resultado.mensagem, 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Erro ao excluir mapa:', error);
+        mostrarAlerta('❌ Erro ao excluir mapa. Tente novamente.', 'error');
+    } finally {
+        // Restaurar estado do botão
+        if (btnConfirmar) {
+            btnConfirmar.disabled = false;
+            btnConfirmar.innerHTML = originalText;
+        }
+    }
+}
+
