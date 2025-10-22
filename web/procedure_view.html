@@ -41,15 +41,6 @@
 
     <div class="main-container">
         <div id="alertContainer"></div>
-        
-        <!-- Breadcrumb -->
-        <nav class="breadcrumb">
-            <ol>
-                <li><a href="dashboard.html"><i class="fas fa-home"></i> Início</a></li>
-                <li><a href="procedure_list.html"><i class="fas fa-file-alt"></i> Processos/Procedimentos</a></li>
-                <li class="active"><i class="fas fa-eye"></i> Visualizar</li>
-            </ol>
-        </nav>
 
         <div class="view-container">
             <!-- Header do Processo/Procedimento -->
@@ -66,6 +57,10 @@
                     </div>
                 </div>
                 <div class="action-buttons">
+                    <button class="btn-action-large home" onclick="window.location.href='dashboard.html'">
+                        <i class="fas fa-home"></i>
+                        Início
+                    </button>
                     <button class="btn-action-large edit" onclick="editarProcedimento()">
                         <i class="fas fa-edit"></i>
                         Editar
