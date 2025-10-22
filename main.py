@@ -896,7 +896,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         # Buscar transgressões RDPM associadas
         rdpm = []
         cursor.execute("""
-            SELECT t.id, t.gravidade, t.inciso, t.texto
+            SELECT t.id, t.artigo, t.gravidade, t.inciso, t.texto
             FROM pm_envolvido_rdpm per
             JOIN transgressoes t ON t.id = per.transgressao_id
             WHERE per.pm_indicios_id = ?
@@ -905,9 +905,10 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         for row in cursor.fetchall():
             rdpm.append({
                 "id": row[0],
-                "natureza": row[1],
-                "inciso": row[2],
-                "texto": row[3]
+                "artigo": row[1],
+                "natureza": row[2],
+                "inciso": row[3],
+                "texto": row[4]
             })
         
         # Buscar infrações Art. 29 associadas
@@ -2296,7 +2297,7 @@ def obter_processo(processo_id):
             try:
                 cur_i.execute(
                     """
-                    SELECT t.id, t.gravidade, t.inciso, t.texto
+                    SELECT t.id, t.artigo, t.gravidade, t.inciso, t.texto
                     FROM procedimentos_indicios_rdpm pir
                     JOIN transgressoes t ON t.id = pir.transgressao_id
                     WHERE pir.procedimento_id = ?
@@ -2306,9 +2307,10 @@ def obter_processo(processo_id):
                 for row in cur_i.fetchall():
                     ind["rdpm"].append({
                         "id": row[0],
-                        "gravidade": row[1],
-                        "inciso": row[2],
-                        "texto": row[3]
+                        "artigo": row[1],
+                        "gravidade": row[2],
+                        "inciso": row[3],
+                        "texto": row[4]
                     })
             except Exception:
                 pass
@@ -5388,7 +5390,7 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         
         # Carregar transgressões RDPM com detalhes
         cursor.execute("""
-            SELECT t.id, t.gravidade, t.inciso, t.texto, per.natureza
+            SELECT t.id, t.artigo, t.gravidade, t.inciso, t.texto, per.natureza
             FROM pm_envolvido_rdpm per
             JOIN transgressoes t ON t.id = per.transgressao_id
             WHERE per.pm_envolvido_id = ?
@@ -5397,10 +5399,11 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         for row in cursor.fetchall():
             indicios['rdpm'].append({
                 'id': row[0],
-                'gravidade': row[1],
-                'inciso': row[2],
-                'texto': row[3],
-                'natureza': row[4]
+                'artigo': row[1],
+                'gravidade': row[2],
+                'inciso': row[3],
+                'texto': row[4],
+                'natureza': row[5]
             })
         
         # Carregar infrações Art. 29 com detalhes
@@ -6143,7 +6146,7 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         
         # Buscar transgressões RDPM específicas do PM
         cursor.execute("""
-            SELECT t.inciso, t.texto, t.gravidade
+            SELECT t.artigo, t.inciso, t.texto, t.gravidade
             FROM pm_envolvido_rdpm per
             JOIN transgressoes t ON t.id = per.transgressao_id
             WHERE per.pm_indicios_id = ?
@@ -6151,10 +6154,12 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         
         for row in cursor.fetchall():
             indicios["transgressoes"].append({
-                "inciso": row[0],
-                "texto": row[1],
-                "gravidade": row[2],
-                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+                "artigo": row[0],
+                "inciso": row[1],
+                "texto": row[2],
+                "gravidade": row[3],
+                "tipo": "rdpm",
+                "texto_completo": f"Inciso {row[1]} - {row[2]} ({row[3]})"
             })
         
         # Buscar infrações Art. 29 específicas do PM
@@ -6242,7 +6247,7 @@ def _obter_indicios_para_mapa(cursor, processo_id):
         
         # Transgressões RDPM
         cursor.execute("""
-            SELECT t.inciso, t.texto, t.gravidade
+            SELECT t.artigo, t.inciso, t.texto, t.gravidade
             FROM procedimentos_indicios_rdpm pir
             JOIN transgressoes t ON t.id = pir.transgressao_id
             WHERE pir.procedimento_id = ?
@@ -6250,10 +6255,12 @@ def _obter_indicios_para_mapa(cursor, processo_id):
         
         for row in cursor.fetchall():
             indicios["transgressoes"].append({
-                "inciso": row[0],
-                "texto": row[1],
-                "gravidade": row[2],
-                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+                "artigo": row[0],
+                "inciso": row[1],
+                "texto": row[2],
+                "gravidade": row[3],
+                "tipo": "rdpm",
+                "texto_completo": f"Inciso {row[1]} - {row[2]} ({row[3]})"
             })
         
         # Infrações Art. 29

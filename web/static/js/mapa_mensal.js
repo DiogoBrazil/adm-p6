@@ -1477,6 +1477,12 @@ async function gerarDocumentoPDF(content, titulo) {
             const gravidade = transgressao.gravidade ? transgressao.gravidade.charAt(0).toUpperCase() + transgressao.gravidade.slice(1) : 'Leve';
             const inciso = transgressao.inciso || 'I';
             const tipo = transgressao.tipo === 'estatuto' ? 'do Estatuto' : 'do RDPM';
+            
+            // Se for RDPM e tiver artigo, incluir na formatação
+            if (transgressao.tipo !== 'estatuto' && transgressao.artigo) {
+                return `- Art. ${transgressao.artigo} (${gravidade}) - Inciso ${inciso} ${tipo}`;
+            }
+            
             return `- ${gravidade} - Inciso ${inciso} ${tipo}`;
         }
         
