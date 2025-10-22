@@ -71,16 +71,25 @@
             border: 1px solid #e9ecef;
         }
         
-        .user-table th:nth-child(1), /* Gravidade */
+        .user-table th:nth-child(1), /* Artigo */
         .user-table td:nth-child(1) {
-            width: 100px;
-            min-width: 100px;
-            max-width: 100px;
+            width: 70px;
+            min-width: 70px;
+            max-width: 70px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .user-table th:nth-child(2), /* Natureza */
+        .user-table td:nth-child(2) {
+            width: 90px;
+            min-width: 90px;
+            max-width: 90px;
             text-align: center;
         }
         
-        .user-table th:nth-child(2), /* Inciso */
-        .user-table td:nth-child(2) {
+        .user-table th:nth-child(3), /* Inciso */
+        .user-table td:nth-child(3) {
             width: 80px;
             min-width: 80px;
             max-width: 80px;
@@ -88,26 +97,26 @@
             font-weight: bold;
         }
         
-        .user-table th:nth-child(3), /* Descrição */
-        .user-table td:nth-child(3) {
-            width: 400px;
-            min-width: 400px;
-            max-width: 400px;
+        .user-table th:nth-child(4), /* Descrição */
+        .user-table td:nth-child(4) {
+            width: 350px;
+            min-width: 350px;
+            max-width: 350px;
             word-wrap: break-word;
             overflow: hidden;
             line-height: 1.4;
         }
         
-        .user-table th:nth-child(4), /* Status */
-        .user-table td:nth-child(4) {
+        .user-table th:nth-child(5), /* Status */
+        .user-table td:nth-child(5) {
             width: 80px;
             min-width: 80px;
             max-width: 80px;
             text-align: center;
         }
         
-        .user-table th:nth-child(5), /* Ações */
-        .user-table td:nth-child(5) {
+        .user-table th:nth-child(6), /* Ações */
+        .user-table td:nth-child(6) {
             width: 100px;
             min-width: 100px;
             max-width: 100px;
@@ -145,20 +154,27 @@
         @media (max-width: 1200px) {
             .user-table th:nth-child(1), 
             .user-table td:nth-child(1) {
-                width: 90px;
-                min-width: 90px;
-                max-width: 90px;
+                width: 60px;
+                min-width: 60px;
+                max-width: 60px;
             }
             
             .user-table th:nth-child(2), 
             .user-table td:nth-child(2) {
+                width: 80px;
+                min-width: 80px;
+                max-width: 80px;
+            }
+            
+            .user-table th:nth-child(3), 
+            .user-table td:nth-child(3) {
                 width: 70px;
                 min-width: 70px;
                 max-width: 70px;
             }
             
-            .user-table th:nth-child(3), 
-            .user-table td:nth-child(3) {
+            .user-table th:nth-child(4), 
+            .user-table td:nth-child(4) {
                 width: 300px;
                 min-width: 300px;
                 max-width: 300px;
@@ -239,7 +255,8 @@
                 <table class="user-table" id="transgressoesTable">
                     <thead>
                         <tr>
-                            <th>Gravidade</th>
+                            <th>Artigo</th>
+                            <th>Natureza</th>
                             <th>Inciso</th>
                             <th>Descrição</th>
                             <th style="text-align:center;">Status</th>

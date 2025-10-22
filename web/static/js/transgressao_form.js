@@ -151,7 +151,7 @@ async function carregarTransgressaoParaEdicao(id) {
             
             // Preencher o formulário
             document.getElementById('transgressaoId').value = transgressao.id;
-            document.getElementById('gravidade').value = transgressao.gravidade;
+            document.getElementById('artigo').value = transgressao.artigo;
             document.getElementById('inciso').value = transgressao.inciso;
             document.getElementById('texto').value = transgressao.texto;
             document.getElementById('ativo').checked = transgressao.ativo;
@@ -185,15 +185,25 @@ async function handleSubmit(event) {
         btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
         
         // Coletar dados do formulário
+        const artigo = document.getElementById('artigo').value.trim();
+        
+        // Calcular gravidade baseada no artigo
+        const artigoParaGravidade = {
+            '15': 'leve',
+            '16': 'media',
+            '17': 'grave'
+        };
+        
         const dadosTransgressao = {
-            gravidade: document.getElementById('gravidade').value.trim(),
+            artigo: parseInt(artigo),
+            gravidade: artigoParaGravidade[artigo],
             inciso: document.getElementById('inciso').value.trim(),
             texto: document.getElementById('texto').value.trim(),
             ativo: document.getElementById('ativo').checked
         };
         
         // Validações básicas
-        if (!dadosTransgressao.gravidade || !dadosTransgressao.inciso || !dadosTransgressao.texto) {
+        if (!dadosTransgressao.artigo || !dadosTransgressao.inciso || !dadosTransgressao.texto) {
             showModalFeedback('Por favor, preencha todos os campos obrigatórios.', 'error', 2000);
             return;
         }
@@ -202,7 +212,7 @@ async function handleSubmit(event) {
         if (!modoEdicao) {
             const duplicataExiste = await verificarDuplicataTransgressao(dadosTransgressao.gravidade, dadosTransgressao.inciso);
             if (duplicataExiste) {
-                showModalFeedback(`❌ Já existe uma transgressão ${dadosTransgressao.gravidade.toLowerCase()} com inciso ${dadosTransgressao.inciso}. Por favor, verifique os dados informados.`, 'error', 2000);
+                showModalFeedback(`❌ Já existe uma transgressão no artigo ${artigo} com inciso ${dadosTransgressao.inciso}. Por favor, verifique os dados informados.`, 'error', 2000);
                 return;
             }
         } else {
@@ -213,7 +223,7 @@ async function handleSubmit(event) {
                 document.getElementById('transgressaoId').value
             );
             if (duplicataExiste) {
-                showModalFeedback(`❌ Já existe outra transgressão ${dadosTransgressao.gravidade.toLowerCase()} com inciso ${dadosTransgressao.inciso}. Por favor, verifique os dados informados.`, 'error', 2000);
+                showModalFeedback(`❌ Já existe outra transgressão no artigo ${artigo} com inciso ${dadosTransgressao.inciso}. Por favor, verifique os dados informados.`, 'error', 2000);
                 return;
             }
         }

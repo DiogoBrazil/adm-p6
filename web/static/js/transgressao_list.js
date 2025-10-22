@@ -191,14 +191,22 @@ function renderizarTabela() {
     itensPagina.forEach(transgressao => {
         const row = document.createElement('tr');
         
+        // Calcular natureza baseada no artigo
+        const artigoParaNatureza = {
+            15: 'Leve',
+            16: 'Média',
+            17: 'Grave'
+        };
+        const natureza = artigoParaNatureza[transgressao.artigo] || transgressao.gravidade || 'N/A';
+        
         // Escapar aspas para evitar erros no onclick
-        const gravidadeEscaped = transgressao.gravidade.replace(/'/g, "\\'");
         const incisoEscaped = transgressao.inciso.replace(/'/g, "\\'");
         
-        console.log(`🔨 Criando botão para transgressão ID: ${transgressao.id}, gravidade: ${gravidadeEscaped}, inciso: ${incisoEscaped}`);
+        console.log(`🔨 Criando botão para transgressão ID: ${transgressao.id}, artigo: ${transgressao.artigo}, natureza: ${natureza}, inciso: ${incisoEscaped}`);
         
         row.innerHTML = `
-            <td><span class="badge badge-${getBadgeClass(transgressao.gravidade)}">${transgressao.gravidade}</span></td>
+            <td style="text-align: center; font-weight: bold;">${transgressao.artigo || '-'}</td>
+            <td><span class="badge badge-${getBadgeClass(natureza)}">${natureza}</span></td>
             <td style="text-align: center; font-weight: bold;">${transgressao.inciso}</td>
             <td class="texto-cell">${transgressao.texto}</td>
             <td style="text-align: center;">
@@ -212,7 +220,7 @@ function renderizarTabela() {
                     <button class="btn-action btn-edit" onclick="editarTransgressao(${transgressao.id})" title="Editar">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn-action btn-delete" onclick="confirmarExclusaoTransgressao(${transgressao.id}, '${gravidadeEscaped}', '${incisoEscaped}')" title="Excluir">
+                    <button class="btn-action btn-delete" onclick="confirmarExclusaoTransgressao(${transgressao.id}, ${transgressao.artigo}, '${incisoEscaped}')" title="Excluir">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -225,8 +233,8 @@ function renderizarTabela() {
     console.log('✅ Tabela renderizada com', itensPagina.length, 'itens');
 }
 
-function getBadgeClass(gravidade) {
-    switch(gravidade) {
+function getBadgeClass(natureza) {
+    switch(natureza) {
         case 'Leve': return 'success';
         case 'Média': return 'warning';
         case 'Grave': return 'danger';
@@ -348,8 +356,8 @@ function editarTransgressao(id) {
     window.location.href = `transgressao_form.html?id=${id}`;
 }
 
-function confirmarExclusaoTransgressao(id, gravidade, inciso) {
-    console.log('🗑️ Função confirmarExclusaoTransgressao chamada com:', {id, gravidade, inciso});
+function confirmarExclusaoTransgressao(id, artigo, inciso) {
+    console.log('🗑️ Função confirmarExclusaoTransgressao chamada com:', {id, artigo, inciso});
     
     transgressaoParaExcluir = id;
     
@@ -363,8 +371,16 @@ function confirmarExclusaoTransgressao(id, gravidade, inciso) {
         transgressaoDescricao: !!transgressaoDescricao
     });
     
+    // Calcular natureza baseada no artigo
+    const artigoParaNatureza = {
+        15: 'Leve',
+        16: 'Média',
+        17: 'Grave'
+    };
+    const natureza = artigoParaNatureza[artigo] || 'N/A';
+    
     if (transgressaoInciso) transgressaoInciso.textContent = inciso;
-    if (transgressaoDescricao) transgressaoDescricao.textContent = gravidade;
+    if (transgressaoDescricao) transgressaoDescricao.textContent = `Artigo ${artigo} - ${natureza}`;
     
     if (modalConfirmacao) {
         modalConfirmacao.style.display = 'flex';

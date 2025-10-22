@@ -4792,20 +4792,21 @@ def listar_todas_transgressoes():
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, gravidade, inciso, texto, ativo, created_at
+            SELECT id, artigo, gravidade, inciso, texto, ativo, created_at
             FROM transgressoes 
-            ORDER BY gravidade, inciso
+            ORDER BY artigo, inciso
         ''')
         
         transgressoes = []
         for row in cursor.fetchall():
             transgressoes.append({
                 'id': row[0],
-                'gravidade': row[1].title() if row[1] else '',  # Capitalizar primeira letra
-                'inciso': row[2],
-                'texto': row[3],
-                'ativo': bool(row[4]),
-                'created_at': row[5]
+                'artigo': row[1],
+                'gravidade': row[2].title() if row[2] else '',  # Capitalizar primeira letra
+                'inciso': row[3],
+                'texto': row[4],
+                'ativo': bool(row[5]),
+                'created_at': row[6]
             })
         
         conn.close()
@@ -4821,11 +4822,18 @@ def listar_todas_transgressoes():
 def cadastrar_transgressao(dados_transgressao):
     """Cadastra uma nova transgressão disciplinar"""
     try:
-        print(f"📝 Cadastrando transgressão: {dados_transgressao['gravidade']} - {dados_transgressao['inciso']}")
+        artigo = dados_transgressao.get('artigo')
+        gravidade = dados_transgressao.get('gravidade')
+        
+        print(f"📝 Cadastrando transgressão: Artigo {artigo} ({gravidade}) - {dados_transgressao['inciso']}")
         
         # Validação básica
-        if not dados_transgressao.get('gravidade') or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
-            return {'success': False, 'error': 'Gravidade, inciso e texto são obrigatórios'}
+        if not artigo or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
+            return {'success': False, 'error': 'Artigo, inciso e texto são obrigatórios'}
+        
+        # Validar artigo (deve ser 15, 16 ou 17)
+        if artigo not in [15, 16, 17]:
+            return {'success': False, 'error': 'Artigo deve ser 15, 16 ou 17'}
         
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -4834,19 +4842,20 @@ def cadastrar_transgressao(dados_transgressao):
         cursor.execute('''
             SELECT id, gravidade, inciso FROM transgressoes 
             WHERE LOWER(gravidade) = LOWER(?) AND UPPER(inciso) = UPPER(?)
-        ''', (dados_transgressao['gravidade'], dados_transgressao['inciso']))
+        ''', (gravidade, dados_transgressao['inciso']))
         
         duplicata = cursor.fetchone()
         if duplicata:
             conn.close()
             return {'success': False, 'error': f'Já existe uma transgressão {duplicata[1]} com inciso {duplicata[2]}. Verifique os dados informados.'}
         
-        # Inserir nova transgressão
+        # Inserir nova transgressão (agora com artigo)
         cursor.execute('''
-            INSERT INTO transgressoes (gravidade, inciso, texto, ativo, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO transgressoes (artigo, gravidade, inciso, texto, ativo, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
         ''', (
-            dados_transgressao['gravidade'],
+            artigo,
+            gravidade,
             dados_transgressao['inciso'],
             dados_transgressao['texto'],
             dados_transgressao.get('ativo', True),
@@ -4874,7 +4883,7 @@ def obter_transgressao_por_id(transgressao_id):
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, gravidade, inciso, texto, ativo, created_at
+            SELECT id, artigo, gravidade, inciso, texto, ativo, created_at
             FROM transgressoes 
             WHERE id = ?
         ''', (transgressao_id,))
@@ -4885,13 +4894,14 @@ def obter_transgressao_por_id(transgressao_id):
         if row:
             transgressao = {
                 'id': row[0],
-                'gravidade': row[1],
-                'inciso': row[2],
-                'texto': row[3],
-                'ativo': bool(row[4]),
-                'created_at': row[5]
+                'artigo': row[1],
+                'gravidade': row[2],
+                'inciso': row[3],
+                'texto': row[4],
+                'ativo': bool(row[5]),
+                'created_at': row[6]
             }
-            print(f"✅ Transgressão encontrada: {transgressao['gravidade']} - {transgressao['inciso']}")
+            print(f"✅ Transgressão encontrada: Artigo {transgressao['artigo']} - {transgressao['inciso']}")
             return {'success': True, 'data': transgressao}
         else:
             print(f"❌ Transgressão não encontrada: ID {transgressao_id}")
@@ -4905,14 +4915,21 @@ def obter_transgressao_por_id(transgressao_id):
 def atualizar_transgressao(dados_transgressao):
     """Atualiza uma transgressão existente"""
     try:
+        artigo = dados_transgressao.get('artigo')
+        gravidade = dados_transgressao.get('gravidade')
+        
         print(f"📝 Atualizando transgressão ID: {dados_transgressao['id']}")
         
         # Validação básica
         if not dados_transgressao.get('id'):
             return {'success': False, 'error': 'ID da transgressão é obrigatório'}
         
-        if not dados_transgressao.get('gravidade') or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
-            return {'success': False, 'error': 'Gravidade, inciso e texto são obrigatórios'}
+        if not artigo or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
+            return {'success': False, 'error': 'Artigo, inciso e texto são obrigatórios'}
+        
+        # Validar artigo (deve ser 15, 16 ou 17)
+        if artigo not in [15, 16, 17]:
+            return {'success': False, 'error': 'Artigo deve ser 15, 16 ou 17'}
         
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -4921,20 +4938,21 @@ def atualizar_transgressao(dados_transgressao):
         cursor.execute('''
             SELECT id, gravidade, inciso FROM transgressoes 
             WHERE LOWER(gravidade) = LOWER(?) AND UPPER(inciso) = UPPER(?) AND id != ?
-        ''', (dados_transgressao['gravidade'], dados_transgressao['inciso'], dados_transgressao['id']))
+        ''', (gravidade, dados_transgressao['inciso'], dados_transgressao['id']))
         
         duplicata = cursor.fetchone()
         if duplicata:
             conn.close()
             return {'success': False, 'error': f'Já existe outra transgressão {duplicata[1]} com inciso {duplicata[2]}. Verifique os dados informados.'}
         
-        # Atualizar transgressão
+        # Atualizar transgressão (agora com artigo)
         cursor.execute('''
             UPDATE transgressoes 
-            SET gravidade = ?, inciso = ?, texto = ?, ativo = ?
+            SET artigo = ?, gravidade = ?, inciso = ?, texto = ?, ativo = ?
             WHERE id = ?
         ''', (
-            dados_transgressao['gravidade'],
+            artigo,
+            gravidade,
             dados_transgressao['inciso'],
             dados_transgressao['texto'],
             dados_transgressao.get('ativo', True),
@@ -4948,7 +4966,7 @@ def atualizar_transgressao(dados_transgressao):
         conn.commit()
         conn.close()
         
-        print(f"✅ Transgressão atualizada: {dados_transgressao['gravidade']} - {dados_transgressao['inciso']}")
+        print(f"✅ Transgressão atualizada: Artigo {artigo} - {dados_transgressao['inciso']}")
         return {'success': True, 'message': 'Transgressão atualizada com sucesso'}
         
     except Exception as e:
