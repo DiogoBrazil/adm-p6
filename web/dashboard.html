@@ -697,9 +697,7 @@
                         <a href="mapas_anteriores.html" class="subdropdown-item">Mapas Anteriores</a>
                     </div>
                     
-                    <a href="#" class="dropdown-item">Relatório Diário</a>
-                    <a href="#" class="dropdown-item">Relatório Semanal</a>
-                    <a href="#" class="dropdown-item">Relatório Anual</a>
+                    <a href="#" class="dropdown-item" onclick="abrirModalRelatorioAnual(event)">Relatório Anual</a>
                 </div>
             </div>
 
@@ -1083,10 +1081,319 @@
             });
         }
         
-        // Inicializar quando a página carregar
+                // Inicializar quando a página carregar
         document.addEventListener('DOMContentLoaded', () => {
             initializeChart();
         });
+        
+        // ============================================
+        // RELATÓRIO ANUAL
+        // ============================================
+        
+        function abrirModalRelatorioAnual(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // Criar modal se não existir
+            let modal = document.getElementById('modalRelatorioAnual');
+            if (!modal) {
+                criarModalRelatorioAnual();
+                modal = document.getElementById('modalRelatorioAnual');
+            }
+            
+            // Preencher select com anos (últimos 10 anos)
+            const anoAtual = new Date().getFullYear();
+            const selectAno = document.getElementById('anoRelatorio');
+            selectAno.innerHTML = '';
+            
+            for (let i = 0; i < 10; i++) {
+                const ano = anoAtual - i;
+                const option = document.createElement('option');
+                option.value = ano;
+                option.textContent = ano;
+                if (i === 0) option.selected = true;
+                selectAno.appendChild(option);
+            }
+            
+            modal.style.display = 'flex';
+        }
+        
+        function criarModalRelatorioAnual() {
+            const modalHTML = `
+                <div id="modalRelatorioAnual" class="modal-relatorio-overlay" onclick="fecharModalRelatorioAnual(event)">
+                    <div class="modal-relatorio-content" onclick="event.stopPropagation()">
+                        <div class="modal-relatorio-header">
+                            <i class="bi bi-file-earmark-bar-graph"></i>
+                            <h3>Gerar Relatório Anual</h3>
+                        </div>
+                        <div class="modal-relatorio-body">
+                            <p>Selecione o ano para gerar o relatório completo com estatísticas e gráficos:</p>
+                            <div class="form-group-modal">
+                                <label for="anoRelatorio">Ano:</label>
+                                <select id="anoRelatorio" class="form-select-modal"></select>
+                            </div>
+                            <div class="info-relatorio">
+                                <i class="bi bi-info-circle"></i>
+                                <span>O relatório incluirá estatísticas completas, gráficos e análises dos processos do ano selecionado.</span>
+                            </div>
+                        </div>
+                        <div class="modal-relatorio-footer">
+                            <button class="btn btn-secondary-modal" onclick="fecharModalRelatorioAnual()">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </button>
+                            <button class="btn btn-primary-modal" id="btnGerarRelatorio" onclick="gerarRelatorioAnual()">
+                                <i class="bi bi-file-earmark-arrow-down"></i> Gerar Relatório
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Adicionar estilos
+            adicionarEstilosModalRelatorio();
+        }
+        
+        function fecharModalRelatorioAnual(event) {
+            if (event && event.target.id !== 'modalRelatorioAnual') return;
+            
+            const modal = document.getElementById('modalRelatorioAnual');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        async function gerarRelatorioAnual() {
+            const ano = document.getElementById('anoRelatorio').value;
+            const btnGerar = document.getElementById('btnGerarRelatorio');
+            const originalText = btnGerar.innerHTML;
+            
+            try {
+                btnGerar.disabled = true;
+                btnGerar.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando...';
+                
+                console.log(`📊 Gerando relatório anual para ${ano}...`);
+                
+                const resultado = await eel.gerar_relatorio_anual(parseInt(ano))();
+                
+                if (resultado.sucesso) {
+                    mostrarAlerta('✅ Relatório gerado com sucesso! O download iniciará em breve.', 'success');
+                    fecharModalRelatorioAnual();
+                    
+                    // Fazer download do PDF
+                    const link = document.createElement('a');
+                    link.href = 'data:application/pdf;base64,' + resultado.pdf_base64;
+                    link.download = `Relatorio_Anual_${ano}.pdf`;
+                    link.click();
+                } else {
+                    mostrarAlerta('❌ Erro ao gerar relatório: ' + resultado.mensagem, 'error');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erro ao gerar relatório:', error);
+                mostrarAlerta('❌ Erro ao gerar relatório. Tente novamente.', 'error');
+            } finally {
+                btnGerar.disabled = false;
+                btnGerar.innerHTML = originalText;
+            }
+        }
+        
+        function adicionarEstilosModalRelatorio() {
+            if (document.getElementById('estilos-modal-relatorio')) return;
+            
+            const style = document.createElement('style');
+            style.id = 'estilos-modal-relatorio';
+            style.textContent = `
+                .modal-relatorio-overlay {
+                    display: none;
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    background: rgba(0, 0, 0, 0.7) !important;
+                    backdrop-filter: blur(5px);
+                    z-index: 10000 !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    animation: fadeIn 0.3s ease;
+                }
+                
+                .modal-relatorio-content {
+                    background: white !important;
+                    border-radius: 16px;
+                    max-width: 500px;
+                    width: 90%;
+                    box-shadow: 0 25px 70px rgba(0, 0, 0, 0.4) !important;
+                    animation: slideUp 0.3s ease;
+                    overflow: hidden;
+                    border: 3px solid #0d6efd;
+                }
+                
+                .modal-relatorio-header {
+                    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%) !important;
+                    color: white !important;
+                    padding: 1.75rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                }
+                
+                .modal-relatorio-header i {
+                    font-size: 2.5rem;
+                }
+                
+                .modal-relatorio-header h3 {
+                    margin: 0;
+                    font-size: 1.5rem;
+                    font-weight: 600;
+                    color: white !important;
+                }
+                
+                .modal-relatorio-body {
+                    padding: 2rem;
+                    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%) !important;
+                }
+                
+                .modal-relatorio-body p {
+                    margin-bottom: 1.5rem;
+                    color: #495057;
+                    font-size: 1.05rem;
+                    line-height: 1.6;
+                }
+                
+                .form-group-modal {
+                    margin-bottom: 1.5rem;
+                }
+                
+                .form-group-modal label {
+                    display: block;
+                    margin-bottom: 0.5rem;
+                    font-weight: 600;
+                    color: #2a5298;
+                    font-size: 1.1rem;
+                }
+                
+                .form-select-modal {
+                    width: 100%;
+                    padding: 0.75rem 1rem;
+                    font-size: 1.1rem;
+                    border: 2px solid #dee2e6;
+                    border-radius: 8px;
+                    background: white;
+                    color: #495057;
+                    transition: all 0.3s ease;
+                }
+                
+                .form-select-modal:focus {
+                    outline: none;
+                    border-color: #0d6efd;
+                    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+                }
+                
+                .info-relatorio {
+                    background: linear-gradient(135deg, #cfe2ff 0%, #e7f1ff 100%);
+                    border-left: 5px solid #0d6efd;
+                    padding: 1rem;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                }
+                
+                .info-relatorio i {
+                    font-size: 1.5rem;
+                    color: #0d6efd;
+                }
+                
+                .info-relatorio span {
+                    color: #084298;
+                    font-size: 0.95rem;
+                    line-height: 1.5;
+                }
+                
+                .modal-relatorio-footer {
+                    padding: 1.5rem 2rem;
+                    background: linear-gradient(135deg, #f1f3f5 0%, #e9ecef 100%);
+                    display: flex;
+                    gap: 1rem;
+                    justify-content: flex-end;
+                    border-top: 2px solid #dee2e6;
+                }
+                
+                .modal-relatorio-footer .btn {
+                    padding: 0.875rem 2rem;
+                    font-weight: 600;
+                    border: none;
+                    border-radius: 10px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.5rem;
+                    min-height: 48px;
+                    font-size: 1.05rem;
+                }
+                
+                .btn-secondary-modal {
+                    background: #6c757d;
+                    color: white;
+                }
+                
+                .btn-secondary-modal:hover {
+                    background: #5a6268;
+                    transform: translateY(-2px);
+                    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.2);
+                }
+                
+                .btn-primary-modal {
+                    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+                    color: white;
+                }
+                
+                .btn-primary-modal:hover {
+                    background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%);
+                    transform: translateY(-2px);
+                    box-shadow: 0 5px 15px rgba(13, 110, 253, 0.4);
+                }
+                
+                .btn:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                    transform: none !important;
+                }
+            `;
+            
+            document.head.appendChild(style);
+        }
+        
+        function mostrarAlerta(mensagem, tipo) {
+            // Implementação simples de alerta
+            const alertDiv = document.createElement('div');
+            alertDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 1rem 1.5rem;
+                background: ${tipo === 'success' ? '#28a745' : '#dc3545'};
+                color: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10001;
+                font-weight: 500;
+            `;
+            alertDiv.textContent = mensagem;
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 4000);
+        }
     </script>
 </body>
 </html>
+```
