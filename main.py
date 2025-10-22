@@ -6257,13 +6257,10 @@ def gerar_relatorio_anual(ano):
 def _gerar_pdf_relatorio_anual(estatisticas):
     """Gera o PDF do relatório anual usando ReportLab"""
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
-    from reportlab.graphics.shapes import Drawing
-    from reportlab.graphics.charts.piecharts import Pie
-    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
     import base64
     from io import BytesIO
@@ -6272,9 +6269,9 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=landscape(A4),
-        rightMargin=1.5*cm,
-        leftMargin=1.5*cm,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
         topMargin=2*cm,
         bottomMargin=2*cm
     )
@@ -6331,7 +6328,7 @@ def _gerar_pdf_relatorio_anual(estatisticas):
         ['Procedimentos', str(estatisticas['total_procedimentos'])]
     ]
     
-    tabela_resumo = Table(dados_resumo, colWidths=[12*cm, 8*cm])
+    tabela_resumo = Table(dados_resumo, colWidths=[10*cm, 7*cm])
     tabela_resumo.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -6347,56 +6344,23 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     ]))
     
     elements.append(tabela_resumo)
-    elements.append(Spacer(1, 1*cm))
+    elements.append(Spacer(1, 0.8*cm))
     
-    # ============ GRÁFICO: PROCESSOS POR TIPO ============
+    # ============ DISTRIBUIÇÃO POR TIPO ============
     if estatisticas['processos_por_tipo'] or estatisticas['procedimentos_por_tipo']:
         elements.append(Paragraph("📈 DISTRIBUIÇÃO POR TIPO", subtitulo_style))
         
         # Combinar todos os tipos
-        todos_tipos = {}
+        dados_tipos = [['Tipo', 'Categoria', 'Quantidade']]
+        
         for tipo, qtd in estatisticas['processos_por_tipo'].items():
-            todos_tipos[tipo] = todos_tipos.get(tipo, 0) + qtd
+            dados_tipos.append([tipo, 'Processo', str(qtd)])
+        
         for tipo, qtd in estatisticas['procedimentos_por_tipo'].items():
-            todos_tipos[tipo] = todos_tipos.get(tipo, 0) + qtd
+            dados_tipos.append([tipo, 'Procedimento', str(qtd)])
         
-        # Criar gráfico de pizza
-        drawing = Drawing(400, 200)
-        pie = Pie()
-        pie.x = 150
-        pie.y = 50
-        pie.width = 150
-        pie.height = 150
-        pie.data = list(todos_tipos.values())
-        pie.labels = list(todos_tipos.keys())
-        pie.slices.strokeWidth = 0.5
-        
-        cores = [
-            colors.HexColor('#0d6efd'),
-            colors.HexColor('#6610f2'),
-            colors.HexColor('#6f42c1'),
-            colors.HexColor('#d63384'),
-            colors.HexColor('#dc3545'),
-            colors.HexColor('#fd7e14')
-        ]
-        
-        for i, cor in enumerate(cores[:len(pie.data)]):
-            pie.slices[i].fillColor = cor
-        
-        drawing.add(pie)
-        elements.append(drawing)
-        elements.append(Spacer(1, 1*cm))
-    
-    # ============ TABELA: PROCESSOS POR TIPO ============
-    if estatisticas['processos_por_tipo']:
-        elements.append(Paragraph("⚖️ PROCESSOS POR TIPO", subtitulo_style))
-        
-        dados_proc_tipo = [['Tipo', 'Quantidade']]
-        for tipo, qtd in estatisticas['processos_por_tipo'].items():
-            dados_proc_tipo.append([tipo, str(qtd)])
-        
-        tabela_proc_tipo = Table(dados_proc_tipo, colWidths=[12*cm, 8*cm])
-        tabela_proc_tipo.setStyle(TableStyle([
+        tabela_tipos = Table(dados_tipos, colWidths=[7*cm, 5*cm, 5*cm])
+        tabela_tipos.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2a5298')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -6407,46 +6371,45 @@ def _gerar_pdf_relatorio_anual(estatisticas):
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
         ]))
         
-        elements.append(tabela_proc_tipo)
+        elements.append(tabela_tipos)
         elements.append(Spacer(1, 0.8*cm))
     
-    # ============ PÁGINA 2: STATUS ============
-    elements.append(PageBreak())
-    
-    # ============ GRÁFICO: STATUS ============
-    elements.append(Paragraph("📋 STATUS DOS PROCESSOS E PROCEDIMENTOS", subtitulo_style))
+    # ============ STATUS ============
+    elements.append(Paragraph("📋 STATUS GERAL", subtitulo_style))
     
     # Combinar status
-    todos_status = {}
-    for status, qtd in estatisticas['processos_status'].items():
+    dados_status = [['Status', 'Processos', 'Procedimentos', 'Total']]
+    
+    status_unicos = set(list(estatisticas['processos_status'].keys()) + list(estatisticas['procedimentos_status'].keys()))
+    
+    for status in status_unicos:
         status_label = status or 'Sem Status'
-        todos_status[status_label] = todos_status.get(status_label, 0) + qtd
-    for status, qtd in estatisticas['procedimentos_status'].items():
-        status_label = status or 'Sem Status'
-        todos_status[status_label] = todos_status.get(status_label, 0) + qtd
+        qtd_processos = estatisticas['processos_status'].get(status, 0)
+        qtd_procedimentos = estatisticas['procedimentos_status'].get(status, 0)
+        total = qtd_processos + qtd_procedimentos
+        dados_status.append([status_label, str(qtd_processos), str(qtd_procedimentos), str(total)])
     
-    if todos_status:
-        # Gráfico de barras
-        drawing = Drawing(600, 250)
-        bar_chart = VerticalBarChart()
-        bar_chart.x = 50
-        bar_chart.y = 50
-        bar_chart.height = 150
-        bar_chart.width = 500
-        bar_chart.data = [list(todos_status.values())]
-        bar_chart.categoryAxis.categoryNames = list(todos_status.keys())
-        bar_chart.valueAxis.valueMin = 0
-        bar_chart.bars[0].fillColor = colors.HexColor('#0d6efd')
-        
-        drawing.add(bar_chart)
-        elements.append(drawing)
-        elements.append(Spacer(1, 1*cm))
+    tabela_status = Table(dados_status, colWidths=[6*cm, 4*cm, 4*cm, 3*cm])
+    tabela_status.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
     
-    # ============ ANÁLISES ESPECÍFICAS ============
+    elements.append(tabela_status)
+    elements.append(Spacer(1, 0.8*cm))
     
-    # IPM/Sindicância - Indícios
+    elements.append(tabela_status)
+    elements.append(Spacer(1, 0.8*cm))
+    
+    # ============ IPM/SINDICÂNCIA - INDÍCIOS ============
     if estatisticas['ipm_sindicancia']['indicios_crime'] > 0 or estatisticas['ipm_sindicancia']['indicios_transgressao'] > 0:
-        elements.append(Paragraph("🔍 IPM/SINDICÂNCIA - INDÍCIOS", subtitulo_style))
+        elements.append(Paragraph("🔍 IPM/SINDICÂNCIA - ANÁLISE DE INDÍCIOS", subtitulo_style))
         
         dados_indicios = [
             ['Tipo de Indício', 'Quantidade'],
@@ -6454,13 +6417,14 @@ def _gerar_pdf_relatorio_anual(estatisticas):
             ['Indícios de Transgressão', str(estatisticas['ipm_sindicancia']['indicios_transgressao'])]
         ]
         
-        tabela_indicios = Table(dados_indicios, colWidths=[12*cm, 8*cm])
+        tabela_indicios = Table(dados_indicios, colWidths=[10*cm, 7*cm])
         tabela_indicios.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6610f2')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
         ]))
@@ -6468,9 +6432,9 @@ def _gerar_pdf_relatorio_anual(estatisticas):
         elements.append(tabela_indicios)
         elements.append(Spacer(1, 0.8*cm))
     
-    # PAD/PADS - Resultados
+    # ============ PAD/PADS - RESULTADOS ============
     if estatisticas['pad_pads']['punidos'] > 0 or estatisticas['pad_pads']['absolvidos_arquivados'] > 0:
-        elements.append(Paragraph("⚖️ PAD/PADS - RESULTADOS", subtitulo_style))
+        elements.append(Paragraph("⚖️ PAD/PADS - RESULTADOS FINAIS", subtitulo_style))
         
         dados_resultados = [
             ['Resultado', 'Quantidade'],
@@ -6478,18 +6442,20 @@ def _gerar_pdf_relatorio_anual(estatisticas):
             ['Absolvidos/Arquivados', str(estatisticas['pad_pads']['absolvidos_arquivados'])]
         ]
         
-        tabela_resultados = Table(dados_resultados, colWidths=[12*cm, 8*cm])
+        tabela_resultados = Table(dados_resultados, colWidths=[10*cm, 7*cm])
         tabela_resultados.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d63384')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
         ]))
         
         elements.append(tabela_resultados)
+        elements.append(Spacer(1, 0.8*cm))
     
     # ============ RODAPÉ ============
     elements.append(Spacer(1, 2*cm))
