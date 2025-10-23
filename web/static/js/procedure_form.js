@@ -2747,9 +2747,9 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         tipo_detalhe = document.getElementById('tipo_procedimento').value;
     }
 
-    // Obter o tipo do responsável (encarregado ou operador)
-    // Como não temos acesso direto ao tipo, vamos assumir "encarregado" como padrão
-    const responsavel_tipo = "encarregado";  // Default - ajustar conforme necessário
+    // Obter o tipo do responsável
+    // Estrutura unificada: todos os usuários são do tipo 'usuario'
+    const responsavel_tipo = "usuario";  // Tipo padrão após migração para tabela unificada
 
     // Novos campos
     const local_origem = document.getElementById('local_origem')?.value || null;

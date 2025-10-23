@@ -1342,6 +1342,11 @@ def registrar_processo(
     for key, value in params.items():
         print(f"  - {key}: {value}")
     
+    # NORMALIZAÇÃO: Converter valores antigos de responsavel_tipo para 'usuario'
+    if responsavel_tipo in ('encarregado', 'operador'):
+        print(f"⚠️ Convertendo responsavel_tipo de '{responsavel_tipo}' para 'usuario'")
+        responsavel_tipo = 'usuario'
+    
     # Validação do documento_iniciador
     documentos_validos = ['Portaria', 'Memorando Disciplinar', 'Feito Preliminar']
     if documento_iniciador not in documentos_validos:
@@ -1469,6 +1474,12 @@ def registrar_processo(
         presidente_tipo = _resolve_user_tipo(cursor, presidente_id) if presidente_id else None
         interrogante_tipo = _resolve_user_tipo(cursor, interrogante_id) if interrogante_id else None
         escrivao_processo_tipo = _resolve_user_tipo(cursor, escrivao_processo_id) if escrivao_processo_id else None
+        
+        # DEBUG: Log dos valores resolvidos
+        print(f"🔍 DEBUG - Resolução de tipos:")
+        print(f"   presidente_id: {presidente_id} -> presidente_tipo: {presidente_tipo}")
+        print(f"   interrogante_id: {interrogante_id} -> interrogante_tipo: {interrogante_tipo}")
+        print(f"   escrivao_processo_id: {escrivao_processo_id} -> escrivao_processo_tipo: {escrivao_processo_tipo}")
 
         # Normalização defensiva de penalidade_tipo para atender o CHECK do banco
         if penalidade_tipo:
@@ -2686,6 +2697,11 @@ def atualizar_processo(
 ):
     """Atualiza um processo/procedimento existente"""
     try:
+        # NORMALIZAÇÃO: Converter valores antigos de responsavel_tipo para 'usuario'
+        if responsavel_tipo in ('encarregado', 'operador'):
+            print(f"⚠️ [ATUALIZAÇÃO] Convertendo responsavel_tipo de '{responsavel_tipo}' para 'usuario'")
+            responsavel_tipo = 'usuario'
+        
         # Validação do local_fatos (obrigatório)
         if not local_fatos:
             return {"sucesso": False, "mensagem": "O campo 'Local onde ocorreram os fatos' é obrigatório."}
