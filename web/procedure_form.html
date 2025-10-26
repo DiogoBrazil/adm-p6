@@ -136,6 +136,34 @@
                     <small class="form-help">Formato: 0021.033044/2025-34</small>
                 </div>
 
+                <!-- CAMPO ESPECÍFICO PARA CP: Unidade onde foi deprecada -->
+                <div class="form-group" id="unidade_deprecada_group" style="display: none;">
+                    <label for="unidade_deprecada">Unidade onde foi deprecada *</label>
+                    <select id="unidade_deprecada">
+                        <option value="">Selecione...</option>
+                        <option value="1ºBPM">1ºBPM</option>
+                        <option value="2ºBPM">2ºBPM</option>
+                        <option value="3ºBPM">3ºBPM</option>
+                        <option value="4ºBPM">4ºBPM</option>
+                        <option value="5ºBPM">5ºBPM</option>
+                        <option value="6ºBPM">6ºBPM</option>
+                        <option value="7ºBPM">7ºBPM</option>
+                        <option value="8ºBPM">8ºBPM</option>
+                        <option value="9ºBPM">9ºBPM</option>
+                        <option value="10ºBPM">10ºBPM</option>
+                        <option value="11ºBPM">11ºBPM</option>
+                        <option value="CIPO - BURITIS">CIPO - BURITIS</option>
+                        <option value="BPCHOQUE">BPCHOQUE</option>
+                        <option value="BOPE">BOPE</option>
+                        <option value="BPTRAN">BPTRAN</option>
+                        <option value="BPTAR">BPTAR</option>
+                        <option value="BPFRON">BPFRON</option>
+                        <option value="BAVOP">BAVOP</option>
+                        <option value="BPA">BPA</option>
+                        <option value="CORREGEPOM">CORREGEPOM</option>
+                    </select>
+                </div>
+
                 <!-- Unidade onde foi instaurado -->
                 <div class="form-group">
                     <label for="local_origem">Unidade onde foi instaurado *</label>
@@ -174,6 +202,13 @@
                         </div>
                     </div>
                     <small class="form-help">Município ou distrito onde os fatos ocorreram</small>
+                </div>
+
+                <!-- CAMPO ESPECÍFICO PARA CP: Deprecante -->
+                <div class="form-group" id="deprecante_group" style="display: none;">
+                    <label for="deprecante">Deprecante *</label>
+                    <input type="text" id="deprecante" placeholder="Digite o nome do deprecante">
+                    <small class="form-help">Autoridade que expediu a carta precatória</small>
                 </div>
 
                 <!-- Datas -->
@@ -290,8 +325,28 @@
                     </div>
                 </div>
 
+                <!-- CAMPO ESPECÍFICO PARA CP: Pessoas a serem inquiridas -->
+                <div class="form-group" id="pessoas_inquiridas_container" style="display: none;">
+                    <label for="pessoas_inquiridas">Pessoas a serem inquiridas *</label>
+                    <div id="pessoas_inquiridas_list">
+                        <!-- Primeira pessoa (sempre visível) -->
+                        <div class="pessoa-inquirida-item mb-2 d-flex align-items-center" id="pessoa_inquirida_1">
+                            <input type="text" 
+                                   class="form-control pessoa-inquirida-input" 
+                                   placeholder="Digite o nome da pessoa a ser inquirida"
+                                   id="pessoa_inquirida_input_1">
+                        </div>
+                    </div>
+                    <button type="button" 
+                            class="btn btn-secondary btn-sm mt-2" 
+                            onclick="adicionarPessoaInquirida()">
+                        <i class="fas fa-plus"></i> Adicionar mais pessoa
+                    </button>
+                    <small class="form-help">Lista de pessoas que serão inquiridas na carta precatória</small>
+                </div>
+
                 <!-- Campo dependente: Nome da Vítima -->
-                <div class="form-group" id="group_nome_vitima" style="display: none;">
+                <div class="form-group" id="nome_vitima_group" style="display: none;">
                     <label for="nome_vitima">Nome da Vítima/Ofendido</label>
                     <input type="text" id="nome_vitima">
                 </div>
@@ -364,9 +419,9 @@
                     <small class="form-help">Digite parte do texto da transgressão para filtrar</small>
                 </div>
                 
-                <div class="form-group" id="group_natureza_procedimento" style="display: none;">
+                <div class="form-group" id="natureza_procedimento_group" style="display: none;">
                     <label for="natureza_procedimento">Natureza Principal Apurada (Procedimento) *</label>
-                    <select id="natureza_procedimento" required>
+                    <select id="natureza_procedimento">
                         <option value="">Selecione...</option>
                         <option value="Dos crimes contra a pessoa">Dos crimes contra a pessoa</option>
                         <option value="Dos crimes contra o patrimônio">Dos crimes contra o patrimônio</option>

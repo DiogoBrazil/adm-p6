@@ -5,6 +5,114 @@ let editandoProcedimento = null;
 // Array para armazenar PMs adicionais (além do primeiro)
 let pmsAdicionais = [];
 
+// ============================================
+// FUNÇÕES PARA CARTA PRECATÓRIA (CP)
+// ============================================
+
+let pessoasInquiridasCount = 1;
+
+function adicionarPessoaInquirida() {
+    pessoasInquiridasCount++;
+    const container = document.getElementById('pessoas_inquiridas_list');
+    
+    const novaLinha = document.createElement('div');
+    novaLinha.className = 'pessoa-inquirida-item mb-2 d-flex align-items-center';
+    novaLinha.id = `pessoa_inquirida_${pessoasInquiridasCount}`;
+    
+    novaLinha.innerHTML = `
+        <input type="text" 
+               class="form-control pessoa-inquirida-input" 
+               placeholder="Digite o nome da pessoa a ser inquirida"
+               id="pessoa_inquirida_input_${pessoasInquiridasCount}"
+               style="flex: 1;">
+        <button type="button" 
+                class="btn btn-sm btn-danger ms-2" 
+                onclick="removerPessoaInquirida(${pessoasInquiridasCount})"
+                title="Remover"
+                style="margin-left: 8px;">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(novaLinha);
+}
+
+function removerPessoaInquirida(id) {
+    const elemento = document.getElementById(`pessoa_inquirida_${id}`);
+    if (elemento) {
+        elemento.remove();
+    }
+}
+
+function coletarPessoasInquiridas() {
+    const inputs = document.querySelectorAll('.pessoa-inquirida-input');
+    const pessoas = [];
+    
+    inputs.forEach(input => {
+        const valor = input.value.trim();
+        if (valor) {
+            pessoas.push(valor);
+        }
+    });
+    
+    return JSON.stringify(pessoas);
+}
+
+function ajustarCamposCartaPrecatoria(tipoProcedimento) {
+    const isCP = (tipoProcedimento === 'CP');
+    
+    console.log('📋 Ajustando campos para CP:', isCP);
+    
+    // Campos ESPECÍFICOS de CP
+    const camposCP = {
+        'unidade_deprecada_group': isCP,
+        'deprecante_group': isCP,
+        'pessoas_inquiridas_container': isCP
+    };
+    
+    // Campos que NÃO devem aparecer em CP
+    const camposOcultar = {
+        'nome_vitima_group': !isCP,
+        'natureza_procedimento_group': !isCP
+    };
+    
+    // Aplicar visibilidade
+    Object.entries(camposCP).forEach(([id, mostrar]) => {
+        const campo = document.getElementById(id);
+        if (campo) {
+            campo.style.display = mostrar ? 'block' : 'none';
+            
+            // Tornar obrigatório se for CP
+            const input = campo.querySelector('select, input');
+            if (input && mostrar) {
+                input.setAttribute('required', 'required');
+            } else if (input) {
+                input.removeAttribute('required');
+            }
+        }
+    });
+    
+    Object.entries(camposOcultar).forEach(([id, mostrar]) => {
+        const campo = document.getElementById(id);
+        if (campo) {
+            campo.style.display = mostrar ? 'block' : 'none';
+            
+            // Limpar valores quando ocultar
+            if (!mostrar) {
+                const input = campo.querySelector('select, input, textarea');
+                if (input) {
+                    input.removeAttribute('required');
+                    input.value = '';
+                }
+            }
+        }
+    });
+}
+
+// ============================================
+// FIM DAS FUNÇÕES DE CARTA PRECATÓRIA
+// ============================================
+
 // Função para obter todos os PMs envolvidos (principal + adicionais)
 function obterTodosPmsEnvolvidos() {
     const pmsEnvolvidos = [];
@@ -1489,6 +1597,31 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('escrivao_processo_nome').value = procedimento.escrivao_processo_completo || procedimento.escrivao_processo_nome || '';
             console.log('✅ Campo Escrivão do Processo preenchido:', procedimento.escrivao_processo_completo || procedimento.escrivao_processo_nome);
         }
+        
+        // Preencher campos específicos de Carta Precatória (CP)
+        if (procedimento.unidade_deprecada) {
+            document.getElementById('unidade_deprecada').value = procedimento.unidade_deprecada || '';
+            console.log('✅ Campo Unidade Deprecada preenchido:', procedimento.unidade_deprecada);
+        }
+        if (procedimento.deprecante) {
+            document.getElementById('deprecante').value = procedimento.deprecante || '';
+            console.log('✅ Campo Deprecante preenchido:', procedimento.deprecante);
+        }
+        if (procedimento.pessoas_inquiridas) {
+            try {
+                const pessoasList = JSON.parse(procedimento.pessoas_inquiridas);
+                pessoasInquiridasCount = 0; // Reset counter
+                const container = document.getElementById('pessoas_inquiridas_list');
+                container.innerHTML = ''; // Limpar lista
+                
+                pessoasList.forEach((pessoa, index) => {
+                    adicionarPessoaInquirida(pessoa);
+                });
+                console.log('✅ Pessoas Inquiridas preenchidas:', pessoasList.length);
+            } catch (e) {
+                console.error('Erro ao parsear pessoas_inquiridas:', e);
+            }
+        }
 
         // Preencher campos de PM envolvido com formato completo
         if (procedimento.tipo_geral === 'procedimento' && procedimento.pms_envolvidos && procedimento.pms_envolvidos.length > 0) {
@@ -2016,6 +2149,18 @@ function updateFormVisibility() {
     // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
     toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
     
+    // Controlar required do campo natureza_procedimento
+    // CP (Carta Precatória) não exige natureza_procedimento
+    const naturezaProcedimentoSelect = document.getElementById('natureza_procedimento');
+    if (naturezaProcedimentoSelect) {
+        const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
+        if (showNaturezaProcedimento && !isCP) {
+            naturezaProcedimentoSelect.setAttribute('required', 'required');
+        } else {
+            naturezaProcedimentoSelect.removeAttribute('required');
+        }
+    }
+    
     // 3. Lógica para Motorista (apenas para sinistros de trânsito em procedimentos)
     const naturezaProcedimento = document.getElementById('natureza_procedimento')?.value || '';
     const isSinistroTransito = naturezaProcedimento.toLowerCase().includes('sinistro de trânsito') || 
@@ -2359,6 +2504,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso); // Removido
         toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
         
+        // Controlar required do campo natureza_procedimento
+        // CP (Carta Precatória) não exige natureza_procedimento
+        const naturezaProcedimentoSelect = document.getElementById('natureza_procedimento');
+        if (naturezaProcedimentoSelect) {
+            const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
+            if (showNaturezaProcedimento && !isCP) {
+                naturezaProcedimentoSelect.setAttribute('required', 'required');
+            } else {
+                naturezaProcedimentoSelect.removeAttribute('required');
+            }
+        }
+        
         // Lógica para Infração (apenas para PADS) - sem depender da natureza principal
         const showInfracao = tipoGeral === 'processo' && tipoProcesso === 'PADS';
         
@@ -2592,7 +2749,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Adicionar event listeners para os campos que controlam a visibilidade
     if (fields.tipoGeral) fields.tipoGeral.addEventListener('change', updateFormVisibility);
-    if (fields.tipoProcedimento) fields.tipoProcedimento.addEventListener('change', updateFormVisibility);
+    if (fields.tipoProcedimento) {
+        fields.tipoProcedimento.addEventListener('change', function() {
+            updateFormVisibility();
+            ajustarCamposCartaPrecatoria(this.value);
+        });
+    }
     if (fields.tipoProcesso) fields.tipoProcesso.addEventListener('change', updateFormVisibility);
     if (fields.documentoIniciador) fields.documentoIniciador.addEventListener('change', updateFormVisibility);
     if (fields.statusPm) fields.statusPm.addEventListener('change', updateFormVisibility);
@@ -2763,6 +2925,15 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
     const motorista_responsavel_id = document.getElementById('motorista_id')?.value || null;
+    
+    // Campos específicos para Carta Precatória (CP)
+    const unidade_deprecada = tipo_detalhe === 'CP' ? 
+        (document.getElementById('unidade_deprecada')?.value || null) : null;
+    const deprecante = tipo_detalhe === 'CP' ? 
+        (document.getElementById('deprecante')?.value?.trim() || null) : null;
+    const pessoas_inquiridas = tipo_detalhe === 'CP' ? 
+        JSON.stringify(coletarPessoasInquiridas()) : null;
+    
     const transgressoes_ids = document.getElementById('transgressoes_ids')?.value || null;
     const resumo_fatos = document.getElementById('resumo_fatos')?.value || null;
     const numero_portaria = document.getElementById('numero_portaria')?.value || null;
@@ -2848,6 +3019,29 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         showAlert('É obrigatório selecionar o motorista responsável para sinistros de trânsito!', 'error');
         document.getElementById('btnBuscarMotorista')?.focus();
         return;
+    }
+    
+    // Validação de campos obrigatórios para Carta Precatória (CP)
+    const tipo_procedimento = document.getElementById('tipo_procedimento')?.value;
+    if (tipo_geral === 'procedimento' && tipo_procedimento === 'CP') {
+        const unidade_deprecada_val = document.getElementById('unidade_deprecada')?.value;
+        const deprecante_val = document.getElementById('deprecante')?.value?.trim();
+        const pessoas_inquiridas_list = coletarPessoasInquiridas();
+        
+        if (!unidade_deprecada_val) {
+            showAlert('É obrigatório selecionar a Unidade Deprecada para Carta Precatória!', 'error');
+            document.getElementById('unidade_deprecada')?.focus();
+            return;
+        }
+        if (!deprecante_val) {
+            showAlert('É obrigatório informar o Deprecante para Carta Precatória!', 'error');
+            document.getElementById('deprecante')?.focus();
+            return;
+        }
+        if (!pessoas_inquiridas_list || pessoas_inquiridas_list.length === 0) {
+            showAlert('É obrigatório adicionar pelo menos uma pessoa inquirida para Carta Precatória!', 'error');
+            return;
+        }
     }
 
     // Validação de número duplicado (apenas para cadastro novo)
@@ -2958,7 +3152,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 // campos específicos PAD/CD/CJ (Migração 018)
                 presidente_id, null,
                 interrogante_id, null,
-                escrivao_processo_id, null
+                escrivao_processo_id, null,
+                // campos específicos CP (Migração 025)
+                unidade_deprecada,
+                deprecante,
+                pessoas_inquiridas
             )();
         } else {
             // Modo criação
@@ -3006,7 +3204,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 // campos específicos PAD/CD/CJ (Migração 018)
                 presidente_id, null,
                 interrogante_id, null,
-                escrivao_processo_id, null
+                escrivao_processo_id, null,
+                // campos específicos CP (Migração 025)
+                unidade_deprecada,
+                deprecante,
+                pessoas_inquiridas
             )();
         }        if (result.sucesso) {
             showAlert(result.mensagem, 'success');

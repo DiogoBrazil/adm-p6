@@ -1303,7 +1303,9 @@ def registrar_processo(
     # Novos campos para PAD, CD, CJ (Migração 018)
     presidente_id=None, presidente_tipo=None,
     interrogante_id=None, interrogante_tipo=None,
-    escrivao_processo_id=None, escrivao_processo_tipo=None
+    escrivao_processo_id=None, escrivao_processo_tipo=None,
+    # Novos campos para Carta Precatória (Migração 025)
+    unidade_deprecada=None, deprecante=None, pessoas_inquiridas=None
 ):
     """Registra um novo processo/procedimento"""
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
@@ -1547,7 +1549,7 @@ def registrar_processo(
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
                 data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
                 presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
-                motorista_id
+                motorista_id, unidade_deprecada, deprecante, pessoas_inquiridas
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?,
@@ -1556,7 +1558,7 @@ def registrar_processo(
                 ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?,
-                ?
+                ?, ?, ?, ?
             )
         """, (
             processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
@@ -1566,7 +1568,7 @@ def registrar_processo(
             concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
             data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
             presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
-            motorista_id
+            motorista_id, unidade_deprecada, deprecante, pessoas_inquiridas
         ))
 
         # Se for procedimento e tiver múltiplos PMs envolvidos, salvar na nova tabela
@@ -2693,7 +2695,9 @@ def atualizar_processo(
     # Novos campos para PAD, CD, CJ (Migração 018)
     presidente_id=None, presidente_tipo=None,
     interrogante_id=None, interrogante_tipo=None,
-    escrivao_processo_id=None, escrivao_processo_tipo=None
+    escrivao_processo_id=None, escrivao_processo_tipo=None,
+    # Novos campos para Carta Precatória (Migração 025)
+    unidade_deprecada=None, deprecante=None, pessoas_inquiridas=None
 ):
     """Atualiza um processo/procedimento existente"""
     try:
@@ -2812,7 +2816,7 @@ def atualizar_processo(
                 concluido = ?, data_conclusao = ?, solucao_final = ?, transgressoes_ids = ?, ano_instauracao = ?,
                 data_remessa_encarregado = ?, data_julgamento = ?, solucao_tipo = ?, penalidade_tipo = ?, penalidade_dias = ?, indicios_categorias = ?,
                 presidente_id = ?, presidente_tipo = ?, interrogante_id = ?, interrogante_tipo = ?, escrivao_processo_id = ?, escrivao_processo_tipo = ?,
-                motorista_id = ?,
+                motorista_id = ?, unidade_deprecada = ?, deprecante = ?, pessoas_inquiridas = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -2824,7 +2828,7 @@ def atualizar_processo(
                 concluido, data_conclusao, solucao_final, transgressoes_ids, ano_instauracao,
                 data_remessa_encarregado, data_julgamento, solucao_tipo, penalidade_tipo, penalidade_dias, indicios_categorias,
                 presidente_id, presidente_tipo, interrogante_id, interrogante_tipo, escrivao_processo_id, escrivao_processo_tipo,
-                motorista_id,
+                motorista_id, unidade_deprecada, deprecante, pessoas_inquiridas,
                 processo_id
             )
         )
