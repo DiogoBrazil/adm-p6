@@ -11,7 +11,7 @@ let pmsAdicionais = [];
 
 let pessoasInquiridasCount = 1;
 
-function adicionarPessoaInquirida() {
+function adicionarPessoaInquirida(nomeInicial = '') {
     pessoasInquiridasCount++;
     const container = document.getElementById('pessoas_inquiridas_list');
     
@@ -24,6 +24,7 @@ function adicionarPessoaInquirida() {
                class="form-control pessoa-inquirida-input" 
                placeholder="Digite o nome da pessoa a ser inquirida"
                id="pessoa_inquirida_input_${pessoasInquiridasCount}"
+               value="${nomeInicial}"
                style="flex: 1;">
         <button type="button" 
                 class="btn btn-sm btn-danger ms-2" 
@@ -55,7 +56,7 @@ function coletarPessoasInquiridas() {
         }
     });
     
-    return JSON.stringify(pessoas);
+    return pessoas; // Retorna array, não JSON string
 }
 
 function ajustarCamposCartaPrecatoria(tipoProcedimento) {
@@ -107,6 +108,20 @@ function ajustarCamposCartaPrecatoria(tipoProcedimento) {
             }
         }
     });
+    
+    // Para CP, solução final não é obrigatória (só data de remessa e data de conclusão)
+    const solucaoFinalTextarea = document.getElementById('solucao_final');
+    if (solucaoFinalTextarea) {
+        if (isCP) {
+            solucaoFinalTextarea.removeAttribute('required');
+        } else {
+            // Para outros procedimentos, manter obrigatório quando conclusão estiver marcada
+            const concluidoCheckbox = document.getElementById('concluido');
+            if (concluidoCheckbox && concluidoCheckbox.checked) {
+                solucaoFinalTextarea.setAttribute('required', 'required');
+            }
+        }
+    }
 }
 
 // ============================================
@@ -1598,6 +1613,12 @@ async function preencherFormularioEdicao(procedimento) {
             console.log('✅ Campo Escrivão do Processo preenchido:', procedimento.escrivao_processo_completo || procedimento.escrivao_processo_nome);
         }
         
+        // Se for CP, ajustar campos específicos ANTES de preencher os dados
+        if (procedimento.tipo_detalhe === 'CP') {
+            console.log('🔧 Ajustando campos para CP ANTES de carregar dados...');
+            ajustarCamposCartaPrecatoria('CP');
+        }
+        
         // Preencher campos específicos de Carta Precatória (CP)
         if (procedimento.unidade_deprecada) {
             document.getElementById('unidade_deprecada').value = procedimento.unidade_deprecada || '';
@@ -1607,20 +1628,44 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('deprecante').value = procedimento.deprecante || '';
             console.log('✅ Campo Deprecante preenchido:', procedimento.deprecante);
         }
+        
+        console.log('🔍 Debug pessoas_inquiridas:', {
+            existe: !!procedimento.pessoas_inquiridas,
+            valor: procedimento.pessoas_inquiridas,
+            tipo: typeof procedimento.pessoas_inquiridas
+        });
+        
         if (procedimento.pessoas_inquiridas) {
             try {
-                const pessoasList = JSON.parse(procedimento.pessoas_inquiridas);
+                console.log('📋 Tentando parsear pessoas_inquiridas...');
+                let pessoasList = JSON.parse(procedimento.pessoas_inquiridas);
+                
+                console.log('📋 Parse inicial:', { tipo: typeof pessoasList, valor: pessoasList });
+                
+                // Se o parse retornou uma string (duplo encode), fazer parse novamente
+                if (typeof pessoasList === 'string') {
+                    console.log('⚠️ Detectado duplo encode, fazendo parse novamente...');
+                    pessoasList = JSON.parse(pessoasList);
+                }
+                
+                console.log('📋 Após tratamento:', { tipo: typeof pessoasList, tamanho: pessoasList.length });
+                
                 pessoasInquiridasCount = 0; // Reset counter
                 const container = document.getElementById('pessoas_inquiridas_list');
                 container.innerHTML = ''; // Limpar lista
                 
+                console.log('📋 Adicionando pessoas à lista...');
                 pessoasList.forEach((pessoa, index) => {
+                    console.log(`  ${index + 1}. Adicionando: ${pessoa}`);
                     adicionarPessoaInquirida(pessoa);
                 });
                 console.log('✅ Pessoas Inquiridas preenchidas:', pessoasList.length);
             } catch (e) {
-                console.error('Erro ao parsear pessoas_inquiridas:', e);
+                console.error('❌ Erro ao parsear pessoas_inquiridas:', e);
+                console.error('Stack:', e.stack);
             }
+        } else {
+            console.log('⚠️ pessoas_inquiridas está vazio ou null');
         }
 
         // Preencher campos de PM envolvido com formato completo
@@ -2932,7 +2977,17 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const deprecante = tipo_detalhe === 'CP' ? 
         (document.getElementById('deprecante')?.value?.trim() || null) : null;
     const pessoas_inquiridas = tipo_detalhe === 'CP' ? 
-        JSON.stringify(coletarPessoasInquiridas()) : null;
+        coletarPessoasInquiridas() : null;  // Enviar array direto, não JSON string
+    
+    // Debug CP
+    if (tipo_detalhe === 'CP') {
+        console.log('🔍 Debug CP - Dados coletados:', {
+            unidade_deprecada,
+            deprecante,
+            pessoas_inquiridas,
+            pessoas_array: coletarPessoasInquiridas()
+        });
+    }
     
     const transgressoes_ids = document.getElementById('transgressoes_ids')?.value || null;
     const resumo_fatos = document.getElementById('resumo_fatos')?.value || null;

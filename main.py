@@ -1308,6 +1308,8 @@ def registrar_processo(
     unidade_deprecada=None, deprecante=None, pessoas_inquiridas=None
 ):
     """Registra um novo processo/procedimento"""
+    import json
+    
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
     
     # Converter nome_vitima para maiúsculas se fornecido
@@ -1506,6 +1508,10 @@ def registrar_processo(
 
         # Gerar ID único para o processo/procedimento
         processo_id = str(uuid.uuid4())
+        
+        # Converter pessoas_inquiridas para JSON string se for array/lista
+        if pessoas_inquiridas is not None and isinstance(pessoas_inquiridas, (list, tuple)):
+            pessoas_inquiridas = json.dumps(pessoas_inquiridas, ensure_ascii=False)
         
         # Debug: verificar TODOS os parâmetros da query SQL
         print(f"\n========== DEBUG SQL PARAMETERS ===========")
@@ -2154,7 +2160,11 @@ def obter_processo(processo_id):
                 p.motorista_id,
                 COALESCE(u_mot.nome, '') as motorista_nome,
                 COALESCE(u_mot.posto_graduacao, '') as motorista_posto,
-                COALESCE(u_mot.matricula, '') as motorista_matricula
+                COALESCE(u_mot.matricula, '') as motorista_matricula,
+                -- Dados específicos de Carta Precatória (CP)
+                p.unidade_deprecada,
+                p.deprecante,
+                p.pessoas_inquiridas
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
             LEFT JOIN usuarios u_esc ON p.escrivao_id = u_esc.id
@@ -2449,6 +2459,10 @@ def obter_processo(processo_id):
             "motorista_id": processo[58],
             "motorista_nome": processo[59],
             "motorista_completo": motorista_completo,
+            # Campos específicos de Carta Precatória (CP)
+            "unidade_deprecada": processo[62],
+            "deprecante": processo[63],
+            "pessoas_inquiridas": processo[64],
         }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
@@ -2700,11 +2714,17 @@ def atualizar_processo(
     unidade_deprecada=None, deprecante=None, pessoas_inquiridas=None
 ):
     """Atualiza um processo/procedimento existente"""
+    import json
+    
     try:
         # NORMALIZAÇÃO: Converter valores antigos de responsavel_tipo para 'usuario'
         if responsavel_tipo in ('encarregado', 'operador'):
             print(f"⚠️ [ATUALIZAÇÃO] Convertendo responsavel_tipo de '{responsavel_tipo}' para 'usuario'")
             responsavel_tipo = 'usuario'
+        
+        # Converter pessoas_inquiridas para JSON string se for array/lista
+        if pessoas_inquiridas is not None and isinstance(pessoas_inquiridas, (list, tuple)):
+            pessoas_inquiridas = json.dumps(pessoas_inquiridas, ensure_ascii=False)
         
         # Validação do local_fatos (obrigatório)
         if not local_fatos:
