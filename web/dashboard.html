@@ -941,10 +941,13 @@
                     
                     // Atualizar totais
                     const totalGeral = resultado.total_processos || 0;
-                    const tiposAtivos = Object.values(resultado.andamento).filter(count => count > 0).length || 0;
+                    // Somar todos os processos em andamento (exceto o campo 'TOTAL')
+                    const totalAndamento = Object.entries(resultado.andamento)
+                        .filter(([tipo, _]) => tipo !== 'TOTAL')
+                        .reduce((sum, [_, count]) => sum + count, 0);
                     
                     document.getElementById('totalGeral').textContent = totalGeral;
-                    document.getElementById('tiposAtivos').textContent = tiposAtivos;
+                    document.getElementById('tiposAtivos').textContent = totalAndamento;
                     
                     // Criar gráfico
                     createChart(processData);
