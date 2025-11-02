@@ -4561,12 +4561,17 @@ async function abrirIndiciosPM(index, tipo) {
     if (indiciosPorPM && indiciosPorPM[pmId]) {
         dadosExistentes = indiciosPorPM[pmId];
         console.log(`📋 Encontrados dados existentes para PM ${pmNome}:`, dadosExistentes);
+        // Adicionar indícios ao pmData
+        pmData.categorias = dadosExistentes.categorias || [];
+        pmData.crimes = dadosExistentes.crimes || [];
+        pmData.rdpm = dadosExistentes.rdpm || [];
+        pmData.art29 = dadosExistentes.art29 || [];
     }
     
-    // Abrir modal NOVO (PM-específico) passando pm_envolvido_id
+    // Abrir modal NOVO (PM-específico) passando pm_envolvido_id E dados existentes
     if (window.indiciosPMModal) {
-        console.log(`🔧 Abrindo modal novo com pmEnvolvidoId=${pmEnvolvidoId}, pmNome=${pmNome}`);
-        await window.indiciosPMModal.abrir(pmEnvolvidoId, pmNome);
+        console.log(`🔧 Abrindo modal novo com pmEnvolvidoId=${pmEnvolvidoId}, dados:`, pmData);
+        await window.indiciosPMModal.abrir(pmEnvolvidoId, pmData);
     } else {
         console.error('❌ Modal de indícios PM não está disponível');
         showAlert('Modal de indícios não está disponível', 'error');

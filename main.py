@@ -896,7 +896,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         # Buscar transgressões RDPM associadas
         rdpm = []
         cursor.execute("""
-            SELECT t.id, t.artigo, t.gravidade, t.inciso, t.texto
+            SELECT t.id, t.gravidade, t.inciso, t.texto
             FROM pm_envolvido_rdpm per
             JOIN transgressoes t ON t.id = per.transgressao_id
             WHERE per.pm_indicios_id = ?
@@ -905,10 +905,9 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         for row in cursor.fetchall():
             rdpm.append({
                 "id": row[0],
-                "artigo": row[1],
-                "natureza": row[2],
-                "inciso": row[3],
-                "texto": row[4]
+                "natureza": row[1],
+                "inciso": row[2],
+                "texto": row[3]
             })
         
         # Buscar infrações Art. 29 associadas
