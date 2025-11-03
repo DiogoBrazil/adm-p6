@@ -6718,7 +6718,7 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         
         # Buscar transgressões RDPM específicas do PM
         cursor.execute("""
-            SELECT t.artigo, t.inciso, t.texto, t.gravidade
+            SELECT t.inciso, t.texto, t.gravidade
             FROM pm_envolvido_rdpm per
             JOIN transgressoes t ON t.id = per.transgressao_id
             WHERE per.pm_indicios_id = ?
@@ -6726,12 +6726,11 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         
         for row in cursor.fetchall():
             indicios["transgressoes"].append({
-                "artigo": row[0],
-                "inciso": row[1],
-                "texto": row[2],
-                "gravidade": row[3],
+                "inciso": row[0],
+                "texto": row[1],
+                "gravidade": row[2],
                 "tipo": "rdpm",
-                "texto_completo": f"Inciso {row[1]} - {row[2]} ({row[3]})"
+                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
             })
         
         # Buscar infrações Art. 29 específicas do PM
@@ -6825,9 +6824,9 @@ def _obter_indicios_para_mapa(cursor, processo_id):
                 
                 # ART. 29 deste PM
                 cursor.execute("""
-                    SELECT a.inciso, a.texto, a.gravidade
+                    SELECT a.inciso, a.texto
                     FROM pm_envolvido_art29 pea
-                    JOIN infracoes_estatuto_art29 a ON a.id = pea.infracao_id
+                    JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id
                     WHERE pea.pm_indicios_id = ? AND a.ativo = 1
                 """, (pm_indicios_id,))
                 
@@ -6835,8 +6834,7 @@ def _obter_indicios_para_mapa(cursor, processo_id):
                     indicios["art29"].append({
                         "inciso": row[0],
                         "texto": row[1],
-                        "gravidade": row[2],
-                        "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]} ({row[2]})"
+                        "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]}"
                     })
         
         # ============================================================

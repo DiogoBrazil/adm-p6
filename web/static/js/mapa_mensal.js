@@ -916,23 +916,61 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         dadosOriginais.pms_envolvidos.forEach(pm => {
             const nomePM = formatarPmParaExibicao(pm);
             const linhas = [];
+            
             if (pm.indicios) {
                 const { categorias, crimes, transgressoes, art29 } = pm.indicios;
-                if (categorias && categorias.length) {
-                    categorias.forEach(cat => linhas.push(`<div class="pm-muted">• ${cat}</div>`));
+                
+                // Se não houver nenhum indício específico, mostrar apenas categorias
+                if ((!crimes || !crimes.length) && (!transgressoes || !transgressoes.length) && (!art29 || !art29.length)) {
+                    if (categorias && categorias.length) {
+                        categorias.forEach(cat => linhas.push(`<div class="pm-muted">• ${cat}</div>`));
+                    } else {
+                        linhas.push('<div class="pm-muted">• Não houve indícios.</div>');
+                    }
                 } else {
-                    linhas.push('<div class="pm-muted">• Não houve indícios.</div>');
+                    // Listar cada crime individualmente com sua categoria
+                    if (crimes && crimes.length) {
+                        const categoriaCrime = categorias ? categorias.filter(c => 
+                            c.includes('crime comum') || c.includes('crime militar')
+                        ) : [];
+                        
+                        crimes.forEach(c => {
+                            const catTexto = categoriaCrime.length > 0 ? categoriaCrime.join(', ') : 'Indícios de crime';
+                            linhas.push(`<div class="pm-muted"><strong>${catTexto}:</strong></div>`);
+                            linhas.push(`<div class="pm-muted" style="margin-left: 10px;">• Crime: ${c.texto_completo}</div>`);
+                        });
+                    }
+                    
+                    // Listar cada transgressão RDPM individualmente
+                    if (transgressoes && transgressoes.length) {
+                        const categoriaRdpm = categorias ? categorias.filter(c => 
+                            c.includes('transgressão disciplinar')
+                        ) : [];
+                        
+                        transgressoes.forEach(t => {
+                            const catTexto = categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar';
+                            linhas.push(`<div class="pm-muted"><strong>${catTexto}:</strong></div>`);
+                            linhas.push(`<div class="pm-muted" style="margin-left: 10px;">• ${t.texto_completo} (RDPM)</div>`);
+                        });
+                    }
+                    
+                    // Listar cada Art. 29 individualmente
+                    if (art29 && art29.length) {
+                        const categoriaArt29 = categorias ? categorias.filter(c => 
+                            c.includes('estatuto')
+                        ) : [];
+                        
+                        art29.forEach(a => {
+                            const catTexto = categoriaArt29.length > 0 ? categoriaArt29[0] : 'Indícios de infração ao Estatuto dos PM';
+                            linhas.push(`<div class="pm-muted"><strong>${catTexto}:</strong></div>`);
+                            linhas.push(`<div class="pm-muted" style="margin-left: 10px;">• ${a.texto_completo}</div>`);
+                        });
+                    }
                 }
-                if (crimes && crimes.length) {
-                    crimes.forEach(c => linhas.push(`<div class="pm-muted">• Crime: ${c.texto_completo}</div>`));
-                }
-                if (transgressoes && transgressoes.length) {
-                    transgressoes.forEach(t => linhas.push(`<div class="pm-muted">• Transgressão: ${t.texto_completo}</div>`));
-                }
-                if (art29 && art29.length) {
-                    art29.forEach(a => linhas.push(`<div class="pm-muted">• Art. 29: ${a.texto_completo}</div>`));
-                }
+            } else {
+                linhas.push('<div class="pm-muted">• Não houve indícios.</div>');
             }
+            
             blocos.push(`<h4>${nomePM}:</h4>${linhas.join('')}`);
         });
         return blocos.join('');
@@ -1474,16 +1512,21 @@ async function gerarDocumentoPDF(content, titulo) {
         
         // Função para formatar transgressões
         function formatarTransgressao(transgressao) {
+            // Se já tiver texto_completo formatado, usar ele
+            if (transgressao.texto_completo) {
+                return transgressao.texto_completo;
+            }
+            
             const gravidade = transgressao.gravidade ? transgressao.gravidade.charAt(0).toUpperCase() + transgressao.gravidade.slice(1) : 'Leve';
             const inciso = transgressao.inciso || 'I';
             const tipo = transgressao.tipo === 'estatuto' ? 'do Estatuto' : 'do RDPM';
             
             // Se for RDPM e tiver artigo, incluir na formatação
             if (transgressao.tipo !== 'estatuto' && transgressao.artigo) {
-                return `- Art. ${transgressao.artigo} (${gravidade}) - Inciso ${inciso} ${tipo}`;
+                return `Art. ${transgressao.artigo} (${gravidade}) - Inciso ${inciso} ${tipo}`;
             }
             
-            return `- ${gravidade} - Inciso ${inciso} ${tipo}`;
+            return `${gravidade} - Inciso ${inciso} ${tipo}`;
         }
         
         if ((['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') || 
@@ -1518,18 +1561,51 @@ async function gerarDocumentoPDF(content, titulo) {
                         linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
                         if (pm.indicios) {
                             const { categorias, crimes, transgressoes, art29 } = pm.indicios;
-                            if ((categorias && categorias.length) || (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
-                                if (categorias && categorias.length) {
-                                    categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
-                                }
+                            
+                            // Verificar se há indícios específicos (crimes/transgressões)
+                            const temIndiciosEspecificos = (crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length);
+                            
+                            if (!temIndiciosEspecificos && categorias && categorias.length) {
+                                // Apenas categorias, sem indícios específicos
+                                categorias.forEach(c => linhasIndicios.push({ text: `• ${c}`, bold: false }));
+                            } else if (temIndiciosEspecificos) {
+                                // Listar cada crime individualmente com sua categoria
                                 if (crimes && crimes.length) {
-                                    crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}` , bold: false }));
+                                    const categoriaCrime = categorias ? categorias.filter(c => 
+                                        c.includes('crime comum') || c.includes('crime militar')
+                                    ) : [];
+                                    
+                                    crimes.forEach(crime => {
+                                        const catTexto = categoriaCrime.length > 0 ? categoriaCrime.join(', ') : 'Indícios de crime';
+                                        linhasIndicios.push({ text: `${catTexto}:`, bold: true });
+                                        linhasIndicios.push({ text: `  - Crime: ${crime.texto_completo}`, bold: false });
+                                    });
                                 }
+                                
+                                // Listar cada transgressão RDPM individualmente
                                 if (transgressoes && transgressoes.length) {
-                                    transgressoes.forEach(t => linhasIndicios.push({ text: formatarTransgressao(t), bold: false }));
+                                    const categoriaRdpm = categorias ? categorias.filter(c => 
+                                        c.includes('transgressão disciplinar')
+                                    ) : [];
+                                    
+                                    transgressoes.forEach(t => {
+                                        const catTexto = categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar';
+                                        linhasIndicios.push({ text: `${catTexto}:`, bold: true });
+                                        linhasIndicios.push({ text: `  - ${formatarTransgressao(t)}`, bold: false });
+                                    });
                                 }
+                                
+                                // Listar cada Art. 29 individualmente
                                 if (art29 && art29.length) {
-                                    art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
+                                    const categoriaArt29 = categorias ? categorias.filter(c => 
+                                        c.includes('estatuto')
+                                    ) : [];
+                                    
+                                    art29.forEach(a => {
+                                        const catTexto = categoriaArt29.length > 0 ? categoriaArt29[0] : 'Indícios de infração ao Estatuto dos PM';
+                                        linhasIndicios.push({ text: `${catTexto}:`, bold: true });
+                                        linhasIndicios.push({ text: `  - Art. 29: ${a.texto_completo}`, bold: false });
+                                    });
                                 }
                             } else {
                                 linhasIndicios.push({ text: '• Não houve', bold: false });
