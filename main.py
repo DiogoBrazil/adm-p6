@@ -3639,10 +3639,11 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 p.processo_sei LIKE ? OR p.numero_portaria LIKE ? OR p.numero_memorando LIKE ? OR
                 p.numero_feito LIKE ? OR 
                 COALESCE(u_resp.nome, '') LIKE ? OR
-                COALESCE(u_pm.nome, '') LIKE ?
+                COALESCE(u_pm.nome, '') LIKE ? OR
+                COALESCE(p.resumo_fatos, '') LIKE ?
             )"""
             search_term_like = f"%{search_term}%"
-            search_params = [search_term_like] * 9
+            search_params = [search_term_like] * 10
 
         # Adicionar filtros avançados se fornecidos
         if filtros:
