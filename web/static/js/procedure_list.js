@@ -725,17 +725,42 @@ function formatarDataHora(dataString) {
 
 // Modal de prorrogação
 let modalProrrogacao;
-function abrirModalProrrogacao(processoId, numeroFmt) {
-    if (!modalProrrogacao) {
-        criarModalProrrogacao();
+async function abrirModalProrrogacao(processoId, numeroFmt) {
+    try {
+        // Buscar dados do procedimento para verificar se está concluído
+        const procedimento = await eel.obter_processo(processoId)();
+        
+        if (!procedimento) {
+            showAlert('Erro ao carregar dados do procedimento.', 'error');
+            return;
+        }
+        
+        // Verificar se o procedimento está concluído
+        if (procedimento.concluido === 1 || procedimento.concluido === true) {
+            showAlert(
+                `<i class="fas fa-exclamation-triangle"></i> 
+                <strong>Ação não permitida</strong><br><br>
+                Não é possível adicionar prorrogação de prazo pois este ${procedimento.tipo_geral === 'processo' ? 'processo' : 'procedimento'} já está concluído.`,
+                'error'
+            );
+            return;
+        }
+        
+        // Se não está concluído, abrir o modal normalmente
+        if (!modalProrrogacao) {
+            criarModalProrrogacao();
+        }
+        modalProrrogacao.querySelector('#prorProcId').value = processoId;
+        modalProrrogacao.querySelector('#prorNumero').textContent = numeroFmt;
+        modalProrrogacao.style.display = 'flex';
+        // Focar no primeiro campo após abrir
+        setTimeout(() => {
+            modalProrrogacao.querySelector('#prorDias').focus();
+        }, 100);
+    } catch (error) {
+        console.error('Erro ao verificar status do procedimento:', error);
+        showAlert('Erro ao processar a solicitação. Por favor, tente novamente.', 'error');
     }
-    modalProrrogacao.querySelector('#prorProcId').value = processoId;
-    modalProrrogacao.querySelector('#prorNumero').textContent = numeroFmt;
-    modalProrrogacao.style.display = 'flex';
-    // Focar no primeiro campo após abrir
-    setTimeout(() => {
-        modalProrrogacao.querySelector('#prorDias').focus();
-    }, 100);
 }
 
 function fecharModalProrrogacao() {
