@@ -193,7 +193,7 @@ function populateProcedureData(data) {
     document.getElementById('infoNumeroRGF').textContent = data.numero_rgf || '-';
     
     // Carregar encarregados
-    loadEncarregados(data.id);
+    loadEncarregados(data.id, data.tipo_procedimento);
     
     // Carregar envolvidos
     loadEnvolvidos(data.id);
@@ -274,19 +274,31 @@ function getStatusInfo(data) {
 }
 
 // Função para carregar encarregados
-async function loadEncarregados(procedureId) {
+async function loadEncarregados(procedureId, tipoProcedimento) {
     try {
         const container = document.getElementById('encarregadosContainer');
+        const tituloCard = document.getElementById('tituloEncarregados');
         const data = await eel.obter_encarregados_procedimento(procedureId)();
+        
+        // Ajustar título do card baseado no tipo
+        if (tipoProcedimento && ['CJ', 'CD', 'PAD'].includes(tipoProcedimento)) {
+            tituloCard.innerHTML = '<i class="fas fa-gavel"></i> Composição do Conselho';
+        } else {
+            tituloCard.innerHTML = '<i class="fas fa-user-shield"></i> Encarregado(s)';
+        }
         
         let encarregadosHtml = '';
         
         if (data.sucesso && data.encarregados.length > 0) {
+            const tituloSecao = ['CJ', 'CD', 'PAD'].includes(tipoProcedimento) 
+                ? 'Membros do Conselho' 
+                : 'Encarregado(s) Atual(is)';
+            
             encarregadosHtml = `
                 <div class="encarregados-atuais">
                     <h4>
                         <i class="fas fa-user-shield"></i>
-                        Encarregado(s) Atual(is)
+                        ${tituloSecao}
                     </h4>
                     <div class="encarregados-lista">
                         ${data.encarregados.map(encarregado => `

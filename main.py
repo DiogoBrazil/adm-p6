@@ -2489,7 +2489,8 @@ def obter_procedimento_completo(procedimento_id):
                 p.numero_controle, p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
                 p.natureza_processo, p.natureza_procedimento, p.solucao_final,
                 p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids,
-                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
+                p.presidente_id, p.interrogante_id, p.escrivao_processo_id
             FROM processos_procedimentos p
             WHERE p.id = ? AND p.ativo = 1
             """,
@@ -2557,7 +2558,11 @@ def obter_procedimento_completo(procedimento_id):
             "penalidade_dias": row[33],
             "indicios_categorias": row[34],
             "indicios": indicios,
-            "indicios_por_pm": indicios_por_pm
+            "indicios_por_pm": indicios_por_pm,
+            # Campos para CJ, CD e PAD
+            "presidente_id": row[35],
+            "interrogante_id": row[36],
+            "escrivao_processo_id": row[37]
         }
 
         return {"sucesso": True, "procedimento": procedimento}
@@ -2567,14 +2572,16 @@ def obter_procedimento_completo(procedimento_id):
 
 @eel.expose
 def obter_encarregados_procedimento(procedimento_id):
-    """Retorna responsável e escrivão (se houver) para o procedimento"""
+    """Retorna responsável e escrivão (se houver) para o procedimento.
+    Para CJ, CD e PAD retorna presidente, interrogante e escrivão do processo."""
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Buscar tipo_detalhe para verificar se é CJ, CD ou PAD
         cursor.execute(
             """
-            SELECT responsavel_id, escrivao_id
+            SELECT responsavel_id, escrivao_id, tipo_detalhe, presidente_id, interrogante_id, escrivao_processo_id
             FROM processos_procedimentos
             WHERE id = ? AND ativo = 1
             """,
@@ -2585,7 +2592,7 @@ def obter_encarregados_procedimento(procedimento_id):
             conn.close()
             return {"sucesso": True, "encarregados": []}
 
-        responsavel_id, escrivao_id = row[0], row[1]
+        responsavel_id, escrivao_id, tipo_detalhe, presidente_id, interrogante_id, escrivao_processo_id = row
 
         def _buscar_usuario(user_id):
             if not user_id:
@@ -2601,19 +2608,44 @@ def obter_encarregados_procedimento(procedimento_id):
             return None
 
         encarregados = []
-        resp = _buscar_usuario(responsavel_id)
-        if resp:
-            encarregados.append({
-                "tipo_encarregado": "Responsável",
-                **resp
-            })
+        
+        # Se for CJ, CD ou PAD, mostrar Presidente, Interrogante e Escrivão do Processo
+        if tipo_detalhe in ['CJ', 'CD', 'PAD']:
+            pres = _buscar_usuario(presidente_id)
+            if pres:
+                encarregados.append({
+                    "tipo_encarregado": "Presidente",
+                    **pres
+                })
+            
+            interrog = _buscar_usuario(interrogante_id)
+            if interrog:
+                encarregados.append({
+                    "tipo_encarregado": "Interrogante",
+                    **interrog
+                })
+            
+            esc_proc = _buscar_usuario(escrivao_processo_id)
+            if esc_proc:
+                encarregados.append({
+                    "tipo_encarregado": "Escrivão do Processo",
+                    **esc_proc
+                })
+        else:
+            # Para outros tipos, mostrar Responsável e Escrivão normalmente
+            resp = _buscar_usuario(responsavel_id)
+            if resp:
+                encarregados.append({
+                    "tipo_encarregado": "Responsável",
+                    **resp
+                })
 
-        esc = _buscar_usuario(escrivao_id)
-        if esc:
-            encarregados.append({
-                "tipo_encarregado": "Escrivão",
-                **esc
-            })
+            esc = _buscar_usuario(escrivao_id)
+            if esc:
+                encarregados.append({
+                    "tipo_encarregado": "Escrivão",
+                    **esc
+                })
 
         conn.close()
         return {"sucesso": True, "encarregados": encarregados}
