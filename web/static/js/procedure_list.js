@@ -737,11 +737,11 @@ async function abrirModalProrrogacao(processoId, numeroFmt) {
         
         // Verificar se o procedimento está concluído
         if (procedimento.concluido === 1 || procedimento.concluido === true) {
-            showAlert(
-                `<i class="fas fa-exclamation-triangle"></i> 
-                <strong>Ação não permitida</strong><br><br>
-                Não é possível adicionar prorrogação de prazo pois este ${procedimento.tipo_geral === 'processo' ? 'processo' : 'procedimento'} já está concluído.`,
-                'error'
+            const tipoTexto = procedimento.tipo_geral === 'processo' ? 'processo' : 'procedimento';
+            showErrorModal(
+                'Ação Não Permitida',
+                `Não é possível adicionar prorrogação de prazo pois este ${tipoTexto} já está concluído.`,
+                'fa-exclamation-triangle'
             );
             return;
         }
@@ -1500,4 +1500,82 @@ async function salvarSubstituicaoEncarregado() {
         console.error('Erro ao substituir encarregado:', error);
         showAlert('Erro ao substituir encarregado.', 'error');
     }
+}
+
+// Função para exibir modal de erro/aviso centralizado
+function showErrorModal(title, message, iconClass = 'fa-exclamation-triangle') {
+    // Verificar se já existe o modal, senão criar
+    let modal = document.getElementById('errorModalOverlay');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'errorModalOverlay';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        `;
+        
+        modal.innerHTML = `
+            <div style="
+                background: white;
+                border-radius: 8px;
+                padding: 2rem;
+                max-width: 500px;
+                width: 90%;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                text-align: center;
+            ">
+                <div id="errorModalIcon" style="font-size: 4rem; margin-bottom: 1rem;"></div>
+                <h3 id="errorModalTitle" style="margin-bottom: 1rem; color: #333;"></h3>
+                <p id="errorModalMessage" style="margin-bottom: 1.5rem; color: #666; line-height: 1.6;"></p>
+                <button id="errorModalBtn" style="
+                    background-color: #e74c3c;
+                    color: white;
+                    border: none;
+                    padding: 0.75rem 2rem;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 1rem;
+                    font-weight: bold;
+                    transition: background-color 0.3s;
+                " onmouseover="this.style.backgroundColor='#c0392b'" 
+                   onmouseout="this.style.backgroundColor='#e74c3c'">
+                    OK
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Fechar ao clicar no botão
+        document.getElementById('errorModalBtn').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        // Fechar ao clicar fora do modal
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+    
+    // Atualizar conteúdo
+    const iconElement = document.getElementById('errorModalIcon');
+    const titleElement = document.getElementById('errorModalTitle');
+    const messageElement = document.getElementById('errorModalMessage');
+    
+    iconElement.innerHTML = `<i class="fas ${iconClass}" style="color: #e74c3c;"></i>`;
+    titleElement.textContent = title;
+    messageElement.innerHTML = message;
+    
+    // Mostrar modal
+    modal.style.display = 'flex';
 }
