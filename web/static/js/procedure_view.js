@@ -174,6 +174,14 @@ function populateProcedureData(data) {
     document.getElementById('infoLocalOrigem').textContent = data.local_origem || '-';
     document.getElementById('infoLocalFatos').textContent = data.local_fatos || '-';
     document.getElementById('infoProcessoSei').textContent = data.processo_sei || '-';
+    
+    // Resumo dos Fatos (card separado)
+    const resumoContainer = document.getElementById('resumoFatosContainer');
+    if (data.resumo_fatos && data.resumo_fatos.trim()) {
+        resumoContainer.textContent = data.resumo_fatos;
+    } else {
+        resumoContainer.innerHTML = '<p style="color: #999; font-style: italic;">Nenhum resumo dos fatos cadastrado.</p>';
+    }
     document.getElementById('infoSituacao').textContent = data.situacao || '-';
     document.getElementById('infoAnoInstauracao').textContent = data.ano_instauracao || '-';
 

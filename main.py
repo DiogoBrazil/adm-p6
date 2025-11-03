@@ -2535,7 +2535,7 @@ def obter_procedimento_completo(procedimento_id):
             "nome_pm_id": row[13],
             "responsavel_id": row[14],
             "escrivao_id": row[15],
-            "observacoes": row[16],
+            "resumo_fatos": row[16],
             "numero_controle": row[17],
             "numero_portaria": row[18],
             "numero_memorando": row[19],
