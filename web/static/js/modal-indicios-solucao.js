@@ -963,7 +963,33 @@ class ModalIndiciosSolucao {
     }
 
     removerIndicio(index) {
-        this.indiciosAdicionados.splice(index, 1);
+        // Obter o indício a ser removido
+        const indicioRemovido = this.indiciosAdicionados[index];
+        
+        if (indicioRemovido && indicioRemovido.pmId) {
+            // Remover do array de exibição
+            this.indiciosAdicionados.splice(index, 1);
+            
+            // ======== REMOVER DA VARIÁVEL GLOBAL INDICIOSPORPM ========
+            if (typeof indiciosPorPM !== 'undefined' && indiciosPorPM[indicioRemovido.pmId]) {
+                console.log(`🗑️ Removendo indícios do PM ${indicioRemovido.pmId}`);
+                console.log('📋 Dados antes da remoção:', indiciosPorPM[indicioRemovido.pmId]);
+                
+                // Remover completamente os dados deste PM
+                delete indiciosPorPM[indicioRemovido.pmId];
+                
+                console.log('✅ Indícios removidos da variável global indiciosPorPM');
+                console.log('📊 Estado atual de indiciosPorPM:', indiciosPorPM);
+            } else if (typeof window.indiciosPorPM !== 'undefined' && window.indiciosPorPM[indicioRemovido.pmId]) {
+                console.log(`🗑️ Removendo indícios do PM ${indicioRemovido.pmId} (window)`);
+                delete window.indiciosPorPM[indicioRemovido.pmId];
+                console.log('✅ Indícios removidos de window.indiciosPorPM');
+            }
+        } else {
+            // Remover apenas do array de exibição se não tiver PM ID
+            this.indiciosAdicionados.splice(index, 1);
+        }
+        
         this.atualizarListaIndicios();
         this.showToast('Sucesso', 'Indício removido com sucesso!', 'success');
     }
