@@ -803,9 +803,13 @@ def buscar_pms_envolvidos(procedimento_id):
                 matricula = pm_data[2] or ""
                 
                 # Montar nome completo removendo espaços extras
-                nome_completo = f"{posto} {matricula} {nome}".strip()
-                # Remover espaços duplos
-                nome_completo = " ".join(nome_completo.split())
+                # Se for "A APURAR", mostrar apenas o nome
+                if nome == "A APURAR":
+                    nome_completo = "A APURAR"
+                else:
+                    nome_completo = f"{posto} {matricula} {nome}".strip()
+                    # Remover espaços duplos
+                    nome_completo = " ".join(nome_completo.split())
                 
                 # Buscar indícios associados a este PM
                 indicios = buscar_indicios_por_pm(pm_envolvido_id)
@@ -3836,7 +3840,11 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             else:
                 # Para processos, usar o sistema antigo (um único PM)
                 if pm_envolvido_nome != "Não informado":
-                    pm_envolvido_completo = f"{pm_envolvido_posto} {pm_envolvido_matricula} {pm_envolvido_nome}".strip()
+                    # Se for "A APURAR", mostrar apenas o nome
+                    if pm_envolvido_nome == "A APURAR":
+                        pm_envolvido_completo = "A APURAR"
+                    else:
+                        pm_envolvido_completo = f"{pm_envolvido_posto} {pm_envolvido_matricula} {pm_envolvido_nome}".strip()
                 else:
                     pm_envolvido_completo = "Não informado"
                 pm_envolvido_tooltip = pm_envolvido_completo

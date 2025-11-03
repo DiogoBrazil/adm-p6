@@ -3481,7 +3481,14 @@ async function buscarUsuariosModal() {
             const nome = this.getAttribute('data-nome');
             const matricula = this.getAttribute('data-matricula');
             const pg = this.getAttribute('data-pg');
-            const texto = `${pg ? pg + ' ' : ''}${matricula ? matricula + ' ' : ''}${nome}`;
+            
+            // Se for "A APURAR", mostrar apenas o nome
+            let texto;
+            if (nome === 'A APURAR') {
+                texto = nome;
+            } else {
+                texto = `${pg ? pg + ' ' : ''}${matricula ? matricula + ' ' : ''}${nome}`;
+            }
             
             if (campoBuscaUsuario === 'encarregado') {
                 document.getElementById('responsavel_nome').value = texto;
