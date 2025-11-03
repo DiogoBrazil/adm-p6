@@ -970,20 +970,74 @@ class ModalIndiciosSolucao {
             // Remover do array de exibição
             this.indiciosAdicionados.splice(index, 1);
             
-            // ======== REMOVER DA VARIÁVEL GLOBAL INDICIOSPORPM ========
-            if (typeof indiciosPorPM !== 'undefined' && indiciosPorPM[indicioRemovido.pmId]) {
-                console.log(`🗑️ Removendo indícios do PM ${indicioRemovido.pmId}`);
-                console.log('📋 Dados antes da remoção:', indiciosPorPM[indicioRemovido.pmId]);
+            // ======== RECONSTRUIR INDICIOSPORPM COM OS ITENS RESTANTES ========
+            console.log(`🗑️ Removendo indício individual do PM ${indicioRemovido.pmId}`);
+            console.log('� Indício removido:', indicioRemovido);
+            
+            // Reconstruir indiciosPorPM baseado nos indiciosAdicionados restantes
+            const novoIndiciosPorPM = {};
+            
+            this.indiciosAdicionados.forEach(indicio => {
+                if (!indicio.pmId) return;
                 
-                // Remover completamente os dados deste PM
-                delete indiciosPorPM[indicioRemovido.pmId];
+                // Inicializar estrutura para este PM se não existir
+                if (!novoIndiciosPorPM[indicio.pmId]) {
+                    novoIndiciosPorPM[indicio.pmId] = {
+                        categorias: [],
+                        crimes: [],
+                        rdpm: [],
+                        art29: []
+                    };
+                }
                 
-                console.log('✅ Indícios removidos da variável global indiciosPorPM');
-                console.log('📊 Estado atual de indiciosPorPM:', indiciosPorPM);
-            } else if (typeof window.indiciosPorPM !== 'undefined' && window.indiciosPorPM[indicioRemovido.pmId]) {
-                console.log(`🗑️ Removendo indícios do PM ${indicioRemovido.pmId} (window)`);
-                delete window.indiciosPorPM[indicioRemovido.pmId];
-                console.log('✅ Indícios removidos de window.indiciosPorPM');
+                // Merge categorias (sem duplicatas)
+                if (indicio.categorias && indicio.categorias.length > 0) {
+                    indicio.categorias.forEach(cat => {
+                        if (!novoIndiciosPorPM[indicio.pmId].categorias.includes(cat)) {
+                            novoIndiciosPorPM[indicio.pmId].categorias.push(cat);
+                        }
+                    });
+                }
+                
+                // Adicionar crimes
+                if (indicio.crimes && indicio.crimes.length > 0) {
+                    indicio.crimes.forEach(crime => {
+                        if (!novoIndiciosPorPM[indicio.pmId].crimes.some(c => c.id === crime.id)) {
+                            novoIndiciosPorPM[indicio.pmId].crimes.push({ id: crime.id });
+                        }
+                    });
+                }
+                
+                // Adicionar transgressões (separar RDPM e Art. 29)
+                if (indicio.transgressoes && indicio.transgressoes.length > 0) {
+                    indicio.transgressoes.forEach(trans => {
+                        if (trans.tipo === 'rdpm' || trans.tipo === 'RDPM') {
+                            if (!novoIndiciosPorPM[indicio.pmId].rdpm.some(r => r.id === trans.id)) {
+                                novoIndiciosPorPM[indicio.pmId].rdpm.push({ id: trans.id });
+                            }
+                        } else if (trans.tipo === 'estatuto' || trans.tipo === 'art29') {
+                            if (!novoIndiciosPorPM[indicio.pmId].art29.some(a => a.id === trans.id)) {
+                                novoIndiciosPorPM[indicio.pmId].art29.push({ id: trans.id });
+                            }
+                        }
+                    });
+                }
+            });
+            
+            // Atualizar variável global
+            if (typeof indiciosPorPM !== 'undefined') {
+                // Substituir completamente
+                Object.keys(indiciosPorPM).forEach(key => delete indiciosPorPM[key]);
+                Object.assign(indiciosPorPM, novoIndiciosPorPM);
+                
+                console.log('✅ indiciosPorPM reconstruído:', indiciosPorPM);
+            }
+            
+            if (typeof window.indiciosPorPM !== 'undefined') {
+                Object.keys(window.indiciosPorPM).forEach(key => delete window.indiciosPorPM[key]);
+                Object.assign(window.indiciosPorPM, novoIndiciosPorPM);
+                
+                console.log('✅ window.indiciosPorPM reconstruído:', window.indiciosPorPM);
             }
         } else {
             // Remover apenas do array de exibição se não tiver PM ID

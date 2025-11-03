@@ -2026,44 +2026,88 @@ async function preencherFormularioEdicao(procedimento) {
                             const label = codigo + desc;
                             return {
                                 id: crime.id,
-                                nome: label || crime.tipo || 'Crime'
+                                nome: label || crime.tipo || 'Crime',
+                                tipo: 'crime'
                             };
                         });
 
                         // Preparar transgressões (RDPM + Art. 29) para exibição
-                        const transgressoesFormatadas = [];
+                        const rdpmFormatados = (dadosIndicios.rdpm || []).map(rdpm => ({
+                            id: rdpm.id,
+                            nome: `Inciso ${rdpm.inciso} - ${rdpm.texto}`,
+                            tipo: 'rdpm'
+                        }));
                         
-                        // Adicionar RDPM
-                        (dadosIndicios.rdpm || []).forEach(rdpm => {
-                            transgressoesFormatadas.push({
-                                id: rdpm.id,
-                                nome: `Inciso ${rdpm.inciso} - ${rdpm.texto}`,
-                                tipo: 'rdpm'
-                            });
-                        });
-                        
-                        // Adicionar Art. 29
-                        (dadosIndicios.art29 || []).forEach(art29 => {
-                            transgressoesFormatadas.push({
-                                id: art29.id,
-                                nome: `Inciso ${art29.inciso} - ${art29.texto}`,
-                                tipo: 'art29'
-                            });
-                        });
+                        const art29Formatados = (dadosIndicios.art29 || []).map(art29 => ({
+                            id: art29.id,
+                            nome: `Inciso ${art29.inciso} - ${art29.texto}`,
+                            tipo: 'estatuto'
+                        }));
 
-                        const indicioItem = {
-                            pmId: pmId,
-                            pmNome: pmNome,
-                            categorias: dadosIndicios.categorias || [],
-                            crimes: crimesFormatados,
-                            transgressoes: transgressoesFormatadas,
-                            // Manter dados originais para compatibilidade
-                            rdpm: dadosIndicios.rdpm || [],
-                            art29: dadosIndicios.art29 || []
-                        };
+                        // Criar um item separado para cada crime/transgressão individual
+                        // Isso permite remover individualmente com lixeira própria
                         
-                        indiciosParaLista.push(indicioItem);
-                        console.log('➕ Indício adicionado à lista:', indicioItem);
+                        // Adicionar crimes individualmente
+                        crimesFormatados.forEach(crime => {
+                            const categoriaCrime = dadosIndicios.categorias.filter(c => 
+                                c.includes('crime comum') || c.includes('crime militar')
+                            );
+                            
+                            indiciosParaLista.push({
+                                id: Date.now() + Math.random(), // ID único
+                                pmId: pmId,
+                                pmNome: pmNome,
+                                categorias: categoriaCrime.length > 0 ? categoriaCrime : dadosIndicios.categorias,
+                                crimes: [crime],
+                                transgressoes: []
+                            });
+                        });
+                        
+                        // Adicionar transgressões RDPM individualmente
+                        rdpmFormatados.forEach(rdpm => {
+                            const categoriaRdpm = dadosIndicios.categorias.filter(c => 
+                                c.includes('transgressão disciplinar')
+                            );
+                            
+                            indiciosParaLista.push({
+                                id: Date.now() + Math.random(), // ID único
+                                pmId: pmId,
+                                pmNome: pmNome,
+                                categorias: categoriaRdpm.length > 0 ? categoriaRdpm : dadosIndicios.categorias,
+                                crimes: [],
+                                transgressoes: [rdpm]
+                            });
+                        });
+                        
+                        // Adicionar Art. 29 individualmente
+                        art29Formatados.forEach(art29 => {
+                            const categoriaArt29 = dadosIndicios.categorias.filter(c => 
+                                c.includes('estatuto')
+                            );
+                            
+                            indiciosParaLista.push({
+                                id: Date.now() + Math.random(), // ID único
+                                pmId: pmId,
+                                pmNome: pmNome,
+                                categorias: categoriaArt29.length > 0 ? categoriaArt29 : dadosIndicios.categorias,
+                                crimes: [],
+                                transgressoes: [art29]
+                            });
+                        });
+                        
+                        // Se não houver crimes/transgressões, mas houver categorias, adicionar só as categorias
+                        if (crimesFormatados.length === 0 && rdpmFormatados.length === 0 && art29Formatados.length === 0 && temCategorias) {
+                            indiciosParaLista.push({
+                                id: Date.now() + Math.random(),
+                                pmId: pmId,
+                                pmNome: pmNome,
+                                categorias: dadosIndicios.categorias,
+                                crimes: [],
+                                transgressoes: []
+                            });
+                        }
+                        
+                        console.log(`➕ ${crimesFormatados.length + rdpmFormatados.length + art29Formatados.length} indícios individuais criados para PM ${pmNome}`);
                     }
                 }
                 
