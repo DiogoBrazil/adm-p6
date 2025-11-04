@@ -1163,33 +1163,33 @@ def obter_estatisticas_encarregados():
             result = cursor.fetchone()
             contadores['pads'] = result[0] if result else 0
             
-            # PAD (como responsável)
+            # PAD (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? 
+                WHERE (responsavel_id = ? OR presidente_id = ? OR interrogante_id = ? OR escrivao_processo_id = ?)
                 AND tipo_detalhe = 'PAD'
                 AND ativo = 1
-            ''', (enc_id,))
+            ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
             contadores['pad'] = result[0] if result else 0
             
-            # CD - Conselho de Disciplina (como responsável)
+            # CD - Conselho de Disciplina (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? 
+                WHERE (responsavel_id = ? OR presidente_id = ? OR interrogante_id = ? OR escrivao_processo_id = ?)
                 AND tipo_detalhe = 'CD'
                 AND ativo = 1
-            ''', (enc_id,))
+            ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
             contadores['cd'] = result[0] if result else 0
             
-            # CJ - Conselho de Justificação (como responsável)
+            # CJ - Conselho de Justificação (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
                 SELECT COUNT(*) FROM processos_procedimentos 
-                WHERE responsavel_id = ? 
+                WHERE (responsavel_id = ? OR presidente_id = ? OR interrogante_id = ? OR escrivao_processo_id = ?)
                 AND tipo_detalhe = 'CJ'
                 AND ativo = 1
-            ''', (enc_id,))
+            ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
             contadores['cj'] = result[0] if result else 0
             
