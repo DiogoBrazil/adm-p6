@@ -1227,6 +1227,77 @@ def obter_estatisticas_encarregados():
         return {"sucesso": False, "erro": str(e)}
 
 @eel.expose
+def obter_ultimos_feitos_encarregado(encarregado_id):
+    """
+    Obtém os 3 feitos mais recentes de um encarregado.
+    Considera todos os papéis: responsável, escrivão, presidente, interrogante, escrivão do processo.
+    
+    Args:
+        encarregado_id: ID do encarregado
+        
+    Returns:
+        dict: {"sucesso": bool, "dados": [{"tipo", "numero", "data_instauracao", 
+               "data_recebimento", "data_remessa"}] ou "erro": str}
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        print(f"🔍 Buscando últimos feitos para encarregado ID: {encarregado_id}")
+        
+        # Buscar os 3 feitos mais recentes onde o encarregado tem qualquer papel
+        cursor.execute('''
+            SELECT 
+                tipo_detalhe as tipo,
+                numero,
+                data_instauracao,
+                data_recebimento,
+                data_remessa_encarregado
+            FROM processos_procedimentos
+            WHERE (
+                responsavel_id = ? OR 
+                escrivao_id = ? OR 
+                presidente_id = ? OR 
+                interrogante_id = ? OR 
+                escrivao_processo_id = ?
+            )
+            AND ativo = 1
+            ORDER BY 
+                CASE 
+                    WHEN data_remessa_encarregado IS NOT NULL THEN date(data_remessa_encarregado)
+                    WHEN data_instauracao IS NOT NULL THEN date(data_instauracao)
+                    ELSE '9999-12-31'
+                END DESC
+            LIMIT 3
+        ''', (encarregado_id, encarregado_id, encarregado_id, encarregado_id, encarregado_id))
+        
+        rows = cursor.fetchall()
+        
+        print(f"  ✅ Encontrou {len(rows)} feitos")
+        
+        feitos = []
+        for row in rows:
+            feito = {
+                'tipo': row[0] or 'N/A',
+                'numero': row[1] or 'N/A',
+                'data_instauracao': row[2] or '',
+                'data_recebimento': row[3] or '',
+                'data_remessa': row[4] or ''
+            }
+            feitos.append(feito)
+            print(f"    - {feito['tipo']} nº {feito['numero']}")
+        
+        conn.close()
+        
+        return {
+            "sucesso": True,
+            "dados": feitos
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def obter_estatisticas_processos_andamento():
     """Retorna estatísticas dos processos em andamento por tipo"""
     try:

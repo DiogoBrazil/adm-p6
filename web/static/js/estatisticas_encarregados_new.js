@@ -330,16 +330,13 @@ function popularDropdownEncarregados() {
     // Limpar opções existentes exceto a primeira
     select.innerHTML = '<option value="">Todos os Encarregados</option>';
     
-    // Obter lista única de encarregados
-    const encarregados = [...new Set(dadosEstatisticas.map(item => item.nome))];
-    
-    // Adicionar opções
-    encarregados.forEach(encarregado => {
-        if (encarregado) {
+    // Adicionar opções usando ID como value
+    dadosEstatisticas.forEach(encarregado => {
+        if (encarregado && encarregado.id && encarregado.nome) {
             const option = document.createElement('option');
-            option.value = encarregado;
-            option.textContent = encarregado;
-            if (filtrosAtivos.encarregado === encarregado) {
+            option.value = encarregado.id;  // Usar ID ao invés do nome
+            option.textContent = encarregado.nome;
+            if (filtrosAtivos.encarregado === encarregado.nome) {
                 option.selected = true;
             }
             select.appendChild(option);
@@ -529,9 +526,13 @@ function atualizarIndicadorFiltros() {
 }
 
 // Função para fechar modal clicando no backdrop
-function fecharModalPorBackdrop(event) {
-    if (event.target.id === 'modal-filtros') {
-        fecharModalFiltros();
+function fecharModalPorBackdrop(event, modalId = 'modal-filtros') {
+    if (event.target.id === modalId) {
+        if (modalId === 'modal-filtros') {
+            fecharModalFiltros();
+        } else if (modalId === 'modal-ultimos-feitos') {
+            fecharModalUltimosFeitos();
+        }
     }
 }
 
@@ -545,4 +546,140 @@ renderTable = function() {
 function updateTableInfo() {
     // Esta função pode ser expandida para mostrar contadores de registros filtrados
     console.log(`Mostrando ${dadosFiltrados.length} de ${dadosEstatisticas.length} encarregados`);
+}
+
+// =================== MODAL ÚLTIMOS FEITOS ===================
+
+// Função para abrir modal de últimos feitos
+async function abrirModalUltimosFeitos() {
+    console.log('Abrindo modal de últimos feitos');
+    
+    const encarregadoSelect = document.getElementById('filtro-encarregado');
+    const encarregadoId = encarregadoSelect.value;
+    
+    if (!encarregadoId) {
+        alert('Por favor, selecione um encarregado primeiro.');
+        return;
+    }
+    
+    const modal = document.getElementById('modal-ultimos-feitos');
+    const content = document.getElementById('ultimos-feitos-content');
+    
+    if (!modal || !content) return;
+    
+    // Mostrar loading
+    content.innerHTML = '<div style="text-align: center; padding: 32px;"><i class="fas fa-spinner fa-spin" style="font-size: 32px; color: #667eea;"></i><p style="margin-top: 16px;">Buscando feitos...</p></div>';
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    
+    try {
+        console.log('Buscando feitos para encarregado ID:', encarregadoId);
+        const resultado = await eel.obter_ultimos_feitos_encarregado(encarregadoId)();
+        
+        if (resultado.sucesso) {
+            if (resultado.dados.length === 0) {
+                content.innerHTML = `
+                    <div class="msg-sem-feitos">
+                        <i class="fas fa-inbox"></i>
+                        <p style="margin: 0; font-size: 16px;">Nenhum feito encontrado para este encarregado.</p>
+                    </div>
+                `;
+            } else {
+                renderizarTabelaUltimosFeitos(resultado.dados, content);
+            }
+        } else {
+            content.innerHTML = `
+                <div class="msg-sem-feitos">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p style="margin: 0; font-size: 16px; color: #dc3545;">Erro ao buscar feitos: ${resultado.erro}</p>
+                </div>
+            `;
+        }
+    } catch (erro) {
+        console.error('Erro ao buscar últimos feitos:', erro);
+        content.innerHTML = `
+            <div class="msg-sem-feitos">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p style="margin: 0; font-size: 16px; color: #dc3545;">Erro ao buscar feitos.</p>
+            </div>
+        `;
+    }
+}
+
+// Função para renderizar tabela de últimos feitos
+function renderizarTabelaUltimosFeitos(feitos, container) {
+    const encarregadoSelect = document.getElementById('filtro-encarregado');
+    const nomeEncarregado = encarregadoSelect.options[encarregadoSelect.selectedIndex].text;
+    
+    let html = `
+        <div style="margin-bottom: 16px;">
+            <p style="margin: 0; font-size: 14px; color: #6c757d;">
+                <strong>Encarregado:</strong> ${nomeEncarregado}
+            </p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #6c757d;">
+                <strong>Total de feitos encontrados:</strong> ${feitos.length}
+            </p>
+        </div>
+        <table class="ultimos-feitos-table">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th>Número</th>
+                    <th>Data Instauração</th>
+                    <th>Data Recebimento</th>
+                    <th>Data Remessa</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    feitos.forEach(feito => {
+        const tipoBadgeClass = feito.tipo.toLowerCase();
+        const dataInstauracao = feito.data_instauracao ? formatarData(feito.data_instauracao) : '-';
+        const dataRecebimento = feito.data_recebimento ? formatarData(feito.data_recebimento) : '-';
+        const dataRemessa = feito.data_remessa ? formatarData(feito.data_remessa) : '-';
+        
+        html += `
+            <tr>
+                <td><span class="tipo-badge ${tipoBadgeClass}">${feito.tipo}</span></td>
+                <td><strong>${feito.numero}</strong></td>
+                <td>${dataInstauracao}</td>
+                <td>${dataRecebimento}</td>
+                <td>${dataRemessa}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// Função para fechar modal de últimos feitos
+function fecharModalUltimosFeitos() {
+    console.log('Fechando modal de últimos feitos');
+    const modal = document.getElementById('modal-ultimos-feitos');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Função auxiliar para formatar data
+function formatarData(dataStr) {
+    if (!dataStr) return '-';
+    
+    // Se já está no formato DD/MM/YYYY, retornar
+    if (dataStr.includes('/')) return dataStr;
+    
+    // Se está no formato YYYY-MM-DD, converter
+    const partes = dataStr.split('-');
+    if (partes.length === 3) {
+        return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+    
+    return dataStr;
 }

@@ -883,6 +883,99 @@
                 transform: translateX(0);
             }
         }
+
+        /* Estilos para tabela de últimos feitos */
+        #ultimos-feitos-content {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .ultimos-feitos-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .ultimos-feitos-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .ultimos-feitos-table th {
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+        }
+
+        .ultimos-feitos-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e8ecf0;
+            font-size: 14px;
+        }
+
+        .ultimos-feitos-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .ultimos-feitos-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .tipo-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .tipo-badge.ipm {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .tipo-badge.sr {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .tipo-badge.pads {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .tipo-badge.pad, .tipo-badge.cd, .tipo-badge.cj {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .tipo-badge.fp {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .tipo-badge.escrivao {
+            background: #f1f8e9;
+            color: #558b2f;
+        }
+
+        .msg-sem-feitos {
+            text-align: center;
+            padding: 32px;
+            color: #6c757d;
+        }
+
+        .msg-sem-feitos i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -1027,6 +1120,13 @@
                             <option value="CJ">CJ</option>
                         </select>
                     </div>
+                    
+                    <div class="filter-group-modal">
+                        <label>&nbsp;</label>
+                        <button type="button" class="btn btn-info" onclick="abrirModalUltimosFeitos()" style="width: 100%;">
+                            <i class="fas fa-list"></i> Últimos Feitos
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -1039,6 +1139,28 @@
                 </button>
                 <button type="button" class="btn btn-outline-secondary" onclick="fecharModalFiltros()">
                     <i class="fas fa-times"></i> Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Últimos Feitos -->
+    <div id="modal-ultimos-feitos" class="modal-filtros" style="display: none;" onclick="fecharModalPorBackdrop(event, 'modal-ultimos-feitos')">
+        <div class="modal-content-filtros" onclick="event.stopPropagation()">
+            <div class="modal-header-filtros">
+                <h3><i class="fas fa-history"></i> Últimos Feitos</h3>
+                <button type="button" class="btn-close-modal" onclick="fecharModalUltimosFeitos()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body-filtros">
+                <div id="ultimos-feitos-content"></div>
+            </div>
+            
+            <div class="modal-footer-filtros">
+                <button type="button" class="btn btn-secondary" onclick="fecharModalUltimosFeitos()">
+                    <i class="fas fa-times"></i> Fechar
                 </button>
             </div>
         </div>
