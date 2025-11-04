@@ -6573,9 +6573,6 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     elements.append(tabela_status)
     elements.append(Spacer(1, 0.8*cm))
     
-    elements.append(tabela_status)
-    elements.append(Spacer(1, 0.8*cm))
-    
     # ============ IPM/SINDICÂNCIA - INDÍCIOS ============
     if estatisticas['ipm_sindicancia']['indicios_crime'] > 0 or estatisticas['ipm_sindicancia']['indicios_transgressao'] > 0:
         elements.append(Paragraph("🔍 IPM/SINDICÂNCIA - ANÁLISE DE INDÍCIOS", subtitulo_style))
@@ -6599,31 +6596,6 @@ def _gerar_pdf_relatorio_anual(estatisticas):
         ]))
         
         elements.append(tabela_indicios)
-        elements.append(Spacer(1, 0.8*cm))
-    
-    # ============ PAD/PADS - RESULTADOS ============
-    if estatisticas['pad_pads']['punidos'] > 0 or estatisticas['pad_pads']['absolvidos_arquivados'] > 0:
-        elements.append(Paragraph("⚖️ PAD/PADS - RESULTADOS FINAIS", subtitulo_style))
-        
-        dados_resultados = [
-            ['Resultado', 'Quantidade'],
-            ['Punidos', str(estatisticas['pad_pads']['punidos'])],
-            ['Absolvidos/Arquivados', str(estatisticas['pad_pads']['absolvidos_arquivados'])]
-        ]
-        
-        tabela_resultados = Table(dados_resultados, colWidths=[10*cm, 7*cm])
-        tabela_resultados.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d63384')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-        ]))
-        
-        elements.append(tabela_resultados)
         elements.append(Spacer(1, 0.8*cm))
     
     # ============ RODAPÉ ============
