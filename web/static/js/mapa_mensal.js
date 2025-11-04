@@ -226,6 +226,8 @@ async function gerarMapaMensal() {
             if (salvamento && salvamento.sucesso) {
                 // Armazenar dados globalmente para uso no download
                 window.ultimoMapaGerado = resultado;
+                window.tipoProcessoAtual = tipoProcesso; // Atualizar tipo de processo atual
+                window.dadosProcessos = resultado.dados; // Atualizar dados dos processos
                 
                 // Exibir botão de download
                 exibirDownloadContainer();
@@ -1935,6 +1937,14 @@ function exibirDownloadContainer() {
     const container = document.getElementById('downloadContainer');
     if (container) {
         container.classList.remove('d-none');
+        
+        // Resetar botão de download para estado inicial
+        const btnDownload = document.getElementById('btnDownloadMapa');
+        if (btnDownload) {
+            btnDownload.disabled = false;
+            btnDownload.innerHTML = '<i class="bi bi-download me-2"></i>Baixar Mapa em PDF';
+        }
+        
         // Scroll suave até o container
         container.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -1968,11 +1978,17 @@ async function downloadMapaGerado() {
         // Gerar e baixar PDF
         await gerarDocumentoPDF(conteudo, conteudo.titulo);
         
+        // Restaurar botão antes de ocultar
+        btnDownload.disabled = false;
+        btnDownload.innerHTML = '<i class="bi bi-download me-2"></i>Baixar Mapa em PDF';
+        
         // Remover o container de download após sucesso
         ocultarDownloadContainer();
         
         // Limpar dados globais
         window.ultimoMapaGerado = null;
+        window.tipoProcessoAtual = null;
+        window.dadosProcessos = null;
         
         mostrarAlerta('Download concluído! O mapa está salvo e pode ser acessado em "Mapas Anteriores".', 'success');
         
