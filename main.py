@@ -3859,6 +3859,21 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 where_clause += " AND p.nome_vitima = ?"
                 search_params.append(filtros['vitima'])
 
+            # Filtro por período de instauração
+            if filtros.get('data_inicio') and filtros.get('data_fim'):
+                # Ambas as datas fornecidas - filtrar pelo intervalo (inclusive)
+                where_clause += " AND p.data_instauracao BETWEEN ? AND ?"
+                search_params.append(filtros['data_inicio'])
+                search_params.append(filtros['data_fim'])
+            elif filtros.get('data_inicio'):
+                # Apenas data inicial - filtrar a partir dessa data
+                where_clause += " AND p.data_instauracao >= ?"
+                search_params.append(filtros['data_inicio'])
+            elif filtros.get('data_fim'):
+                # Apenas data final - filtrar até essa data
+                where_clause += " AND p.data_instauracao <= ?"
+                search_params.append(filtros['data_fim'])
+
             if filtros.get('situacao'):
                 if filtros['situacao'] == 'concluido':
                     where_clause += " AND p.concluido = 1"
