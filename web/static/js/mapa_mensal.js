@@ -7,6 +7,19 @@ let paginaAtualMapas = 1;
 const mapasPorPagina = 3;
 let timeoutBusca = null;
 
+// Função global para formatar penalidade
+function formatarPenalidade(penalidade) {
+    const mapeamento = {
+        'Prisao': 'Prisão',
+        'Detencao': 'Detenção',
+        'Repreensao': 'Repreensão',
+        'Excluido_Disciplina': 'Excluído a bem da disciplina',
+        'Licenciado_Disciplina': 'Licenciado a bem da disciplina',
+        'Demitido_Exoficio': 'Demitido ex-ofício'
+    };
+    return mapeamento[penalidade] || penalidade;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     inicializarMapaMensal();
 });
@@ -913,7 +926,23 @@ async function gerarRelatorioHTMLParaImpressao(content) {
     const montarIndiciosPMHTML = (procId, tipo) => {
         if (!['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) return '';
         const dadosOriginais = (window.dadosProcessos || []).find(p => String(p.id) === String(procId));
-        if (!dadosOriginais || !Array.isArray(dadosOriginais.pms_envolvidos)) return '';
+        if (!dadosOriginais) return '';
+        
+        // Para PAD/CD/CJ, mostrar tipo de penalidade se concluído, senão nada
+        if (['PAD','CD','CJ'].includes(tipo)) {
+            if (dadosOriginais.concluido && dadosOriginais.solucao) {
+                const penalidade = dadosOriginais.solucao.penalidade_tipo;
+                if (penalidade) {
+                    const penalидadeFormatada = formatarPenalidade(penalidade);
+                    const dias = dadosOriginais.solucao.penalidade_dias ? ` (${dadosOriginais.solucao.penalidade_dias} dias)` : '';
+                    return `<div class="pm-muted">${penalidadeFormatada}${dias}</div>`;
+                }
+            }
+            return ''; // Em andamento não mostra nada
+        }
+        
+        // Para IPM/SR/PADS, mostrar indícios
+        if (!Array.isArray(dadosOriginais.pms_envolvidos)) return '';
         const blocos = [];
         dadosOriginais.pms_envolvidos.forEach(pm => {
             const nomePM = formatarPmParaExibicao(pm);
@@ -1009,7 +1038,14 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         if (['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) {
             const indiciosHTML = montarIndiciosPMHTML(p.id, tipo);
             if (indiciosHTML) {
-                const tituloIndicios = tipoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+                let tituloIndicios;
+                if (tipoAtual === 'PADS') {
+                    tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
+                } else if (['PAD','CD','CJ'].includes(tipoAtual)) {
+                    tituloIndicios = 'SOLUÇÃO';
+                } else {
+                    tituloIndicios = 'INDÍCIOS APONTADOS';
+                }
                 linhas.push([tituloIndicios, `<div class="pm-value-block">${indiciosHTML}</div>`]);
             }
         }
@@ -1499,7 +1535,16 @@ async function gerarDocumentoPDF(content, titulo) {
             pdf.setTextColor(255, 255, 255);
             pdf.text('CAMPO', margin + 2, tableY + 5);
             pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
-            const tituloIndicios = window.tipoProcessoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+            
+            // Definir título da 3ª coluna baseado no tipo
+            let tituloIndicios;
+            if (window.tipoProcessoAtual === 'PADS') {
+                tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
+            } else if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+                tituloIndicios = 'SOLUÇÃO';
+            } else {
+                tituloIndicios = 'INDÍCIOS APONTADOS';
+            }
             pdf.text(tituloIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
             
             tableY += 8;
@@ -1538,8 +1583,17 @@ async function gerarDocumentoPDF(content, titulo) {
             if (dadosOriginais) {
                 const linhasIndicios = [];
                 
-                // Mostrar indícios por PM (funciona para IPM/SR/PADS/PAD/CD/CJ)
-                if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+                // Para PAD/CD/CJ, mostrar tipo de penalidade se concluído
+                if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+                    if (dadosOriginais.concluido && dadosOriginais.solucao?.penalidade_tipo) {
+                        const penalidade = formatarPenalidade(dadosOriginais.solucao.penalidade_tipo);
+                        const dias = dadosOriginais.solucao.penalidade_dias ? ` (${dadosOriginais.solucao.penalidade_dias} dias)` : '';
+                        linhasIndicios.push({ text: `${penalidade}${dias}`, bold: false });
+                    }
+                    // Se em andamento, não adiciona nada (linhasIndicios fica vazio)
+                }
+                // Para IPM/SR/PADS, mostrar indícios por PM
+                else if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
                     dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
                         const nomePM = formatarPmParaExibicao(pm);
                         linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
@@ -1618,8 +1672,15 @@ async function gerarDocumentoPDF(content, titulo) {
         }
         linhasEsq.push(['Data Conclusão:', processo.detalhes.dataConclusao, false]);
         linhasEsq.push(['Número RGF:', processo.detalhes.numeroRGF, false]);
-        linhasEsq.push(['Encarregado:', processo.encarregado, false]);
-    linhasEsq.push(['PMs Envolvidos:', processo.pmsEnvolvidos, false]);
+        
+        // Encarregado/Responsáveis: Para PAD/CD/CJ mostrar Presidente, Interrogante e Escrivão
+        if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+            linhasEsq.push(['Responsáveis:', processo.encarregado, false]);
+        } else {
+            linhasEsq.push(['Encarregado:', processo.encarregado, false]);
+        }
+        
+        linhasEsq.push(['PMs Envolvidos:', processo.pmsEnvolvidos, false]);
         if (processo.status === 'Concluído') {
             if (['IPM', 'SR'].includes(window.tipoProcessoAtual)) {
                 const dadosOriginais = window.dadosProcessos ?
@@ -2029,7 +2090,19 @@ function construirConteudoPDFParaDownload(dadosResultado) {
     const processos = dados.map((p, idx) => {
         const status = p.concluido ? 'Concluído' : 'Em Andamento';
         const numeroProc = `${p.numero}/${p.ano || (p.data_instauracao ? String(p.data_instauracao).slice(0,4) : '')}`;
-        const encarregado = p?.responsavel?.completo || 'Não informado';
+        
+        // Para PAD/CD/CJ, montar texto com Presidente, Interrogante e Escrivão
+        let encarregado;
+        if (['PAD','CD','CJ'].includes(meta.tipo_processo)) {
+            const partes = [];
+            if (p.presidente_processo) partes.push(`Presidente: ${p.presidente_processo.completo || p.presidente_processo.nome || 'Não informado'}`);
+            if (p.interrogante_processo) partes.push(`Interrogante: ${p.interrogante_processo.completo || p.interrogante_processo.nome || 'Não informado'}`);
+            if (p.escrivao_processo) partes.push(`Escrivão: ${p.escrivao_processo.completo || p.escrivao_processo.nome || 'Não informado'}`);
+            encarregado = partes.length > 0 ? partes.join(' | ') : 'Não informado';
+        } else {
+            encarregado = p?.responsavel?.completo || 'Não informado';
+        }
+        
         const pmsStr = (Array.isArray(p.pms_envolvidos) ? p.pms_envolvidos.map(formatarPmParaExibicao) : []).join(', ') || 'Nenhum PM informado';
         
         // Documento/número
