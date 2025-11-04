@@ -909,7 +909,7 @@ async function gerarRelatorioHTMLParaImpressao(content) {
     const getLabelSolucao = (tipo) => ['PAD','PADS','CD','CJ'].includes(tipo) ? 'DECISÃO FINAL' : 'SOLUÇÃO';
 
     const montarIndiciosPMHTML = (procId, tipo) => {
-        if (!['IPM','SR'].includes(tipo)) return '';
+        if (!['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) return '';
         const dadosOriginais = (window.dadosProcessos || []).find(p => String(p.id) === String(procId));
         if (!dadosOriginais || !Array.isArray(dadosOriginais.pms_envolvidos)) return '';
         const blocos = [];
@@ -1003,8 +1003,8 @@ async function gerarRelatorioHTMLParaImpressao(content) {
             [labelSolucao, `<div class="pm-value-block">${solucaoValor}</div>`],
         ];
 
-        // Índicios só para IPM/SR
-        if (['IPM','SR'].includes(tipo)) {
+        // Índicios/Transgressões para IPM/SR e PADS/PAD/CD/CJ
+        if (['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) {
             const indiciosHTML = montarIndiciosPMHTML(p.id, tipo);
             if (indiciosHTML) {
                 const tituloIndicios = tipoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
@@ -1536,26 +1536,8 @@ async function gerarDocumentoPDF(content, titulo) {
             if (dadosOriginais) {
                 const linhasIndicios = [];
                 
-                // Para PADS, mostrar transgressões do procedimento
-                if (window.tipoProcessoAtual === 'PADS' && dadosOriginais.indicios) {
-                    const { crimes, transgressoes, art29 } = dadosOriginais.indicios;
-                    
-                    if ((crimes && crimes.length) || (transgressoes && transgressoes.length) || (art29 && art29.length)) {
-                        if (crimes && crimes.length) {
-                            crimes.forEach(crime => linhasIndicios.push({ text: `- Crime: ${crime.texto_completo}`, bold: false }));
-                        }
-                        if (transgressoes && transgressoes.length) {
-                            transgressoes.forEach(t => linhasIndicios.push({ text: formatarTransgressao(t), bold: false }));
-                        }
-                        if (art29 && art29.length) {
-                            art29.forEach(a => linhasIndicios.push({ text: `- Art. 29: ${a.texto_completo}`, bold: false }));
-                        }
-                    } else {
-                        linhasIndicios.push({ text: '• Não houve', bold: false });
-                    }
-                }
-                // Para IPM/SR, mostrar indícios por PM
-                else if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
+                // Mostrar indícios por PM (funciona para IPM/SR/PADS/PAD/CD/CJ)
+                if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {
                     dadosOriginais.pms_envolvidos.forEach((pm, idx) => {
                         const nomePM = formatarPmParaExibicao(pm);
                         linhasIndicios.push({ text: `${nomePM.toUpperCase()}:`, bold: true });
@@ -1597,14 +1579,9 @@ async function gerarDocumentoPDF(content, titulo) {
                                 
                                 // Listar cada Art. 29 individualmente
                                 if (art29 && art29.length) {
-                                    const categoriaArt29 = categorias ? categorias.filter(c => 
-                                        c.includes('estatuto')
-                                    ) : [];
-                                    
                                     art29.forEach(a => {
-                                        const catTexto = categoriaArt29.length > 0 ? categoriaArt29[0] : 'Indícios de infração ao Estatuto dos PM';
-                                        linhasIndicios.push({ text: `${catTexto}:`, bold: true });
-                                        linhasIndicios.push({ text: `  - Art. 29: ${a.texto_completo}`, bold: false });
+                                        linhasIndicios.push({ text: `Indícios de transgressão disciplinar:`, bold: true });
+                                        linhasIndicios.push({ text: `  - ${a.texto_completo}`, bold: false });
                                     });
                                 }
                             } else {

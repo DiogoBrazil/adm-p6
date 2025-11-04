@@ -6640,11 +6640,12 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                     "indicios": indicios_pm
                 })
         else:
-            # Para processos, buscar PM único
+            # Para processos, buscar PM único e suas transgressões do campo JSON
             cursor.execute("""
                 SELECT 
                     p.status_pm,
-                    u.nome, u.posto_graduacao, u.matricula
+                    u.nome, u.posto_graduacao, u.matricula,
+                    p.transgressoes_ids
                 FROM processos_procedimentos p
                 LEFT JOIN usuarios u ON p.nome_pm_id = u.id
                 WHERE p.id = ? AND u.id IS NOT NULL
@@ -6652,13 +6653,96 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
             
             row = cursor.fetchone()
             if row:
+                # Buscar transgressões do campo JSON
+                indicios_processo = {"categorias": [], "crimes": [], "transgressoes": [], "art29": []}
+                
+                if row[4]:  # transgressoes_ids
+                    try:
+                        import json
+                        transgressoes_json = json.loads(row[4])
+                        
+                        if isinstance(transgressoes_json, list):
+                            for trans in transgressoes_json:
+                                trans_id = trans.get('id')
+                                trans_tipo = trans.get('tipo')
+                                
+                                if trans_tipo == 'rdpm':
+                                    # Buscar transgressão RDPM
+                                    cursor.execute("""
+                                        SELECT inciso, texto, gravidade
+                                        FROM transgressoes
+                                        WHERE id = ?
+                                    """, (trans_id,))
+                                    rdpm_row = cursor.fetchone()
+                                    if rdpm_row:
+                                        # Determinar artigo baseado na gravidade
+                                        gravidade = rdpm_row[2].lower()
+                                        artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
+                                        artigo = artigo_map.get(gravidade, '15')
+                                        
+                                        indicios_processo["transgressoes"].append({
+                                            "inciso": rdpm_row[0],
+                                            "texto": rdpm_row[1],
+                                            "gravidade": rdpm_row[2],
+                                            "artigo": artigo,
+                                            "tipo": "rdpm",
+                                            "texto_completo": f"Inciso {rdpm_row[0]}, do RDPM - {rdpm_row[1]} (art. {artigo} - {rdpm_row[2]})"
+                                        })
+                                
+                                elif trans_tipo == 'estatuto':
+                                    # Buscar infração Art. 29
+                                    cursor.execute("""
+                                        SELECT inciso, texto
+                                        FROM infracoes_estatuto_art29
+                                        WHERE id = ?
+                                    """, (trans_id,))
+                                    art29_row = cursor.fetchone()
+                                    if art29_row:
+                                        art29_obj = {
+                                            "inciso": art29_row[0],
+                                            "texto": art29_row[1],
+                                            "texto_completo": f"Art. 29, Inciso {art29_row[0]}, do Decreto Lei 09A/1982 - {art29_row[1]}"
+                                        }
+                                        
+                                        # Se houver analogia RDPM, adicionar como complemento
+                                        if 'rdmp_analogia' in trans and trans['rdmp_analogia']:
+                                            analogia_id = trans['rdmp_analogia'].get('id')
+                                            if analogia_id:
+                                                cursor.execute("""
+                                                    SELECT inciso, texto, gravidade
+                                                    FROM transgressoes
+                                                    WHERE id = ?
+                                                """, (analogia_id,))
+                                                rdpm_row = cursor.fetchone()
+                                                if rdpm_row:
+                                                    # Determinar artigo baseado na gravidade
+                                                    gravidade = rdpm_row[2].lower()
+                                                    artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
+                                                    artigo = artigo_map.get(gravidade, '15')
+                                                    
+                                                    art29_obj["analogia"] = {
+                                                        "inciso": rdpm_row[0],
+                                                        "texto": rdpm_row[1],
+                                                        "gravidade": rdpm_row[2],
+                                                        "artigo": artigo
+                                                    }
+                                                    # Atualizar texto_completo para incluir a analogia
+                                                    art29_obj["texto_completo"] = (
+                                                        f"Art. 29, Inciso {art29_row[0]}, do Decreto Lei 09A/1982 - {art29_row[1]}\n"
+                                                        f"  Analogia RDPM: Inciso {rdpm_row[0]} - {rdpm_row[1]} (art. {artigo} - {rdpm_row[2]})"
+                                                    )
+                                        
+                                        indicios_processo["art29"].append(art29_obj)
+                    except Exception as e:
+                        print(f"Erro ao processar transgressões JSON: {e}")
+                
                 pms.append({
                     "nome": row[1],
                     "posto_graduacao": row[2],
                     "matricula": row[3], 
                     "tipo_envolvimento": row[0] or "Acusado",
                     "completo": f"{row[2]} {row[3]} {row[1]}".strip(),
-                    "indicios": {"categorias": [], "crimes": [], "transgressoes": [], "art29": []}
+                    "indicios": indicios_processo
                 })
                 
     except Exception as e:
@@ -6725,12 +6809,18 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         """, (pm_indicios_id,))
         
         for row in cursor.fetchall():
+            # Determinar artigo baseado na gravidade
+            gravidade = row[2].lower()
+            artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
+            artigo = artigo_map.get(gravidade, '15')
+            
             indicios["transgressoes"].append({
                 "inciso": row[0],
                 "texto": row[1],
                 "gravidade": row[2],
+                "artigo": artigo,
                 "tipo": "rdpm",
-                "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+                "texto_completo": f"Inciso {row[0]}, do RDPM - {row[1]} (art. {artigo} - {row[2]})"
             })
         
         # Buscar infrações Art. 29 específicas do PM
@@ -6745,7 +6835,7 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
             indicios["art29"].append({
                 "inciso": row[0],
                 "texto": row[1],
-                "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]}"
+                "texto_completo": f"Art. 29, Inciso {row[0]}, do Decreto Lei 09A/1982 - {row[1]}"
             })
             
     except Exception as e:
@@ -6814,12 +6904,18 @@ def _obter_indicios_para_mapa(cursor, processo_id):
                 """, (pm_indicios_id,))
                 
                 for row in cursor.fetchall():
+                    # Determinar artigo baseado na gravidade
+                    gravidade = row[2].lower()
+                    artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
+                    artigo = artigo_map.get(gravidade, '15')
+                    
                     indicios["transgressoes"].append({
                         "inciso": row[0],
                         "texto": row[1],
                         "gravidade": row[2],
+                        "artigo": artigo,
                         "tipo": "rdpm",
-                        "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+                        "texto_completo": f"Inciso {row[0]}, do RDPM - {row[1]} (art. {artigo} - {row[2]})"
                     })
                 
                 # ART. 29 deste PM
@@ -6834,7 +6930,7 @@ def _obter_indicios_para_mapa(cursor, processo_id):
                     indicios["art29"].append({
                         "inciso": row[0],
                         "texto": row[1],
-                        "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]}"
+                        "texto_completo": f"Art. 29, Inciso {row[0]}, do Decreto Lei 09A/1982 - {row[1]}"
                     })
         
         # ============================================================
@@ -6873,12 +6969,18 @@ def _obter_indicios_para_mapa(cursor, processo_id):
             """, (processo_id,))
             
             for row in cursor.fetchall():
+                # Determinar artigo baseado na gravidade
+                gravidade = row[2].lower()
+                artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
+                artigo = artigo_map.get(gravidade, '15')
+                
                 indicios["transgressoes"].append({
                     "inciso": row[0],
                     "texto": row[1],
                     "gravidade": row[2],
+                    "artigo": artigo,
                     "tipo": "rdpm",
-                    "texto_completo": f"Inciso {row[0]} - {row[1]} ({row[2]})"
+                    "texto_completo": f"Inciso {row[0]}, do RDPM - {row[1]} (art. {artigo} - {row[2]})"
                 })
         
         # Se não encontrou Art. 29 no sistema novo, buscar no antigo
@@ -6888,7 +6990,7 @@ def _obter_indicios_para_mapa(cursor, processo_id):
             col_fk = 'art29_id' if 'art29_id' in cols else 'infracao_id'
             
             cursor.execute(f"""
-                SELECT a.inciso, a.texto, a.gravidade
+                SELECT a.inciso, a.texto
                 FROM procedimentos_indicios_art29 pia
                 JOIN infracoes_estatuto_art29 a ON a.id = pia.{col_fk}
                 WHERE pia.procedimento_id = ? AND a.ativo = 1
@@ -6898,8 +7000,7 @@ def _obter_indicios_para_mapa(cursor, processo_id):
                 indicios["art29"].append({
                     "inciso": row[0],
                     "texto": row[1],
-                    "gravidade": row[2],
-                    "texto_completo": f"Art. 29, Inciso {row[0]} - {row[1]} ({row[2]})"
+                    "texto_completo": f"Art. 29, Inciso {row[0]}, do Decreto Lei 09A/1982 - {row[1]}"
                 })
             
     except Exception as e:
