@@ -77,7 +77,7 @@ async function carregarEstatisticas() {
             
             // Calcular totais para cada encarregado
             dadosEstatisticas.forEach(enc => {
-                enc.total = enc.sr + enc.fp + enc.ipm + enc.escrivao + enc.pads + enc.pad + enc.cd + enc.cj;
+                enc.total = enc.sr + enc.fp + enc.ipm + enc.escrivao + enc.pads + enc.pad + enc.pade + enc.cd + enc.cj + enc.cp;
             });
             
             // Renderizar tabela
@@ -146,8 +146,10 @@ function renderTable() {
                 <td><span class="process-count ${getCountClass(enc.escrivao, 2)}">${enc.escrivao}</span></td>
                 <td><span class="process-count ${getCountClass(enc.pads, 3)}">${enc.pads}</span></td>
                 <td><span class="process-count ${getCountClass(enc.pad, 1)}">${enc.pad}</span></td>
+                <td><span class="process-count ${getCountClass(enc.pade, 1)}">${enc.pade}</span></td>
                 <td><span class="process-count ${getCountClass(enc.cd, 1)}">${enc.cd}</span></td>
                 <td><span class="process-count ${getCountClass(enc.cj, 1)}">${enc.cj}</span></td>
+                <td><span class="process-count ${getCountClass(enc.cp, 2)}">${enc.cp}</span></td>
                 <td class="total-cell">${enc.total}</td>
             </tr>
         `;
@@ -188,10 +190,10 @@ function sortTable(field) {
 // Função para exportar dados
 function exportData() {
     try {
-        let csv = 'Encarregado,SR,FP,IPM,Escrivão,PADS,PAD,CD,CJ,Total\n';
+        let csv = 'Encarregado,SR,FP,IPM,Escrivão,PADS,PAD,PADE,CD,CJ,CP,Total\n';
         
         dadosFiltrados.forEach(enc => {
-            csv += `"${enc.nome}",${enc.sr},${enc.fp},${enc.ipm},${enc.escrivao},${enc.pads},${enc.pad},${enc.cd},${enc.cj},${enc.total}\n`;
+            csv += `"${enc.nome}",${enc.sr},${enc.fp},${enc.ipm},${enc.escrivao},${enc.pads},${enc.pad},${enc.pade},${enc.cd},${enc.cj},${enc.cp},${enc.total}\n`;
         });
         
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -336,7 +338,7 @@ function popularDropdownEncarregados() {
             const option = document.createElement('option');
             option.value = encarregado.id;  // Usar ID ao invés do nome
             option.textContent = encarregado.nome;
-            if (filtrosAtivos.encarregado === encarregado.nome) {
+            if (filtrosAtivos.encarregado === encarregado.id) {
                 option.selected = true;
             }
             select.appendChild(option);
@@ -413,7 +415,7 @@ function aplicarFiltros() {
     // Aplicar filtro por encarregado específico
     if (filtrosAtivos.encarregado) {
         dadosFiltrados = dadosFiltrados.filter(enc => 
-            enc.nome === filtrosAtivos.encarregado
+            enc.id === filtrosAtivos.encarregado
         );
     }
     
@@ -428,8 +430,10 @@ function aplicarFiltros() {
                 'Escrivão': 'escrivao',
                 'PADs': 'pads',
                 'PAD': 'pad',
+                'PADE': 'pade',
                 'CD': 'cd',
-                'CJ': 'cj'
+                'CJ': 'cj',
+                'CP': 'cp'
             };
             
             const propriedade = tipoMap[filtrosAtivos.tipoFeito];
@@ -481,8 +485,10 @@ function renderTableWithFilters() {
                 <td><span class="process-count ${getCountClass(enc.escrivao, 2)}">${enc.escrivao}</span></td>
                 <td><span class="process-count ${getCountClass(enc.pads, 3)}">${enc.pads}</span></td>
                 <td><span class="process-count ${getCountClass(enc.pad, 1)}">${enc.pad}</span></td>
+                <td><span class="process-count ${getCountClass(enc.pade, 1)}">${enc.pade}</span></td>
                 <td><span class="process-count ${getCountClass(enc.cd, 1)}">${enc.cd}</span></td>
                 <td><span class="process-count ${getCountClass(enc.cj, 1)}">${enc.cj}</span></td>
+                <td><span class="process-count ${getCountClass(enc.cp, 2)}">${enc.cp}</span></td>
                 <td class="total-cell">${enc.total}</td>
             </tr>
         `;

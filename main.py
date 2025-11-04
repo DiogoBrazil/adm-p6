@@ -1193,6 +1193,26 @@ def obter_estatisticas_encarregados():
             result = cursor.fetchone()
             contadores['cj'] = result[0] if result else 0
             
+            # PADE - Processo Administrativo Disciplinar Especial (como responsável, presidente, interrogante ou escrivão do processo)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE (responsavel_id = ? OR presidente_id = ? OR interrogante_id = ? OR escrivao_processo_id = ?)
+                AND tipo_detalhe = 'PADE'
+                AND ativo = 1
+            ''', (enc_id, enc_id, enc_id, enc_id))
+            result = cursor.fetchone()
+            contadores['pade'] = result[0] if result else 0
+            
+            # CP - Conselho Permanente (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) FROM processos_procedimentos 
+                WHERE responsavel_id = ?
+                AND tipo_detalhe = 'CP'
+                AND ativo = 1
+            ''', (enc_id,))
+            result = cursor.fetchone()
+            contadores['cp'] = result[0] if result else 0
+            
             # Calcular total para este encarregado
             total_encarregado = sum(contadores.values())
             total_processos += total_encarregado
