@@ -5908,9 +5908,23 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
                     WHEN p.concluido = 1 THEN 'Concluído'
                     ELSE 'Em andamento'
                 END as status_processo,
-                p.ano_instauracao
+                p.ano_instauracao,
+                -- Dados de PAD/CD/CJ
+                p.presidente_id, p.interrogante_id, p.escrivao_processo_id,
+                COALESCE(u_pres.nome, '') as presidente_nome,
+                COALESCE(u_pres.posto_graduacao, '') as presidente_posto,
+                COALESCE(u_pres.matricula, '') as presidente_matricula,
+                COALESCE(u_inter.nome, '') as interrogante_nome,
+                COALESCE(u_inter.posto_graduacao, '') as interrogante_posto,
+                COALESCE(u_inter.matricula, '') as interrogante_matricula,
+                COALESCE(u_esc_proc.nome, '') as escrivao_processo_nome,
+                COALESCE(u_esc_proc.posto_graduacao, '') as escrivao_processo_posto,
+                COALESCE(u_esc_proc.matricula, '') as escrivao_processo_matricula
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
+            LEFT JOIN usuarios u_pres ON p.presidente_id = u_pres.id
+            LEFT JOIN usuarios u_inter ON p.interrogante_id = u_inter.id
+            LEFT JOIN usuarios u_esc_proc ON p.escrivao_processo_id = u_esc_proc.id
             WHERE p.ativo = 1 
             AND p.tipo_detalhe = ?
             AND (
@@ -5979,6 +5993,29 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
                 },
                 "ultima_movimentacao": ultima_movimentacao
             }
+            
+            # Adicionar dados de presidente, interrogante e escrivão para PAD/CD/CJ
+            if processo[3] in ['PAD', 'CD', 'CJ']:  # tipo_detalhe
+                dados_processo["presidente_processo"] = {
+                    "nome": processo[28],
+                    "posto": processo[29],
+                    "matricula": processo[30],
+                    "completo": f"{processo[29]} {processo[30]} {processo[28]}".strip() if processo[28] else ""
+                } if processo[25] else None  # presidente_id
+                
+                dados_processo["interrogante_processo"] = {
+                    "nome": processo[31],
+                    "posto": processo[32],
+                    "matricula": processo[33],
+                    "completo": f"{processo[32]} {processo[33]} {processo[31]}".strip() if processo[31] else ""
+                } if processo[26] else None  # interrogante_id
+                
+                dados_processo["escrivao_processo"] = {
+                    "nome": processo[34],
+                    "posto": processo[35],
+                    "matricula": processo[36],
+                    "completo": f"{processo[35]} {processo[36]} {processo[34]}".strip() if processo[34] else ""
+                } if processo[27] else None  # escrivao_processo_id
             
             dados_mapa.append(dados_processo)
         
