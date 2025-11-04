@@ -233,6 +233,12 @@ async function gerarMapaMensal() {
         if (resultado.sucesso) {
             console.log(`✅ Mapa gerado: ${resultado.dados.length} processos encontrados`);
             
+            // Verificar se há dados
+            if (!resultado.dados || resultado.dados.length === 0) {
+                mostrarModalSemDados(tipoProcesso, mes, ano);
+                return;
+            }
+            
             // Salvar mapa automaticamente
             const salvamento = await salvarMapaAutomaticamente(resultado);
             
@@ -2415,4 +2421,28 @@ async function excluirMapa() {
         }
     }
 }
+
+// Funções do modal de sem dados
+function mostrarModalSemDados(tipoProcesso, mes, ano) {
+    const mesesNomes = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const mesNome = mesesNomes[parseInt(mes)] || 'Desconhecido';
+    
+    const mensagem = `Não foram encontrados processos ou procedimentos do tipo <strong>${tipoProcesso}</strong> para o período de <strong>${mesNome}/${ano}</strong>.`;
+    
+    document.getElementById('mensagemSemDados').innerHTML = mensagem;
+    document.getElementById('modalSemDados').style.display = 'flex';
+}
+
+function fecharModalSemDados() {
+    document.getElementById('modalSemDados').style.display = 'none';
+}
+
+// Fechar modal ao clicar fora
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('modalSemDados');
+    if (event.target === modal) {
+        fecharModalSemDados();
+    }
+});
 
