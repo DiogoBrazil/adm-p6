@@ -952,6 +952,7 @@ async function carregarOpcoesDosFiltros() {
             povoarSelect('filtroTipo', opcoes.tipos);
             povoarSelect('filtroAno', opcoes.anos);
             povoarSelect('filtroOrigem', opcoes.origens);
+            povoarSelect('filtroLocalFatos', opcoes.locais_fatos);
             // Removido: filtroStatus
             povoarSelect('filtroDocumento', opcoes.documentos);
             
@@ -1023,6 +1024,7 @@ async function aplicarFiltros() {
         tipo: document.getElementById('filtroTipo').value,
         ano: document.getElementById('filtroAno').value,
         origem: document.getElementById('filtroOrigem').value,
+        local_fatos: document.getElementById('filtroLocalFatos').value,
         encarregado: getDatalistValue('filtroEncarregado'),
     // Removido: status PM
         pm_envolvido: getDatalistValue('filtroPmEnvolvido'),
@@ -1041,6 +1043,7 @@ async function aplicarFiltros() {
                 'tipo': 'Tipo',
                 'ano': 'Ano', 
                 'origem': 'Origem',
+                'local_fatos': 'Local dos Fatos',
                 'encarregado': 'Responsável',
                 // Removido: Status PM
                 'pm_envolvido': 'PM Envolvido',
@@ -1077,6 +1080,7 @@ async function limparFiltros() {
     document.getElementById('filtroTipo').value = '';
     document.getElementById('filtroAno').value = '';
     document.getElementById('filtroOrigem').value = '';
+    document.getElementById('filtroLocalFatos').value = '';
     // Removido: limpar filtroStatus
     document.getElementById('filtroDocumento').value = '';
     document.getElementById('filtroSituacao').value = '';

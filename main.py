@@ -3814,6 +3814,10 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 where_clause += " AND p.local_origem = ?"
                 search_params.append(filtros['origem'])
 
+            if filtros.get('local_fatos'):
+                where_clause += " AND p.local_fatos = ?"
+                search_params.append(filtros['local_fatos'])
+
             if filtros.get('documento'):
                 where_clause += " AND p.documento_iniciador = ?"
                 search_params.append(filtros['documento'])
@@ -4276,6 +4280,7 @@ def obter_opcoes_filtros():
             SELECT DISTINCT 
                 p.tipo_detalhe,
                 p.local_origem,
+                p.local_fatos,
                 p.documento_iniciador,
                 p.status_pm,
                 p.nome_vitima,
@@ -4300,6 +4305,7 @@ def obter_opcoes_filtros():
         # Processar resultados
         tipos = set()
         origens = set()
+        locais_fatos = set()
         documentos = set()
         status = set()
         encarregados = set()
@@ -4308,7 +4314,7 @@ def obter_opcoes_filtros():
         anos = set()
         
         for row in resultados:
-            (tipo_detalhe, local_origem, documento_iniciador, status_pm, nome_vitima,
+            (tipo_detalhe, local_origem, local_fatos, documento_iniciador, status_pm, nome_vitima,
              responsavel_nome, responsavel_posto, responsavel_matricula, pm_envolvido_completo,
              ano_instauracao, ano_recebimento) = row
             
@@ -4316,6 +4322,8 @@ def obter_opcoes_filtros():
                 tipos.add(tipo_detalhe)
             if local_origem:
                 origens.add(local_origem)
+            if local_fatos:
+                locais_fatos.add(local_fatos)
             if documento_iniciador:
                 documentos.add(documento_iniciador)
             if status_pm:
@@ -4341,6 +4349,7 @@ def obter_opcoes_filtros():
             "opcoes": {
                 "tipos": sorted(list(tipos)),
                 "origens": sorted(list(origens)),
+                "locais_fatos": sorted(list(locais_fatos)),
                 "documentos": sorted(list(documentos)),
                 "status": sorted(list(status)),
                 "encarregados": sorted(list(encarregados)),
