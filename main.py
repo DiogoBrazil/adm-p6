@@ -1769,6 +1769,112 @@ def obter_estatistica_naturezas_apuradas(ano=None):
         return {"sucesso": False, "erro": str(e)}
 
 @eel.expose
+def obter_estatistica_crimes_militares_ipm(ano=None):
+    """
+    Estatística 7: Crimes militares apontados em IPM
+    Lista todos os crimes militares vinculados a IPMs
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = """WHERE p.tipo_detalhe = 'IPM' 
+                         AND p.ativo = 1 
+                         AND cc.tipo = 'Crime'
+                         AND pei.categorias_indicios LIKE '%Indícios de crime militar%'"""
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        cursor.execute(f'''
+            SELECT 
+                cc.descricao_artigo,
+                COUNT(DISTINCT pei.procedimento_id) as total
+            FROM pm_envolvido_indicios pei
+            JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
+            JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
+            JOIN processos_procedimentos p ON pei.procedimento_id = p.id
+            {where_clause}
+            GROUP BY cc.descricao_artigo
+            ORDER BY total DESC
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        dados = []
+        for row in resultados:
+            crime, total = row
+            dados.append({
+                'crime': crime,
+                'quantidade': total
+            })
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_crimes_militares_ipm: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_estatistica_crimes_comuns(ano=None):
+    """
+    Estatística 8: Crimes comuns apontados em SR e IPM
+    Lista todos os crimes comuns vinculados a IPMs e SRs
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = """WHERE p.tipo_detalhe IN ('IPM', 'SR') 
+                         AND p.ativo = 1 
+                         AND cc.tipo = 'Crime'
+                         AND pei.categorias_indicios LIKE '%Indícios de crime comum%'"""
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        cursor.execute(f'''
+            SELECT 
+                cc.descricao_artigo,
+                COUNT(DISTINCT pei.procedimento_id) as total
+            FROM pm_envolvido_indicios pei
+            JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
+            JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
+            JOIN processos_procedimentos p ON pei.procedimento_id = p.id
+            {where_clause}
+            GROUP BY cc.descricao_artigo
+            ORDER BY total DESC
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        dados = []
+        for row in resultados:
+            crime, total = row
+            dados.append({
+                'crime': crime,
+                'quantidade': total
+            })
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_crimes_comuns: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def obter_estatisticas_processos_andamento():
     """Retorna estatísticas dos processos em andamento por tipo"""
     try:

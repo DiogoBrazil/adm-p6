@@ -60,6 +60,18 @@ async function baixarPDF() {
             tabelaNaturezasVizualizacao.style.display = 'none';
         }
         
+        // Ocultar tabela paginada de crimes militares (se existir)
+        const tabelaCrimesMilitaresVizualizacao = contentArea.querySelector('#tabelaCrimesMilitaresVisualizacao');
+        if (tabelaCrimesMilitaresVizualizacao) {
+            tabelaCrimesMilitaresVizualizacao.style.display = 'none';
+        }
+        
+        // Ocultar tabela paginada de crimes comuns (se existir)
+        const tabelaCrimesComunsVizualizacao = contentArea.querySelector('#tabelaCrimesComunsVisualizacao');
+        if (tabelaCrimesComunsVizualizacao) {
+            tabelaCrimesComunsVizualizacao.style.display = 'none';
+        }
+        
         // Mostrar elementos com classe data-table-pdf (tabelas de dados)
         const tabelasMostrar = contentArea.querySelectorAll('.data-table-pdf');
         tabelasMostrar.forEach(el => el.style.display = 'table');
@@ -80,6 +92,12 @@ async function baixarPDF() {
         }
         if (tabelaNaturezasVizualizacao) {
             tabelaNaturezasVizualizacao.style.display = 'table';
+        }
+        if (tabelaCrimesMilitaresVizualizacao) {
+            tabelaCrimesMilitaresVizualizacao.style.display = 'table';
+        }
+        if (tabelaCrimesComunsVizualizacao) {
+            tabelaCrimesComunsVizualizacao.style.display = 'table';
         }
         
         const imgData = canvas.toDataURL('image/png');
@@ -201,6 +219,12 @@ async function gerarEstatistica() {
             case 'naturezas_apuradas':
                 await gerarEstatisticaNaturezasApuradas(ano);
                 break;
+            case 'crimes_militares_ipm':
+                await gerarEstatisticaCrimesMilitares(ano);
+                break;
+            case 'crimes_comuns':
+                await gerarEstatisticaCrimesComuns(ano);
+                break;
         }
     } catch (error) {
         console.error('❌ Erro ao gerar estatística:', error);
@@ -319,6 +343,32 @@ async function gerarEstatisticaNaturezasApuradas(ano) {
     } else {
         estatisticaAtual = null;
         mostrarSemDados('Não há dados de naturezas apuradas para o período selecionado.');
+    }
+}
+
+// ==== ESTATÍSTICA 7: CRIMES MILITARES EM IPM ====
+async function gerarEstatisticaCrimesMilitares(ano) {
+    const resultado = await eel.obter_estatistica_crimes_militares_ipm(ano || null)();
+    
+    if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'crimes_militares_ipm', ano: ano };
+        renderizarTabelaCrimesMilitares(resultado.dados);
+    } else {
+        estatisticaAtual = null;
+        mostrarSemDados('Não há dados de crimes militares em IPM para o período selecionado.');
+    }
+}
+
+// ==== ESTATÍSTICA 8: CRIMES COMUNS EM SR E IPM ====
+async function gerarEstatisticaCrimesComuns(ano) {
+    const resultado = await eel.obter_estatistica_crimes_comuns(ano || null)();
+    
+    if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'crimes_comuns', ano: ano };
+        renderizarTabelaCrimesComuns(resultado.dados);
+    } else {
+        estatisticaAtual = null;
+        mostrarSemDados('Não há dados de crimes comuns para o período selecionado.');
     }
 }
 
@@ -866,6 +916,246 @@ function mudarPaginaNaturezas(direcao) {
     if (window.paginaAtualNaturezas > totalPaginas) window.paginaAtualNaturezas = totalPaginas;
     
     renderizarPaginaNaturezas();
+}
+
+// ==== RENDERIZAÇÃO: CRIMES MILITARES EM IPM ====
+function renderizarTabelaCrimesMilitares(dados) {
+    const contentArea = document.getElementById('contentArea');
+    
+    // Armazenar dados completos para paginação
+    window.dadosCrimesMilitares = dados;
+    window.paginaAtualCrimesMilitares = 1;
+    window.itensPorPaginaCrimesMilitares = 10;
+    
+    // Renderizar primeira página
+    renderizarPaginaCrimesMilitares();
+}
+
+function renderizarPaginaCrimesMilitares() {
+    const contentArea = document.getElementById('contentArea');
+    const dados = window.dadosCrimesMilitares;
+    const paginaAtual = window.paginaAtualCrimesMilitares;
+    const itensPorPagina = window.itensPorPaginaCrimesMilitares;
+    
+    const totalPaginas = Math.ceil(dados.length / itensPorPagina);
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    const fim = inicio + itensPorPagina;
+    const dadosPagina = dados.slice(inicio, fim);
+    
+    let html = `
+        <div class="statistics-title">
+            <div class="statistics-title-left">
+                <i class="fas fa-gavel"></i>
+                Crimes militares apontados em IPM
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
+        </div>
+        <table class="motoristas-table" id="tabelaCrimesMilitaresVisualizacao">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Crime Militar</th>
+                    <th style="text-align: center;">Quantidade de IPMs</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dadosPagina.forEach((item, index) => {
+        const numeroGlobal = inicio + index + 1;
+        html += `
+            <tr>
+                <td>${numeroGlobal}</td>
+                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <div class="pagination-container hide-in-pdf">
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="mudarPaginaCrimesMilitares(-1)" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <button class="pagination-btn" onclick="mudarPaginaCrimesMilitares(1)" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    Próxima <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-info">
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} crimes militares)
+            </div>
+        </div>
+    `;
+    
+    // Tabela completa oculta para PDF
+    html += `
+        <table class="motoristas-table data-table-pdf" id="tabelaCrimesMilitaresCompleta">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Crime Militar</th>
+                    <th style="text-align: center;">Quantidade de IPMs</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach((item, index) => {
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+    `;
+    
+    contentArea.innerHTML = html;
+}
+
+function mudarPaginaCrimesMilitares(direcao) {
+    const totalPaginas = Math.ceil(window.dadosCrimesMilitares.length / window.itensPorPaginaCrimesMilitares);
+    window.paginaAtualCrimesMilitares += direcao;
+    
+    // Garantir que a página está dentro dos limites
+    if (window.paginaAtualCrimesMilitares < 1) window.paginaAtualCrimesMilitares = 1;
+    if (window.paginaAtualCrimesMilitares > totalPaginas) window.paginaAtualCrimesMilitares = totalPaginas;
+    
+    renderizarPaginaCrimesMilitares();
+}
+
+// ==== RENDERIZAÇÃO: CRIMES COMUNS EM SR E IPM ====
+function renderizarTabelaCrimesComuns(dados) {
+    const contentArea = document.getElementById('contentArea');
+    
+    // Armazenar dados completos para paginação
+    window.dadosCrimesComuns = dados;
+    window.paginaAtualCrimesComuns = 1;
+    window.itensPorPaginaCrimesComuns = 10;
+    
+    // Renderizar primeira página
+    renderizarPaginaCrimesComuns();
+}
+
+function renderizarPaginaCrimesComuns() {
+    const contentArea = document.getElementById('contentArea');
+    const dados = window.dadosCrimesComuns;
+    const paginaAtual = window.paginaAtualCrimesComuns;
+    const itensPorPagina = window.itensPorPaginaCrimesComuns;
+    
+    const totalPaginas = Math.ceil(dados.length / itensPorPagina);
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    const fim = inicio + itensPorPagina;
+    const dadosPagina = dados.slice(inicio, fim);
+    
+    let html = `
+        <div class="statistics-title">
+            <div class="statistics-title-left">
+                <i class="fas fa-balance-scale-right"></i>
+                Crimes comuns apontados em SR e IPM
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
+        </div>
+        <table class="motoristas-table" id="tabelaCrimesComunsVisualizacao">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Crime Comum</th>
+                    <th style="text-align: center;">Quantidade de Processos</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dadosPagina.forEach((item, index) => {
+        const numeroGlobal = inicio + index + 1;
+        html += `
+            <tr>
+                <td>${numeroGlobal}</td>
+                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <div class="pagination-container hide-in-pdf">
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="mudarPaginaCrimesComuns(-1)" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <button class="pagination-btn" onclick="mudarPaginaCrimesComuns(1)" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    Próxima <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-info">
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} crimes comuns)
+            </div>
+        </div>
+    `;
+    
+    // Tabela completa oculta para PDF
+    html += `
+        <table class="motoristas-table data-table-pdf" id="tabelaCrimesComunsCompleta">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Crime Comum</th>
+                    <th style="text-align: center;">Quantidade de Processos</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach((item, index) => {
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+    `;
+    
+    contentArea.innerHTML = html;
+}
+
+function mudarPaginaCrimesComuns(direcao) {
+    const totalPaginas = Math.ceil(window.dadosCrimesComuns.length / window.itensPorPaginaCrimesComuns);
+    window.paginaAtualCrimesComuns += direcao;
+    
+    // Garantir que a página está dentro dos limites
+    if (window.paginaAtualCrimesComuns < 1) window.paginaAtualCrimesComuns = 1;
+    if (window.paginaAtualCrimesComuns > totalPaginas) window.paginaAtualCrimesComuns = totalPaginas;
+    
+    renderizarPaginaCrimesComuns();
 }
 
 // ==== FUNÇÕES AUXILIARES ====
