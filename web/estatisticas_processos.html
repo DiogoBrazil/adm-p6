@@ -46,7 +46,7 @@
 
         .filters-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr auto;
+            grid-template-columns: 2fr 1fr auto auto;
             gap: 20px;
             align-items: end;
         }
@@ -102,11 +102,35 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            height: 45px;
         }
 
         .btn-generate:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(245, 87, 108, 0.4);
+        }
+
+        .btn-inicio {
+            padding: 10px 30px;
+            background: white;
+            color: #667eea;
+            border: 2px solid white;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            height: 45px;
+        }
+
+        .btn-inicio:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(255, 255, 255, 0.5);
+            background: #f8f9fa;
         }
 
         .btn-generate:disabled {
@@ -261,11 +285,8 @@
         <div class="header-content">
             <div class="logo">
                 <i class="fas fa-shield-alt"></i>
-                <span>Sistema P6</span>
+                <span>Sistema P6/7ºBPM</span>
             </div>
-            <button class="btn-back" onclick="window.location.href='dashboard.html'">
-                <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
-            </button>
         </div>
     </header>
 
@@ -307,6 +328,11 @@
                 <button id="btnGerar" class="btn-generate" onclick="gerarEstatistica()">
                     <i class="fas fa-chart-pie"></i>
                     Gerar Estatística
+                </button>
+
+                <button class="btn-inicio" onclick="window.location.href='dashboard.html'">
+                    <i class="fas fa-home"></i>
+                    Início
                 </button>
             </div>
         </div>
