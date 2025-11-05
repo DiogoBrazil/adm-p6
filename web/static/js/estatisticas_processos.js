@@ -89,29 +89,49 @@ async function baixarPDF() {
         // Criar PDF
         const pdf = new jsPDF('p', 'mm', 'a4');
         
+        // Carregar e adicionar logo no cabeçalho
+        const logo = new Image();
+        logo.src = 'static/images/pm_ro-removebg-preview.png';
+        
+        await new Promise((resolve, reject) => {
+            logo.onload = resolve;
+            logo.onerror = reject;
+        });
+        
+        // Adicionar logo centralizado (40mm de largura, proporcional em altura)
+        const logoWidth = 40;
+        const logoHeight = (logo.height * logoWidth) / logo.width;
+        const logoX = (210 - logoWidth) / 2; // Centralizar (A4 tem 210mm de largura)
+        pdf.addImage(logo, 'PNG', logoX, 10, logoWidth, logoHeight);
+        
+        // Ajustar posição do título após o logo
+        const yPosTitulo = 10 + logoHeight + 5;
+        
         // Adicionar cabeçalho
         pdf.setFontSize(16);
         pdf.setTextColor(102, 126, 234);
-        pdf.text('Sistema P6/7ºBPM - Análise de Processos', 105, 15, { align: 'center' });
+        pdf.text('Sistema P6/7ºBPM - Análise de Processos', 105, yPosTitulo, { align: 'center' });
         
         // Adicionar data de geração
         pdf.setFontSize(10);
         pdf.setTextColor(100, 100, 100);
         const dataHora = new Date().toLocaleString('pt-BR');
-        pdf.text(`Gerado em: ${dataHora}`, 105, 22, { align: 'center' });
+        pdf.text(`Gerado em: ${dataHora}`, 105, yPosTitulo + 7, { align: 'center' });
         
         // Adicionar ano filtrado se houver
+        let yPosConteudo = yPosTitulo + 12;
         if (estatisticaAtual && estatisticaAtual.ano) {
-            pdf.text(`Ano: ${estatisticaAtual.ano}`, 105, 27, { align: 'center' });
+            pdf.text(`Ano: ${estatisticaAtual.ano}`, 105, yPosTitulo + 12, { align: 'center' });
+            yPosConteudo = yPosTitulo + 17;
         }
         
         // Adicionar imagem do gráfico/tabela
-        let yPosition = estatisticaAtual && estatisticaAtual.ano ? 32 : 27;
+        const espacoDisponivel = 297 - yPosConteudo - 10; // Altura A4 menos cabeçalho e margem inferior
         
-        if (imgHeight > 250) {
+        if (imgHeight > espacoDisponivel) {
             // Se muito alto, dividir em páginas
             let heightLeft = imgHeight;
-            let position = yPosition;
+            let position = yPosConteudo;
             
             pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
             heightLeft -= (297 - position);
@@ -123,7 +143,7 @@ async function baixarPDF() {
                 heightLeft -= 297;
             }
         } else {
-            pdf.addImage(imgData, 'PNG', 10, yPosition, imgWidth, imgHeight);
+            pdf.addImage(imgData, 'PNG', 10, yPosConteudo, imgWidth, imgHeight);
         }
         
         // Nome do arquivo
