@@ -1288,6 +1288,28 @@ async function gerarDocumentoPDF(content, titulo) {
     
     let currentY = margin;
     
+    // Carregar e adicionar logo no cabeçalho
+    const logo = new Image();
+    logo.src = 'static/images/pm_ro-removebg-preview.png';
+    
+    await new Promise((resolve, reject) => {
+        logo.onload = resolve;
+        logo.onerror = () => {
+            console.warn('⚠️ Não foi possível carregar o logo');
+            resolve(); // Continua mesmo sem logo
+        };
+    });
+    
+    // Se o logo foi carregado com sucesso, adicioná-lo
+    if (logo.complete && logo.naturalHeight !== 0) {
+        // Adicionar logo centralizado (42mm de largura para paisagem - 40% maior)
+        const logoWidth = 42;
+        const logoHeight = (logo.height * logoWidth) / logo.width;
+        const logoX = (pageWidth - logoWidth) / 2; // Centralizar
+        pdf.addImage(logo, 'PNG', logoX, currentY, logoWidth, logoHeight);
+        currentY += logoHeight + 5; // Espaço após o logo
+    }
+    
     // Header com gradiente simulado
     pdf.setFillColor(30, 60, 114);
     pdf.rect(margin, currentY, contentWidth, 25, 'F');

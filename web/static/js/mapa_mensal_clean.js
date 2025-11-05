@@ -516,12 +516,37 @@ async function gerarDocumentoPDF(content, titulo) {
         const canvas = await html2canvas(elementoImpressao, opcoes);
         const imgData = canvas.toDataURL('image/png', 0.95);
         
+        // Carregar e adicionar logo no cabeçalho
+        const logo = new Image();
+        logo.src = 'static/images/pm_ro-removebg-preview.png';
+        
+        await new Promise((resolve, reject) => {
+            logo.onload = resolve;
+            logo.onerror = () => {
+                console.warn('⚠️ Não foi possível carregar o logo');
+                resolve(); // Continua mesmo sem logo
+            };
+        });
+        
         // Dimensões da página em mm (A4 paisagem)
         const pageWidth = 297;
         const pageHeight = 210;
         const margin = 10;
+        
+        let yOffset = margin;
+        
+        // Se o logo foi carregado com sucesso, adicioná-lo
+        if (logo.complete && logo.naturalHeight !== 0) {
+            // Adicionar logo centralizado (42mm de largura para paisagem - 40% maior)
+            const logoWidth = 42;
+            const logoHeight = (logo.height * logoWidth) / logo.width;
+            const logoX = (pageWidth - logoWidth) / 2; // Centralizar
+            pdf.addImage(logo, 'PNG', logoX, yOffset, logoWidth, logoHeight);
+            yOffset += logoHeight + 5; // Espaço após o logo
+        }
+        
         const maxWidth = pageWidth - (2 * margin);
-        const maxHeight = pageHeight - (2 * margin);
+        const maxHeight = pageHeight - yOffset - margin; // Ajustar altura disponível
         
         // Calcular dimensões da imagem
         const imgWidth = canvas.width;
@@ -531,9 +556,10 @@ async function gerarDocumentoPDF(content, titulo) {
         const finalWidth = imgWidth * 0.264583 * ratio;
         const finalHeight = imgHeight * 0.264583 * ratio;
         
-        // Centralizar na página
+        // Centralizar na página (considerando o espaço do logo)
         const x = (pageWidth - finalWidth) / 2;
-        const y = (pageHeight - finalHeight) / 2;
+        const espacoDisponivel = pageHeight - yOffset - margin;
+        const y = yOffset + (espacoDisponivel - finalHeight) / 2;
         
         console.log('Adicionando imagem ao PDF...');
         
