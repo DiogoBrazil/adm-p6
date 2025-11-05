@@ -54,6 +54,12 @@ async function baixarPDF() {
             tabelaVizualizacao.style.display = 'none';
         }
         
+        // Ocultar tabela paginada de naturezas (se existir)
+        const tabelaNaturezasVizualizacao = contentArea.querySelector('#tabelaNaturezasVisualizacao');
+        if (tabelaNaturezasVizualizacao) {
+            tabelaNaturezasVizualizacao.style.display = 'none';
+        }
+        
         // Mostrar elementos com classe data-table-pdf (tabelas de dados)
         const tabelasMostrar = contentArea.querySelectorAll('.data-table-pdf');
         tabelasMostrar.forEach(el => el.style.display = 'table');
@@ -71,6 +77,9 @@ async function baixarPDF() {
         tabelasMostrar.forEach(el => el.style.display = 'none');
         if (tabelaVizualizacao) {
             tabelaVizualizacao.style.display = 'table';
+        }
+        if (tabelaNaturezasVizualizacao) {
+            tabelaNaturezasVizualizacao.style.display = 'table';
         }
         
         const imgData = canvas.toDataURL('image/png');
@@ -168,6 +177,9 @@ async function gerarEstatistica() {
                 break;
             case 'motoristas_sinistros':
                 await gerarEstatisticaMotoristas(ano);
+                break;
+            case 'naturezas_apuradas':
+                await gerarEstatisticaNaturezasApuradas(ano);
                 break;
         }
     } catch (error) {
@@ -274,6 +286,19 @@ async function gerarEstatisticaMotoristas(ano) {
     } else {
         estatisticaAtual = null;
         mostrarSemDados('Não há dados de sinistros para o período selecionado.');
+    }
+}
+
+// ==== ESTATÍSTICA 6: NATUREZAS APURADAS ====
+async function gerarEstatisticaNaturezasApuradas(ano) {
+    const resultado = await eel.obter_estatistica_naturezas_apuradas(ano || null)();
+    
+    if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'naturezas_apuradas', ano: ano };
+        renderizarTabelaNaturezas(resultado.dados);
+    } else {
+        estatisticaAtual = null;
+        mostrarSemDados('Não há dados de naturezas apuradas para o período selecionado.');
     }
 }
 
@@ -702,6 +727,125 @@ function mudarPaginaMotoristas(direcao) {
     if (window.paginaAtualMotoristas > totalPaginas) window.paginaAtualMotoristas = totalPaginas;
     
     renderizarPaginaMotoristas();
+}
+
+function renderizarTabelaNaturezas(dados) {
+    const contentArea = document.getElementById('contentArea');
+    
+    // Armazenar dados completos para paginação
+    window.dadosNaturezas = dados;
+    window.paginaAtualNaturezas = 1;
+    window.itensPorPaginaNaturezas = 10;
+    
+    // Renderizar primeira página
+    renderizarPaginaNaturezas();
+}
+
+function renderizarPaginaNaturezas() {
+    const contentArea = document.getElementById('contentArea');
+    const dados = window.dadosNaturezas;
+    const paginaAtual = window.paginaAtualNaturezas;
+    const itensPorPagina = window.itensPorPaginaNaturezas;
+    
+    const totalPaginas = Math.ceil(dados.length / itensPorPagina);
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    const fim = inicio + itensPorPagina;
+    const dadosPagina = dados.slice(inicio, fim);
+    
+    let html = `
+        <div class="statistics-title">
+            <div class="statistics-title-left">
+                <i class="fas fa-balance-scale"></i>
+                Principais naturezas apuradas em procedimentos
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
+        </div>
+        <table class="motoristas-table" id="tabelaNaturezasVisualizacao">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Natureza</th>
+                    <th style="text-align: center;">Quantidade</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dadosPagina.forEach((item, index) => {
+        const numeroGlobal = inicio + index + 1;
+        html += `
+            <tr>
+                <td>${numeroGlobal}</td>
+                <td class="motorista-nome">${item.natureza}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <div class="pagination-container hide-in-pdf">
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="mudarPaginaNaturezas(-1)" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <button class="pagination-btn" onclick="mudarPaginaNaturezas(1)" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    Próxima <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-info">
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} naturezas)
+            </div>
+        </div>
+    `;
+    
+    // Tabela completa oculta para PDF
+    html += `
+        <table class="motoristas-table data-table-pdf" id="tabelaNaturezasCompleta">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Natureza</th>
+                    <th style="text-align: center;">Quantidade</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach((item, index) => {
+        html += `
+            <tr>
+                <td>${index + 1}</td>
+                <td class="motorista-nome">${item.natureza}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.quantidade}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+    `;
+    
+    contentArea.innerHTML = html;
+}
+
+function mudarPaginaNaturezas(direcao) {
+    const totalPaginas = Math.ceil(window.dadosNaturezas.length / window.itensPorPaginaNaturezas);
+    window.paginaAtualNaturezas += direcao;
+    
+    // Garantir que a página está dentro dos limites
+    if (window.paginaAtualNaturezas < 1) window.paginaAtualNaturezas = 1;
+    if (window.paginaAtualNaturezas > totalPaginas) window.paginaAtualNaturezas = totalPaginas;
+    
+    renderizarPaginaNaturezas();
 }
 
 // ==== FUNÇÕES AUXILIARES ====

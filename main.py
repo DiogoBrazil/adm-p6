@@ -1722,6 +1722,53 @@ def obter_ranking_motoristas_sinistros(ano=None):
         return {"sucesso": False, "erro": str(e)}
 
 @eel.expose
+def obter_estatistica_naturezas_apuradas(ano=None):
+    """
+    Estatística 6: Principais naturezas apuradas em procedimentos
+    Conta todos os procedimentos (em andamento e concluídos) que possuem natureza_procedimento
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = "WHERE p.natureza_procedimento IS NOT NULL AND p.natureza_procedimento != '' AND p.ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        cursor.execute(f'''
+            SELECT 
+                p.natureza_procedimento,
+                COUNT(*) as total
+            FROM processos_procedimentos p
+            {where_clause}
+            GROUP BY p.natureza_procedimento
+            ORDER BY total DESC
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        dados = []
+        for row in resultados:
+            natureza, total = row
+            dados.append({
+                'natureza': natureza,
+                'quantidade': total
+            })
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_naturezas_apuradas: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def obter_estatisticas_processos_andamento():
     """Retorna estatísticas dos processos em andamento por tipo"""
     try:
