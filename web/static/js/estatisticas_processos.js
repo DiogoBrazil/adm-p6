@@ -128,7 +128,7 @@ async function baixarPDF() {
         // Adicionar cabeçalho
         pdf.setFontSize(16);
         pdf.setTextColor(102, 126, 234);
-        pdf.text('Sistema P6/7ºBPM - Análise de Processos', 105, yPosTitulo, { align: 'center' });
+        pdf.text('Sistema P6/7ºBPM - Análise de dados', 105, yPosTitulo, { align: 'center' });
         
         // Adicionar data de geração
         pdf.setFontSize(10);
