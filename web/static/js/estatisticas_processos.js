@@ -293,9 +293,9 @@ function renderizarGraficoBarrasTransgressoes(titulo, dados) {
         chartAtual.destroy();
     }
     
-    const labels = dados.map(d => d.descricao_curta);
+    const labels = dados.map(d => d.artigo_label); // Usar artigo_label como label principal
     const values = dados.map(d => d.quantidade);
-    const artigos = dados.map(d => d.artigo_label);
+    const descricoes = dados.map(d => d.descricao_curta);
     
     chartAtual = new Chart(ctx, {
         type: 'bar',
@@ -312,7 +312,6 @@ function renderizarGraficoBarrasTransgressoes(titulo, dados) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            indexAxis: 'y', // Barras horizontais
             plugins: {
                 legend: {
                     display: false
@@ -320,22 +319,28 @@ function renderizarGraficoBarrasTransgressoes(titulo, dados) {
                 tooltip: {
                     callbacks: {
                         title: function(context) {
-                            return artigos[context[0].dataIndex];
+                            return labels[context[0].dataIndex];
                         },
                         label: function(context) {
-                            return `Ocorrências: ${context.parsed.x}`;
+                            return `Ocorrências: ${context.parsed.y}`;
                         },
                         afterLabel: function(context) {
-                            return labels[context.dataIndex];
+                            return descricoes[context.dataIndex];
                         }
                     }
                 }
             },
             scales: {
-                x: {
+                y: {
                     beginAtZero: true,
                     ticks: {
                         stepSize: 1
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
                     }
                 }
             }
