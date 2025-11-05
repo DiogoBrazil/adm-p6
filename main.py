@@ -1046,8 +1046,100 @@ def listar_encarregados_operadores():
         return []
 
 @eel.expose
-def atualizar_usuario(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
-    """Atualiza um usuário existente"""
+def obter_usuario_detalhado(user_id, user_type):
+    """Obtém detalhes completos de um usuário para edição"""
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, 
+                   is_encarregado, is_operador, email, perfil
+            FROM usuarios
+            WHERE id = ? AND ativo = 1
+        ''', (user_id,))
+        
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            return {
+                "sucesso": True,
+                "usuario": {
+                    "id": user[0],
+                    "tipo_usuario": user[1],
+                    "posto_graduacao": user[2],
+                    "nome": user[3],
+                    "matricula": user[4],
+                    "is_encarregado": bool(user[5]),
+                    "is_operador": bool(user[6]),
+                    "email": user[7],
+                    "perfil": user[8]
+                }
+            }
+        else:
+            return {"sucesso": False, "mensagem": "Usuário não encontrado"}
+            
+    except Exception as e:
+        print(f"Erro ao obter usuário detalhado: {e}")
+        return {"sucesso": False, "mensagem": str(e)}
+
+@eel.expose
+def atualizar_usuario(user_id, user_type, tipo_usuario, posto_graduacao, nome, matricula, 
+                      is_encarregado, is_operador, email, senha, perfil):
+    """Atualiza um usuário existente com todos os campos"""
+    try:
+        # Validações básicas
+        if not user_id or not tipo_usuario or not posto_graduacao or not nome or not matricula:
+            return {"sucesso": False, "mensagem": "Todos os campos obrigatórios devem ser preenchidos!"}
+
+        if len(nome.strip()) < 2:
+            return {"sucesso": False, "mensagem": "Nome deve ter pelo menos 2 caracteres!"}
+
+        if is_operador:
+            if not email or not email.strip():
+                return {"sucesso": False, "mensagem": "Email é obrigatório para operadores!"}
+            if "@" not in email or "." not in email:
+                return {"sucesso": False, "mensagem": "Email inválido!"}
+            if not perfil:
+                return {"sucesso": False, "mensagem": "Perfil é obrigatório para operadores!"}
+
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        # Atualizar usuário
+        if senha and senha.strip():
+            # Se senha foi fornecida, atualizar com nova senha (hash)
+            senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+            cursor.execute('''
+                UPDATE usuarios 
+                SET tipo_usuario = ?, posto_graduacao = ?, nome = ?, matricula = ?,
+                    is_encarregado = ?, is_operador = ?, email = ?, senha = ?, perfil = ?
+                WHERE id = ?
+            ''', (tipo_usuario, posto_graduacao, nome, matricula, 
+                  is_encarregado, is_operador, email, senha_hash, perfil, user_id))
+        else:
+            # Manter senha atual
+            cursor.execute('''
+                UPDATE usuarios 
+                SET tipo_usuario = ?, posto_graduacao = ?, nome = ?, matricula = ?,
+                    is_encarregado = ?, is_operador = ?, email = ?, perfil = ?
+                WHERE id = ?
+            ''', (tipo_usuario, posto_graduacao, nome, matricula, 
+                  is_encarregado, is_operador, email, perfil, user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {"sucesso": True, "mensagem": "Usuário atualizado com sucesso!"}
+        
+    except Exception as e:
+        print(f"Erro ao atualizar usuário: {e}")
+        return {"sucesso": False, "mensagem": str(e)}
+
+@eel.expose
+def atualizar_usuario_old(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
+    """Atualiza um usuário existente (versão antiga - manter por compatibilidade)"""
     # Validações básicas
     if not user_id or not user_type or not posto_graduacao or not matricula or not nome:
         return {"sucesso": False, "mensagem": "Todos os campos obrigatórios devem ser preenchidos!"}

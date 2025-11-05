@@ -1,7 +1,89 @@
 // Variável para usuário logado
 let usuarioLogado = null;
+let modoEdicao = false;
+let usuarioIdEdicao = null;
+let usuarioTipoEdicao = null;
 
 console.log('🚀 Script user_form.js carregado!'); // Debug inicial
+
+// Função para obter parâmetros da URL
+function obterParametrosURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id');
+    const type = urlParams.get('type');
+    
+    if (id && type) {
+        modoEdicao = true;
+        usuarioIdEdicao = id;
+        usuarioTipoEdicao = type;
+        console.log('Modo edição ativado - ID:', id, 'Tipo:', type);
+    }
+    
+    return { id, type };
+}
+
+// Função para carregar dados do usuário para edição
+async function carregarDadosUsuarioEdicao(userId, userType) {
+    try {
+        console.log('Carregando dados do usuário para edição...', userId, userType);
+        
+        const resultado = await eel.obter_usuario_detalhado(userId, userType)();
+        
+        if (resultado.sucesso) {
+            const usuario = resultado.usuario;
+            console.log('Dados do usuário carregados:', usuario);
+            
+            // Preencher título
+            const titulo = document.querySelector('.card-header h2');
+            if (titulo) {
+                titulo.textContent = 'Editar Usuário';
+            }
+            
+            // Preencher campos básicos
+            document.getElementById('tipo_usuario').value = usuario.tipo_usuario || '';
+            
+            // Atualizar opções de posto/graduação antes de selecionar
+            atualizarPostoGraduacao();
+            
+            // Aguardar um pouco para garantir que as opções foram carregadas
+            setTimeout(() => {
+                document.getElementById('posto_graduacao').value = usuario.posto_graduacao || '';
+                document.getElementById('nome').value = usuario.nome || '';
+                document.getElementById('matricula').value = usuario.matricula || '';
+                document.getElementById('is_encarregado').checked = usuario.is_encarregado || false;
+                document.getElementById('is_operador').checked = usuario.is_operador || false;
+                
+                // Atualizar campos de operador
+                toggleOperatorFields();
+                
+                // Preencher campos de operador se for operador
+                if (usuario.is_operador) {
+                    document.getElementById('email').value = usuario.email || '';
+                    document.getElementById('perfil').value = usuario.perfil || '';
+                    // Senha não é preenchida por segurança
+                    document.querySelector('label[for="senha"]').innerHTML = 'Nova Senha (deixe em branco para manter a atual)';
+                }
+                
+                // Mudar texto do botão
+                const submitBtn = document.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.textContent = 'Atualizar Usuário';
+                }
+                
+                console.log('Formulário preenchido com dados do usuário');
+            }, 100);
+            
+            return true;
+        } else {
+            showAlert('Erro ao carregar dados do usuário: ' + resultado.mensagem, 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('Erro ao carregar dados do usuário:', error);
+        showAlert('Erro ao carregar dados do usuário!', 'error');
+        return false;
+    }
+}
 
 // Mapas de postos/graduações
 const postosOficial = [
@@ -245,6 +327,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Carregar usuário logado
     await carregarUsuarioLogado();
     
+    // Verificar se é modo edição
+    const { id, type } = obterParametrosURL();
+    
     // Verificar se elementos existem
     const tipoUsuarioSelect = document.getElementById('tipo_usuario');
     const operadorCheckbox = document.getElementById('is_operador');
@@ -276,6 +361,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Configurar validações de campos
     configurarValidacoesCampos();
     console.log('Validações de campos configuradas'); // Debug
+    
+    // Se for modo edição, carregar dados do usuário
+    if (modoEdicao && id && type) {
+        await carregarDadosUsuarioEdicao(id, type);
+    }
     
     // Modal close
     if (modalCloseBtn) {
@@ -324,40 +414,79 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Validar campos de operador se necessário
             if (formData.is_operador) {
-                if (!formData.email || !formData.senha || !formData.perfil) {
-                    showAlert('Para operadores, email, senha e perfil são obrigatórios!', 'error');
-                    return;
+                // Em modo edição, senha é opcional (mantém a atual se vazio)
+                if (!modoEdicao) {
+                    if (!formData.email || !formData.senha || !formData.perfil) {
+                        showAlert('Para operadores, email, senha e perfil são obrigatórios!', 'error');
+                        return;
+                    }
+                } else {
+                    if (!formData.email || !formData.perfil) {
+                        showAlert('Para operadores, email e perfil são obrigatórios!', 'error');
+                        return;
+                    }
                 }
             }
             
             try {
-                const resultado = await eel.cadastrar_usuario(
-                    formData.tipo_usuario,
-                    formData.posto_graduacao,
-                    formData.nome,
-                    formData.matricula,
-                    formData.is_encarregado,
-                    formData.is_operador,
-                    formData.email,
-                    formData.senha,
-                    formData.perfil
-                )();
+                let resultado;
                 
-                if (resultado.sucesso) {
-                    showAlert('Usuário cadastrado com sucesso!', 'success');
+                if (modoEdicao) {
+                    // Modo edição - atualizar usuário
+                    resultado = await eel.atualizar_usuario(
+                        usuarioIdEdicao,
+                        usuarioTipoEdicao,
+                        formData.tipo_usuario,
+                        formData.posto_graduacao,
+                        formData.nome,
+                        formData.matricula,
+                        formData.is_encarregado,
+                        formData.is_operador,
+                        formData.email,
+                        formData.senha, // null se não for alterada
+                        formData.perfil
+                    )();
                     
-                    // Redirecionar para listagem após 1 segundo
-                    setTimeout(() => {
-                        document.getElementById('modalFeedback').style.display = 'none';
-                        window.location.href = 'user_list.html';
-                    }, 1000);
-                    
+                    if (resultado.sucesso) {
+                        showAlert('Usuário atualizado com sucesso!', 'success');
+                        
+                        // Redirecionar para listagem após 1 segundo
+                        setTimeout(() => {
+                            document.getElementById('modalFeedback').style.display = 'none';
+                            window.location.href = 'user_list.html';
+                        }, 1000);
+                    } else {
+                        showAlert(resultado.mensagem, 'error');
+                    }
                 } else {
-                    showAlert(resultado.mensagem, 'error');
+                    // Modo cadastro - criar novo usuário
+                    resultado = await eel.cadastrar_usuario(
+                        formData.tipo_usuario,
+                        formData.posto_graduacao,
+                        formData.nome,
+                        formData.matricula,
+                        formData.is_encarregado,
+                        formData.is_operador,
+                        formData.email,
+                        formData.senha,
+                        formData.perfil
+                    )();
+                    
+                    if (resultado.sucesso) {
+                        showAlert('Usuário cadastrado com sucesso!', 'success');
+                        
+                        // Redirecionar para listagem após 1 segundo
+                        setTimeout(() => {
+                            document.getElementById('modalFeedback').style.display = 'none';
+                            window.location.href = 'user_list.html';
+                        }, 1000);
+                    } else {
+                        showAlert(resultado.mensagem, 'error');
+                    }
                 }
                 
             } catch (error) {
-                console.error('Erro ao cadastrar usuário:', error);
+                console.error('Erro ao salvar usuário:', error);
                 showAlert('Erro ao conectar com o servidor!', 'error');
             }
         });
