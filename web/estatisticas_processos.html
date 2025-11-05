@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Processos - Sistema P6</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="static/css/dashboard_layout.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .statistics-container {
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .page-title i {
+            color: #667eea;
+        }
+
+        .filters-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr auto;
+            gap: 20px;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-select {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            background: white;
+            color: #2c3e50;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-select:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .filter-select:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-generate {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(245, 87, 108, 0.4);
+        }
+
+        .btn-generate:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .content-area {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            min-height: 400px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            color: #95a5a6;
+            text-align: center;
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #7f8c8d;
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            max-width: 400px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+        }
+
+        .statistics-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #ecf0f1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .statistics-title i {
+            color: #667eea;
+        }
+
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #7f8c8d;
+            font-size: 16px;
+        }
+
+        /* Tabela de motoristas */
+        .motoristas-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .motoristas-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .motoristas-table th {
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+        }
+
+        .motoristas-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e8ecf0;
+            font-size: 14px;
+        }
+
+        .motoristas-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .motorista-nome {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .sinistros-count {
+            display: inline-block;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .statistics-container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>Sistema P6</span>
+            </div>
+            <button class="btn-back" onclick="window.location.href='dashboard.html'">
+                <i class="fas fa-arrow-left"></i> Voltar ao Dashboard
+            </button>
+        </div>
+    </header>
+
+    <div class="statistics-container">
+        <div class="page-header">
+            <h1 class="page-title">
+                <i class="fas fa-chart-line"></i>
+                Análise de Processos
+            </h1>
+        </div>
+
+        <div class="filters-section">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="tipoEstatistica">
+                        <i class="fas fa-chart-bar"></i>
+                        Tipo de Estatística
+                    </label>
+                    <select id="tipoEstatistica" class="filter-select">
+                        <option value="">Selecione uma estatística...</option>
+                        <option value="pads_solucoes">PADS - Soluções Finais</option>
+                        <option value="ipm_indicios">IPM - Tipos de Indícios</option>
+                        <option value="sr_indicios">SR - Tipos de Indícios</option>
+                        <option value="top_transgressoes">Top 10 Transgressões Mais Recorrentes</option>
+                        <option value="motoristas_sinistros">Ranking de Motoristas em Sinistros</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="anoEstatistica">
+                        <i class="fas fa-calendar-alt"></i>
+                        Ano
+                    </label>
+                    <select id="anoEstatistica" class="filter-select">
+                        <option value="">Todos os Anos</option>
+                    </select>
+                </div>
+
+                <button id="btnGerar" class="btn-generate" onclick="gerarEstatistica()">
+                    <i class="fas fa-chart-pie"></i>
+                    Gerar Estatística
+                </button>
+            </div>
+        </div>
+
+        <div class="content-area" id="contentArea">
+            <div class="empty-state">
+                <i class="fas fa-chart-area"></i>
+                <h3>Nenhuma estatística selecionada</h3>
+                <p>Selecione um tipo de estatística e um período acima para visualizar os dados.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/eel.js"></script>
+    <script src="static/js/estatisticas_processos.js"></script>
+</body>
+</html>

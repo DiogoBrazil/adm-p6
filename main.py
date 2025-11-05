@@ -1317,6 +1317,410 @@ def obter_ultimos_feitos_encarregado(encarregado_id):
     except Exception as e:
         return {"sucesso": False, "erro": str(e)}
 
+# ======== FUNÇÕES DE ESTATÍSTICAS POR TIPO DE PROCESSO ========
+
+@eel.expose
+def obter_anos_disponiveis():
+    """Retorna lista de anos com processos/procedimentos cadastrados"""
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT DISTINCT strftime('%Y', data_instauracao) as ano
+            FROM processos_procedimentos
+            WHERE data_instauracao IS NOT NULL AND ativo = 1
+            ORDER BY ano DESC
+        ''')
+        
+        anos = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        return {
+            "sucesso": True,
+            "anos": anos
+        }
+        
+    except Exception as e:
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_estatistica_pads_solucoes(ano=None):
+    """
+    Estatística 1: Quantidade de PADS concluídos por tipo de solução
+    (punido, absolvido, arquivado)
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = "WHERE tipo_detalhe = 'PADS' AND concluido = 1 AND ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', data_instauracao) = ?"
+            params.append(ano)
+        
+        cursor.execute(f'''
+            SELECT 
+                CASE 
+                    WHEN solucao_tipo IS NOT NULL THEN solucao_tipo
+                    WHEN penalidade_tipo IS NOT NULL THEN 'Punido'
+                    ELSE 'Não Informado'
+                END as solucao,
+                COUNT(*) as quantidade
+            FROM processos_procedimentos
+            {where_clause}
+            GROUP BY solucao
+            ORDER BY quantidade DESC
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        dados = [{'solucao': row[0], 'quantidade': row[1]} for row in resultados]
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_pads_solucoes: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_estatistica_ipm_indicios(ano=None):
+    """
+    Estatística 2: Quantidade de IPM concluídos por tipo de indício
+    (crime militar, transgressões disciplinares, sem indícios)
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = "WHERE p.tipo_detalhe IN ('IPM', 'IPPM') AND p.concluido = 1 AND p.ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        # Crime Militar (verifica no JSON categorias_indicios)
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
+            {where_clause}
+            AND (i.categorias_indicios LIKE '%crime militar%' OR i.categoria LIKE '%crime militar%')
+        ''', params)
+        crime_militar = cursor.fetchone()[0]
+        
+        # Transgressões (verifica nas tabelas pm_envolvido_rdpm e pm_envolvido_art29)
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            WHERE p.id IN (
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
+                UNION
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
+            )
+            {where_clause.replace('WHERE', 'AND')}
+        ''', params)
+        transgressoes = cursor.fetchone()[0]
+        
+        # Sem indícios (não tem crime militar, nem transgressões)
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            {where_clause}
+            AND p.id NOT IN (
+                SELECT procedimento_id FROM pm_envolvido_indicios 
+                WHERE categorias_indicios LIKE '%crime militar%' OR categoria LIKE '%crime militar%'
+            )
+            AND p.id NOT IN (
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
+                UNION
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
+            )
+        ''', params)
+        sem_indicios = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        dados = [
+            {'tipo_indicio': 'Crime Militar', 'quantidade': crime_militar},
+            {'tipo_indicio': 'Transgressões Disciplinares', 'quantidade': transgressoes},
+            {'tipo_indicio': 'Sem Indícios', 'quantidade': sem_indicios}
+        ]
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_ipm_indicios: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_estatistica_sr_indicios(ano=None):
+    """
+    Estatística 3: Quantidade de SR concluídos por tipo de indício
+    (crime comum, transgressões disciplinares, sem indícios)
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = "WHERE p.tipo_detalhe = 'SR' AND p.concluido = 1 AND p.ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        # Crime Comum (verifica no JSON categorias_indicios)
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
+            {where_clause}
+            AND (i.categorias_indicios LIKE '%crime comum%' OR i.categoria LIKE '%crime comum%')
+        ''', params)
+        crime_comum = cursor.fetchone()[0]
+        
+        # Transgressões (verifica nas tabelas pm_envolvido_rdpm e pm_envolvido_art29)
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            WHERE p.id IN (
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
+                UNION
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
+            )
+            {where_clause.replace('WHERE', 'AND')}
+        ''', params)
+        transgressoes = cursor.fetchone()[0]
+        
+        # Sem indícios
+        cursor.execute(f'''
+            SELECT COUNT(DISTINCT p.id)
+            FROM processos_procedimentos p
+            {where_clause}
+            AND p.id NOT IN (
+                SELECT procedimento_id FROM pm_envolvido_indicios 
+                WHERE categorias_indicios LIKE '%crime comum%' OR categoria LIKE '%crime comum%'
+            )
+            AND p.id NOT IN (
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
+                UNION
+                SELECT i.procedimento_id 
+                FROM pm_envolvido_indicios i
+                INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
+            )
+        ''', params)
+        sem_indicios = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        dados = [
+            {'tipo_indicio': 'Crime Comum', 'quantidade': crime_comum},
+            {'tipo_indicio': 'Transgressões Disciplinares', 'quantidade': transgressoes},
+            {'tipo_indicio': 'Sem Indícios', 'quantidade': sem_indicios}
+        ]
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_estatistica_sr_indicios: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_top10_transgressoes(ano=None):
+    """
+    Estatística 4: Top 10 transgressões mais recorrentes como indícios em IPM/SR concluídos
+    Retorna artigo formatado (Art. 17, Inciso I) e descrição
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause_ipm = "WHERE p.tipo_detalhe IN ('IPM', 'IPPM') AND p.concluido = 1 AND p.ativo = 1"
+        where_clause_sr = "WHERE p.tipo_detalhe = 'SR' AND p.concluido = 1 AND p.ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause_ipm += " AND strftime('%Y', p.data_instauracao) = ?"
+            where_clause_sr += " AND strftime('%Y', p.data_instauracao) = ?"
+            params = [ano, ano]
+        
+        # UNION de transgressões RDPM de IPM e SR
+        cursor.execute(f'''
+            SELECT 
+                t.id,
+                t.inciso,
+                t.gravidade,
+                t.texto,
+                COUNT(*) as ocorrencias
+            FROM (
+                SELECT r.transgressao_id, i.procedimento_id
+                FROM pm_envolvido_rdpm r
+                INNER JOIN pm_envolvido_indicios i ON r.pm_indicios_id = i.id
+                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                {where_clause_ipm}
+                
+                UNION ALL
+                
+                SELECT r.transgressao_id, i.procedimento_id
+                FROM pm_envolvido_rdpm r
+                INNER JOIN pm_envolvido_indicios i ON r.pm_indicios_id = i.id
+                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                {where_clause_sr}
+            ) as trans
+            INNER JOIN transgressoes t ON trans.transgressao_id = t.id
+            GROUP BY t.id, t.inciso, t.gravidade, t.texto
+            ORDER BY ocorrencias DESC
+            LIMIT 10
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        
+        # Mapear gravidade para artigo
+        gravidade_map = {'leve': '15', 'media': '16', 'grave': '17'}
+        
+        dados = []
+        for row in resultados:
+            transgressao_id, inciso, gravidade, texto, ocorrencias = row
+            artigo = gravidade_map.get(gravidade.lower(), '?')
+            
+            dados.append({
+                'transgressao_id': transgressao_id,
+                'artigo_label': f"Art. {artigo}, Inciso {inciso}",
+                'descricao_curta': texto[:50] + '...' if len(texto) > 50 else texto,
+                'quantidade': ocorrencias
+            })
+        
+        # Adicionar Art. 29 se houver
+        cursor.execute(f'''
+            SELECT 
+                t.id,
+                t.inciso,
+                t.texto,
+                COUNT(*) as ocorrencias
+            FROM (
+                SELECT a.art29_id as transgressao_id, i.procedimento_id
+                FROM pm_envolvido_art29 a
+                INNER JOIN pm_envolvido_indicios i ON a.pm_indicios_id = i.id
+                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                {where_clause_ipm}
+                
+                UNION ALL
+                
+                SELECT a.art29_id as transgressao_id, i.procedimento_id
+                FROM pm_envolvido_art29 a
+                INNER JOIN pm_envolvido_indicios i ON a.pm_indicios_id = i.id
+                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                {where_clause_sr}
+            ) as trans
+            INNER JOIN transgressoes t ON trans.transgressao_id = t.id
+            GROUP BY t.id, t.inciso, t.texto
+            ORDER BY ocorrencias DESC
+            LIMIT 10
+        ''', params)
+        
+        art29_resultados = cursor.fetchall()
+        
+        for row in art29_resultados:
+            transgressao_id, inciso, texto, ocorrencias = row
+            dados.append({
+                'transgressao_id': transgressao_id,
+                'artigo_label': f"Art. 29, Inciso {inciso}",
+                'descricao_curta': texto[:50] + '...' if len(texto) > 50 else texto,
+                'quantidade': ocorrencias
+            })
+        
+        # Ordenar todos por ocorrências e pegar top 10
+        dados = sorted(dados, key=lambda x: x['quantidade'], reverse=True)[:10]
+        
+        conn.close()
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_top10_transgressoes: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
+def obter_ranking_motoristas_sinistros(ano=None):
+    """
+    Estatística 5: Ranking de PMs motoristas em sinistros de trânsito
+    Inclui TODOS os procedimentos (em andamento e concluídos)
+    """
+    try:
+        conn = sqlite3.connect('usuarios.db')
+        cursor = conn.cursor()
+        
+        where_clause = "WHERE p.motorista_id IS NOT NULL AND p.ativo = 1"
+        params = []
+        
+        if ano:
+            where_clause += " AND strftime('%Y', p.data_instauracao) = ?"
+            params.append(ano)
+        
+        cursor.execute(f'''
+            SELECT 
+                u.posto_graduacao,
+                u.matricula,
+                u.nome,
+                COUNT(*) as total_sinistros
+            FROM processos_procedimentos p
+            INNER JOIN usuarios u ON p.motorista_id = u.id
+            {where_clause}
+            GROUP BY u.id, u.posto_graduacao, u.matricula, u.nome
+            ORDER BY total_sinistros DESC
+        ''', params)
+        
+        resultados = cursor.fetchall()
+        conn.close()
+        
+        dados = []
+        for row in resultados:
+            posto, matricula, nome, total = row
+            dados.append({
+                'pm_completo': f"{posto} {matricula} {nome}",
+                'total_sinistros': total
+            })
+        
+        return {
+            "sucesso": True,
+            "dados": dados
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro em obter_ranking_motoristas_sinistros: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
 @eel.expose
 def obter_estatisticas_processos_andamento():
     """Retorna estatísticas dos processos em andamento por tipo"""
