@@ -194,7 +194,7 @@ async function carregarTiposProcesso() {
             resultado.tipos.forEach(tipo => {
                 const option = document.createElement('option');
                 option.value = tipo.codigo;
-                option.textContent = `${tipo.nome} (${tipo.total} registros)`;
+                option.textContent = tipo.nome;
                 selectTipo.appendChild(option);
             });
             
