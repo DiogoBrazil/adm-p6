@@ -44,9 +44,15 @@ async function baixarPDF() {
     try {
         const contentArea = document.getElementById('contentArea');
         
-        // Ocultar elementos com classe hide-in-pdf (botões)
+        // Ocultar elementos com classe hide-in-pdf (botões e paginação)
         const elementosOcultar = contentArea.querySelectorAll('.hide-in-pdf');
         elementosOcultar.forEach(el => el.style.display = 'none');
+        
+        // Ocultar tabela paginada de motoristas (se existir)
+        const tabelaVizualizacao = contentArea.querySelector('#tabelaMotoristasVizualizacao');
+        if (tabelaVizualizacao) {
+            tabelaVizualizacao.style.display = 'none';
+        }
         
         // Mostrar elementos com classe data-table-pdf (tabelas de dados)
         const tabelasMostrar = contentArea.querySelectorAll('.data-table-pdf');
@@ -63,6 +69,9 @@ async function baixarPDF() {
         // Restaurar elementos ao estado original
         elementosOcultar.forEach(el => el.style.display = '');
         tabelasMostrar.forEach(el => el.style.display = 'none');
+        if (tabelaVizualizacao) {
+            tabelaVizualizacao.style.display = 'table';
+        }
         
         const imgData = canvas.toDataURL('image/png');
         const imgWidth = 190; // A4 width em mm (com margens)
@@ -563,6 +572,26 @@ function renderizarGraficoBarrasTransgressoes(titulo, dados) {
 function renderizarTabelaMotoristas(dados) {
     const contentArea = document.getElementById('contentArea');
     
+    // Armazenar dados completos para paginação
+    window.dadosMotoristas = dados;
+    window.paginaAtualMotoristas = 1;
+    window.itensPorPagina = 10;
+    
+    // Renderizar primeira página
+    renderizarPaginaMotoristas();
+}
+
+function renderizarPaginaMotoristas() {
+    const contentArea = document.getElementById('contentArea');
+    const dados = window.dadosMotoristas;
+    const paginaAtual = window.paginaAtualMotoristas;
+    const itensPorPagina = window.itensPorPagina;
+    
+    const totalPaginas = Math.ceil(dados.length / itensPorPagina);
+    const inicio = (paginaAtual - 1) * itensPorPagina;
+    const fim = inicio + itensPorPagina;
+    const dadosPagina = dados.slice(inicio, fim);
+    
     let html = `
         <div class="statistics-title">
             <div class="statistics-title-left">
@@ -573,7 +602,51 @@ function renderizarTabelaMotoristas(dados) {
                 <i class="fas fa-file-pdf"></i> Baixar PDF
             </button>
         </div>
-        <table class="motoristas-table">
+        <table class="motoristas-table" id="tabelaMotoristasVizualizacao">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>PM Motorista</th>
+                    <th style="text-align: center;">Total de Sinistros</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dadosPagina.forEach((item, index) => {
+        const numeroGlobal = inicio + index + 1;
+        html += `
+            <tr>
+                <td>${numeroGlobal}</td>
+                <td class="motorista-nome">${item.pm_completo}</td>
+                <td style="text-align: center;">
+                    <span class="sinistros-count">${item.total_sinistros}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+            </tbody>
+        </table>
+        <div class="pagination-container hide-in-pdf">
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="mudarPaginaMotoristas(-1)" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <button class="pagination-btn" onclick="mudarPaginaMotoristas(1)" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    Próxima <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-info">
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} motoristas)
+            </div>
+        </div>
+    `;
+    
+    // Tabela completa oculta para PDF
+    html += `
+        <table class="motoristas-table data-table-pdf" id="tabelaMotoristasCompleta">
             <thead>
                 <tr>
                     <th>#</th>
@@ -602,6 +675,17 @@ function renderizarTabelaMotoristas(dados) {
     `;
     
     contentArea.innerHTML = html;
+}
+
+function mudarPaginaMotoristas(direcao) {
+    const totalPaginas = Math.ceil(window.dadosMotoristas.length / window.itensPorPagina);
+    window.paginaAtualMotoristas += direcao;
+    
+    // Garantir que a página está dentro dos limites
+    if (window.paginaAtualMotoristas < 1) window.paginaAtualMotoristas = 1;
+    if (window.paginaAtualMotoristas > totalPaginas) window.paginaAtualMotoristas = totalPaginas;
+    
+    renderizarPaginaMotoristas();
 }
 
 // ==== FUNÇÕES AUXILIARES ====
