@@ -247,22 +247,71 @@ function limparBusca() {
     }
 }
 
+// Função para mostrar modal de confirmação
+function showConfirmModal(title, message, onConfirm) {
+    // Remover modal existente se houver
+    let existingModal = document.getElementById('confirmModal');
+    if (existingModal) existingModal.remove();
+
+    // Criar novo modal
+    const modal = document.createElement('div');
+    modal.id = 'confirmModal';
+    modal.className = 'modal-feedback';
+    modal.style.display = 'flex';
+    
+    modal.innerHTML = `
+        <div class="modal-content">
+            <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 3rem; margin-bottom: 20px;"></i>
+            <h3 style="margin-bottom: 15px; color: #333; font-size: 1.5rem;">${title}</h3>
+            <p style="margin-bottom: 25px; color: #666; font-size: 1rem;">${message}</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirmCancel" class="btn-secondary">Cancelar</button>
+                <button id="confirmOk" class="btn-danger">Confirmar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Event listeners
+    const cancelBtn = document.getElementById('confirmCancel');
+    const okBtn = document.getElementById('confirmOk');
+
+    const closeModal = () => {
+        modal.style.display = 'none';
+        modal.remove();
+    };
+
+    cancelBtn.addEventListener('click', closeModal);
+    
+    okBtn.addEventListener('click', () => {
+        closeModal();
+        if (onConfirm) onConfirm();
+    });
+
+    // Fechar ao clicar fora
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+}
+
 // Função para logout
 async function realizarLogout() {
-    try {
-        const resultado = await eel.fazer_logout()();
-        if (resultado.sucesso) {
-            showAlert('Logout realizado com sucesso!', 'success');
-            setTimeout(() => {
-                window.location.href = 'login.html';
-            }, 1000);
-        } else {
-            showAlert('Erro ao fazer logout: ' + resultado.erro, 'error');
+    showConfirmModal(
+        'Confirmar Logout',
+        'Tem certeza que deseja sair do sistema?',
+        async () => {
+            try {
+                await eel.fazer_logout()();
+                showAlert('Logout realizado com sucesso!', 'success');
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1000);
+            } catch (error) {
+                console.error('Erro ao fazer logout:', error);
+                showAlert('Erro ao fazer logout!', 'error');
+            }
         }
-    } catch (error) {
-        console.error('Erro ao fazer logout:', error);
-        showAlert('Erro ao fazer logout!', 'error');
-    }
+    );
 }
 
 // Sistema de alertas
