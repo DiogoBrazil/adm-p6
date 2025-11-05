@@ -1392,11 +1392,8 @@ async function gerarDocumentoPDF(content, titulo) {
     
     // Processar processos concluídos (2 por página, igual aos andamentos)
     processosConcluidos.forEach((processo, index) => {
-        // Para concluídos, verificar se precisa quebrar página (a cada 2 processos)
-        if (index > 0 && index % 2 === 0) {
-            pdf.addPage();
-            currentY = margin + 10;
-        } else if (index > 0 && index % 2 === 1) {
+        // Adicionar espaçamento entre processos na mesma página
+        if (index > 0 && index % 2 === 1) {
             // Segundo processo na mesma página - espaçamento reduzido
             if (window.tipoProcessoAtual === 'PADS') {
                 currentY += 3; // Espaçamento mínimo para PADS
@@ -1405,26 +1402,36 @@ async function gerarDocumentoPDF(content, titulo) {
             }
         }
         
+        // Verificar se há espaço suficiente na página antes de começar novo processo
+        const alturaMinima = 60; // Altura mínima estimada para um processo
+        if (currentY + alturaMinima > pageHeight - 25 && index > 0) {
+            pdf.addPage();
+            currentY = margin + 10;
+        }
+        
         currentY = renderizarProcesso(processo, 10); // Espaçamento normal para concluídos
     });
     
     // Processar processos em andamento (2 por página)
     processosAndamento.forEach((processo, index) => {
-        // Para andamentos, verificar se precisa quebrar página (a cada 2 processos)
-        if (index > 0 && index % 2 === 0) {
-            pdf.addPage();
-            currentY = margin + 10;
-        } else if (index === 0 && processosConcluidos.length > 0) {
-            // Se há concluídos antes, quebrar página para começar os andamentos
-            pdf.addPage();
-            currentY = margin + 10;
-        } else if (index > 0 && index % 2 === 1) {
+        // Calcular o índice considerando os concluídos também
+        const indexGlobal = processosConcluidos.length + index;
+        
+        // Adicionar espaçamento entre processos na mesma página
+        if (indexGlobal > 0 && indexGlobal % 2 === 1) {
             // Segundo processo na mesma página - espaçamento bem reduzido para PADS andamentos
             if (window.tipoProcessoAtual === 'PADS') {
                 currentY += 3; // Espaçamento mínimo para PADS
             } else {
                 currentY += 5; // Espaçamento normal para outros tipos
             }
+        }
+        
+        // Verificar se há espaço suficiente na página antes de começar novo processo
+        const alturaMinima = 60; // Altura mínima estimada para um processo
+        if (currentY + alturaMinima > pageHeight - 25 && indexGlobal > 0) {
+            pdf.addPage();
+            currentY = margin + 10;
         }
         
         // Espaçamento final diferenciado por tipo
