@@ -2236,16 +2236,16 @@ function updateFormVisibility() {
     // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
     // Não mostrar mais o campo de natureza processo para PADS
     // const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS';
-    const showNaturezaProcedimento = tipoGeral === 'procedimento';
+    // CP (Carta Precatória) não exige natureza_procedimento, então não mostramos o campo
+    const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
+    const showNaturezaProcedimento = tipoGeral === 'procedimento' && !isCP;
     // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso);
     toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
     
     // Controlar required do campo natureza_procedimento
-    // CP (Carta Precatória) não exige natureza_procedimento
     const naturezaProcedimentoSelect = document.getElementById('natureza_procedimento');
     if (naturezaProcedimentoSelect) {
-        const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
-        if (showNaturezaProcedimento && !isCP) {
+        if (showNaturezaProcedimento) {
             naturezaProcedimentoSelect.setAttribute('required', 'required');
         } else {
             naturezaProcedimentoSelect.removeAttribute('required');
@@ -2591,16 +2591,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 2. Lógica para Natureza (depende do Tipo de Cadastro e Tipo de Processo)
         // const showNaturezaProcesso = tipoGeral === 'processo' && tipoProcesso === 'PADS'; // Removido
-        const showNaturezaProcedimento = tipoGeral === 'procedimento';
+        // CP (Carta Precatória) não exige natureza_procedimento, então não mostramos o campo
+        const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
+        const showNaturezaProcedimento = tipoGeral === 'procedimento' && !isCP;
         // toggleGroup(fieldGroups.naturezaProcesso, showNaturezaProcesso); // Removido
         toggleGroup(fieldGroups.naturezaProcedimento, showNaturezaProcedimento);
         
         // Controlar required do campo natureza_procedimento
-        // CP (Carta Precatória) não exige natureza_procedimento
         const naturezaProcedimentoSelect = document.getElementById('natureza_procedimento');
         if (naturezaProcedimentoSelect) {
-            const isCP = tipoGeral === 'procedimento' && tipoProcedimento === 'CP';
-            if (showNaturezaProcedimento && !isCP) {
+            if (showNaturezaProcedimento) {
                 naturezaProcedimentoSelect.setAttribute('required', 'required');
             } else {
                 naturezaProcedimentoSelect.removeAttribute('required');
