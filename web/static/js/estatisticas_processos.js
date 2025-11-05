@@ -44,6 +44,10 @@ async function baixarPDF() {
     try {
         const contentArea = document.getElementById('contentArea');
         
+        // Ocultar elementos com classe hide-in-pdf
+        const elementosOcultar = contentArea.querySelectorAll('.hide-in-pdf');
+        elementosOcultar.forEach(el => el.style.display = 'none');
+        
         // Capturar o conteúdo como imagem
         const canvas = await html2canvas(contentArea, {
             scale: 2,
@@ -51,6 +55,9 @@ async function baixarPDF() {
             logging: false,
             useCORS: true
         });
+        
+        // Restaurar elementos ocultados
+        elementosOcultar.forEach(el => el.style.display = '');
         
         const imgData = canvas.toDataURL('image/png');
         const imgWidth = 190; // A4 width em mm (com margens)
@@ -245,19 +252,50 @@ async function gerarEstatisticaMotoristas(ano) {
 function renderizarGraficoPizza(titulo, dados, labelKey, valueKey) {
     const contentArea = document.getElementById('contentArea');
     
+    // Criar tabela de dados para o PDF
+    const total = dados.reduce((sum, d) => sum + d[valueKey], 0);
+    let tabelaDados = `
+        <table class="data-table-pdf">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th>Quantidade</th>
+                    <th>Percentual</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach(d => {
+        const percentual = ((d[valueKey] / total) * 100).toFixed(1);
+        tabelaDados += `
+            <tr>
+                <td>${d[labelKey]}</td>
+                <td style="text-align: center;">${d[valueKey]}</td>
+                <td style="text-align: center;">${percentual}%</td>
+            </tr>
+        `;
+    });
+    
+    tabelaDados += `
+            </tbody>
+        </table>
+    `;
+    
     contentArea.innerHTML = `
         <div class="statistics-title">
             <div class="statistics-title-left">
                 <i class="fas fa-chart-pie"></i>
                 ${titulo}
             </div>
-            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
             </button>
         </div>
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
         </div>
+        ${tabelaDados}
     `;
     
     const ctx = document.getElementById('chartCanvas').getContext('2d');
@@ -319,19 +357,46 @@ function renderizarGraficoPizza(titulo, dados, labelKey, valueKey) {
 function renderizarGraficoBarras(titulo, dados, labelKey, valueKey, cores) {
     const contentArea = document.getElementById('contentArea');
     
+    // Criar tabela de dados para o PDF
+    let tabelaDados = `
+        <table class="data-table-pdf">
+            <thead>
+                <tr>
+                    <th>Categoria</th>
+                    <th>Quantidade</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach(d => {
+        tabelaDados += `
+            <tr>
+                <td>${d[labelKey]}</td>
+                <td style="text-align: center;">${d[valueKey]}</td>
+            </tr>
+        `;
+    });
+    
+    tabelaDados += `
+            </tbody>
+        </table>
+    `;
+    
     contentArea.innerHTML = `
         <div class="statistics-title">
             <div class="statistics-title-left">
                 <i class="fas fa-chart-bar"></i>
                 ${titulo}
             </div>
-            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
             </button>
         </div>
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
         </div>
+        ${tabelaDados}
     `;
     
     const ctx = document.getElementById('chartCanvas').getContext('2d');
@@ -385,19 +450,48 @@ function renderizarGraficoBarras(titulo, dados, labelKey, valueKey, cores) {
 function renderizarGraficoBarrasTransgressoes(titulo, dados) {
     const contentArea = document.getElementById('contentArea');
     
+    // Criar tabela de dados para o PDF
+    let tabelaDados = `
+        <table class="data-table-pdf">
+            <thead>
+                <tr>
+                    <th>Artigo</th>
+                    <th>Descrição</th>
+                    <th>Ocorrências</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    dados.forEach(d => {
+        tabelaDados += `
+            <tr>
+                <td>${d.artigo_label}</td>
+                <td>${d.descricao_curta}</td>
+                <td style="text-align: center;">${d.quantidade}</td>
+            </tr>
+        `;
+    });
+    
+    tabelaDados += `
+            </tbody>
+        </table>
+    `;
+    
     contentArea.innerHTML = `
         <div class="statistics-title">
             <div class="statistics-title-left">
                 <i class="fas fa-chart-bar"></i>
                 ${titulo}
             </div>
-            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
             </button>
         </div>
         <div class="chart-container" style="height: 500px;">
             <canvas id="chartCanvas"></canvas>
         </div>
+        ${tabelaDados}
     `;
     
     const ctx = document.getElementById('chartCanvas').getContext('2d');
@@ -470,7 +564,7 @@ function renderizarTabelaMotoristas(dados) {
                 <i class="fas fa-car-crash"></i>
                 Ranking de motoristas em sinistro com viatura PM
             </div>
-            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+            <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
             </button>
         </div>

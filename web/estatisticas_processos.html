@@ -232,6 +232,42 @@
             transform: none;
         }
 
+        /* Classe para ocultar elemento no PDF */
+        .hide-in-pdf {
+            display: block; /* Será ocultado via JavaScript antes da captura */
+        }
+
+        /* Tabela de dados para exibir no PDF */
+        .data-table-pdf {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .data-table-pdf th,
+        .data-table-pdf td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #e0e0e0;
+        }
+
+        .data-table-pdf th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+        }
+
+        .data-table-pdf tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .data-table-pdf td:last-child {
+            text-align: center;
+            font-weight: 600;
+            color: #667eea;
+        }
+
         .loading-state {
             display: flex;
             flex-direction: column;
