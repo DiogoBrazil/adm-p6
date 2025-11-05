@@ -985,7 +985,9 @@ async function gerarRelatorioHTMLParaImpressao(content) {
                         ) : [];
                         
                         transgressoes.forEach(t => {
-                            const catTexto = categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar';
+                            // Para PADS, usar "Transgressão:" ao invés de "Indícios de transgressão disciplinar:"
+                            const catTexto = tipo === 'PADS' ? 'Transgressão' : 
+                                (categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar');
                             linhas.push(`<div class="pm-muted"><strong>${catTexto}:</strong></div>`);
                             linhas.push(`<div class="pm-muted" style="margin-left: 10px;">• ${t.texto_completo} (RDPM)</div>`);
                         });
@@ -998,7 +1000,9 @@ async function gerarRelatorioHTMLParaImpressao(content) {
                         ) : [];
                         
                         art29.forEach(a => {
-                            const catTexto = categoriaArt29.length > 0 ? categoriaArt29[0] : 'Indícios de infração ao Estatuto dos PM';
+                            // Para PADS, usar "Transgressão:" ao invés de "Indícios de infração ao Estatuto dos PM:"
+                            const catTexto = tipo === 'PADS' ? 'Transgressão' : 
+                                (categoriaArt29.length > 0 ? categoriaArt29[0] : 'Indícios de infração ao Estatuto dos PM');
                             linhas.push(`<div class="pm-muted"><strong>${catTexto}:</strong></div>`);
                             linhas.push(`<div class="pm-muted" style="margin-left: 10px;">• ${a.texto_completo}</div>`);
                         });
@@ -1655,8 +1659,10 @@ async function gerarDocumentoPDF(content, titulo) {
                                     ) : [];
                                     
                                     transgressoes.forEach(t => {
-                                        const catTexto = categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar';
-                                        linhasIndicios.push({ text: `${catTexto}:`, bold: true });
+                                        // Para PADS, usar "Transgressão:" ao invés de "Indícios de transgressão disciplinar:"
+                                        const textoTransgressao = window.tipoProcessoAtual === 'PADS' ? 'Transgressão' : 
+                                            (categoriaRdpm.length > 0 ? categoriaRdpm[0] : 'Indícios de transgressão disciplinar');
+                                        linhasIndicios.push({ text: `${textoTransgressao}:`, bold: true });
                                         linhasIndicios.push({ text: `  - ${formatarTransgressao(t)}`, bold: false });
                                     });
                                 }
@@ -1664,7 +1670,9 @@ async function gerarDocumentoPDF(content, titulo) {
                                 // Listar cada Art. 29 individualmente
                                 if (art29 && art29.length) {
                                     art29.forEach(a => {
-                                        linhasIndicios.push({ text: `Indícios de transgressão disciplinar:`, bold: true });
+                                        // Para PADS, usar "Transgressão:" ao invés de "Indícios de transgressão disciplinar:"
+                                        const textoTransgressao = window.tipoProcessoAtual === 'PADS' ? 'Transgressão' : 'Indícios de transgressão disciplinar';
+                                        linhasIndicios.push({ text: `${textoTransgressao}:`, bold: true });
                                         linhasIndicios.push({ text: `  - ${a.texto_completo}`, bold: false });
                                     });
                                 }
