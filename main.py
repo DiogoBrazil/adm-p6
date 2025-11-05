@@ -6808,6 +6808,32 @@ def excluir_mapa_salvo(mapa_id):
         return {"sucesso": False, "mensagem": f"Erro ao excluir mapa: {str(e)}"}
 
 @eel.expose
+def obter_anos_relatorio_anual():
+    """Obtém lista de anos que possuem processos/procedimentos instaurados"""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT DISTINCT strftime('%Y', data_instauracao) as ano
+            FROM processos_procedimentos
+            WHERE data_instauracao IS NOT NULL
+            AND ativo = 1
+            ORDER BY ano DESC
+        """)
+        
+        anos = [row[0] for row in cursor.fetchall() if row[0]]
+        
+        return {
+            "sucesso": True,
+            "anos": anos
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao obter anos: {e}")
+        return {"sucesso": False, "erro": str(e)}
+
+@eel.expose
 def gerar_relatorio_anual(ano):
     """Gera relatório anual completo com estatísticas e gráficos em PDF"""
     import base64
@@ -6995,11 +7021,12 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
     import base64
     from io import BytesIO
     from datetime import datetime
+    import os
     
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -7045,6 +7072,17 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     )
     
     # ============ CABEÇALHO ============
+    # Adicionar logo (aumentado em 20%)
+    logo_path = 'web/static/images/pm_ro-removebg-preview.png'
+    if os.path.exists(logo_path):
+        try:
+            logo = Image(logo_path, width=4.8*cm, height=4.8*cm, kind='proportional')
+            logo.hAlign = 'CENTER'
+            elements.append(logo)
+            elements.append(Spacer(1, 0.5*cm))
+        except Exception as e:
+            print(f"⚠️ Não foi possível adicionar logo: {e}")
+    
     ano = estatisticas['ano']
     data_geracao = datetime.now().strftime('%d/%m/%Y às %H:%M')
     
@@ -7163,14 +7201,6 @@ def _gerar_pdf_relatorio_anual(estatisticas):
         
         elements.append(tabela_indicios)
         elements.append(Spacer(1, 0.8*cm))
-    
-    # ============ RODAPÉ ============
-    elements.append(Spacer(1, 2*cm))
-    rodape = Paragraph(
-        f"Relatório gerado automaticamente pelo Sistema de Gestão de Processos e Procedimentos",
-        info_style
-    )
-    elements.append(rodape)
     
     # Gerar PDF
     doc.build(elements)

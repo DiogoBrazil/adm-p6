@@ -1094,7 +1094,7 @@
         // RELATÓRIO ANUAL
         // ============================================
         
-        function abrirModalRelatorioAnual(event) {
+        async function abrirModalRelatorioAnual(event) {
             event.preventDefault();
             event.stopPropagation();
             
@@ -1105,18 +1105,46 @@
                 modal = document.getElementById('modalRelatorioAnual');
             }
             
-            // Preencher select com anos (últimos 10 anos)
-            const anoAtual = new Date().getFullYear();
-            const selectAno = document.getElementById('anoRelatorio');
-            selectAno.innerHTML = '';
-            
-            for (let i = 0; i < 10; i++) {
-                const ano = anoAtual - i;
-                const option = document.createElement('option');
-                option.value = ano;
-                option.textContent = ano;
-                if (i === 0) option.selected = true;
-                selectAno.appendChild(option);
+            // Carregar anos disponíveis do backend
+            try {
+                const resultado = await eel.obter_anos_relatorio_anual()();
+                const selectAno = document.getElementById('anoRelatorio');
+                selectAno.innerHTML = '';
+                
+                if (resultado.sucesso && resultado.anos.length > 0) {
+                    resultado.anos.forEach((ano, index) => {
+                        const option = document.createElement('option');
+                        option.value = ano;
+                        option.textContent = ano;
+                        if (index === 0) option.selected = true; // Selecionar o ano mais recente
+                        selectAno.appendChild(option);
+                    });
+                } else {
+                    // Fallback: últimos 10 anos se não houver dados
+                    const anoAtual = new Date().getFullYear();
+                    for (let i = 0; i < 10; i++) {
+                        const ano = anoAtual - i;
+                        const option = document.createElement('option');
+                        option.value = ano;
+                        option.textContent = ano;
+                        if (i === 0) option.selected = true;
+                        selectAno.appendChild(option);
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao carregar anos:', error);
+                // Fallback: últimos 10 anos
+                const anoAtual = new Date().getFullYear();
+                const selectAno = document.getElementById('anoRelatorio');
+                selectAno.innerHTML = '';
+                for (let i = 0; i < 10; i++) {
+                    const ano = anoAtual - i;
+                    const option = document.createElement('option');
+                    option.value = ano;
+                    option.textContent = ano;
+                    if (i === 0) option.selected = true;
+                    selectAno.appendChild(option);
+                }
             }
             
             modal.style.display = 'flex';
