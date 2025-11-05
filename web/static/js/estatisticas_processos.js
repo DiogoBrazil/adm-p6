@@ -198,15 +198,23 @@ async function gerarEstatisticaPadsSolucoes(ano) {
 async function gerarEstatisticaIpmIndicios(ano) {
     const resultado = await eel.obter_estatistica_ipm_indicios(ano || null)();
     
-    if (resultado.sucesso) {
-        estatisticaAtual = { tipo: 'ipm_indicios', ano: ano };
-        renderizarGraficoBarras(
-            'Tipos de Indícios em IPM Concluídos',
-            resultado.dados,
-            'tipo_indicio',
-            'quantidade',
-            ['#e74c3c', '#f39c12', '#95a5a6'] // Vermelho, Laranja, Cinza
-        );
+    if (resultado.sucesso && resultado.dados && resultado.dados.length > 0) {
+        // Verificar se há pelo menos um dado com quantidade > 0
+        const temDados = resultado.dados.some(d => d.quantidade > 0);
+        
+        if (temDados) {
+            estatisticaAtual = { tipo: 'ipm_indicios', ano: ano };
+            renderizarGraficoBarras(
+                'Tipos de Indícios em IPM Concluídos',
+                resultado.dados,
+                'tipo_indicio',
+                'quantidade',
+                ['#e74c3c', '#f39c12', '#95a5a6'] // Vermelho, Laranja, Cinza
+            );
+        } else {
+            estatisticaAtual = null;
+            mostrarSemDados('Não há dados de IPM concluídos para o período selecionado.');
+        }
     } else {
         estatisticaAtual = null;
         mostrarSemDados('Não há dados de IPM concluídos para o período selecionado.');
@@ -217,15 +225,23 @@ async function gerarEstatisticaIpmIndicios(ano) {
 async function gerarEstatisticaSrIndicios(ano) {
     const resultado = await eel.obter_estatistica_sr_indicios(ano || null)();
     
-    if (resultado.sucesso) {
-        estatisticaAtual = { tipo: 'sr_indicios', ano: ano };
-        renderizarGraficoBarras(
-            'Tipos de Indícios em SR Concluídos',
-            resultado.dados,
-            'tipo_indicio',
-            'quantidade',
-            ['#3498db', '#f39c12', '#95a5a6'] // Azul, Laranja, Cinza
-        );
+    if (resultado.sucesso && resultado.dados && resultado.dados.length > 0) {
+        // Verificar se há pelo menos um dado com quantidade > 0
+        const temDados = resultado.dados.some(d => d.quantidade > 0);
+        
+        if (temDados) {
+            estatisticaAtual = { tipo: 'sr_indicios', ano: ano };
+            renderizarGraficoBarras(
+                'Tipos de Indícios em SR Concluídos',
+                resultado.dados,
+                'tipo_indicio',
+                'quantidade',
+                ['#3498db', '#f39c12', '#95a5a6'] // Azul, Laranja, Cinza
+            );
+        } else {
+            estatisticaAtual = null;
+            mostrarSemDados('Não há dados de SR concluídos para o período selecionado.');
+        }
     } else {
         estatisticaAtual = null;
         mostrarSemDados('Não há dados de SR concluídos para o período selecionado.');
