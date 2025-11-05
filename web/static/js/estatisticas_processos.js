@@ -44,9 +44,13 @@ async function baixarPDF() {
     try {
         const contentArea = document.getElementById('contentArea');
         
-        // Ocultar elementos com classe hide-in-pdf
+        // Ocultar elementos com classe hide-in-pdf (botões)
         const elementosOcultar = contentArea.querySelectorAll('.hide-in-pdf');
         elementosOcultar.forEach(el => el.style.display = 'none');
+        
+        // Mostrar elementos com classe data-table-pdf (tabelas de dados)
+        const tabelasMostrar = contentArea.querySelectorAll('.data-table-pdf');
+        tabelasMostrar.forEach(el => el.style.display = 'table');
         
         // Capturar o conteúdo como imagem
         const canvas = await html2canvas(contentArea, {
@@ -56,8 +60,9 @@ async function baixarPDF() {
             useCORS: true
         });
         
-        // Restaurar elementos ocultados
+        // Restaurar elementos ao estado original
         elementosOcultar.forEach(el => el.style.display = '');
+        tabelasMostrar.forEach(el => el.style.display = 'none');
         
         const imgData = canvas.toDataURL('image/png');
         const imgWidth = 190; // A4 width em mm (com margens)

@@ -237,8 +237,9 @@
             display: block; /* Será ocultado via JavaScript antes da captura */
         }
 
-        /* Tabela de dados para exibir no PDF */
+        /* Tabela de dados para exibir APENAS no PDF */
         .data-table-pdf {
+            display: none; /* Oculta na tela, será mostrada apenas no PDF via JavaScript */
             width: 100%;
             margin-top: 20px;
             border-collapse: collapse;
