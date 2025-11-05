@@ -1178,6 +1178,8 @@ async function carregarProcedimentoEdicao(id) {
             return;
         }
         await preencherFormularioEdicao(procedimento); // usa versão por objeto (definida mais abaixo)
+        // Atualizar visibilidade dos campos após preencher o formulário
+        updateFormVisibility();
         // Ajustar UI (título e botão)
         const titulo = document.querySelector('h2');
         if (titulo) titulo.textContent = 'Editar Registro';
@@ -2156,14 +2158,14 @@ const fieldGroups = {
     nomePm: document.getElementById('group_nome_pm'),
     nomeVitima: document.getElementById('group_nome_vitima'),
     // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
-    naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+    naturezaProcedimento: document.getElementById('natureza_procedimento_group'),
     motoristaSinistro: document.getElementById('group_motorista_sinistro'),
     infracao: document.getElementById('group_infracao'),
 };
 
 // Debug: Verificar se os elementos existem
 console.log('🔍 Debug FieldGroups - Verificando elementos:');
-console.log('naturezaProcedimento element:', document.getElementById('group_natureza_procedimento'));
+console.log('naturezaProcedimento element:', document.getElementById('natureza_procedimento_group'));
 console.log('motoristaSinistro element:', document.getElementById('group_motorista_sinistro'));
 console.log('natureza_procedimento select:', document.getElementById('natureza_procedimento'));
 
@@ -2512,7 +2514,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         nomePm: document.getElementById('group_nome_pm'),
         nomeVitima: document.getElementById('group_nome_vitima'),
         // naturezaProcesso: document.getElementById('group_natureza_processo'), // Removido
-        naturezaProcedimento: document.getElementById('group_natureza_procedimento'),
+        naturezaProcedimento: document.getElementById('natureza_procedimento_group'),
         motoristaSinistro: document.getElementById('group_motorista_sinistro'),  // ADICIONADO!
         infracao: document.getElementById('group_infracao'),
     };
@@ -2831,7 +2833,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Adiciona 'data-required' aos campos que são obrigatórios condicionalmente
     // para que a função toggleGroup saiba quando aplicar 'required'
-    document.querySelectorAll('#group_tipo_procedimento select, #group_tipo_processo select, #group_escrivao select, #group_numero_portaria input, #group_numero_memorando input, #group_numero_feito input, #group_nome_pm input, #group_natureza_procedimento select').forEach(el => {
+    document.querySelectorAll('#group_tipo_procedimento select, #group_tipo_processo select, #group_escrivao select, #group_numero_portaria input, #group_numero_memorando input, #group_numero_feito input, #group_nome_pm input, #natureza_procedimento_group select').forEach(el => {
         el.setAttribute('data-required', 'true');
     });
 
