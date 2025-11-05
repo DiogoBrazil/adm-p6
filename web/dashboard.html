@@ -63,6 +63,9 @@
             color: white;
             white-space: nowrap;
             transition: all 0.3s;
+            flex: 1;
+            min-width: 0; /* Permite que o flex item encolha além do conteúdo */
+            overflow: hidden;
         }
 
         .sidebar.collapsed .logo-section .user-info {
@@ -97,17 +100,25 @@
         .logo-section .user-details {
             flex: 1;
             transition: opacity 0.3s;
+            min-width: 0; /* Permite que o flex item encolha */
+            overflow: hidden; /* Esconde overflow */
         }
 
         .logo-section .user-name {
             font-size: 14px;
             font-weight: 600;
             margin-bottom: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .logo-section .user-role {
             font-size: 12px;
             opacity: 0.8;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Botão de Logout */
@@ -602,6 +613,81 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        /* Modal de confirmação */
+        .modal-feedback {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .modal-feedback[style*="display: flex"] {
+            display: flex !important;
+        }
+
+        .modal-feedback .modal-content {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            min-width: 350px;
+            max-width: 90vw;
+            animation: modalFadeIn 0.3s ease-out;
+            position: relative;
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .modal-feedback .btn-secondary,
+        .modal-feedback .btn-danger {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 100px;
+        }
+
+        .modal-feedback .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .modal-feedback .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+        }
+
+        .modal-feedback .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .modal-feedback .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
         }
     </style>
 </head>
