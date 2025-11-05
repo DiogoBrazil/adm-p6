@@ -1,5 +1,6 @@
 // Variáveis globais
 let chartAtual = null;
+let estatisticaAtual = null; // Armazena info da estatística atual
 
 // Inicializar página
 document.addEventListener('DOMContentLoaded', async function() {
@@ -26,6 +27,93 @@ async function carregarAnos() {
         }
     } catch (error) {
         console.error('❌ Erro ao carregar anos:', error);
+    }
+}
+
+// Função para baixar estatística em PDF
+async function baixarPDF() {
+    const { jsPDF } = window.jspdf;
+    
+    // Desabilitar botão durante geração
+    const btnDownload = document.getElementById('btnDownloadPDF');
+    if (btnDownload) {
+        btnDownload.disabled = true;
+        btnDownload.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando PDF...';
+    }
+    
+    try {
+        const contentArea = document.getElementById('contentArea');
+        
+        // Capturar o conteúdo como imagem
+        const canvas = await html2canvas(contentArea, {
+            scale: 2,
+            backgroundColor: '#ffffff',
+            logging: false,
+            useCORS: true
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = 190; // A4 width em mm (com margens)
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        // Criar PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        
+        // Adicionar cabeçalho
+        pdf.setFontSize(16);
+        pdf.setTextColor(102, 126, 234);
+        pdf.text('Sistema P6/7ºBPM - Análise de Processos', 105, 15, { align: 'center' });
+        
+        // Adicionar data de geração
+        pdf.setFontSize(10);
+        pdf.setTextColor(100, 100, 100);
+        const dataHora = new Date().toLocaleString('pt-BR');
+        pdf.text(`Gerado em: ${dataHora}`, 105, 22, { align: 'center' });
+        
+        // Adicionar ano filtrado se houver
+        if (estatisticaAtual && estatisticaAtual.ano) {
+            pdf.text(`Ano: ${estatisticaAtual.ano}`, 105, 27, { align: 'center' });
+        }
+        
+        // Adicionar imagem do gráfico/tabela
+        let yPosition = estatisticaAtual && estatisticaAtual.ano ? 32 : 27;
+        
+        if (imgHeight > 250) {
+            // Se muito alto, dividir em páginas
+            let heightLeft = imgHeight;
+            let position = yPosition;
+            
+            pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+            heightLeft -= (297 - position);
+            
+            while (heightLeft > 0) {
+                position = heightLeft - imgHeight;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                heightLeft -= 297;
+            }
+        } else {
+            pdf.addImage(imgData, 'PNG', 10, yPosition, imgWidth, imgHeight);
+        }
+        
+        // Nome do arquivo
+        const tipo = document.getElementById('tipoEstatistica').options[document.getElementById('tipoEstatistica').selectedIndex].text;
+        const ano = estatisticaAtual?.ano || 'todos_anos';
+        const nomeArquivo = `estatistica_${tipo.toLowerCase().replace(/\s+/g, '_')}_${ano}.pdf`;
+        
+        pdf.save(nomeArquivo);
+        
+        console.log('✅ PDF gerado com sucesso');
+        
+    } catch (error) {
+        console.error('❌ Erro ao gerar PDF:', error);
+        alert('Erro ao gerar PDF. Por favor, tente novamente.');
+    } finally {
+        // Reabilitar botão
+        if (btnDownload) {
+            btnDownload.disabled = false;
+            btnDownload.innerHTML = '<i class="fas fa-file-pdf"></i> Baixar PDF';
+        }
     }
 }
 
@@ -72,6 +160,7 @@ async function gerarEstatisticaPadsSolucoes(ano) {
     const resultado = await eel.obter_estatistica_pads_solucoes(ano || null)();
     
     if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'pads_solucoes', ano: ano };
         renderizarGraficoPizza(
             'Soluções Finais de PADS',
             resultado.dados,
@@ -79,6 +168,7 @@ async function gerarEstatisticaPadsSolucoes(ano) {
             'quantidade'
         );
     } else {
+        estatisticaAtual = null;
         mostrarSemDados('Não há dados de PADS concluídos para o período selecionado.');
     }
 }
@@ -88,6 +178,7 @@ async function gerarEstatisticaIpmIndicios(ano) {
     const resultado = await eel.obter_estatistica_ipm_indicios(ano || null)();
     
     if (resultado.sucesso) {
+        estatisticaAtual = { tipo: 'ipm_indicios', ano: ano };
         renderizarGraficoBarras(
             'Tipos de Indícios em IPM Concluídos',
             resultado.dados,
@@ -96,6 +187,7 @@ async function gerarEstatisticaIpmIndicios(ano) {
             ['#e74c3c', '#f39c12', '#95a5a6'] // Vermelho, Laranja, Cinza
         );
     } else {
+        estatisticaAtual = null;
         mostrarSemDados('Não há dados de IPM concluídos para o período selecionado.');
     }
 }
@@ -105,6 +197,7 @@ async function gerarEstatisticaSrIndicios(ano) {
     const resultado = await eel.obter_estatistica_sr_indicios(ano || null)();
     
     if (resultado.sucesso) {
+        estatisticaAtual = { tipo: 'sr_indicios', ano: ano };
         renderizarGraficoBarras(
             'Tipos de Indícios em SR Concluídos',
             resultado.dados,
@@ -113,6 +206,7 @@ async function gerarEstatisticaSrIndicios(ano) {
             ['#3498db', '#f39c12', '#95a5a6'] // Azul, Laranja, Cinza
         );
     } else {
+        estatisticaAtual = null;
         mostrarSemDados('Não há dados de SR concluídos para o período selecionado.');
     }
 }
@@ -122,11 +216,13 @@ async function gerarEstatisticaTopTransgressoes(ano) {
     const resultado = await eel.obter_top10_transgressoes(ano || null)();
     
     if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'top_transgressoes', ano: ano };
         renderizarGraficoBarrasTransgressoes(
             'Top 10 transgressões mais recorrentes apontadas em IPM e SR',
             resultado.dados
         );
     } else {
+        estatisticaAtual = null;
         mostrarSemDados('Não há dados de transgressões para o período selecionado.');
     }
 }
@@ -136,8 +232,10 @@ async function gerarEstatisticaMotoristas(ano) {
     const resultado = await eel.obter_ranking_motoristas_sinistros(ano || null)();
     
     if (resultado.sucesso && resultado.dados.length > 0) {
+        estatisticaAtual = { tipo: 'motoristas_sinistros', ano: ano };
         renderizarTabelaMotoristas(resultado.dados);
     } else {
+        estatisticaAtual = null;
         mostrarSemDados('Não há dados de sinistros para o período selecionado.');
     }
 }
@@ -149,8 +247,13 @@ function renderizarGraficoPizza(titulo, dados, labelKey, valueKey) {
     
     contentArea.innerHTML = `
         <div class="statistics-title">
-            <i class="fas fa-chart-pie"></i>
-            ${titulo}
+            <div class="statistics-title-left">
+                <i class="fas fa-chart-pie"></i>
+                ${titulo}
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
         </div>
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
@@ -218,8 +321,13 @@ function renderizarGraficoBarras(titulo, dados, labelKey, valueKey, cores) {
     
     contentArea.innerHTML = `
         <div class="statistics-title">
-            <i class="fas fa-chart-bar"></i>
-            ${titulo}
+            <div class="statistics-title-left">
+                <i class="fas fa-chart-bar"></i>
+                ${titulo}
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
         </div>
         <div class="chart-container">
             <canvas id="chartCanvas"></canvas>
@@ -279,8 +387,13 @@ function renderizarGraficoBarrasTransgressoes(titulo, dados) {
     
     contentArea.innerHTML = `
         <div class="statistics-title">
-            <i class="fas fa-chart-bar"></i>
-            ${titulo}
+            <div class="statistics-title-left">
+                <i class="fas fa-chart-bar"></i>
+                ${titulo}
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
         </div>
         <div class="chart-container" style="height: 500px;">
             <canvas id="chartCanvas"></canvas>
@@ -353,8 +466,13 @@ function renderizarTabelaMotoristas(dados) {
     
     let html = `
         <div class="statistics-title">
-            <i class="fas fa-car-crash"></i>
-            Ranking de motoristas em sinistro com viatura PM
+            <div class="statistics-title-left">
+                <i class="fas fa-car-crash"></i>
+                Ranking de motoristas em sinistro com viatura PM
+            </div>
+            <button id="btnDownloadPDF" class="btn-download-pdf" onclick="baixarPDF()">
+                <i class="fas fa-file-pdf"></i> Baixar PDF
+            </button>
         </div>
         <table class="motoristas-table">
             <thead>
