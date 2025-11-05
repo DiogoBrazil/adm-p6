@@ -1085,14 +1085,18 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         return art;
     };
 
-    // Páginas: concluídos 1 por página
-    concluidos.forEach(p => {
+    // Páginas: concluídos 2 por página (igual aos andamentos)
+    for (let i = 0; i < concluidos.length; i += 2) {
         const page = document.createElement('div');
-        page.className = 'pm-print-page';
-        const card = criarCardConcluido(p, tipoAtual);
-        page.appendChild(card);
+        page.className = 'pm-print-page pm-two-per-page';
+        const card1 = criarCardConcluido(concluidos[i], tipoAtual);
+        page.appendChild(card1);
+        if (i + 1 < concluidos.length) {
+            const card2 = criarCardConcluido(concluidos[i + 1], tipoAtual);
+            page.appendChild(card2);
+        }
         printWrapper.appendChild(page);
-    });
+    }
 
     // Páginas: andamentos 2 por página
     for (let i = 0; i < andamentos.length; i += 2) {
@@ -1386,12 +1390,19 @@ async function gerarDocumentoPDF(content, titulo) {
     const processosConcluidos = content.processos.filter(p => p.status === 'Concluído');
     const processosAndamento = content.processos.filter(p => p.status === 'Em Andamento');
     
-    // Processar processos concluídos (1 por página para todos os tipos)
+    // Processar processos concluídos (2 por página, igual aos andamentos)
     processosConcluidos.forEach((processo, index) => {
-        // Para concluídos, sempre quebra página (exceto o primeiro)
-        if (index > 0) {
+        // Para concluídos, verificar se precisa quebrar página (a cada 2 processos)
+        if (index > 0 && index % 2 === 0) {
             pdf.addPage();
             currentY = margin + 10;
+        } else if (index > 0 && index % 2 === 1) {
+            // Segundo processo na mesma página - espaçamento reduzido
+            if (window.tipoProcessoAtual === 'PADS') {
+                currentY += 3; // Espaçamento mínimo para PADS
+            } else {
+                currentY += 5; // Espaçamento normal para outros tipos
+            }
         }
         
         currentY = renderizarProcesso(processo, 10); // Espaçamento normal para concluídos
@@ -1484,7 +1495,8 @@ async function gerarDocumentoPDF(content, titulo) {
                 pdf.setTextColor(255, 255, 255);
                 pdf.setFontSize(10);
                 pdf.setFont(undefined, 'bold');
-                pdf.text(`${processo.numero}. PROCESSO/PROCEDIMENTO Nº ${processo.numeroProcesso} (continuação)`, margin + 3, currentY + 7);
+                const tipoProcesso = window.tipoProcessoAtual || 'PROCESSO/PROCEDIMENTO';
+                pdf.text(`${processo.numero}. ${tipoProcesso} Nº ${processo.numeroProcesso} (continuação)`, margin + 3, currentY + 7);
                 currentY += 12;
 
                 // Recriar cabeçalho da tabela
