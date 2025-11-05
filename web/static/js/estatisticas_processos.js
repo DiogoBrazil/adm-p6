@@ -123,7 +123,7 @@ async function gerarEstatisticaTopTransgressoes(ano) {
     
     if (resultado.sucesso && resultado.dados.length > 0) {
         renderizarGraficoBarrasTransgressoes(
-            'Top 10 Transgressões Mais Recorrentes',
+            'Top 10 transgressões mais recorrentes apontadas em IPM e SR',
             resultado.dados
         );
     } else {
@@ -354,7 +354,7 @@ function renderizarTabelaMotoristas(dados) {
     let html = `
         <div class="statistics-title">
             <i class="fas fa-car-crash"></i>
-            Ranking de Motoristas em Sinistros de Trânsito
+            Ranking de motoristas em sinistro com viatura PM
         </div>
         <table class="motoristas-table">
             <thead>
