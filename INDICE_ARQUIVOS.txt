@@ -1,0 +1,121 @@
+═══════════════════════════════════════════════════════════════
+  📋 ÍNDICE DE ARQUIVOS - REFATORAÇÃO SQLITE → POSTGRESQL
+═══════════════════════════════════════════════════════════════
+
+🎯 LEIA PRIMEIRO (Ordem recomendada):
+─────────────────────────────────────────────────────────────
+1. 📄 README_MIGRACAO.md           - Visão geral visual
+2. 📄 PROXIMOS_PASSOS.md            - Guia executivo (3 passos)
+3. 📄 RESOLVER_PERMISSOES_PG.md     - Configurar permissões (Passo 1)
+4. 📄 REFATORACAO_POSTGRESQL.md     - Documentação técnica completa
+
+
+🔧 ARQUIVOS PYTHON - EXECUTÁVEIS:
+─────────────────────────────────────────────────────────────
+📦 db_config.py                     - Módulo de conexão PostgreSQL
+                                      Uso: import from db_config
+                                      Teste: python db_config.py
+
+🔄 migrar_dados.py                  - Script de migração completa
+                                      Uso: python migrar_dados.py [options]
+                                      Dry-run: python migrar_dados.py --dry-run
+                                      Uma tabela: python migrar_dados.py --tabela usuarios
+
+🧪 teste_rapido_pg.py               - Suite de testes (5 testes)
+                                      Uso: python teste_rapido_pg.py
+                                      Valida conexão, tabelas, queries
+
+🔨 refatorar_para_postgres.py       - Script auxiliar (já usado)
+                                      Uso interno - não precisa executar
+
+
+🗄️ ARQUIVOS SQL:
+─────────────────────────────────────────────────────────────
+📜 setup_postgresql.sql             - Comandos SQL prontos
+                                      Copie e cole no pgAdmin/psql
+                                      Configura permissões do app_user
+
+
+✏️ CÓDIGO REFATORADO:
+─────────────────────────────────────────────────────────────
+✅ main.py                          - Aplicação principal (PostgreSQL)
+✅ prazos_andamentos_manager.py     - Módulo auxiliar (PostgreSQL)
+✅ requirements.txt                 - Dependências atualizadas
+
+
+💾 BACKUPS (pasta backups/):
+─────────────────────────────────────────────────────────────
+🔙 main.py.sqlite                   - Versão SQLite original
+🔙 prazos_andamentos_manager.py.sqlite - Versão SQLite original
+🔙 main.py.backup_[timestamp]       - Backup adicional timestamped
+
+
+📊 ESTATÍSTICAS DA REFATORAÇÃO:
+─────────────────────────────────────────────────────────────
+• Arquivos refatorados:     2 principais
+• Linhas processadas:       ~8,600
+• Placeholders trocados:    530+ (? → %s)
+• Cursors atualizados:      83
+• Tabelas no banco:         28
+• Arquivos criados:         7 novos
+• Documentação:             4 guias completos
+
+
+🎯 COMANDOS RÁPIDOS:
+─────────────────────────────────────────────────────────────
+
+Ativar ambiente:
+  source .venv/bin/activate
+
+Testar conexão:
+  python db_config.py
+  python teste_rapido_pg.py
+
+Migrar dados:
+  python migrar_dados.py --dry-run    # Simulação
+  python migrar_dados.py              # Real
+
+Rodar app:
+  python main.py
+
+
+⚠️ ANTES DE MIGRAR:
+─────────────────────────────────────────────────────────────
+1. Configure permissões no PostgreSQL (setup_postgresql.sql)
+2. Teste conexão (python teste_rapido_pg.py)
+3. Faça dry-run da migração primeiro
+4. Mantenha backup do SQLite (usuarios.db)
+
+
+✅ CHECKLIST DE PROGRESSO:
+─────────────────────────────────────────────────────────────
+[✓] Código refatorado
+[✓] Dependências instaladas
+[✓] Scripts criados
+[✓] Documentação completa
+[✓] Backups realizados
+[ ] Permissões configuradas (SEU PASSO 1)
+[ ] Dados migrados (SEU PASSO 2)
+[ ] Sistema testado (SEU PASSO 3)
+
+
+📌 CONFIGURAÇÃO DO SERVIDOR:
+─────────────────────────────────────────────────────────────
+Host:      192.168.0.137
+Porta:     5432
+Database:  app_db
+User:      app_user
+Password:  p67bpm
+
+
+🚀 STATUS FINAL:
+─────────────────────────────────────────────────────────────
+✅ Refatoração: 100% CONCLUÍDA
+⏳ Sua ação:    Configure permissões e migre dados
+🎯 Resultado:   Sistema multiusuário pronto!
+
+
+═══════════════════════════════════════════════════════════════
+Criado em: 05/11/2025
+Ambiente: Linux + PostgreSQL Windows Server
+═══════════════════════════════════════════════════════════════

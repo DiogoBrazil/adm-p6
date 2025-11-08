@@ -275,7 +275,7 @@ class DatabaseManager:
 
         # Contar total de usuários
         cursor.execute(f"SELECT COUNT(*) FROM usuarios {where_clause}", search_params)
-        total_users = cursor.fetchone()['count']
+        total_users = cursor.fetchone()[0]
 
         # Calcular offset para paginação
         offset = (page - 1) * per_page
@@ -297,24 +297,24 @@ class DatabaseManager:
         for user in all_users:
             # Determinar o tipo baseado nos vínculos
             vinculos = []
-            if user['is_encarregado']:
+            if user[9]:  # is_encarregado
                 vinculos.append('encarregado')
-            if user['is_operador']:
+            if user[10]:  # is_operador
                 vinculos.append('operador')
             
             users.append({
-                "id": user['id'],
-                "tipo_usuario": user['tipo_usuario'],
-                "posto_graduacao": user['posto_graduacao'],
-                "matricula": user['matricula'],
-                "nome": user['nome'],
-                "email": user['email'],
-                "created_at": user['created_at'],
-                "updated_at": user['updated_at'],
-                "ativo": bool(user['ativo']),
-                "is_encarregado": bool(user['is_encarregado']),
-                "is_operador": bool(user['is_operador']),
-                "perfil": user['perfil'],
+                "id": user[0],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "matricula": user[3],
+                "nome": user[4],
+                "email": user[5],
+                "created_at": user[6],
+                "updated_at": user[7],
+                "ativo": bool(user[8]),
+                "is_encarregado": bool(user[9]),
+                "is_operador": bool(user[10]),
+                "perfil": user[11],
                 "vinculos": vinculos
             })
         
@@ -329,25 +329,25 @@ class DatabaseManager:
         
         # Total de usuários ativos (excluindo admin)
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE ativo = TRUE AND nome != 'ADMINISTRADOR'")
-        total_usuarios = cursor.fetchone()['count']
+        total_usuarios = cursor.fetchone()[0]
         
         # Total geral incluindo admin
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE ativo = TRUE")
-        total_geral = cursor.fetchone()['count']
+        total_geral = cursor.fetchone()[0]
         
         # Usuários criados hoje (excluindo admin)
         cursor.execute('''
             SELECT COUNT(*) FROM usuarios 
             WHERE DATE(created_at) = DATE('now') AND ativo = TRUE AND nome != 'ADMINISTRADOR'
         ''')
-        novos_hoje = cursor.fetchone()['count']
+        novos_hoje = cursor.fetchone()[0]
         
         # Estatísticas por vínculo
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE is_encarregado = TRUE AND ativo = TRUE AND nome != 'ADMINISTRADOR'")
-        total_encarregados = cursor.fetchone()['count']
+        total_encarregados = cursor.fetchone()[0]
         
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE is_operador = TRUE AND ativo = TRUE AND nome != 'ADMINISTRADOR'")
-        total_operadores = cursor.fetchone()['count']
+        total_operadores = cursor.fetchone()[0]
         
         conn.close()
         
@@ -392,7 +392,7 @@ def api_buscar_transgressoes():
             WHERE gravidade = %s AND ativo = TRUE
             ORDER BY 
                 CASE 
-                    WHEN inciso ~ '^[IVX]' THEN LENGTH(inciso)
+                    WHEN inciso GLOB '[IVX]*' THEN LENGTH(inciso)
                     ELSE 999
                 END,
                 inciso
@@ -404,9 +404,9 @@ def api_buscar_transgressoes():
         resultado = []
         for t in transgressoes:
             resultado.append({
-                "id": t['id'],
-                "inciso": t['inciso'],
-                "texto": t['texto']
+                "id": t[0],
+                "inciso": t[1],
+                "texto": t[2]
             })
         
         return json.dumps(resultado)
@@ -435,7 +435,7 @@ def api_buscar_infracoes_art29():
                 WHERE (inciso LIKE %s OR texto LIKE %s) AND ativo = TRUE
                 ORDER BY 
                     CASE 
-                        WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
                         ELSE 999
                     END,
                     inciso
@@ -448,7 +448,7 @@ def api_buscar_infracoes_art29():
                 WHERE ativo = TRUE
                 ORDER BY 
                     CASE 
-                        WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
                         ELSE 999
                     END,
                     inciso
@@ -460,9 +460,9 @@ def api_buscar_infracoes_art29():
         resultado = []
         for i in infracoes:
             resultado.append({
-                "id": i['id'],
-                "inciso": i['inciso'],
-                "texto": i['texto']
+                "id": i[0],
+                "inciso": i[1],
+                "texto": i[2]
             })
         
         return json.dumps(resultado)
@@ -516,16 +516,16 @@ def api_buscar_municipios_distritos():
         resultado = []
         for m in municipios_distritos:
             # Formatar nome para exibição (distrito + município pai)
-            nome_display = m['nome']
-            if m['tipo'] == 'distrito' and m['municipio_pai']:  # se é distrito e tem município pai
-                nome_display = f"{m['nome']} ({m['municipio_pai']})"
+            nome_display = m[1]  # nome
+            if m[2] == 'distrito' and m[3]:  # se é distrito e tem município pai
+                nome_display = f"{m[1]} ({m[3]})"
             
             resultado.append({
-                "id": m['id'],
-                "nome": m['nome'],
+                "id": m[0],
+                "nome": m[1],
                 "nome_display": nome_display,
-                "tipo": m['tipo'],
-                "municipio_pai": m['municipio_pai']
+                "tipo": m[2],
+                "municipio_pai": m[3]
             })
         
         return json.dumps(resultado)
@@ -573,16 +573,16 @@ def buscar_municipios_distritos(termo=''):
         resultado = []
         for m in municipios_distritos:
             # Formatar nome para exibição (distrito + município pai)
-            nome_display = m['nome']
-            if m['tipo'] == 'distrito' and m['municipio_pai']:  # se é distrito e tem município pai
-                nome_display = f"{m['nome']} ({m['municipio_pai']})"
+            nome_display = m[1]  # nome
+            if m[2] == 'distrito' and m[3]:  # se é distrito e tem município pai
+                nome_display = f"{m[1]} ({m[3]})"
             
             resultado.append({
-                "id": m['id'],
-                "nome": m['nome'],
+                "id": m[0],
+                "nome": m[1],
                 "nome_display": nome_display,
-                "tipo": m['tipo'],
-                "municipio_pai": m['municipio_pai']
+                "tipo": m[2],
+                "municipio_pai": m[3]
             })
         
         return {"sucesso": True, "municipios": resultado}
@@ -614,28 +614,28 @@ def obter_usuario_por_id(user_id, user_type):
         if row:
             # Determinar vínculos
             vinculos = []
-            if row['is_encarregado']:
+            if row[5]:  # is_encarregado
                 vinculos.append("Encarregado")
-            if row['is_operador']:
-                perfil_texto = f"Operador ({row['perfil']})" if row['perfil'] else "Operador"
+            if row[6]:  # is_operador
+                perfil_texto = f"Operador ({row[8]})" if row[8] else "Operador"
                 vinculos.append(perfil_texto)
             
             vinculo_texto = " / ".join(vinculos) if vinculos else "Sem vínculo"
             
             user = {
-                "id": row['id'],
-                "tipo_usuario": row['tipo_usuario'],
-                "posto_graduacao": row['posto_graduacao'],
-                "matricula": row['matricula'],
-                "nome": row['nome'],
-                "is_encarregado": bool(row['is_encarregado']),
-                "is_operador": bool(row['is_operador']),
-                "email": row['email'],
-                "profile": row['perfil'],  # Mantém 'profile' para compatibilidade
-                "perfil": row['perfil'],
-                "created_at": row['created_at'],
-                "updated_at": row['updated_at'],
-                "ativo": bool(row['ativo']),
+                "id": row[0],
+                "tipo_usuario": row[1],
+                "posto_graduacao": row[2],
+                "matricula": row[3],
+                "nome": row[4],
+                "is_encarregado": bool(row[5]),
+                "is_operador": bool(row[6]),
+                "email": row[7],
+                "profile": row[8],  # Mantém 'profile' para compatibilidade
+                "perfil": row[8],
+                "created_at": row[9],
+                "updated_at": row[10],
+                "ativo": bool(row[11]),
                 "tipo": user_type,  # Mantém o tipo passado para compatibilidade
                 "vinculo_texto": vinculo_texto
             }
@@ -879,19 +879,19 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         """, (indicios_id,))
         
         for row in cursor.fetchall():
-            codigo = f"{row['codigo']} Art. {row['artigo']}"
-            if row['paragrafo']:
-                codigo += f" §{row['paragrafo']}"
-            if row['inciso']:
-                codigo += f" {row['inciso']}"
-            if row['alinea']:
-                codigo += f" {row['alinea']}"
+            codigo = f"{row[2]} Art. {row[3]}"
+            if row[5]:  # parágrafo
+                codigo += f" §{row[5]}"
+            if row[6]:  # inciso
+                codigo += f" {row[6]}"
+            if row[7]:  # alínea
+                codigo += f" {row[7]}"
                 
             crimes.append({
-                "id": row['id'],
-                "tipo": row['tipo'],
+                "id": row[0],
+                "tipo": row[1],
                 "codigo": codigo,
-                "descricao": row['descricao'] or ""
+                "descricao": row[4] or ""
             })
         
         # Buscar transgressões RDPM associadas
@@ -905,10 +905,10 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         
         for row in cursor.fetchall():
             rdpm.append({
-                "id": row['id'],
-                "natureza": row['gravidade'],
-                "inciso": row['inciso'],
-                "texto": row['texto']
+                "id": row[0],
+                "natureza": row[1],
+                "inciso": row[2],
+                "texto": row[3]
             })
         
         # Buscar infrações Art. 29 associadas
@@ -922,9 +922,9 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         
         for row in cursor.fetchall():
             art29.append({
-                "id": row['id'],
-                "inciso": row['inciso'],
-                "texto": row['texto']
+                "id": row[0],
+                "inciso": row[1],
+                "texto": row[2]
             })
         
         conn.close()
@@ -966,29 +966,29 @@ def listar_todos_usuarios():
         for user in cursor.fetchall():
             # Determinar vínculos
             vinculos = []
-            if user['is_encarregado']:
+            if user[5]:  # is_encarregado
                 vinculos.append("Encarregado")
-            if user['is_operador']:
-                perfil_texto = f"Operador ({user['perfil']})" if user['perfil'] else "Operador"
+            if user[6]:  # is_operador
+                perfil_texto = f"Operador ({user[8]})" if user[8] else "Operador"
                 vinculos.append(perfil_texto)
             
             vinculo_texto = " / ".join(vinculos) if vinculos else "Sem vínculo"
             
             usuarios.append({
-                "id": user['id'],
-                "tipo_usuario": user['tipo_usuario'],
-                "posto_graduacao": user['posto_graduacao'],
-                "nome": user['nome'],
-                "matricula": user['matricula'],
-                "is_encarregado": bool(user['is_encarregado']),
-                "is_operador": bool(user['is_operador']),
-                "email": user['email'],
-                "perfil": user['perfil'],
-                "created_at": user['created_at'],
-                "updated_at": user['updated_at'],
-                "ativo": bool(user['ativo']),
+                "id": user[0],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "nome": user[3],
+                "matricula": user[4],
+                "is_encarregado": bool(user[5]),
+                "is_operador": bool(user[6]),
+                "email": user[7],
+                "perfil": user[8],
+                "created_at": user[9],
+                "updated_at": user[10],
+                "ativo": bool(user[11]),
                 "vinculo_texto": vinculo_texto,
-                "nome_completo": f"{user['posto_graduacao']} {user['nome']}"  # posto/graduação + nome
+                "nome_completo": f"{user[2]} {user[3]}"  # posto/graduação + nome
             })
         
         conn.close()
@@ -1016,23 +1016,23 @@ def listar_encarregados_operadores():
         usuarios = []
         for user in cursor.fetchall():
             # Determinar tipo para compatibilidade
-            if user['is_encarregado'] and user['is_operador']:  # Ambos
+            if user[5] and user[6]:  # Ambos
                 tipo = "encarregado_operador"
-            elif user['is_encarregado']:  # Apenas encarregado
+            elif user[5]:  # Apenas encarregado
                 tipo = "encarregado"
             else:  # Apenas operador
                 tipo = "operador"
             
             usuarios.append({
-                "id": user['id'],
-                "tipo_usuario": user['tipo_usuario'],
-                "posto_graduacao": user['posto_graduacao'],
-                "nome": user['nome'],
-                "matricula": user['matricula'],
-                "email": user['email'],
-                "perfil": user['perfil'],
+                "id": user[0],
+                "tipo_usuario": user[1],
+                "posto_graduacao": user[2],
+                "nome": user[3],
+                "matricula": user[4],
+                "email": user[7],
+                "perfil": user[8],
                 "tipo": tipo,
-                "nome_completo": f"{user['posto_graduacao']} {user['matricula']} {user['nome']}".strip() if user['matricula'] else f"{user['posto_graduacao']} {user['nome']}".strip()
+                "nome_completo": f"{user[2]} {user[4]} {user[3]}".strip() if user[4] else f"{user[2]} {user[3]}".strip()
             })
         
         conn.close()
@@ -1063,15 +1063,15 @@ def obter_usuario_detalhado(user_id, user_type):
             return {
                 "sucesso": True,
                 "usuario": {
-                    "id": user['id'],
-                    "tipo_usuario": user['tipo_usuario'],
-                    "posto_graduacao": user['posto_graduacao'],
-                    "nome": user['nome'],
-                    "matricula": user['matricula'],
-                    "is_encarregado": bool(user['is_encarregado']),
-                    "is_operador": bool(user['is_operador']),
-                    "email": user['email'],
-                    "perfil": user['perfil']
+                    "id": user[0],
+                    "tipo_usuario": user[1],
+                    "posto_graduacao": user[2],
+                    "nome": user[3],
+                    "matricula": user[4],
+                    "is_encarregado": bool(user[5]),
+                    "is_operador": bool(user[6]),
+                    "email": user[7],
+                    "perfil": user[8]
                 }
             }
         else:
@@ -1193,10 +1193,7 @@ def obter_estatisticas_encarregados():
         mais_ativo = {"nome": "N/A", "total": 0}
         
         for encarregado in encarregados:
-            enc_id = encarregado['id']
-            posto = encarregado['posto_graduacao']
-            matricula = encarregado['matricula']
-            nome = encarregado['nome']
+            enc_id, posto, matricula, nome = encarregado
             nome_completo = f"{posto} {matricula} {nome}"
             
             # Inicializar contadores
@@ -1207,103 +1204,103 @@ def obter_estatisticas_encarregados():
             
             # SR e Sindicâncias (como responsável)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE responsavel_id = %s 
                 AND (tipo_detalhe = 'SR' OR tipo_detalhe = 'SINDICANCIA')
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['sr'] = result['count'] if result else 0
+            contadores['sr'] = result[0] if result else 0
             
             # FP - Feito Preliminar (como responsável)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE responsavel_id = %s 
                 AND (tipo_detalhe = 'FP' OR tipo_detalhe = 'FEITO_PRELIMINAR')
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['fp'] = result['count'] if result else 0
+            contadores['fp'] = result[0] if result else 0
             
             # IPM (como responsável)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE responsavel_id = %s 
                 AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['ipm'] = result['count'] if result else 0
+            contadores['ipm'] = result[0] if result else 0
             
             # Escrivão (quando foi escrivão em IPM)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE escrivao_id = %s
                 AND (tipo_detalhe = 'IPM' OR tipo_detalhe = 'IPPM')
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['escrivao'] = result['count'] if result else 0
+            contadores['escrivao'] = result[0] if result else 0
             
             # PADS (como responsável)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE responsavel_id = %s 
                 AND tipo_detalhe = 'PADS'
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['pads'] = result['count'] if result else 0
+            contadores['pads'] = result[0] if result else 0
             
             # PAD (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
                 AND tipo_detalhe = 'PAD'
                 AND ativo = TRUE
             ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
-            contadores['pad'] = result['count'] if result else 0
+            contadores['pad'] = result[0] if result else 0
             
             # CD - Conselho de Disciplina (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
                 AND tipo_detalhe = 'CD'
                 AND ativo = TRUE
             ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
-            contadores['cd'] = result['count'] if result else 0
+            contadores['cd'] = result[0] if result else 0
             
             # CJ - Conselho de Justificação (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
                 AND tipo_detalhe = 'CJ'
                 AND ativo = TRUE
             ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
-            contadores['cj'] = result['count'] if result else 0
+            contadores['cj'] = result[0] if result else 0
             
             # PADE - Processo Administrativo Disciplinar Especial (como responsável, presidente, interrogante ou escrivão do processo)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
                 AND tipo_detalhe = 'PADE'
                 AND ativo = TRUE
             ''', (enc_id, enc_id, enc_id, enc_id))
             result = cursor.fetchone()
-            contadores['pade'] = result['count'] if result else 0
+            contadores['pade'] = result[0] if result else 0
             
             # CP - Conselho Permanente (como responsável)
             cursor.execute('''
-                SELECT COUNT(*) as count FROM processos_procedimentos 
+                SELECT COUNT(*) FROM processos_procedimentos 
                 WHERE responsavel_id = %s
                 AND tipo_detalhe = 'CP'
                 AND ativo = TRUE
             ''', (enc_id,))
             result = cursor.fetchone()
-            contadores['cp'] = result['count'] if result else 0
+            contadores['cp'] = result[0] if result else 0
             
             # Calcular total para este encarregado
             total_encarregado = sum(contadores.values())
@@ -1390,11 +1387,11 @@ def obter_ultimos_feitos_encarregado(encarregado_id):
         feitos = []
         for row in rows:
             feito = {
-                'tipo': row['tipo'] or 'N/A',
-                'numero': row['numero'] or 'N/A',
-                'data_instauracao': str(row['data_instauracao']) if row['data_instauracao'] else '',
-                'data_recebimento': str(row['data_recebimento']) if row['data_recebimento'] else '',
-                'data_remessa': str(row['data_remessa_encarregado']) if row['data_remessa_encarregado'] else ''
+                'tipo': row[0] or 'N/A',
+                'numero': row[1] or 'N/A',
+                'data_instauracao': row[2] or '',
+                'data_recebimento': row[3] or '',
+                'data_remessa': row[4] or ''
             }
             feitos.append(feito)
             print(f"    - {feito['tipo']} nº {feito['numero']}")
@@ -1419,7 +1416,7 @@ def obter_anos_disponiveis():
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         cursor.execute('''
-            SELECT DISTINCT TO_CHAR(data_instauracao, 'YYYY') as ano
+            SELECT DISTINCT strftime('%Y', data_instauracao) as ano
             FROM processos_procedimentos
             WHERE data_instauracao IS NOT NULL AND ativo = TRUE
             ORDER BY ano DESC
@@ -1450,7 +1447,7 @@ def obter_estatistica_pads_solucoes(ano=None):
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', data_instauracao) = %s"
             params.append(ano)
         
         cursor.execute(f'''
@@ -1470,7 +1467,7 @@ def obter_estatistica_pads_solucoes(ano=None):
         resultados = cursor.fetchall()
         conn.close()
         
-        dados = [{'solucao': row['solucao'], 'quantidade': row['quantidade']} for row in resultados]
+        dados = [{'solucao': row[0], 'quantidade': row[1]} for row in resultados]
         
         return {
             "sucesso": True,
@@ -1495,22 +1492,22 @@ def obter_estatistica_ipm_indicios(ano=None):
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         # Crime Militar (verifica no JSON categorias_indicios)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
             {where_clause}
-            AND (i.categorias_indicios LIKE '%%crime militar%%' OR i.categoria LIKE '%%crime militar%%')
+            AND (i.categorias_indicios LIKE '%crime militar%' OR i.categoria LIKE '%crime militar%')
         ''', params)
-        crime_militar = cursor.fetchone()['count']
+        crime_militar = cursor.fetchone()[0]
         
         # Transgressões (verifica nas tabelas pm_envolvido_rdpm e pm_envolvido_art29)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             WHERE p.id IN (
                 SELECT i.procedimento_id 
@@ -1523,16 +1520,16 @@ def obter_estatistica_ipm_indicios(ano=None):
             )
             {where_clause.replace('WHERE', 'AND')}
         ''', params)
-        transgressoes = cursor.fetchone()['count']
+        transgressoes = cursor.fetchone()[0]
         
         # Sem indícios (não tem crime militar, nem transgressões)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             {where_clause}
             AND p.id NOT IN (
                 SELECT procedimento_id FROM pm_envolvido_indicios 
-                WHERE categorias_indicios LIKE '%%crime militar%%' OR categoria LIKE '%%crime militar%%'
+                WHERE categorias_indicios LIKE '%crime militar%' OR categoria LIKE '%crime militar%'
             )
             AND p.id NOT IN (
                 SELECT i.procedimento_id 
@@ -1544,7 +1541,7 @@ def obter_estatistica_ipm_indicios(ano=None):
                 INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
             )
         ''', params)
-        sem_indicios = cursor.fetchone()['count']
+        sem_indicios = cursor.fetchone()[0]
         
         conn.close()
         
@@ -1577,22 +1574,22 @@ def obter_estatistica_sr_indicios(ano=None):
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         # Crime Comum (verifica no JSON categorias_indicios)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
             {where_clause}
-            AND (i.categorias_indicios LIKE '%%crime comum%%' OR i.categoria LIKE '%%crime comum%%')
+            AND (i.categorias_indicios LIKE '%crime comum%' OR i.categoria LIKE '%crime comum%')
         ''', params)
-        crime_comum = cursor.fetchone()['count']
+        crime_comum = cursor.fetchone()[0]
         
         # Transgressões (verifica nas tabelas pm_envolvido_rdpm e pm_envolvido_art29)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             WHERE p.id IN (
                 SELECT i.procedimento_id 
@@ -1605,16 +1602,16 @@ def obter_estatistica_sr_indicios(ano=None):
             )
             {where_clause.replace('WHERE', 'AND')}
         ''', params)
-        transgressoes = cursor.fetchone()['count']
+        transgressoes = cursor.fetchone()[0]
         
         # Sem indícios
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
+            SELECT COUNT(DISTINCT p.id)
             FROM processos_procedimentos p
             {where_clause}
             AND p.id NOT IN (
                 SELECT procedimento_id FROM pm_envolvido_indicios 
-                WHERE categorias_indicios LIKE '%%crime comum%%' OR categoria LIKE '%%crime comum%%'
+                WHERE categorias_indicios LIKE '%crime comum%' OR categoria LIKE '%crime comum%'
             )
             AND p.id NOT IN (
                 SELECT i.procedimento_id 
@@ -1626,7 +1623,7 @@ def obter_estatistica_sr_indicios(ano=None):
                 INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
             )
         ''', params)
-        sem_indicios = cursor.fetchone()['count']
+        sem_indicios = cursor.fetchone()[0]
         
         conn.close()
         
@@ -1660,8 +1657,8 @@ def obter_top10_transgressoes(ano=None):
         params = []
         
         if ano:
-            where_clause_ipm += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
-            where_clause_sr += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause_ipm += " AND strftime('%Y', p.data_instauracao) = %s"
+            where_clause_sr += " AND strftime('%Y', p.data_instauracao) = %s"
             params = [ano, ano]
         
         # UNION de transgressões RDPM de IPM e SR
@@ -1777,7 +1774,7 @@ def obter_ranking_motoristas_sinistros(ano=None):
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         cursor.execute(f'''
@@ -1827,7 +1824,7 @@ def obter_estatistica_naturezas_apuradas(ano=None):
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         cursor.execute(f'''
@@ -1873,11 +1870,11 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
         where_clause = """WHERE p.tipo_detalhe = 'IPM' 
                          AND p.ativo = TRUE 
                          AND cc.tipo = 'Crime'
-                         AND pei.categorias_indicios LIKE '%%Indícios de crime militar%%'"""
+                         AND pei.categorias_indicios LIKE '%Indícios de crime militar%'"""
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         cursor.execute(f'''
@@ -1926,11 +1923,11 @@ def obter_estatistica_crimes_comuns(ano=None):
         where_clause = """WHERE p.tipo_detalhe IN ('IPM', 'SR') 
                          AND p.ativo = TRUE 
                          AND cc.tipo = 'Crime'
-                         AND pei.categorias_indicios LIKE '%%Indícios de crime comum%%'"""
+                         AND pei.categorias_indicios LIKE '%Indícios de crime comum%'"""
         params = []
         
         if ano:
-            where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
+            where_clause += " AND strftime('%Y', p.data_instauracao) = %s"
             params.append(ano)
         
         cursor.execute(f'''
@@ -1980,7 +1977,7 @@ def obter_estatisticas_processos_andamento():
                 COUNT(*) as total
             FROM processos_procedimentos 
             WHERE ativo = TRUE 
-            AND data_conclusao IS NULL
+            AND (data_conclusao IS NULL OR data_conclusao = '')
             AND (concluido = FALSE OR concluido IS NULL)
             GROUP BY tipo_detalhe
             ORDER BY total DESC
@@ -1993,9 +1990,7 @@ def obter_estatisticas_processos_andamento():
         estatisticas = {}
         total_geral = 0
         
-        for row in resultados:
-            tipo = row['tipo_detalhe']
-            quantidade = row['total']
+        for tipo, quantidade in resultados:
             if tipo:  # Ignorar tipos vazios
                 estatisticas[tipo] = quantidade
                 total_geral += quantidade
@@ -2005,15 +2000,15 @@ def obter_estatisticas_processos_andamento():
         
         # Query para obter alguns dados adicionais úteis
         cursor.execute('''
-            SELECT COUNT(*) as count FROM processos_procedimentos 
-            WHERE ativo = TRUE AND data_conclusao IS NOT NULL
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE ativo = TRUE AND data_conclusao IS NOT NULL AND data_conclusao != ''
         ''')
-        concluidos = cursor.fetchone()['count']
+        concluidos = cursor.fetchone()[0]
         
         cursor.execute('''
             SELECT COUNT(*) FROM processos_procedimentos WHERE ativo = TRUE
         ''')
-        total_processos = cursor.fetchone()['count']
+        total_processos = cursor.fetchone()[0]
         
         conn.close()
         
@@ -2106,7 +2101,32 @@ def registrar_processo(
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # Tabelas de associação para indícios (idempotente)
+        # Garantir existência das novas colunas/tabelas (idempotente)
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN data_remessa_encarregado DATE")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN data_julgamento DATE")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN solucao_tipo TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN penalidade_tipo TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN penalidade_dias INTEGER")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE processos_procedimentos ADD COLUMN indicios_categorias TEXT")
+        except Exception:
+            pass
+        # Tabelas de associação para indícios
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS procedimentos_indicios_crimes (
                 id TEXT PRIMARY KEY,
@@ -2160,12 +2180,12 @@ def registrar_processo(
             
             print(f"🔍 Verificação controle - conflito encontrado: {conflito_controle is not None}")
             if conflito_controle:
-                print(f"   Controle {numero_controle} já usado no {tipo_detalhe} {conflito_controle['numero']}")
+                print(f"   Controle {numero_controle} já usado no {tipo_detalhe} {conflito_controle[1]}")
             
             if conflito_controle:
                 local_msg = f" no {local_origem}" if local_origem else ""
                 tipo_msg = f"/{tipo_detalhe}" if tipo_detalhe else ""
-                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no {conflito_controle['tipo_detalhe'] or tipo_detalhe} {conflito_controle['numero']})"}
+                return {"sucesso": False, "mensagem": f"Já existe um {documento_iniciador} com número de controle {numero_controle}{tipo_msg} para o ano {ano_instauracao or 'informado'}{local_msg}. (Usado no {conflito_controle[3] or tipo_detalhe} {conflito_controle[1]})"}
 
         print("✅ Nenhum conflito detectado, prosseguindo com inserção...")
 
@@ -2334,8 +2354,14 @@ def registrar_processo(
 
         _insert_indicios(indicios_crimes, 'procedimentos_indicios_crimes', 'crime_id')
         _insert_indicios(indicios_rdpm, 'procedimentos_indicios_rdpm', 'transgressao_id')
-        # PostgreSQL: sempre usar 'art29_id' (nome correto da coluna)
-        _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', 'art29_id')
+        # Detectar nome correto da coluna (migrações antigas podem ter infracao_id)
+        try:
+            cursor.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+            cols_art29 = [r[1] for r in cursor.fetchall()]
+            col_art29 = 'art29_id' if 'art29_id' in cols_art29 else ('infracao_id' if 'infracao_id' in cols_art29 else 'art29_id')
+        except Exception:
+            col_art29 = 'art29_id'
+        _insert_indicios(indicios_art29, 'procedimentos_indicios_art29', col_art29)
 
         # ======== PROCESSAR INDÍCIOS POR PM (MIGRAÇÃO 015) ========
         try:
@@ -2487,17 +2513,17 @@ def listar_processos():
     
     # Formatar o número do procedimento baseado no numero_controle
     def formatar_numero_processo(processo):
-        numero_controle = processo['numero_controle']
-        tipo_detalhe = processo['tipo_detalhe']
-        documento = processo['documento_iniciador']
-        local_origem = processo['local_origem'] or ""
-        data_instauracao = processo['data_instauracao'] or ""
+        numero_controle = processo[22]  # numero_controle é o índice 22
+        tipo_detalhe = processo[3]
+        documento = processo[4]
+        local_origem = processo[8] or ""
+        data_instauracao = processo[9] or ""
         ano_instauracao = ""
         
         # Extrair o ano da data de instauração, se disponível
         if data_instauracao:
             try:
-                ano_instauracao = str(datetime.strptime(str(data_instauracao), "%Y-%m-%d").year)
+                ano_instauracao = str(datetime.strptime(data_instauracao, "%Y-%m-%d").year)
             except:
                 ano_instauracao = ""
         
@@ -2506,7 +2532,7 @@ def listar_processos():
             return f"{tipo_detalhe} nº {numero_controle}/{local_origem}/{ano_instauracao}"
         else:
             # Fallback para o número do documento se numero_controle estiver vazio
-            numero_documento = processo['numero']
+            numero_documento = processo[1]
             if numero_documento:
                 return f"{tipo_detalhe} nº {numero_documento}/{local_origem}/{ano_instauracao}"
         
@@ -2514,8 +2540,8 @@ def listar_processos():
 
     def formatar_pms_envolvidos(processo):
         """Formata a exibição dos PMs envolvidos considerando múltiplos PMs para procedimentos"""
-        tipo_geral = processo['tipo_geral']
-        processo_id = processo['id']
+        tipo_geral = processo[2]  # tipo_geral
+        processo_id = processo[0]  # id
         
         # Se for procedimento, buscar múltiplos PMs
         if tipo_geral == 'procedimento':
@@ -2540,9 +2566,9 @@ def listar_processos():
                 }
             else:
                 # Fallback para PM único se não há múltiplos
-                pm_nome = processo['nome_pm']
-                pm_posto = processo['nome_pm_pg'] or ""
-                pm_matricula = processo['nome_pm_matricula'] or ""
+                pm_nome = processo[11]  # nome_pm
+                pm_posto = processo[19] or ""  # nome_pm_pg
+                pm_matricula = processo[20] or ""  # nome_pm_matricula
                 
                 if pm_nome:
                     pm_completo = f"{pm_posto} {pm_matricula} {pm_nome}".strip()
@@ -2557,9 +2583,9 @@ def listar_processos():
                     }
         else:
             # Para processos, usar PM único
-            pm_nome = processo['nome_pm']
-            pm_posto = processo['nome_pm_pg'] or ""
-            pm_matricula = processo['nome_pm_matricula'] or ""
+            pm_nome = processo[11]  # nome_pm
+            pm_posto = processo[19] or ""  # nome_pm_pg
+            pm_matricula = processo[20] or ""  # nome_pm_matricula
             
             if pm_nome:
                 pm_completo = f"{pm_posto} {pm_matricula} {pm_nome}".strip()
@@ -2578,31 +2604,31 @@ def listar_processos():
         pms_info = formatar_pms_envolvidos(processo)
         
         resultado.append({
-            "id": processo['id'],
-            "numero": processo['numero'],
-            "numero_controle": processo['numero_controle'],
+            "id": processo[0],
+            "numero": processo[1],
+            "numero_controle": processo[22],  # Incluir numero_controle
             "numero_formatado": formatar_numero_processo(processo),
-            "tipo_geral": processo['tipo_geral'],
-            "tipo_detalhe": processo['tipo_detalhe'],
-            "documento_iniciador": processo['documento_iniciador'],
-            "processo_sei": processo['processo_sei'],
-            "responsavel": processo['responsavel'],
-            "responsavel_posto_grad": processo['responsavel_pg'] or "",
-            "responsavel_matricula": processo['responsavel_matricula'] or "",
-            "data_criacao": processo['created_at'],
-            "local_origem": processo['local_origem'],
-            "data_instauracao": processo['data_instauracao'],
-            "status_pm": processo['status_pm'],
-            "nome_pm": processo['nome_pm'],
-            "nome_pm_posto_grad": processo['nome_pm_pg'] or "",
-            "nome_pm_matricula": processo['nome_pm_matricula'] or "",
-            "numero_rgf": processo['numero_rgf'] or "",
-            "concluido": bool(processo['concluido']) if processo.get('concluido') is not None else False,
-            "data_conclusao": processo.get('data_conclusao'),
-            "responsavel_completo": f"{processo['responsavel_pg'] or ''} {processo['responsavel_matricula'] or ''} {processo['responsavel']}".strip(),
-            "nome_pm_completo": f"{processo['nome_pm_pg'] or ''} {processo['nome_pm_matricula'] or ''} {processo['nome_pm'] or ''}".strip() if processo['nome_pm'] else None,
-            "pm_envolvido_nome": pms_info['display'],
-            "pm_envolvido_tooltip": pms_info['tooltip']
+            "tipo_geral": processo[2],
+            "tipo_detalhe": processo[3],
+            "documento_iniciador": processo[4],
+            "processo_sei": processo[5],
+            "responsavel": processo[6],
+            "responsavel_posto_grad": processo[17] or "",  # Posto/graduação do responsável (índice 17)
+            "responsavel_matricula": processo[18] or "",  # Matrícula do responsável (índice 18)
+            "data_criacao": processo[7],
+            "local_origem": processo[8],
+            "data_instauracao": processo[9],
+            "status_pm": processo[10],
+            "nome_pm": processo[11],
+            "nome_pm_posto_grad": processo[19] or "",  # Posto/graduação do PM envolvido (índice 19)
+            "nome_pm_matricula": processo[20] or "",  # Matrícula do PM envolvido (índice 20)
+            "numero_rgf": processo[21] or "",  # Número do RGF (índice 21)
+            "concluido": bool(processo[23]) if processo[23] is not None else False,  # Campo concluído (índice 23)
+            "data_conclusao": processo[24] if len(processo) > 24 else None,  # Data de conclusão (índice 24)
+            "responsavel_completo": f"{processo[17] or ''} {processo[18] or ''} {processo[6]}".strip(),  # Posto/graduação + matrícula + nome
+            "nome_pm_completo": f"{processo[19] or ''} {processo[20] or ''} {processo[11] or ''}".strip() if processo[11] else None,  # Posto/graduação + matrícula + nome PM
+            "pm_envolvido_nome": pms_info['display'],  # Campo para exibição na tabela
+            "pm_envolvido_tooltip": pms_info['tooltip']  # Campo para tooltip
         })
     
     return resultado
@@ -2900,33 +2926,36 @@ def obter_processo(processo_id):
 
         # Formatar dados completos dos usuários
         responsavel_completo = ""
-        if processo['responsavel_posto'] and processo['responsavel_matricula'] and processo['responsavel_nome']:
-            responsavel_completo = f"{processo['responsavel_posto']} {processo['responsavel_matricula']} {processo['responsavel_nome']}".strip()
-        elif processo['responsavel_nome']:
-            responsavel_completo = processo['responsavel_nome']
+        # indices: 35=resp_posto, 36=resp_matricula, 8=resp_nome
+        if processo[35] and processo[36] and processo[8]:
+            responsavel_completo = f"{processo[35]} {processo[36]} {processo[8]}".strip()
+        elif processo[8]:
+            responsavel_completo = processo[8]
 
         escrivao_completo = ""
-        if processo['escrivao_posto'] and processo['escrivao_matricula'] and processo['escrivao_nome']:
-            escrivao_completo = f"{processo['escrivao_posto']} {processo['escrivao_matricula']} {processo['escrivao_nome']}".strip()
+        # indices: 38=esc_posto, 39=esc_matricula, 37=esc_nome
+        if processo[38] and processo[39] and processo[37]:
+            escrivao_completo = f"{processo[38]} {processo[39]} {processo[37]}".strip()
 
         pm_completo = ""
-        if processo['pm_posto'] and processo['pm_matricula'] and processo['pm_nome']:
-            pm_completo = f"{processo['pm_posto']} {processo['pm_matricula']} {processo['pm_nome']}".strip()
+        # indices: 41=pm_posto, 42=pm_matricula, 40=pm_nome
+        if processo[41] and processo[42] and processo[40]:
+            pm_completo = f"{processo[41]} {processo[42]} {processo[40]}".strip()
 
         # Para procedimentos, buscar múltiplos PMs envolvidos
         pms_envolvidos = []
-        if processo['tipo_geral'] == 'procedimento':
+        if processo[2] == 'procedimento':  # tipo_geral
             pms_envolvidos = buscar_pms_envolvidos(processo_id)
 
         # Processar transgressões (campo JSON) - suporta formato antigo e novo
         transgressoes_selecionadas = []
-        if processo['transgressoes_ids']:
+        if processo[28]:  # transgressoes_ids
             try:
-                transgressoes_data = json.loads(processo['transgressoes_ids'])
+                transgressoes_data = json.loads(processo[28])
 
                 if isinstance(transgressoes_data, list) and len(transgressoes_data) > 0:
                     conn2 = db_manager.get_connection()
-                    cursor2 = conn2.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                    cursor2 = conn2.cursor()
 
                     # Verificar se é formato novo (com natureza) ou antigo (só IDs)
                     primeiro_item = transgressoes_data[0]
@@ -2953,14 +2982,14 @@ def obter_processo(processo_id):
                                         rdpm_trans = cursor2.fetchone()
                                         if rdpm_trans:
                                             analogia_completa.update({
-                                                'inciso': rdpm_trans['inciso'],
-                                                'texto': rdpm_trans['texto']
+                                                'inciso': rdpm_trans[1],
+                                                'texto': rdpm_trans[2]
                                             })
 
                                     transgressoes_selecionadas.append({
-                                        'id': art29_trans['id'],
-                                        'inciso': art29_trans['inciso'],
-                                        'texto': art29_trans['texto'],
+                                        'id': art29_trans[0],
+                                        'inciso': art29_trans[1],
+                                        'texto': art29_trans[2],
                                         'tipo': 'estatuto',
                                         'rdmp_analogia': analogia_completa
                                     })
@@ -2973,9 +3002,9 @@ def obter_processo(processo_id):
                                 trans = cursor2.fetchone()
                                 if trans:
                                     transgressoes_selecionadas.append({
-                                        'id': trans['id'],
-                                        'inciso': trans['inciso'],
-                                        'texto': trans['texto'],
+                                        'id': trans[0],
+                                        'inciso': trans[1],
+                                        'texto': trans[2],
                                         'natureza': natureza,
                                         'tipo': 'rdpm'
                                     })
@@ -2986,10 +3015,10 @@ def obter_processo(processo_id):
                             trans = cursor2.fetchone()
                             if trans:
                                 transgressoes_selecionadas.append({
-                                    'id': trans['id'],
-                                    'inciso': trans['inciso'],
-                                    'texto': trans['texto'],
-                                    'natureza': trans['gravidade'],  # gravidade da tabela
+                                    'id': trans[0],
+                                    'inciso': trans[1],
+                                    'texto': trans[2],
+                                    'natureza': trans[3],  # gravidade da tabela
                                     'tipo': 'rdpm'
                                 })
 
@@ -3002,7 +3031,7 @@ def obter_processo(processo_id):
         def _carregar_indicios(pid):
             ind = {"crimes": [], "rdpm": [], "art29": []}
             conn_i = db_manager.get_connection()
-            cur_i = conn_i.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur_i = conn_i.cursor()
             # crimes_contravencoes
             try:
                 cur_i.execute(
@@ -3016,14 +3045,14 @@ def obter_processo(processo_id):
                 )
                 for row in cur_i.fetchall():
                     ind["crimes"].append({
-                        "id": row['id'],
-                        "tipo": row['tipo'],
-                        "dispositivo_legal": row['dispositivo_legal'],
-                        "artigo": row['artigo'],
-                        "descricao_artigo": row['descricao_artigo'],
-                        "paragrafo": row['paragrafo'] or "",
-                        "inciso": row['inciso'] or "",
-                        "alinea": row['alinea'] or ""
+                        "id": row[0],
+                        "tipo": row[1],
+                        "dispositivo_legal": row[2],
+                        "artigo": row[3],
+                        "descricao_artigo": row[4],
+                        "paragrafo": row[5] or "",
+                        "inciso": row[6] or "",
+                        "alinea": row[7] or ""
                     })
             except Exception:
                 pass
@@ -3040,30 +3069,34 @@ def obter_processo(processo_id):
                 )
                 for row in cur_i.fetchall():
                     ind["rdpm"].append({
-                        "id": row['id'],
-                        "artigo": row['artigo'],
-                        "gravidade": row['gravidade'],
-                        "inciso": row['inciso'],
-                        "texto": row['texto']
+                        "id": row[0],
+                        "artigo": row[1],
+                        "gravidade": row[2],
+                        "inciso": row[3],
+                        "texto": row[4]
                     })
             except Exception:
                 pass
-            # art29 - PostgreSQL: sempre usar 'art29_id'
+            # art29
             try:
+                # Detectar coluna (art29_id ou infracao_id)
+                cur_i.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+                ccols = [r[1] for r in cur_i.fetchall()]
+                col_fk = 'art29_id' if 'art29_id' in ccols else ('infracao_id' if 'infracao_id' in ccols else 'art29_id')
                 cur_i.execute(
-                    """
+                    f"""
                     SELECT a.id, a.inciso, a.texto
                     FROM procedimentos_indicios_art29 pia
-                    JOIN infracoes_estatuto_art29 a ON a.id = pia.art29_id
+                    JOIN infracoes_estatuto_art29 a ON a.id = pia.{col_fk}
                     WHERE pia.procedimento_id = %s
                     """,
                     (pid,)
                 )
                 for row in cur_i.fetchall():
                     ind["art29"].append({
-                        "id": row['id'],
-                        "inciso": row['inciso'],
-                        "texto": row['texto']
+                        "id": row[0],
+                        "inciso": row[1],
+                        "texto": row[2]
                     })
             except Exception:
                 pass
@@ -3074,7 +3107,7 @@ def obter_processo(processo_id):
 
         # Carregar indícios por PM para procedimentos
         indicios_por_pm = {}
-        if processo['tipo_geral'] == 'procedimento' and pms_envolvidos:
+        if processo[2] == 'procedimento' and pms_envolvidos:  # tipo_geral
             print(f"🔍 Carregando indícios por PM para procedimento {processo_id}")
             for pm_envolvido in pms_envolvidos:
                 pm_envolvido_id = pm_envolvido.get('pm_envolvido_id')
@@ -3087,88 +3120,89 @@ def obter_processo(processo_id):
 
         # Montar nomes completos das funções de processo (campos adicionados ao final)
         presidente_completo = ""
-        if processo['presidente_posto'] and processo['presidente_matricula'] and processo['presidente_nome']:
-            presidente_completo = f"{processo['presidente_posto']} {processo['presidente_matricula']} {processo['presidente_nome']}".strip()
+        if processo[50] and processo[51] and processo[49]:
+            presidente_completo = f"{processo[50]} {processo[51]} {processo[49]}".strip()
 
         interrogante_completo = ""
-        if processo['interrogante_posto'] and processo['interrogante_matricula'] and processo['interrogante_nome']:
-            interrogante_completo = f"{processo['interrogante_posto']} {processo['interrogante_matricula']} {processo['interrogante_nome']}".strip()
+        if processo[53] and processo[54] and processo[52]:
+            interrogante_completo = f"{processo[53]} {processo[54]} {processo[52]}".strip()
 
         escrivao_processo_completo = ""
-        if processo['escrivao_processo_posto'] and processo['escrivao_processo_matricula'] and processo['escrivao_processo_nome']:
-            escrivao_processo_completo = f"{processo['escrivao_processo_posto']} {processo['escrivao_processo_matricula']} {processo['escrivao_processo_nome']}".strip()
+        if processo[56] and processo[57] and processo[55]:
+            escrivao_processo_completo = f"{processo[56]} {processo[57]} {processo[55]}".strip()
 
         motorista_completo = ""
-        if processo['motorista_posto'] and processo['motorista_matricula'] and processo['motorista_nome']:
-            motorista_completo = f"{processo['motorista_posto']} {processo['motorista_matricula']} {processo['motorista_nome']}".strip()
-        elif processo['motorista_nome']:
-            motorista_completo = processo['motorista_nome']
+        # indices: 59=motorista_nome, 60=motorista_posto, 61=motorista_matricula
+        if processo[60] and processo[61] and processo[59]:
+            motorista_completo = f"{processo[60]} {processo[61]} {processo[59]}".strip()
+        elif processo[59]:
+            motorista_completo = processo[59]
 
         return {
-            "id": processo['id'],
-            "numero": processo['numero'],
-            "tipo_geral": processo['tipo_geral'],
-            "tipo_detalhe": processo['tipo_detalhe'],
-            "documento_iniciador": processo['documento_iniciador'],
-            "processo_sei": processo['processo_sei'],
-            "responsavel_id": processo['responsavel_id'],
-            "responsavel_tipo": processo['responsavel_tipo'],
-            "responsavel_nome": processo['responsavel_nome'],
+            "id": processo[0],
+            "numero": processo[1],
+            "tipo_geral": processo[2],
+            "tipo_detalhe": processo[3],
+            "documento_iniciador": processo[4],
+            "processo_sei": processo[5],
+            "responsavel_id": processo[6],
+            "responsavel_tipo": processo[7],
+            "responsavel_nome": processo[8],
             "responsavel_completo": responsavel_completo,
-            "local_origem": processo['local_origem'],
-            "local_fatos": processo['local_fatos'],
-            "data_instauracao": str(processo['data_instauracao']) if processo['data_instauracao'] else None,
-            "data_recebimento": str(processo['data_recebimento']) if processo['data_recebimento'] else None,
-            "escrivao_id": processo['escrivao_id'],
+            "local_origem": processo[9],
+            "local_fatos": processo[10],
+            "data_instauracao": processo[11],
+            "data_recebimento": processo[12],
+            "escrivao_id": processo[13],
             "escrivao_completo": escrivao_completo,
-            "status_pm": processo['status_pm'],
-            "nome_pm_id": processo['nome_pm_id'],
+            "status_pm": processo[14],
+            "nome_pm_id": processo[15],
             "pm_completo": pm_completo,
             "pms_envolvidos": pms_envolvidos,
-            "nome_vitima": processo['nome_vitima'],
-            "natureza_processo": _determinar_natureza_processo(processo['natureza_processo'], transgressoes_selecionadas),
-            "natureza_procedimento": processo['natureza_procedimento'],
-            "resumo_fatos": processo['resumo_fatos'],
-            "numero_portaria": processo['numero_portaria'],
-            "numero_memorando": processo['numero_memorando'],
-            "numero_feito": processo['numero_feito'],
-            "numero_rgf": processo['numero_rgf'],
-            "numero_controle": processo['numero_controle'],
-            "concluido": processo['concluido'],
-            "data_conclusao": str(processo['data_conclusao']) if processo['data_conclusao'] else None,
-            "solucao_final": processo['solucao_final'],
-            "transgressoes_ids": processo['transgressoes_ids'],
+            "nome_vitima": processo[16],
+            "natureza_processo": _determinar_natureza_processo(processo[17], transgressoes_selecionadas),
+            "natureza_procedimento": processo[18],
+            "resumo_fatos": processo[19],
+            "numero_portaria": processo[20],
+            "numero_memorando": processo[21],
+            "numero_feito": processo[22],
+            "numero_rgf": processo[23],
+            "numero_controle": processo[24],
+            "concluido": processo[25],
+            "data_conclusao": processo[26],
+            "solucao_final": processo[27],
+            "transgressoes_ids": processo[28],
             "transgressoes_selecionadas": transgressoes_selecionadas,
             # Novos campos
-            "data_remessa_encarregado": str(processo['data_remessa_encarregado']) if processo['data_remessa_encarregado'] else None,
-            "data_julgamento": str(processo['data_julgamento']) if processo['data_julgamento'] else None,
-            "solucao_tipo": processo['solucao_tipo'],
-            "penalidade_tipo": processo['penalidade_tipo'],
-            "penalidade_dias": processo['penalidade_dias'],
-            "indicios_categorias": processo['indicios_categorias'],
+            "data_remessa_encarregado": processo[29],
+            "data_julgamento": processo[30],
+            "solucao_tipo": processo[31],
+            "penalidade_tipo": processo[32],
+            "penalidade_dias": processo[33],
+            "indicios_categorias": processo[34],
             "indicios": indicios,
             "indicios_por_pm": indicios_por_pm,
             # Funções específicas do processo (PAD/CD/CJ)
-            "presidente_id": processo['presidente_id'],
-            "presidente_tipo": processo['presidente_tipo'],
-            "interrogante_id": processo['interrogante_id'],
-            "interrogante_tipo": processo['interrogante_tipo'],
-            "escrivao_processo_id": processo['escrivao_processo_id'],
-            "escrivao_processo_tipo": processo['escrivao_processo_tipo'],
-            "presidente_nome": processo['presidente_nome'],
+            "presidente_id": processo[43],
+            "presidente_tipo": processo[44],
+            "interrogante_id": processo[45],
+            "interrogante_tipo": processo[46],
+            "escrivao_processo_id": processo[47],
+            "escrivao_processo_tipo": processo[48],
+            "presidente_nome": processo[49],
             "presidente_completo": presidente_completo,
-            "interrogante_nome": processo['interrogante_nome'],
+            "interrogante_nome": processo[52],
             "interrogante_completo": interrogante_completo,
-            "escrivao_processo_nome": processo['escrivao_processo_nome'],
+            "escrivao_processo_nome": processo[55],
             "escrivao_processo_completo": escrivao_processo_completo,
             # Motorista (sinistros de trânsito)
-            "motorista_id": processo['motorista_id'],
-            "motorista_nome": processo['motorista_nome'],
+            "motorista_id": processo[58],
+            "motorista_nome": processo[59],
             "motorista_completo": motorista_completo,
             # Campos específicos de Carta Precatória (CP)
-            "unidade_deprecada": processo['unidade_deprecada'],
-            "deprecante": processo['deprecante'],
-            "pessoas_inquiridas": processo['pessoas_inquiridas'],
+            "unidade_deprecada": processo[62],
+            "deprecante": processo[63],
+            "pessoas_inquiridas": processo[64],
         }
     except Exception as e:
         print(f"Erro ao obter processo: {e}")
@@ -3377,7 +3411,7 @@ def obter_envolvidos_procedimento(procedimento_id):
             "SELECT COUNT(*) FROM procedimento_pms_envolvidos WHERE procedimento_id = %s",
             (procedimento_id,)
         )
-        count = cursor.fetchone()['count']
+        count = cursor.fetchone()[0]
 
         envolvidos = []
 
@@ -3597,7 +3631,7 @@ def atualizar_processo(
 
             # Buscar PMs existentes
             cursor.execute("SELECT id, pm_id FROM procedimento_pms_envolvidos WHERE procedimento_id = %s", (processo_id,))
-            pms_existentes = {row['pm_id']: row['id'] for row in cursor.fetchall()}  # {pm_id: pm_envolvido_id}
+            pms_existentes = {row[1]: row[0] for row in cursor.fetchall()}  # {pm_id: pm_envolvido_id}
             
             print(f"📋 PMs existentes no banco: {list(pms_existentes.keys())}")
             
@@ -3688,10 +3722,16 @@ def atualizar_processo(
                         "INSERT INTO procedimentos_indicios_rdpm (id, procedimento_id, transgressao_id) VALUES (%s, %s, %s)",
                         (str(uuid.uuid4()), processo_id, tid)
                     )
-                # PostgreSQL: sempre usar 'art29_id'
+                # detectar nome da coluna FK de art29
+                try:
+                    cursor.execute("PRAGMA table_info(procedimentos_indicios_art29)")
+                    cols_art29 = [r[1] for r in cursor.fetchall()]
+                    col_art29 = 'art29_id' if 'art29_id' in cols_art29 else ('infracao_id' if 'infracao_id' in cols_art29 else 'art29_id')
+                except Exception:
+                    col_art29 = 'art29_id'
                 for aid in art29_ids:
                     cursor.execute(
-                        "INSERT INTO procedimentos_indicios_art29 (id, procedimento_id, art29_id) VALUES (%s, %s, %s)",
+                        f"INSERT INTO procedimentos_indicios_art29 (id, procedimento_id, {col_art29}) VALUES (%s, %s, %s)",
                         (str(uuid.uuid4()), processo_id, aid)
                     )
             else:
@@ -3709,7 +3749,7 @@ def atualizar_processo(
                 SELECT pm_id FROM procedimento_pms_envolvidos 
                 WHERE procedimento_id = %s
             """, (processo_id,))
-            pms_cadastrados = [row['pm_id'] for row in cursor.fetchall()]
+            pms_cadastrados = [row[0] for row in cursor.fetchall()]
             
             # Se há PMs cadastrados, sempre processar indícios por PM (mesmo que vazio = limpar)
             if pms_cadastrados and isinstance(indicios_por_pm, dict):
@@ -3729,7 +3769,7 @@ def atualizar_processo(
                         print(f"⚠️ PM {pm_id} não encontrado na tabela procedimento_pms_envolvidos")
                         continue
                         
-                    pm_envolvido_id = pm_envolvido_result['id']
+                    pm_envolvido_id = pm_envolvido_result[0]
                     
                     # Verificar se este PM tem dados em indicios_por_pm
                     dados_indicios = indicios_por_pm.get(pm_id)
@@ -4465,9 +4505,9 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 # Priorizar data_instauracao, depois data_recebimento, depois created_at
                 where_clause += """ AND (
                     CASE 
-                        WHEN p.data_instauracao IS NOT NULL THEN TO_CHAR(p.data_instauracao, 'YYYY')
-                        WHEN p.data_recebimento IS NOT NULL THEN TO_CHAR(p.data_recebimento, 'YYYY')
-                        ELSE TO_CHAR(p.created_at, 'YYYY')
+                        WHEN p.data_instauracao IS NOT NULL THEN strftime('%Y', p.data_instauracao)
+                        WHEN p.data_recebimento IS NOT NULL THEN strftime('%Y', p.data_recebimento)
+                        ELSE strftime('%Y', p.created_at)
                     END = %s
                 )"""
                 search_params.append(filtros['ano'])
@@ -4512,13 +4552,13 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                                       AND (
                                           CASE 
                                               WHEN p.documento_iniciador = 'Feito Preliminar' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) < 15
-                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%%IPM%%' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) < 40
-                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%%SR%%' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) < 30
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 15
+                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%IPM%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 40
+                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%SR%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 30
                                               ELSE
-                                                  (CURRENT_DATE - p.data_recebimento) < 30
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) < 30
                                           END
                                       )"""
                 elif filtros['situacao'] == 'em_andamento_vencido':
@@ -4528,42 +4568,26 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                                       AND (
                                           CASE 
                                               WHEN p.documento_iniciador = 'Feito Preliminar' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) >= 15
-                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%%IPM%%' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) >= 40
-                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%%SR%%' THEN
-                                                  (CURRENT_DATE - p.data_recebimento) >= 30
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 15
+                                              WHEN p.tipo_detalhe = 'IPM' OR p.tipo_detalhe LIKE '%IPM%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 40
+                                              WHEN p.tipo_detalhe = 'SR' OR p.tipo_detalhe LIKE '%SR%' THEN
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 30
                                               ELSE
-                                                  (CURRENT_DATE - p.data_recebimento) >= 30
+                                                  CAST((julianday('now') - julianday(p.data_recebimento)) AS INTEGER) >= 30
                                           END
                                       )"""
 
         # Contar total de registros
         count_query = f"""
-            SELECT COUNT(*) as count
+            SELECT COUNT(*)
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
             LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
             {where_clause}
         """
-        
-        try:
-            cursor.execute(count_query, search_params)
-            result = cursor.fetchone()
-            total_processos = result['count'] if result else 0
-        except Exception as e:
-            # Debug detalhado do erro
-            print(f"\n{'='*80}")
-            print(f"❌ ERRO AO EXECUTAR COUNT QUERY")
-            print(f"{'='*80}")
-            print(f"Erro: {type(e).__name__}: {e}")
-            print(f"\nNúmero de placeholders (%s) na query: {count_query.count('%s')}")
-            print(f"Número de parâmetros fornecidos: {len(search_params)}")
-            print(f"\nParâmetros: {search_params}")
-            print(f"\nFiltros recebidos: {filtros}")
-            print(f"\nWHERE clause:\n{where_clause}")
-            print(f"{'='*80}\n")
-            raise
+        cursor.execute(count_query, search_params)
+        total_processos = cursor.fetchone()[0]
 
         # Calcular offset para paginação
         offset = (page - 1) * per_page
@@ -4613,45 +4637,14 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
         processos_com_prazos = []
 
         for processo in processos:
-            # RealDictCursor retorna dicionários, não tuplas
-            processo_id = processo['id']
-            numero = processo['numero']
-            tipo_geral = processo['tipo_geral']
-            tipo_detalhe = processo['tipo_detalhe']
-            documento_iniciador = processo['documento_iniciador']
-            data_recebimento = processo['data_recebimento']
-            created_at = processo['created_at']
-            data_instauracao = processo['data_instauracao']
-            responsavel_nome = processo['responsavel_nome']
-            responsavel_posto = processo['responsavel_posto']
-            responsavel_matricula = processo['responsavel_matricula']
-            presidente_nome = processo['presidente_nome']
-            presidente_posto = processo['presidente_posto']
-            presidente_matricula = processo['presidente_matricula']
-            interrogante_nome = processo['interrogante_nome']
-            interrogante_posto = processo['interrogante_posto']
-            interrogante_matricula = processo['interrogante_matricula']
-            escrivao_nome = processo['escrivao_nome']
-            escrivao_posto = processo['escrivao_posto']
-            escrivao_matricula = processo['escrivao_matricula']
-            local_origem = processo['local_origem']
-            processo_sei = processo['processo_sei']
-            nome_pm_id = processo['nome_pm_id']
-            status_pm = processo['status_pm']
-            pm_envolvido_nome = processo['pm_envolvido_nome']
-            pm_envolvido_posto = processo['pm_envolvido_posto']
-            pm_envolvido_matricula = processo['pm_envolvido_matricula']
-            numero_controle = processo['numero_controle']
-            concluido = processo['concluido']
-            data_conclusao = processo['data_conclusao']
-            
-            # Converter dates para strings se necessário
-            if data_recebimento and not isinstance(data_recebimento, str):
-                data_recebimento = str(data_recebimento)
-            if data_instauracao and not isinstance(data_instauracao, str):
-                data_instauracao = str(data_instauracao)
-            if data_conclusao and not isinstance(data_conclusao, str):
-                data_conclusao = str(data_conclusao)
+            (processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, 
+             data_recebimento, created_at, data_instauracao, responsavel_nome, responsavel_posto, responsavel_matricula,
+             presidente_nome, presidente_posto, presidente_matricula,
+             interrogante_nome, interrogante_posto, interrogante_matricula,
+             escrivao_nome, escrivao_posto, escrivao_matricula,
+             local_origem, processo_sei, nome_pm_id, status_pm, 
+             pm_envolvido_nome, pm_envolvido_posto, pm_envolvido_matricula, numero_controle, 
+             concluido, data_conclusao) = processo
 
             # Formatar responsável completo: "posto/grad + matrícula + nome"
             responsavel_completo = f"{responsavel_posto} {responsavel_matricula} {responsavel_nome}".strip()
@@ -4979,8 +4972,8 @@ def obter_opcoes_filtros():
                     u_pm.posto_graduacao || ' ' || u_pm.matricula || ' ' || u_pm.nome,
                     ''
                 ) as pm_envolvido_completo,
-                TO_CHAR(p.data_instauracao, 'YYYY') as ano_instauracao,
-                TO_CHAR(p.data_recebimento, 'YYYY') as ano_recebimento
+                strftime('%Y', p.data_instauracao) as ano_instauracao,
+                strftime('%Y', p.data_recebimento) as ano_recebimento
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
             LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
@@ -5002,19 +4995,9 @@ def obter_opcoes_filtros():
         anos = set()
         
         for row in resultados:
-            # RealDictCursor retorna dicionários
-            tipo_detalhe = row['tipo_detalhe']
-            local_origem = row['local_origem']
-            local_fatos = row['local_fatos']
-            documento_iniciador = row['documento_iniciador']
-            status_pm = row['status_pm']
-            nome_vitima = row['nome_vitima']
-            responsavel_nome = row['responsavel_nome']
-            responsavel_posto = row['responsavel_posto']
-            responsavel_matricula = row['responsavel_matricula']
-            pm_envolvido_completo = row['pm_envolvido_completo']
-            ano_instauracao = row['ano_instauracao']
-            ano_recebimento = row['ano_recebimento']
+            (tipo_detalhe, local_origem, local_fatos, documento_iniciador, status_pm, nome_vitima,
+             responsavel_nome, responsavel_posto, responsavel_matricula, pm_envolvido_completo,
+             ano_instauracao, ano_recebimento) = row
             
             if tipo_detalhe:
                 tipos.add(tipo_detalhe)
@@ -5091,18 +5074,18 @@ def listar_transgressoes(gravidade=None):
         for t in transgressoes:
             if gravidade:
                 resultado.append({
-                    "id": t['id'],
-                    "inciso": t['inciso'],
-                    "texto": t['texto'],
-                    "display": f"{t['inciso']} - {t['texto']}"
+                    "id": t[0],
+                    "inciso": t[1],
+                    "texto": t[2],
+                    "display": f"{t[1]} - {t[2]}"
                 })
             else:
                 resultado.append({
-                    "id": t['id'],
-                    "gravidade": t['gravidade'],
-                    "inciso": t['inciso'],
-                    "texto": t['texto'],
-                    "display": f"{t['inciso']} - {t['texto']}"
+                    "id": t[0],
+                    "gravidade": t[1],
+                    "inciso": t[2],
+                    "texto": t[3],
+                    "display": f"{t[2]} - {t[3]}"
                 })
         
         return {"sucesso": True, "transgressoes": resultado}
@@ -5143,18 +5126,18 @@ def buscar_transgressoes(termo, gravidade=None):
         for t in transgressoes:
             if gravidade:
                 resultado.append({
-                    "id": t['id'],
-                    "inciso": t['inciso'],
-                    "texto": t['texto'],
-                    "display": f"{t['inciso']} - {t['texto']}"
+                    "id": t[0],
+                    "inciso": t[1],
+                    "texto": t[2],
+                    "display": f"{t[1]} - {t[2]}"
                 })
             else:
                 resultado.append({
-                    "id": t['id'],
-                    "gravidade": t['gravidade'],
-                    "inciso": t['inciso'],
-                    "texto": t['texto'],
-                    "display": f"{t['inciso']} - {t['texto']}"
+                    "id": t[0],
+                    "gravidade": t[1],
+                    "inciso": t[2],
+                    "texto": t[3],
+                    "display": f"{t[2]} - {t[3]}"
                 })
         
         return {"sucesso": True, "transgressoes": resultado}
@@ -5188,7 +5171,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE responsavel_id = %s AND ativo = TRUE 
             AND tipo_detalhe IN ('SR', 'SV')
         """, (user_id,))
-        estatisticas["encarregado_sindicancia"] = cursor.fetchone()['count']
+        estatisticas["encarregado_sindicancia"] = cursor.fetchone()[0]
         
         # 2. Encarregado de PADS
         cursor.execute("""
@@ -5196,7 +5179,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE responsavel_id = %s AND ativo = TRUE 
             AND tipo_detalhe = 'PADS'
         """, (user_id,))
-        estatisticas["encarregado_pads"] = cursor.fetchone()['count']
+        estatisticas["encarregado_pads"] = cursor.fetchone()[0]
         
         # 3. Encarregado de IPM
         cursor.execute("""
@@ -5204,7 +5187,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE responsavel_id = %s AND ativo = TRUE 
             AND tipo_detalhe = 'IPM'
         """, (user_id,))
-        estatisticas["encarregado_ipm"] = cursor.fetchone()['count']
+        estatisticas["encarregado_ipm"] = cursor.fetchone()[0]
         
         # 4. Encarregado de Feito Preliminar (FP)
         cursor.execute("""
@@ -5212,7 +5195,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE responsavel_id = %s AND ativo = TRUE 
             AND tipo_detalhe = 'FP'
         """, (user_id,))
-        estatisticas["encarregado_feito_preliminar"] = cursor.fetchone()['count']
+        estatisticas["encarregado_feito_preliminar"] = cursor.fetchone()[0]
         
         # 5. Encarregado de PAD
         cursor.execute("""
@@ -5220,14 +5203,14 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE responsavel_id = %s AND ativo = TRUE 
             AND tipo_detalhe = 'PAD'
         """, (user_id,))
-        estatisticas["encarregado_pad"] = cursor.fetchone()['count']
+        estatisticas["encarregado_pad"] = cursor.fetchone()[0]
         
         # 6. Escrivão
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE escrivao_id = %s AND ativo = TRUE
         """, (user_id,))
-        estatisticas["escrivao"] = cursor.fetchone()['count']
+        estatisticas["escrivao"] = cursor.fetchone()[0]
         
         # 7. Envolvido como sindicado (status_pm = 'Sindicado')
         cursor.execute("""
@@ -5235,7 +5218,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE nome_pm_id = %s AND ativo = TRUE 
             AND LOWER(status_pm) = 'sindicado'
         """, (user_id,))
-        estatisticas["envolvido_sindicado"] = cursor.fetchone()['count']
+        estatisticas["envolvido_sindicado"] = cursor.fetchone()[0]
         
         # 8. Envolvido como acusado (status_pm = 'Acusado')
         cursor.execute("""
@@ -5243,7 +5226,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE nome_pm_id = %s AND ativo = TRUE 
             AND LOWER(status_pm) = 'acusado'
         """, (user_id,))
-        estatisticas["envolvido_acusado"] = cursor.fetchone()['count']
+        estatisticas["envolvido_acusado"] = cursor.fetchone()[0]
         
         # 9. Envolvido como indiciado (status_pm = 'Indiciado')
         cursor.execute("""
@@ -5251,7 +5234,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE nome_pm_id = %s AND ativo = TRUE 
             AND LOWER(status_pm) = 'indiciado'
         """, (user_id,))
-        estatisticas["envolvido_indiciado"] = cursor.fetchone()['count']
+        estatisticas["envolvido_indiciado"] = cursor.fetchone()[0]
         
         # 10. Envolvido como investigado (status_pm = 'Investigado')
         cursor.execute("""
@@ -5259,7 +5242,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE nome_pm_id = %s AND ativo = TRUE 
             AND LOWER(status_pm) = 'investigado'
         """, (user_id,))
-        estatisticas["envolvido_investigado"] = cursor.fetchone()['count']
+        estatisticas["envolvido_investigado"] = cursor.fetchone()[0]
         
         # 11. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
         cursor.execute("""
@@ -5268,7 +5251,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE pme.pm_id = %s AND p.ativo = TRUE 
             AND LOWER(p.status_pm) = 'sindicado'
         """, (user_id,))
-        estatisticas["envolvido_sindicado"] += cursor.fetchone()['count']
+        estatisticas["envolvido_sindicado"] += cursor.fetchone()[0]
         
         cursor.execute("""
             SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
@@ -5276,7 +5259,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE pme.pm_id = %s AND p.ativo = TRUE 
             AND LOWER(p.status_pm) = 'acusado'
         """, (user_id,))
-        estatisticas["envolvido_acusado"] += cursor.fetchone()['count']
+        estatisticas["envolvido_acusado"] += cursor.fetchone()[0]
         
         cursor.execute("""
             SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
@@ -5284,7 +5267,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE pme.pm_id = %s AND p.ativo = TRUE 
             AND LOWER(p.status_pm) = 'indiciado'
         """, (user_id,))
-        estatisticas["envolvido_indiciado"] += cursor.fetchone()['count']
+        estatisticas["envolvido_indiciado"] += cursor.fetchone()[0]
         
         cursor.execute("""
             SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
@@ -5292,7 +5275,7 @@ def obter_estatisticas_usuario(user_id, user_type):
             WHERE pme.pm_id = %s AND p.ativo = TRUE 
             AND LOWER(p.status_pm) = 'investigado'
         """, (user_id,))
-        estatisticas["envolvido_investigado"] += cursor.fetchone()['count']
+        estatisticas["envolvido_investigado"] += cursor.fetchone()[0]
         
         conn.close()
         
@@ -5514,15 +5497,15 @@ def listar_crimes_contravencoes():
         result = []
         for crime in crimes:
             result.append({
-                'id': crime['id'],
-                'tipo': crime['tipo'],
-                'dispositivo_legal': crime['dispositivo_legal'],
-                'artigo': crime['artigo'],
-                'descricao_artigo': crime['descricao_artigo'],
-                'paragrafo': crime['paragrafo'] if crime['paragrafo'] else '',
-                'inciso': crime['inciso'] if crime['inciso'] else '',
-                'alinea': crime['alinea'] if crime['alinea'] else '',
-                'ativo': bool(crime['ativo'])
+                'id': crime[0],
+                'tipo': crime[1],
+                'dispositivo_legal': crime[2],
+                'artigo': crime[3],
+                'descricao_artigo': crime[4],
+                'paragrafo': crime[5] if crime[5] else '',
+                'inciso': crime[6] if crime[6] else '',
+                'alinea': crime[7] if crime[7] else '',
+                'ativo': bool(crime[8])
             })
         
         return {'success': True, 'data': result}
@@ -5628,15 +5611,15 @@ def obter_crime_por_id(crime_id):
             return {'success': False, 'error': 'Crime não encontrado'}
         
         result = {
-            'id': crime['id'],
-            'tipo': crime['tipo'],
-            'dispositivo_legal': crime['dispositivo_legal'],
-            'artigo': crime['artigo'],
-            'descricao_artigo': crime['descricao_artigo'],
-            'paragrafo': crime['paragrafo'] if crime['paragrafo'] else '',
-            'inciso': crime['inciso'] if crime['inciso'] else '',
-            'alinea': crime['alinea'] if crime['alinea'] else '',
-            'ativo': bool(crime['ativo'])
+            'id': crime[0],
+            'tipo': crime[1],
+            'dispositivo_legal': crime[2],
+            'artigo': crime[3],
+            'descricao_artigo': crime[4],
+            'paragrafo': crime[5] if crime[5] else '',
+            'inciso': crime[6] if crime[6] else '',
+            'alinea': crime[7] if crime[7] else '',
+            'ativo': bool(crime[8])
         }
         
         return {'success': True, 'data': result}
@@ -5712,13 +5695,13 @@ def listar_todas_transgressoes():
         transgressoes = []
         for row in cursor.fetchall():
             transgressoes.append({
-                'id': row['id'],
-                'artigo': row['artigo'],
-                'gravidade': row['gravidade'].title() if row['gravidade'] else '',  # Capitalizar primeira letra
-                'inciso': row['inciso'],
-                'texto': row['texto'],
-                'ativo': bool(row['ativo']),
-                'created_at': row['created_at']
+                'id': row[0],
+                'artigo': row[1],
+                'gravidade': row[2].title() if row[2] else '',  # Capitalizar primeira letra
+                'inciso': row[3],
+                'texto': row[4],
+                'ativo': bool(row[5]),
+                'created_at': row[6]
             })
         
         conn.close()
@@ -5805,13 +5788,13 @@ def obter_transgressao_por_id(transgressao_id):
         
         if row:
             transgressao = {
-                'id': row['id'],
-                'artigo': row['artigo'],
-                'gravidade': row['gravidade'],
-                'inciso': row['inciso'],
-                'texto': row['texto'],
-                'ativo': bool(row['ativo']),
-                'created_at': row['created_at']
+                'id': row[0],
+                'artigo': row[1],
+                'gravidade': row[2],
+                'inciso': row[3],
+                'texto': row[4],
+                'ativo': bool(row[5]),
+                'created_at': row[6]
             }
             print(f"✅ Transgressão encontrada: Artigo {transgressao['artigo']} - {transgressao['inciso']}")
             return {'success': True, 'data': transgressao}
@@ -5929,7 +5912,7 @@ def listar_infracoes_estatuto_art29():
             WHERE ativo = TRUE
             ORDER BY 
                 CASE 
-                    WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
+                    WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
                     ELSE 999
                 END,
                 inciso
@@ -5941,10 +5924,10 @@ def listar_infracoes_estatuto_art29():
         resultado = []
         for infracao in infracoes:
             resultado.append({
-                'id': infracao['id'],
-                'inciso': infracao['inciso'],
-                'texto': infracao['texto'],
-                'ativo': bool(infracao['ativo'])
+                'id': infracao[0],
+                'inciso': infracao[1],
+                'texto': infracao[2],
+                'ativo': bool(infracao[3])
             })
         
         print(f"✅ {len(resultado)} infrações do Art. 29 encontradas")
@@ -5974,10 +5957,10 @@ def obter_infracao_estatuto_art29(infracao_id):
         
         if infracao:
             resultado = {
-                'id': infracao['id'],
-                'inciso': infracao['inciso'],
-                'texto': infracao['texto'],
-                'ativo': bool(infracao['ativo'])
+                'id': infracao[0],
+                'inciso': infracao[1],
+                'texto': infracao[2],
+                'ativo': bool(infracao[3])
             }
             print(f"✅ Infração encontrada: {resultado['inciso']}")
             return {'success': True, 'data': resultado}
@@ -6378,7 +6361,7 @@ def listar_pms_envolvidos_com_indicios(procedimento_id):
             
             # Carregar resumo dos indícios
             cursor.execute("SELECT COUNT(*) FROM pm_envolvido_indicios WHERE pm_envolvido_id = %s", (pm_envolvido_id,))
-            total_categorias = cursor.fetchone()['count']
+            total_categorias = cursor.fetchone()[0]
             
             # Para crimes, rdpm e art29, precisamos buscar via pm_indicios_id
             cursor.execute("""
@@ -6386,21 +6369,21 @@ def listar_pms_envolvidos_com_indicios(procedimento_id):
                 JOIN pm_envolvido_indicios pei ON pec.pm_indicios_id = pei.id 
                 WHERE pei.pm_envolvido_id = %s
             """, (pm_envolvido_id,))
-            total_crimes = cursor.fetchone()['count']
+            total_crimes = cursor.fetchone()[0]
             
             cursor.execute("""
                 SELECT COUNT(*) FROM pm_envolvido_rdpm per 
                 JOIN pm_envolvido_indicios pei ON per.pm_indicios_id = pei.id 
                 WHERE pei.pm_envolvido_id = %s
             """, (pm_envolvido_id,))
-            total_rdpm = cursor.fetchone()['count']
+            total_rdpm = cursor.fetchone()[0]
             
             cursor.execute("""
                 SELECT COUNT(*) FROM pm_envolvido_art29 pea 
                 JOIN pm_envolvido_indicios pei ON pea.pm_indicios_id = pei.id 
                 WHERE pei.pm_envolvido_id = %s
             """, (pm_envolvido_id,))
-            total_art29 = cursor.fetchone()['count']
+            total_art29 = cursor.fetchone()[0]
             
             pms_envolvidos.append({
                 'pm_envolvido_id': pm_envolvido_id,
@@ -6603,7 +6586,7 @@ def buscar_art29_para_indicios(termo=''):
                 AND (inciso LIKE %s OR texto LIKE %s)
                 ORDER BY 
                     CASE 
-                        WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
                         ELSE 999
                     END,
                     inciso
@@ -6616,7 +6599,7 @@ def buscar_art29_para_indicios(termo=''):
                 WHERE ativo = TRUE
                 ORDER BY 
                     CASE 
-                        WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
+                        WHEN inciso GLOB '[IVXLC]*' THEN LENGTH(inciso)
                         ELSE 999
                     END,
                     inciso
@@ -7027,7 +7010,7 @@ def obter_anos_relatorio_anual():
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         cursor.execute("""
-            SELECT DISTINCT TO_CHAR(data_instauracao, 'YYYY') as ano
+            SELECT DISTINCT strftime('%Y', data_instauracao) as ano
             FROM processos_procedimentos
             WHERE data_instauracao IS NOT NULL
             AND ativo = TRUE
@@ -7063,20 +7046,20 @@ def gerar_relatorio_anual(ano):
         # Total de processos (tipo_geral = 'processo')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'processo'
             AND ativo = TRUE
         """, (str(ano),))
-        total_processos = cursor.fetchone()['count']
+        total_processos = cursor.fetchone()[0]
         
         # Total de procedimentos (tipo_geral = 'procedimento')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'procedimento'
             AND ativo = TRUE
         """, (str(ano),))
-        total_procedimentos = cursor.fetchone()['count']
+        total_procedimentos = cursor.fetchone()[0]
         
         total_geral = total_processos + total_procedimentos
         
@@ -7086,7 +7069,7 @@ def gerar_relatorio_anual(ano):
         cursor.execute("""
             SELECT tipo_detalhe, COUNT(*) as qtd 
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'processo'
             AND ativo = TRUE
             GROUP BY tipo_detalhe
@@ -7097,7 +7080,7 @@ def gerar_relatorio_anual(ano):
         cursor.execute("""
             SELECT tipo_detalhe, COUNT(*) as qtd 
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'procedimento'
             AND ativo = TRUE
             GROUP BY tipo_detalhe
@@ -7115,7 +7098,7 @@ def gerar_relatorio_anual(ano):
                 END as status,
                 COUNT(*) as qtd 
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'processo'
             AND ativo = TRUE
             GROUP BY status
@@ -7131,7 +7114,7 @@ def gerar_relatorio_anual(ano):
                 END as status,
                 COUNT(*) as qtd 
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_geral = 'procedimento'
             AND ativo = TRUE
             GROUP BY status
@@ -7146,7 +7129,7 @@ def gerar_relatorio_anual(ano):
                 indicios_categorias,
                 COUNT(*) as qtd
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_detalhe IN ('IPM', 'Sindicância')
             AND concluido = TRUE
             AND ativo = TRUE
@@ -7170,7 +7153,7 @@ def gerar_relatorio_anual(ano):
                 solucao_tipo,
                 COUNT(*) as qtd
             FROM processos_procedimentos 
-            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+            WHERE strftime('%Y', data_instauracao) = %s
             AND tipo_detalhe IN ('PAD', 'PADS')
             AND concluido = TRUE
             AND ativo = TRUE

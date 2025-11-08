@@ -1,7 +1,5 @@
 # prazos_andamentos_manager.py - Gerenciador de Prazos e Andamentos
-import psycopg2
-import psycopg2.extras
-from db_config import get_pg_connection
+import sqlite3
 import uuid
 from datetime import datetime, timedelta
 import json
@@ -9,15 +7,12 @@ import json
 class PrazosAndamentosManager:
     """Gerenciador de prazos e andamentos dos processos"""
     
-    def __init__(self):
-        # PostgreSQL não usa db_path - conexão gerenciada pelo db_config
-        pass
+    def __init__(self, db_path='usuarios.db'):
+        self.db_path = db_path
     
     def get_connection(self):
-        """Retorna conexão com o banco PostgreSQL"""
-        return get_pg_connection()
         """Retorna conexão com o banco"""
-        return get_pg_connection()
+        return sqlite3.connect(self.db_path)
     
     # ============================================
     # GERENCIAMENTO DE PRAZOS
@@ -27,7 +22,7 @@ class PrazosAndamentosManager:
         """Adiciona prazo inicial para um processo"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             # Calcular data de vencimento
             data_inicio_obj = datetime.strptime(data_inicio, "%Y-%m-%d")
@@ -39,7 +34,7 @@ class PrazosAndamentosManager:
                 INSERT INTO prazos_processo (
                     id, processo_id, tipo_prazo, data_inicio, data_vencimento, 
                     dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 prazo_id, processo_id, 'inicial', data_inicio, 
                 data_vencimento.strftime("%Y-%m-%d"), dias_prazo, 
@@ -63,7 +58,7 @@ class PrazosAndamentosManager:
                 return {"sucesso": False, "mensagem": "Dias de prorrogação deve ser maior que zero."}
 
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
 
             # Garantir colunas novas (numero_portaria, data_portaria, ordem_prorrogacao)
             try:
@@ -83,7 +78,7 @@ class PrazosAndamentosManager:
             cursor.execute('''
                 SELECT id, data_vencimento, dias_adicionados 
                 FROM prazos_processo 
-                WHERE processo_id = %s AND ativo = TRUE
+                WHERE processo_id = ? AND ativo = 1
             ''', (processo_id,))
             
             prazo_atual = cursor.fetchone()
@@ -92,7 +87,7 @@ class PrazosAndamentosManager:
                 cursor.execute("""
                     SELECT tipo_detalhe, documento_iniciador, data_recebimento
                     FROM processos_procedimentos
-                    WHERE id = %s AND ativo = TRUE
+                    WHERE id = ? AND ativo = 1
                 """, (processo_id,))
                 proc = cursor.fetchone()
                 if not proc:
@@ -119,7 +114,7 @@ class PrazosAndamentosManager:
                     INSERT INTO prazos_processo (
                         id, processo_id, tipo_prazo, data_inicio, data_vencimento,
                         dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo
-                    ) VALUES (%s, %s, 'inicial', %s, %s, %s, %s, %s, %s, 1)
+                    ) VALUES (?, ?, 'inicial', ?, ?, ?, ?, ?, ?, 1)
                 ''', (
                     prazo_id_ini, processo_id, data_recebimento, data_vencimento_ini.strftime("%Y-%m-%d"),
                     dias_base, 'Prazo inicial automático', autorizado_por, autorizado_tipo
@@ -129,7 +124,7 @@ class PrazosAndamentosManager:
                 cursor.execute('''
                     SELECT id, data_vencimento, dias_adicionados 
                     FROM prazos_processo 
-                    WHERE processo_id = %s AND ativo = TRUE
+                    WHERE processo_id = ? AND ativo = 1
                 ''', (processo_id,))
                 prazo_atual = cursor.fetchone()
                 if not prazo_atual:
@@ -138,8 +133,8 @@ class PrazosAndamentosManager:
             # Desativar prazo atual
             cursor.execute('''
                 UPDATE prazos_processo 
-                SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP 
-                WHERE id = %s
+                SET ativo = 0, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
             ''', (prazo_atual[0],))
             
             # Calcular nova data de vencimento
@@ -152,7 +147,7 @@ class PrazosAndamentosManager:
             cursor.execute('''
                 SELECT COALESCE(MAX(ordem_prorrogacao), 0)
                 FROM prazos_processo
-                WHERE processo_id = %s AND tipo_prazo = 'prorrogacao'
+                WHERE processo_id = ? AND tipo_prazo = 'prorrogacao'
             ''', (processo_id,))
             ordem_atual = cursor.fetchone()[0] or 0
             proxima_ordem = ordem_atual + 1
@@ -164,7 +159,7 @@ class PrazosAndamentosManager:
                     id, processo_id, tipo_prazo, data_inicio, data_vencimento,
                     dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo,
                     numero_portaria, data_portaria, ordem_prorrogacao
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 novo_prazo_id, processo_id, 'prorrogacao', 
                 data_vencimento_atual.strftime("%Y-%m-%d"), nova_data_vencimento.strftime("%Y-%m-%d"),
@@ -190,13 +185,13 @@ class PrazosAndamentosManager:
         """Lista histórico de prazos (inicial e prorrogações) com sequência e portaria"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             cursor.execute('''
                 SELECT id, tipo_prazo, data_inicio, data_vencimento, dias_adicionados,
                        motivo, autorizado_por, autorizado_tipo, ativo,
                        numero_portaria, data_portaria, ordem_prorrogacao, created_at
                 FROM prazos_processo
-                WHERE processo_id = %s
+                WHERE processo_id = ?
                 ORDER BY 
                     CASE tipo_prazo WHEN 'inicial' THEN 0 ELSE 1 END,
                     COALESCE(ordem_prorrogacao, 0)
@@ -229,7 +224,7 @@ class PrazosAndamentosManager:
         """Retorna processos com prazos vencendo"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             cursor.execute('''
                 SELECT 
@@ -238,9 +233,9 @@ class PrazosAndamentosManager:
                     JULIANDAY(pr.data_vencimento) - JULIANDAY(DATE('now')) as dias_restantes,
                     COALESCE(u.nome, 'Desconhecido') as responsavel
                 FROM processos_procedimentos p
-                INNER JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = TRUE
+                INNER JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = 1
                 LEFT JOIN usuarios u ON p.responsavel_id = u.id
-                WHERE p.ativo = TRUE 
+                WHERE p.ativo = 1 
                   AND pr.data_vencimento <= DATE('now', '+{} days')
                 ORDER BY pr.data_vencimento ASC
             '''.format(dias_antecedencia))
@@ -273,7 +268,7 @@ class PrazosAndamentosManager:
         """Adiciona um andamento ao processo"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             andamento_id = str(uuid.uuid4())
             
@@ -282,7 +277,7 @@ class PrazosAndamentosManager:
                     id, processo_id, data_movimentacao, tipo_andamento, descricao,
                     destino_origem, usuario_responsavel_id, usuario_responsavel_tipo,
                     observacoes, documento_anexo
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 andamento_id, processo_id, data_movimentacao, tipo_andamento, descricao,
                 destino_origem, usuario_id, usuario_tipo, observacoes, documento_anexo
@@ -300,7 +295,7 @@ class PrazosAndamentosManager:
         """Lista todos os andamentos de um processo"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             cursor.execute('''
                 SELECT 
@@ -310,7 +305,7 @@ class PrazosAndamentosManager:
                     COALESCE(u.posto_graduacao, '') as posto_graduacao
                 FROM andamentos_processo a
                 LEFT JOIN usuarios u ON a.usuario_responsavel_id = u.id
-                WHERE a.processo_id = %s
+                WHERE a.processo_id = ?
                 ORDER BY a.data_movimentacao DESC, a.created_at DESC
             ''', (processo_id,))
             
@@ -348,7 +343,7 @@ class PrazosAndamentosManager:
         if not usuario_id:
             return None
         try:
-            cursor.execute("SELECT 1 FROM usuarios WHERE id = %s AND ativo = TRUE", (usuario_id,))
+            cursor.execute("SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1", (usuario_id,))
             if cursor.fetchone():
                 return 'usuario'
         except Exception:
@@ -359,7 +354,7 @@ class PrazosAndamentosManager:
         """Compatível com main: cria um andamento (tabela andamentos_processo)."""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             # Normalizar tipo para respeitar o CHECK constraint
             tipos_validos = {
@@ -383,7 +378,7 @@ class PrazosAndamentosManager:
                     id, processo_id, data_movimentacao, tipo_andamento, descricao,
                     destino_origem, usuario_responsavel_id, usuario_responsavel_tipo,
                     observacoes, documento_anexo
-                ) VALUES (%s, %s, %s, %s, %s, NULL, %s, %s, %s, NULL)
+                ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL)
             ''', (
                 andamento_id, processo_id, data_mov, tipo_norm, descricao,
                 responsavel_id, usuario_tipo, observacoes
@@ -398,10 +393,10 @@ class PrazosAndamentosManager:
         """Compatível com main: marca um prazo como concluído (desativa)."""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             # Obter dados do prazo para log/andamento
-            cursor.execute("SELECT processo_id, data_vencimento FROM prazos_processo WHERE id = %s", (prazo_id,))
+            cursor.execute("SELECT processo_id, data_vencimento FROM prazos_processo WHERE id = ?", (prazo_id,))
             row = cursor.fetchone()
             if not row:
                 conn.close()
@@ -409,7 +404,7 @@ class PrazosAndamentosManager:
             proc_id, data_venc = row[0], row[1]
             
             # Desativar prazo
-            cursor.execute("UPDATE prazos_processo SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (prazo_id,))
+            cursor.execute("UPDATE prazos_processo SET ativo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (prazo_id,))
             
             # Registrar andamento de conclusão (opcional)
             try:
@@ -424,7 +419,7 @@ class PrazosAndamentosManager:
                         id, processo_id, data_movimentacao, tipo_andamento, descricao,
                         destino_origem, usuario_responsavel_id, usuario_responsavel_tipo,
                         observacoes, documento_anexo
-                    ) VALUES (%s, %s, %s, 'conclusao', %s, NULL, %s, %s, %s, NULL)
+                    ) VALUES (?, ?, ?, 'conclusao', ?, NULL, ?, ?, ?, NULL)
                 ''', (
                     andamento_id, proc_id, _dt.now().strftime("%Y-%m-%d"), msg,
                     responsavel_id, usuario_tipo, observacoes
@@ -448,17 +443,17 @@ class PrazosAndamentosManager:
             if not novo_status:
                 return {"sucesso": False, "mensagem": "Status inválido"}
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             # Garantir status na tabela de catálogo
-            cursor.execute("SELECT 1 FROM status_processo WHERE codigo = %s", (novo_status,))
+            cursor.execute("SELECT 1 FROM status_processo WHERE codigo = ?", (novo_status,))
             if not cursor.fetchone():
                 cursor.execute(
-                    "INSERT INTO status_processo (id, codigo, descricao, ativo) VALUES (%s, %s, %s, 1)",
+                    "INSERT INTO status_processo (id, codigo, descricao, ativo) VALUES (?, ?, ?, 1)",
                     (str(uuid.uuid4()), novo_status, novo_status)
                 )
             # Desativar status atual
             cursor.execute(
-                "UPDATE status_detalhado_processo SET ativo = FALSE WHERE processo_id = %s AND ativo = TRUE",
+                "UPDATE status_detalhado_processo SET ativo = 0 WHERE processo_id = ? AND ativo = 1",
                 (processo_id,)
             )
             # Inserir novo status
@@ -468,7 +463,7 @@ class PrazosAndamentosManager:
             cursor.execute('''
                 INSERT INTO status_detalhado_processo (
                     id, processo_id, status_codigo, data_alteracao, usuario_id, usuario_tipo, observacoes, ativo
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
             ''', (sid, processo_id, novo_status, _dt.now().strftime("%Y-%m-%d"), responsavel_id, usuario_tipo, observacoes))
             conn.commit()
             conn.close()
@@ -480,13 +475,13 @@ class PrazosAndamentosManager:
         """Retorna o histórico de status detalhado (mais recente primeiro)."""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             cursor.execute('''
                 SELECT s.id, s.status_codigo, s.data_alteracao, s.observacoes, s.ativo,
                        COALESCE(u.nome, 'Sistema') as usuario_nome
                 FROM status_detalhado_processo s
                 LEFT JOIN usuarios u ON s.usuario_id = u.id
-                WHERE s.processo_id = %s
+                WHERE s.processo_id = ?
                 ORDER BY s.data_alteracao DESC, s.created_at DESC
             ''', (processo_id,))
             rows = cursor.fetchall()
@@ -504,7 +499,7 @@ class PrazosAndamentosManager:
         """Resumo para dashboard com base no prazo ativo (ou ausência dele)."""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             cursor.execute('''
                 SELECT 
                     CASE 
@@ -515,8 +510,8 @@ class PrazosAndamentosManager:
                     END as situacao,
                     COUNT(*)
                 FROM processos_procedimentos p
-                LEFT JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = TRUE
-                WHERE p.ativo = TRUE
+                LEFT JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = 1
+                WHERE p.ativo = 1
                 GROUP BY situacao
             ''')
             mapa = { 'vencido': 0, 'vencendo': 0, 'no_prazo': 0, 'sem_prazo': 0 }
@@ -545,26 +540,26 @@ class PrazosAndamentosManager:
         """Relatório consolidado de um processo/procedimento."""
         try:
             conn = self.get_connection()
-            c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            c = conn.cursor()
             c.execute('''
                 SELECT id, numero, tipo_geral, tipo_detalhe, documento_iniciador,
                        data_instauracao, data_recebimento, concluido, data_conclusao,
                        responsavel_id, responsavel_tipo, local_origem
                 FROM processos_procedimentos
-                WHERE id = %s AND ativo = TRUE
+                WHERE id = ? AND ativo = 1
             ''', (processo_id,))
             p = c.fetchone()
             if not p:
                 conn.close()
                 return {"sucesso": False, "mensagem": "Processo não encontrado"}
             # Prazo ativo
-            c.execute("SELECT data_inicio, data_vencimento, dias_adicionados, tipo_prazo, numero_portaria, data_portaria, ordem_prorrogacao FROM prazos_processo WHERE processo_id = %s AND ativo = TRUE", (processo_id,))
+            c.execute("SELECT data_inicio, data_vencimento, dias_adicionados, tipo_prazo, numero_portaria, data_portaria, ordem_prorrogacao FROM prazos_processo WHERE processo_id = ? AND ativo = 1", (processo_id,))
             prazo_ativo = c.fetchone()
             # Prorrogações
-            c.execute("SELECT data_inicio, data_vencimento, dias_adicionados, numero_portaria, data_portaria, ordem_prorrogacao FROM prazos_processo WHERE processo_id = %s AND tipo_prazo = 'prorrogacao' ORDER BY COALESCE(ordem_prorrogacao,0)", (processo_id,))
+            c.execute("SELECT data_inicio, data_vencimento, dias_adicionados, numero_portaria, data_portaria, ordem_prorrogacao FROM prazos_processo WHERE processo_id = ? AND tipo_prazo = 'prorrogacao' ORDER BY COALESCE(ordem_prorrogacao,0)", (processo_id,))
             prorrogs = c.fetchall()
             # Últimos andamentos
-            c.execute("SELECT data_movimentacao, tipo_andamento, descricao FROM andamentos_processo WHERE processo_id = %s ORDER BY data_movimentacao DESC, created_at DESC LIMIT 5", (processo_id,))
+            c.execute("SELECT data_movimentacao, tipo_andamento, descricao FROM andamentos_processo WHERE processo_id = ? ORDER BY data_movimentacao DESC, created_at DESC LIMIT 5", (processo_id,))
             and5 = c.fetchall()
             conn.close()
             return {
@@ -609,13 +604,13 @@ class PrazosAndamentosManager:
         """Relatório de processos agrupados por situação de prazo"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
-            where_clause = "WHERE p.ativo = TRUE"
+            where_clause = "WHERE p.ativo = 1"
             params = []
             
             if data_inicio and data_fim:
-                where_clause += " AND p.data_instauracao BETWEEN %s AND %s"
+                where_clause += " AND p.data_instauracao BETWEEN ? AND ?"
                 params.extend([data_inicio, data_fim])
             
             cursor.execute(f'''
@@ -630,7 +625,7 @@ class PrazosAndamentosManager:
                     COUNT(CASE WHEN p.tipo_geral = 'processo' THEN 1 END) as processos,
                     COUNT(CASE WHEN p.tipo_geral = 'procedimento' THEN 1 END) as procedimentos
                 FROM processos_procedimentos p
-                LEFT JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = TRUE
+                LEFT JOIN prazos_processo pr ON p.id = pr.processo_id AND pr.ativo = 1
                 {where_clause}
                 GROUP BY situacao_prazo
                 ORDER BY 
@@ -660,7 +655,7 @@ class PrazosAndamentosManager:
         """Relatório de andamentos por período"""
         try:
             conn = self.get_connection()
-            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor = conn.cursor()
             
             cursor.execute('''
                 SELECT 
@@ -668,7 +663,7 @@ class PrazosAndamentosManager:
                     COUNT(*) as total,
                     COUNT(DISTINCT a.processo_id) as processos_distintos
                 FROM andamentos_processo a
-                WHERE a.data_movimentacao BETWEEN %s AND %s
+                WHERE a.data_movimentacao BETWEEN ? AND ?
                 GROUP BY a.tipo_andamento
                 ORDER BY total DESC
             ''', (data_inicio, data_fim))
