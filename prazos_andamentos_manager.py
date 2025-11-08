@@ -331,7 +331,7 @@ class PrazosAndamentosManager:
                 "created_at": and_['created_at'],
                 "usuario_nome": and_['usuario_nome'],
                 "posto_graduacao": and_['posto_graduacao'],
-                "usuario_completo": f"{and_[9]} {and_[8]}".strip()
+                "usuario_completo": f"{and_['posto_graduacao']} {and_['usuario_nome']}".strip()
             } for and_ in andamentos]
             
         except Exception as e:

@@ -2693,7 +2693,10 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
             conn.close()
             return {"sucesso": False, "mensagem": "Processo não encontrado!"}
         
-        responsavel_atual_id, _, responsavel_atual_nome, responsavel_atual_posto, responsavel_atual_matricula = processo_atual
+        responsavel_atual_id = processo_atual['responsavel_id']
+        responsavel_atual_nome = processo_atual['responsavel_atual_nome']
+        responsavel_atual_posto = processo_atual['responsavel_atual_posto']
+        responsavel_atual_matricula = processo_atual['responsavel_atual_matricula']
 
         # Verificar se o novo encarregado é válido na tabela usuarios
         cursor.execute("SELECT id, nome, posto_graduacao, matricula FROM usuarios WHERE id = %s AND ativo = TRUE", (novo_encarregado_id,))
@@ -2704,7 +2707,10 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
             conn.close()
             return {"sucesso": False, "mensagem": "Novo encarregado não encontrado ou inativo!"}
         
-        novo_encarregado_id, novo_encarregado_nome, novo_encarregado_posto, novo_encarregado_matricula = novo_encarregado
+        novo_encarregado_id = novo_encarregado['id']
+        novo_encarregado_nome = novo_encarregado['nome']
+        novo_encarregado_posto = novo_encarregado['posto_graduacao']
+        novo_encarregado_matricula = novo_encarregado['matricula']
         
         # Verificar se é o mesmo encarregado
         if responsavel_atual_id == novo_encarregado_id:
@@ -2713,7 +2719,8 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
         
         # Obter histórico atual
         cursor.execute("SELECT historico_encarregados FROM processos_procedimentos WHERE id = %s", (processo_id,))
-        historico_atual = cursor.fetchone()[0]
+        historico_result = cursor.fetchone()
+        historico_atual = historico_result['historico_encarregados'] if historico_result else None
         
         # Criar registro de substituição
         import json
@@ -4308,7 +4315,7 @@ def adicionar_andamento(processo_id, texto, usuario_nome=None):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos existentes ou criar lista vazia
-        andamentos_json = result[0] if result[0] else '[]'
+        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
         try:
             andamentos = json.loads(andamentos_json)
         except:
@@ -4363,7 +4370,7 @@ def listar_andamentos(processo_id):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos
-        andamentos_json = result[0] if result[0] else '[]'
+        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
         try:
             andamentos = json.loads(andamentos_json)
         except:
