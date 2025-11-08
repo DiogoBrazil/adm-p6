@@ -4421,15 +4421,15 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
         where_clause = "WHERE p.ativo = TRUE"
         search_params = []
 
-        # Adicionar busca por texto se fornecida
+        # Adicionar busca por texto se fornecida (case-insensitive)
         if search_term:
             where_clause += """ AND (
-                p.numero LIKE %s OR p.tipo_detalhe LIKE %s OR p.local_origem LIKE %s OR
-                p.processo_sei LIKE %s OR p.numero_portaria LIKE %s OR p.numero_memorando LIKE %s OR
-                p.numero_feito LIKE %s OR 
-                COALESCE(u_resp.nome, '') LIKE %s OR
-                COALESCE(u_pm.nome, '') LIKE %s OR
-                COALESCE(p.resumo_fatos, '') LIKE %s
+                p.numero ILIKE %s OR p.tipo_detalhe ILIKE %s OR p.local_origem ILIKE %s OR
+                p.processo_sei ILIKE %s OR p.numero_portaria ILIKE %s OR p.numero_memorando ILIKE %s OR
+                p.numero_feito ILIKE %s OR 
+                COALESCE(u_resp.nome, '') ILIKE %s OR
+                COALESCE(u_pm.nome, '') ILIKE %s OR
+                COALESCE(p.resumo_fatos, '') ILIKE %s
             )"""
             search_term_like = f"%{search_term}%"
             search_params = [search_term_like] * 10
