@@ -105,12 +105,14 @@ function adicionarPessoaInquirida() {
         <input type="text" 
                class="form-control pessoa-inquirida-input" 
                placeholder="Digite o nome da pessoa a ser inquirida"
-               id="pessoa_inquirida_input_${pessoasInquiridasCount}">
+               id="pessoa_inquirida_input_${pessoasInquiridasCount}"
+               style="flex: 1; max-width: calc(100% - 60px);">
         <button type="button" 
-                class="btn btn-sm btn-danger ms-2" 
+                class="btn btn-danger" 
                 onclick="removerPessoaInquirida(${pessoasInquiridasCount})"
-                title="Remover">
-            <i class="fas fa-times"></i>
+                title="Remover pessoa"
+                style="padding: 6px 12px; margin-left: 8px; flex-shrink: 0; background-color: #dc3545; border-color: #dc3545;">
+            <i class="fas fa-trash-alt"></i>
         </button>
     `;
     
@@ -207,12 +209,14 @@ function carregarDadosParaEdicao(procedimento) {
                         <input type="text" 
                                class="form-control pessoa-inquirida-input" 
                                value="${pessoa}"
-                               id="pessoa_inquirida_input_${pessoasInquiridasCount}">
+                               id="pessoa_inquirida_input_${pessoasInquiridasCount}"
+                               style="flex: 1; max-width: calc(100% - 60px);">
                         <button type="button" 
-                                class="btn btn-sm btn-danger ms-2" 
+                                class="btn btn-danger" 
                                 onclick="removerPessoaInquirida(${pessoasInquiridasCount})"
-                                title="Remover">
-                            <i class="fas fa-times"></i>
+                                title="Remover pessoa"
+                                style="padding: 6px 12px; margin-left: 8px; flex-shrink: 0; background-color: #dc3545; border-color: #dc3545;">
+                            <i class="fas fa-trash-alt"></i>
                         </button>
                     `;
                     

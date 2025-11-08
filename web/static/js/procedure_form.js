@@ -25,13 +25,13 @@ function adicionarPessoaInquirida(nomeInicial = '') {
                placeholder="Digite o nome da pessoa a ser inquirida"
                id="pessoa_inquirida_input_${pessoasInquiridasCount}"
                value="${nomeInicial}"
-               style="flex: 1;">
+               style="flex: 1; max-width: calc(100% - 60px);">
         <button type="button" 
-                class="btn btn-sm btn-danger ms-2" 
+                class="btn btn-danger" 
                 onclick="removerPessoaInquirida(${pessoasInquiridasCount})"
-                title="Remover"
-                style="margin-left: 8px;">
-            <i class="fas fa-times"></i>
+                title="Remover pessoa"
+                style="padding: 6px 12px; margin-left: 8px; flex-shrink: 0; background-color: #dc3545; border-color: #dc3545;">
+            <i class="fas fa-trash-alt"></i>
         </button>
     `;
     
