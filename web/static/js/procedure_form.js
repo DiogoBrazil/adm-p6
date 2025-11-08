@@ -3364,8 +3364,8 @@ function adicionarPmAdicional() {
         </div>
         <div style="flex: 0 0 auto; display:flex; gap:4px; align-items:center;">
             <button type="button" class="btn-remover-pm" data-index="${index}" 
-                    style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;">
-                <i class="fas fa-times"></i>
+                    style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 14px;" title="Remover PM">
+                <i class="fas fa-trash-alt"></i>
             </button>
         </div>
     `;
