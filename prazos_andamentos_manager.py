@@ -65,19 +65,8 @@ class PrazosAndamentosManager:
             conn = self.get_connection()
             cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-            # Garantir colunas novas (numero_portaria, data_portaria, ordem_prorrogacao)
-            try:
-                cursor.execute("PRAGMA table_info(prazos_processo)")
-                cols = [c[1] for c in cursor.fetchall()]
-                if 'numero_portaria' not in cols:
-                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN numero_portaria TEXT")
-                if 'data_portaria' not in cols:
-                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN data_portaria DATE")
-                if 'ordem_prorrogacao' not in cols:
-                    cursor.execute("ALTER TABLE prazos_processo ADD COLUMN ordem_prorrogacao INTEGER")
-                conn.commit()
-            except Exception:
-                pass
+            # PostgreSQL não precisa garantir colunas (já existem via migrations)
+            # Código SQLite removido (PRAGMA não funciona no PostgreSQL)
             
             # Buscar prazo atual
             cursor.execute('''
@@ -97,7 +86,9 @@ class PrazosAndamentosManager:
                 proc = cursor.fetchone()
                 if not proc:
                     return {"sucesso": False, "mensagem": "Processo não encontrado ou inativo"}
-                tipo_detalhe, documento_iniciador, data_recebimento = proc
+                tipo_detalhe = proc['tipo_detalhe']
+                documento_iniciador = proc['documento_iniciador']
+                data_recebimento = proc['data_recebimento']
                 if not data_recebimento:
                     return {"sucesso": False, "mensagem": "Processo não possui data de recebimento para iniciar prazo"}
                 # Regras básicas de prazo
@@ -112,16 +103,21 @@ class PrazosAndamentosManager:
                 elif tipo_detalhe in prazos_base:
                     dias_base = prazos_base[tipo_detalhe]
                 # Inserir prazo inicial
-                data_inicio_obj = datetime.strptime(data_recebimento, "%Y-%m-%d")
+                # Converter data_recebimento para string se for objeto date
+                if hasattr(data_recebimento, 'strftime'):
+                    data_recebimento_str = data_recebimento.strftime("%Y-%m-%d")
+                else:
+                    data_recebimento_str = str(data_recebimento)
+                data_inicio_obj = datetime.strptime(data_recebimento_str, "%Y-%m-%d")
                 data_vencimento_ini = data_inicio_obj + timedelta(days=dias_base)
                 prazo_id_ini = str(uuid.uuid4())
                 cursor.execute('''
                     INSERT INTO prazos_processo (
                         id, processo_id, tipo_prazo, data_inicio, data_vencimento,
                         dias_adicionados, motivo, autorizado_por, autorizado_tipo, ativo
-                    ) VALUES (%s, %s, 'inicial', %s, %s, %s, %s, %s, %s, 1)
+                    ) VALUES (%s, %s, 'inicial', %s, %s, %s, %s, %s, %s, TRUE)
                 ''', (
-                    prazo_id_ini, processo_id, data_recebimento, data_vencimento_ini.strftime("%Y-%m-%d"),
+                    prazo_id_ini, processo_id, data_recebimento_str, data_vencimento_ini.strftime("%Y-%m-%d"),
                     dias_base, 'Prazo inicial automático', autorizado_por, autorizado_tipo
                 ))
                 conn.commit()
@@ -140,21 +136,28 @@ class PrazosAndamentosManager:
                 UPDATE prazos_processo 
                 SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP 
                 WHERE id = %s
-            ''', (prazo_atual[0],))
+            ''', (prazo_atual['id'],))
             
             # Calcular nova data de vencimento
             # Dia inicial da contagem é o dia seguinte ao vencimento atual
-            data_vencimento_atual = datetime.strptime(prazo_atual[1], "%Y-%m-%d")
+            data_venc_value = prazo_atual['data_vencimento']
+            # Converter para string se for objeto date
+            if hasattr(data_venc_value, 'strftime'):
+                data_venc_str = data_venc_value.strftime("%Y-%m-%d")
+            else:
+                data_venc_str = str(data_venc_value)
+            data_vencimento_atual = datetime.strptime(data_venc_str, "%Y-%m-%d")
             inicio_prorrogacao = data_vencimento_atual + timedelta(days=1)
             nova_data_vencimento = inicio_prorrogacao + timedelta(days=dias_prorrogacao - 1) if dias_prorrogacao and dias_prorrogacao > 0 else inicio_prorrogacao
 
             # Calcular a ordem da prorrogação (nº sequencial)
             cursor.execute('''
-                SELECT COALESCE(MAX(ordem_prorrogacao), 0)
+                SELECT COALESCE(MAX(ordem_prorrogacao), 0) as max_ordem
                 FROM prazos_processo
                 WHERE processo_id = %s AND tipo_prazo = 'prorrogacao'
             ''', (processo_id,))
-            ordem_atual = cursor.fetchone()[0] or 0
+            resultado_ordem = cursor.fetchone()
+            ordem_atual = resultado_ordem['max_ordem'] if resultado_ordem else 0
             proxima_ordem = ordem_atual + 1
             
             # Criar novo prazo (prorrogação)
@@ -168,7 +171,7 @@ class PrazosAndamentosManager:
             ''', (
                 novo_prazo_id, processo_id, 'prorrogacao', 
                 data_vencimento_atual.strftime("%Y-%m-%d"), nova_data_vencimento.strftime("%Y-%m-%d"),
-                dias_prorrogacao, motivo, autorizado_por, autorizado_tipo, 1,
+                dias_prorrogacao, motivo, autorizado_por, autorizado_tipo, True,
                 numero_portaria, data_portaria, proxima_ordem
             ))
             
@@ -206,18 +209,18 @@ class PrazosAndamentosManager:
             result = []
             for r in rows:
                 result.append({
-                    "id": r[0],
-                    "tipo_prazo": r[1],
-                    "data_inicio": r[2],
-                    "data_vencimento": r[3],
-                    "dias_adicionados": r[4],
-                    "motivo": r[5],
-                    "autorizado_por": r[6],
-                    "autorizado_tipo": r[7],
-                    "ativo": bool(r[8]),
-                    "numero_portaria": r[9],
-                    "data_portaria": r[10],
-                    "ordem_prorrogacao": r[11],
+                    "id": r['id'],
+                    "tipo_prazo": r['tipo_prazo'],
+                    "data_inicio": r['data_inicio'],
+                    "data_vencimento": r['data_vencimento'],
+                    "dias_adicionados": r['dias_adicionados'],
+                    "motivo": r['motivo'],
+                    "autorizado_por": r['autorizado_por'],
+                    "autorizado_tipo": r['autorizado_tipo'],
+                    "ativo": bool(r['ativo']),
+                    "numero_portaria": r['numero_portaria'],
+                    "data_portaria": r['data_portaria'],
+                    "ordem_prorrogacao": r['ordem_prorrogacao'],
                     "created_at": r[12]
                 })
             return result
@@ -249,14 +252,14 @@ class PrazosAndamentosManager:
             conn.close()
             
             return [{
-                "processo_id": prazo[0],
-                "numero": prazo[1],
-                "tipo": prazo[2],
-                "data_vencimento": prazo[3],
-                "tipo_prazo": prazo[4],
-                "dias_restantes": int(prazo[5]) if prazo[5] else 0,
-                "responsavel": prazo[6],
-                "situacao": "vencido" if prazo[5] < 0 else "vencendo"
+                "processo_id": prazo['processo_id'],
+                "numero": prazo['numero'],
+                "tipo": prazo['tipo'],
+                "data_vencimento": prazo['data_vencimento'],
+                "tipo_prazo": prazo['tipo_prazo'],
+                "dias_restantes": int(prazo['dias_restantes']) if prazo['dias_restantes'] else 0,
+                "responsavel": prazo['responsavel'],
+                "situacao": "vencido" if prazo['dias_restantes'] < 0 else "vencendo"
             } for prazo in prazos]
             
         except Exception as e:
@@ -318,16 +321,16 @@ class PrazosAndamentosManager:
             conn.close()
             
             return [{
-                "id": and_[0],
-                "data_movimentacao": and_[1],
-                "tipo_andamento": and_[2],
-                "descricao": and_[3],
-                "destino_origem": and_[4],
-                "observacoes": and_[5],
-                "documento_anexo": and_[6],
-                "created_at": and_[7],
-                "usuario_nome": and_[8],
-                "posto_graduacao": and_[9],
+                "id": and_['id'],
+                "data_movimentacao": and_['data_movimentacao'],
+                "tipo_andamento": and_['tipo_andamento'],
+                "descricao": and_['descricao'],
+                "destino_origem": and_['destino_origem'],
+                "observacoes": and_['observacoes'],
+                "documento_anexo": and_['documento_anexo'],
+                "created_at": and_['created_at'],
+                "usuario_nome": and_['usuario_nome'],
+                "posto_graduacao": and_['posto_graduacao'],
                 "usuario_completo": f"{and_[9]} {and_[8]}".strip()
             } for and_ in andamentos]
             
@@ -406,7 +409,7 @@ class PrazosAndamentosManager:
             if not row:
                 conn.close()
                 return {"sucesso": False, "mensagem": "Prazo não encontrado"}
-            proc_id, data_venc = row[0], row[1]
+            proc_id, data_venc = row['processo_id'], row['data_vencimento']
             
             # Desativar prazo
             cursor.execute("UPDATE prazos_processo SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (prazo_id,))
@@ -492,7 +495,7 @@ class PrazosAndamentosManager:
             rows = cursor.fetchall()
             conn.close()
             return [{
-                "id": r[0], "status": r[1], "data": r[2], "observacoes": r[3], "ativo": bool(r[4]), "usuario": r[5]
+                "id": r['id'], "status": r['status_codigo'], "data": r['data_alteracao'], "observacoes": r['observacoes'], "ativo": bool(r['ativo']), "usuario": r['usuario_nome']
             } for r in rows]
         except Exception as e:
             return []
