@@ -783,7 +783,11 @@ def buscar_pms_envolvidos(procedimento_id):
         
         resultado = []
         for pm_rel in pms_relacionamento:
-            pm_envolvido_id, pm_id, pm_tipo_tabela, ordem, status_pm_env = pm_rel
+            pm_envolvido_id = pm_rel['id']
+            pm_id = pm_rel['pm_id']
+            pm_tipo_tabela = pm_rel['pm_tipo']
+            ordem = pm_rel['ordem']
+            status_pm_env = pm_rel['status_pm']
             
             # Busca na tabela usuarios unificada
             cursor.execute("""
@@ -795,9 +799,9 @@ def buscar_pms_envolvidos(procedimento_id):
             pm_data = cursor.fetchone()
             
             if pm_data:
-                nome = pm_data[0] or ""
-                posto = pm_data[1] or ""
-                matricula = pm_data[2] or ""
+                nome = pm_data['nome'] or ""
+                posto = pm_data['posto_graduacao'] or ""
+                matricula = pm_data['matricula'] or ""
                 
                 # Montar nome completo removendo espaços extras
                 # Se for "A APURAR", mostrar apenas o nome
