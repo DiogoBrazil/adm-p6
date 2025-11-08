@@ -6516,24 +6516,24 @@ def buscar_crimes_para_indicios(termo=''):
         crimes = []
         for row in cursor.fetchall():
             # Formatar texto para exibição
-            texto_completo = f"Art. {row[3]}"
-            if row[5]:  # parágrafo
-                texto_completo += f", {row[5]}"
-            if row[6]:  # inciso
-                texto_completo += f", inciso {row[6]}"
-            if row[7]:  # alínea
-                texto_completo += f", alínea {row[7]}"
-            texto_completo += f" - {row[2]} - {row[4]}"
+            texto_completo = f"Art. {row['artigo']}"
+            if row['paragrafo']:
+                texto_completo += f", {row['paragrafo']}"
+            if row['inciso']:
+                texto_completo += f", inciso {row['inciso']}"
+            if row['alinea']:
+                texto_completo += f", alínea {row['alinea']}"
+            texto_completo += f" - {row['dispositivo_legal']} - {row['descricao_artigo']}"
             
             crimes.append({
-                'id': row[0],
-                'tipo': row[1],
-                'dispositivo_legal': row[2],
-                'artigo': row[3],
-                'descricao_artigo': row[4],
-                'paragrafo': row[5] or '',
-                'inciso': row[6] or '',
-                'alinea': row[7] or '',
+                'id': row['id'],
+                'tipo': row['tipo'],
+                'dispositivo_legal': row['dispositivo_legal'],
+                'artigo': row['artigo'],
+                'descricao_artigo': row['descricao_artigo'],
+                'paragrafo': row['paragrafo'] or '',
+                'inciso': row['inciso'] or '',
+                'alinea': row['alinea'] or '',
                 'texto_completo': texto_completo
             })
         
