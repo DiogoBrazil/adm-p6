@@ -941,14 +941,14 @@ function fecharModalFiltros() {
 
 // Função para aplicar filtros do modal
 async function aplicarFiltrosModal() {
-    await aplicarFiltros();
     fecharModalFiltros();
+    await aplicarFiltros();
 }
 
 // Função para limpar filtros do modal
 async function limparFiltrosModal() {
-    await limparFiltros();
     fecharModalFiltros();
+    await limparFiltros();
 }
 
 // Função para carregar as opções dos filtros baseado no banco de dados completo
