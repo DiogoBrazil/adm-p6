@@ -269,7 +269,7 @@ class DatabaseManager:
         where_clause = "WHERE ativo = TRUE AND nome != 'ADMINISTRADOR'"
         search_params = []
         if search_term:
-            where_clause += " AND (nome LIKE %s OR matricula LIKE %s)"
+            where_clause += " AND (nome ILIKE %s OR matricula ILIKE %s)"
             search_term_like = f"%{search_term}%"
             search_params = [search_term_like, search_term_like]
 
@@ -428,11 +428,11 @@ def api_buscar_infracoes_art29():
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         if termo:
-            # Busca com filtro por termo
+            # Busca com filtro por termo (case-insensitive)
             cursor.execute("""
                 SELECT id, inciso, texto 
                 FROM infracoes_estatuto_art29 
-                WHERE (inciso LIKE %s OR texto LIKE %s) AND ativo = TRUE
+                WHERE (inciso ILIKE %s OR texto ILIKE %s) AND ativo = TRUE
                 ORDER BY 
                     CASE 
                         WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
@@ -484,11 +484,11 @@ def api_buscar_municipios_distritos():
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         if termo:
-            # Busca com filtro por termo
+            # Busca com filtro por termo (case-insensitive)
             cursor.execute("""
                 SELECT id, nome, tipo, municipio_pai 
                 FROM municipios_distritos 
-                WHERE nome LIKE %s AND ativo = TRUE
+                WHERE nome ILIKE %s AND ativo = TRUE
                 ORDER BY 
                     CASE tipo 
                         WHEN 'municipio' THEN 1 
@@ -541,11 +541,11 @@ def buscar_municipios_distritos(termo=''):
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         if termo:
-            # Busca com filtro por termo
+            # Busca com filtro por termo (case-insensitive)
             cursor.execute("""
                 SELECT id, nome, tipo, municipio_pai 
                 FROM municipios_distritos 
-                WHERE nome LIKE %s AND ativo = TRUE
+                WHERE nome ILIKE %s AND ativo = TRUE
                 ORDER BY 
                     CASE tipo 
                         WHEN 'municipio' THEN 1 
@@ -856,7 +856,9 @@ def buscar_indicios_por_pm(pm_envolvido_id):
             conn.close()
             return None
             
-        indicios_id, categorias_json, categoria_texto = indicios_result
+        indicios_id = indicios_result['id']
+        categorias_json = indicios_result['categorias_indicios']
+        categoria_texto = indicios_result['categoria']
         
         # Parse das categorias do JSON
         categorias = []
@@ -883,7 +885,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         """, (indicios_id,))
         
         for row in cursor.fetchall():
-            codigo = f"{row['codigo']} Art. {row['artigo']}"
+            codigo = f"{row['dispositivo_legal']} Art. {row['artigo']}"
             if row['paragrafo']:
                 codigo += f" §{row['paragrafo']}"
             if row['inciso']:
@@ -895,7 +897,7 @@ def buscar_indicios_por_pm(pm_envolvido_id):
                 "id": row['id'],
                 "tipo": row['tipo'],
                 "codigo": codigo,
-                "descricao": row['descricao'] or ""
+                "descricao": row['descricao_artigo'] or ""
             })
         
         # Buscar transgressões RDPM associadas
@@ -2060,6 +2062,12 @@ def registrar_processo(
     import json
     
     print(f"📝 Tentando registrar processo: {numero}, {tipo_geral}, {tipo_detalhe}")
+    
+    # Converter concluido para boolean (caso venha como int do frontend)
+    if isinstance(concluido, int):
+        concluido = bool(concluido)
+    elif isinstance(concluido, str):
+        concluido = concluido.lower() in ('true', '1', 'yes', 'sim')
     
     # Converter nome_vitima para maiúsculas se fornecido
     if nome_vitima:
@@ -3459,6 +3467,12 @@ def atualizar_processo(
     import json
     
     try:
+        # Converter concluido para boolean (caso venha como int do frontend)
+        if isinstance(concluido, int):
+            concluido = bool(concluido)
+        elif isinstance(concluido, str):
+            concluido = concluido.lower() in ('true', '1', 'yes', 'sim')
+        
         # NORMALIZAÇÃO: Converter valores antigos de responsavel_tipo para 'usuario'
         if responsavel_tipo in ('encarregado', 'operador'):
             print(f"⚠️ [ATUALIZAÇÃO] Convertendo responsavel_tipo de '{responsavel_tipo}' para 'usuario'")
@@ -3792,7 +3806,7 @@ def atualizar_processo(
                         
                         cursor.execute("""
                             INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categorias_indicios, categoria, ativo)
-                            VALUES (%s, %s, %s, '[]', '', 1)
+                            VALUES (%s, %s, %s, '[]', '', TRUE)
                         """, (pm_indicios_id, pm_envolvido_id, processo_id))
                     
                     # Atualizar categorias no registro principal
@@ -5128,7 +5142,7 @@ def buscar_transgressoes(termo, gravidade=None):
                 SELECT id, inciso, texto 
                 FROM transgressoes 
                 WHERE gravidade = %s AND ativo = TRUE 
-                AND (inciso LIKE %s OR texto LIKE %s)
+                AND (inciso ILIKE %s OR texto ILIKE %s)
                 ORDER BY inciso
             """, (gravidade, termo_like, termo_like))
         else:
@@ -5136,7 +5150,7 @@ def buscar_transgressoes(termo, gravidade=None):
                 SELECT id, gravidade, inciso, texto 
                 FROM transgressoes 
                 WHERE ativo = TRUE 
-                AND (inciso LIKE %s OR texto LIKE %s)
+                AND (inciso ILIKE %s OR texto ILIKE %s)
                 ORDER BY gravidade, inciso
             """, (termo_like, termo_like))
         
@@ -6025,7 +6039,7 @@ def criar_infracao_estatuto_art29(inciso, texto):
         # Inserir nova infração
         cursor.execute("""
             INSERT INTO infracoes_estatuto_art29 (inciso, texto, ativo)
-            VALUES (%s, %s, 1)
+            VALUES (%s, %s, TRUE)
         """, (inciso, texto))
         
         infracao_id = cursor.lastrowid
@@ -6193,7 +6207,7 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
             
             cursor.execute("""
                 INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categorias_indicios, categoria, ativo)
-                VALUES (%s, %s, %s, '[]', '', 1)
+                VALUES (%s, %s, %s, '[]', '', TRUE)
             """, (pm_indicios_id, pm_envolvido_id, procedimento_id))
         
         # Atualizar categorias no registro principal
@@ -6485,7 +6499,7 @@ def buscar_crimes_para_indicios(termo=''):
                        paragrafo, inciso, alinea
                 FROM crimes_contravencoes 
                 WHERE ativo = TRUE 
-                AND (artigo LIKE %s OR descricao_artigo LIKE %s OR dispositivo_legal LIKE %s)
+                AND (artigo ILIKE %s OR descricao_artigo ILIKE %s OR dispositivo_legal ILIKE %s)
                 ORDER BY tipo, dispositivo_legal, artigo
                 LIMIT 50
             """, (f'%{termo}%', f'%{termo}%', f'%{termo}%'))
@@ -6551,7 +6565,7 @@ def buscar_rdpm_para_indicios(termo='', gravidade=None):
         where_clause = "WHERE ativo = TRUE"
         
         if termo:
-            where_clause += " AND (inciso LIKE %s OR texto LIKE %s)"
+            where_clause += " AND (inciso ILIKE %s OR texto ILIKE %s)"
             params.extend([f'%{termo}%', f'%{termo}%'])
         
         if gravidade:
@@ -6569,11 +6583,11 @@ def buscar_rdpm_para_indicios(termo='', gravidade=None):
         transgressoes = []
         for row in cursor.fetchall():
             transgressoes.append({
-                'id': row[0],
-                'gravidade': row[1],
-                'inciso': row[2],
-                'texto': row[3],
-                'texto_completo': f"Inciso {row[2]} ({row[1]}) - {row[3]}"
+                'id': row['id'],
+                'gravidade': row['gravidade'],
+                'inciso': row['inciso'],
+                'texto': row['texto'],
+                'texto_completo': f"Inciso {row['inciso']} ({row['gravidade']}) - {row['texto']}"
             })
         
         conn.close()
@@ -6604,7 +6618,7 @@ def buscar_art29_para_indicios(termo=''):
                 SELECT id, inciso, texto
                 FROM infracoes_estatuto_art29 
                 WHERE ativo = TRUE 
-                AND (inciso LIKE %s OR texto LIKE %s)
+                AND (inciso ILIKE %s OR texto ILIKE %s)
                 ORDER BY 
                     CASE 
                         WHEN inciso ~ '^[IVXLC]' THEN LENGTH(inciso)
@@ -6630,10 +6644,10 @@ def buscar_art29_para_indicios(termo=''):
         infracoes = []
         for row in cursor.fetchall():
             infracoes.append({
-                'id': row[0],
-                'inciso': row[1],
-                'texto': row[2],
-                'texto_completo': f"Inciso {row[1]} - {row[2]}"
+                'id': row['id'],
+                'inciso': row['inciso'],
+                'texto': row['texto'],
+                'texto_completo': f"Inciso {row['inciso']} - {row['texto']}"
             })
         
         conn.close()
