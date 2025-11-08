@@ -221,7 +221,7 @@ class PrazosAndamentosManager:
                     "numero_portaria": r['numero_portaria'],
                     "data_portaria": r['data_portaria'],
                     "ordem_prorrogacao": r['ordem_prorrogacao'],
-                    "created_at": r[12]
+                    "created_at": r['created_at']
                 })
             return result
         except Exception as e:

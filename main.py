@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import uuid
 import time
 import json
+import traceback
 from bottle import route, request, response
 from prazos_andamentos_manager import PrazosAndamentosManager
 
@@ -2792,7 +2793,10 @@ def obter_historico_encarregados(processo_id):
             conn.close()
             return {"sucesso": False, "mensagem": "Processo não encontrado!"}
 
-        historico_json, responsavel_id, data_instauracao, data_criacao = row
+        historico_json = row['historico_encarregados']
+        responsavel_id = row['responsavel_id']
+        data_instauracao = row['data_instauracao']
+        data_criacao = row['created_at']
         
         historico = []
         if historico_json:
@@ -2819,10 +2823,10 @@ def obter_historico_encarregados(processo_id):
             
             if encarregado_info:
                 primeiro_encarregado_dados = {
-                    "id": encarregado_info[0],
-                    "nome": encarregado_info[1],
-                    "posto_graduacao": encarregado_info[2],
-                    "matricula": encarregado_info[3]
+                    "id": encarregado_info['id'],
+                    "nome": encarregado_info['nome'],
+                    "posto_graduacao": encarregado_info['posto_graduacao'],
+                    "matricula": encarregado_info['matricula']
                 }
 
                 # Se não há histórico, cria um registro para o encarregado inicial
@@ -3226,7 +3230,7 @@ def obter_procedimento_completo(procedimento_id):
             return {"sucesso": False, "mensagem": "Procedimento não encontrado."}
 
         # Mapear campos para o formato esperado pelo front
-        concluido_flag = bool(row[11]) if row[11] is not None else False
+        concluido_flag = bool(row['concluido']) if row['concluido'] is not None else False
         situacao = "Concluído" if concluido_flag else "Em Andamento"
 
         # Tentar obter transgressões detalhadas reutilizando a função existente
@@ -3241,50 +3245,58 @@ def obter_procedimento_completo(procedimento_id):
         proc_edicao = obter_processo(procedimento_id) or {}
         indicios = proc_edicao.get('indicios') if isinstance(proc_edicao, dict) else None
 
+        # Função auxiliar para converter datas
+        def format_date(d):
+            if d is None:
+                return None
+            if hasattr(d, 'strftime'):
+                return d.strftime("%Y-%m-%d")
+            return str(d)
+
         procedimento = {
-            "id": row[0],
-            "numero": row[1],
-            "tipo_geral": row[2],
-            "tipo_procedimento": row[3],
-            "documento_iniciador": row[4],
-            "processo_sei": row[5],
-            "local_origem": row[6],
-            "local_fatos": row[7],
-            "data_abertura": row[8],
-            "data_recebimento": row[9],
-            "data_conclusao": row[10],
+            "id": row['id'],
+            "numero": row['numero'],
+            "tipo_geral": row['tipo_geral'],
+            "tipo_procedimento": row['tipo_detalhe'],
+            "documento_iniciador": row['documento_iniciador'],
+            "processo_sei": row['processo_sei'],
+            "local_origem": row['local_origem'],
+            "local_fatos": row['local_fatos'],
+            "data_abertura": format_date(row['data_instauracao']),
+            "data_recebimento": format_date(row['data_recebimento']),
+            "data_conclusao": format_date(row['data_conclusao']),
             "situacao": situacao,
-            "status_pm": row[12],
-            "nome_pm_id": row[13],
-            "responsavel_id": row[14],
-            "escrivao_id": row[15],
-            "resumo_fatos": row[16],
-            "numero_controle": row[17],
-            "numero_portaria": row[18],
-            "numero_memorando": row[19],
-            "numero_feito": row[20],
-            "numero_rgf": row[21],
-            "natureza_processo": row[22],
-            "natureza_procedimento": row[23],
-            "solucao_final": row[24],
-            "created_at": row[25],
-            "updated_at": row[26],
-            "ano_instauracao": row[27],
-            "transgressoes_ids": row[28],
+            "status_pm": row['status_pm'],
+            "nome_pm_id": row['nome_pm_id'],
+            "responsavel_id": row['responsavel_id'],
+            "escrivao_id": row['escrivao_id'],
+            "resumo_fatos": row['resumo_fatos'],
+            "numero_controle": row['numero_controle'],
+            "numero_portaria": row['numero_portaria'],
+            "numero_memorando": row['numero_memorando'],
+            "numero_feito": row['numero_feito'],
+            "numero_rgf": row['numero_rgf'],
+            "natureza_processo": row['natureza_processo'],
+            "natureza_procedimento": row['natureza_procedimento'],
+            "solucao_final": row['solucao_final'],
+            "created_at": row['created_at'],
+            "updated_at": row['updated_at'],
+            "ano_instauracao": row['ano_instauracao'],
+            "transgressoes_ids": row['transgressoes_ids'],
             "transgressoes_selecionadas": trans_sel,
             # Novos campos (Migração 014)
-            "data_remessa_encarregado": row[29],
-            "data_julgamento": row[30],
-            "solucao_tipo": row[31],
-            "penalidade_tipo": row[32],
-            "penalidade_dias": row[33],
-            "indicios_categorias": row[34],
+            "data_remessa_encarregado": format_date(row['data_remessa_encarregado']),
+            "data_julgamento": format_date(row['data_julgamento']),
+            "solucao_tipo": row['solucao_tipo'],
+            "penalidade_tipo": row['penalidade_tipo'],
+            "penalidade_dias": row['penalidade_dias'],
+            "indicios_categorias": row['indicios_categorias'],
             "indicios": indicios,
             "indicios_por_pm": indicios_por_pm,
             # Campos para CJ, CD e PAD
-            "presidente_id": row[35],
-            "interrogante_id": row[36],
-            "escrivao_processo_id": row[37]
+            "presidente_id": row['presidente_id'],
+            "interrogante_id": row['interrogante_id'],
+            "escrivao_processo_id": row['escrivao_processo_id']
         }
 
         return {"sucesso": True, "procedimento": procedimento}
@@ -3314,7 +3326,12 @@ def obter_encarregados_procedimento(procedimento_id):
             conn.close()
             return {"sucesso": True, "encarregados": []}
 
-        responsavel_id, escrivao_id, tipo_detalhe, presidente_id, interrogante_id, escrivao_processo_id = row
+        responsavel_id = row['responsavel_id']
+        escrivao_id = row['escrivao_id']
+        tipo_detalhe = row['tipo_detalhe']
+        presidente_id = row['presidente_id']
+        interrogante_id = row['interrogante_id']
+        escrivao_processo_id = row['escrivao_processo_id']
 
         def _buscar_usuario(user_id):
             if not user_id:
@@ -3326,7 +3343,7 @@ def obter_encarregados_procedimento(procedimento_id):
             )
             u = cursor.fetchone()
             if u:
-                return {"nome": u[0], "posto_graduacao": u[1], "matricula": u[2]}
+                return {"nome": u['nome'], "posto_graduacao": u['posto_graduacao'], "matricula": u['matricula']}
             return None
 
         encarregados = []
@@ -3373,6 +3390,7 @@ def obter_encarregados_procedimento(procedimento_id):
         return {"sucesso": True, "encarregados": encarregados}
     except Exception as e:
         print(f"Erro em obter_encarregados_procedimento: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter encarregados: {str(e)}"}
 
 @eel.expose
@@ -3388,8 +3406,8 @@ def obter_envolvidos_procedimento(procedimento_id):
             (procedimento_id,)
         )
         row_head = cursor.fetchone()
-        tipo_geral_val = row_head[0] if row_head else None
-        nome_vitima_val = row_head[1] if row_head else None
+        tipo_geral_val = row_head['tipo_geral'] if row_head else None
+        nome_vitima_val = row_head['nome_vitima'] if row_head else None
 
         # Verificar se há registros na tabela de múltiplos PMs (procedimentos)
         cursor.execute(
@@ -3426,13 +3444,13 @@ def obter_envolvidos_procedimento(procedimento_id):
                 (procedimento_id,)
             )
             row = cursor.fetchone()
-            if row and (row[2] or row[3] or row[4]):
+            if row and (row['nome'] or row['posto'] or row['matricula']):
                 envolvidos.append({
-                    "usuario_id": row[1],  # Incluir usuario_id para consistência
-                    "nome": row[2],
-                    "posto_graduacao": row[3],
-                    "matricula": row[4],
-                    "tipo_envolvimento": row[0] or "Envolvido"
+                    "usuario_id": row['nome_pm_id'],  # Incluir usuario_id para consistência
+                    "nome": row['nome'],
+                    "posto_graduacao": row['posto'],
+                    "matricula": row['matricula'],
+                    "tipo_envolvimento": row['status_pm'] or "Envolvido"
                 })
 
         # Para procedimentos, também listar a vítima/ofendido se existir
@@ -3448,6 +3466,7 @@ def obter_envolvidos_procedimento(procedimento_id):
         return {"sucesso": True, "envolvidos": envolvidos}
     except Exception as e:
         print(f"Erro em obter_envolvidos_procedimento: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter envolvidos: {str(e)}"}
 
 @eel.expose
@@ -4045,11 +4064,11 @@ def listar_andamentos_processo(processo_id):
         result = cursor.fetchone()
         conn.close()
         
-        if result and result[0]:
+        if result and result['andamentos']:
             try:
                 # Parse do JSON
                 import json
-                andamentos = json.loads(result[0])
+                andamentos = json.loads(result['andamentos'])
                 
                 # Ordenar por data (mais recente primeiro)
                 andamentos_ordenados = sorted(
@@ -4371,9 +4390,11 @@ def listar_andamentos(processo_id):
         
         # Parse andamentos
         andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
+        print(f"DEBUG listar_andamentos: andamentos_json type={type(andamentos_json)}, value={andamentos_json}")
         try:
             andamentos = json.loads(andamentos_json)
-        except:
+        except Exception as parse_error:
+            print(f"Erro ao fazer parse de andamentos: {parse_error}")
             andamentos = []
         
         return {
@@ -4383,6 +4404,7 @@ def listar_andamentos(processo_id):
         
     except Exception as e:
         print(f"Erro ao listar andamentos: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
 
 @eel.expose
@@ -4403,7 +4425,7 @@ def remover_andamento(processo_id, andamento_id):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos existentes
-        andamentos_json = result[0] if result[0] else '[]'
+        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
         try:
             andamentos = json.loads(andamentos_json)
         except:
@@ -7877,10 +7899,10 @@ def _obter_ultima_movimentacao(cursor, processo_id):
         """, (processo_id,))
         
         result = cursor.fetchone()
-        if result and result[0]:
+        if result and result['andamentos']:
             try:
                 import json
-                andamentos = json.loads(result[0])
+                andamentos = json.loads(result['andamentos'])
                 if andamentos and len(andamentos) > 0:
                     # Pegar o primeiro andamento (mais recente)
                     ultimo_andamento = andamentos[0]
