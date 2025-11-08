@@ -1289,7 +1289,7 @@ function excluirProcedimento(id, numero) {
         async () => {
             try {
                 await eel.excluir_processo(id)();
-                showAlert('Procedimento excluído com sucesso!', 'success');
+                showSuccessModal('Procedimento excluído com sucesso!', 2000);
                 carregarProcedimentos(); // Recarrega a lista
             } catch (error) {
                 console.error('Erro ao excluir procedimento:', error);
@@ -1530,8 +1530,8 @@ async function salvarSubstituicaoEncarregado() {
             // Fechar modal
             fecharModalSubstituirEncarregado();
             
-            // Mostrar mensagem de sucesso
-            showAlert('Encarregado substituído com sucesso!', 'success');
+            // Mostrar modal de sucesso por 2 segundos
+            showSuccessModal('Encarregado substituído com sucesso!', 2000);
             
             // Recarregar a lista de procedimentos
             await carregarProcedimentos();

@@ -129,8 +129,8 @@ async function salvarSubstituicaoEncarregado() {
             // Fechar modal
             fecharModalSubstituirEncarregado();
             
-            // Mostrar mensagem de sucesso
-            showAlert('Encarregado substituído com sucesso!', 'success');
+            // Mostrar modal de sucesso por 2 segundos
+            showSuccessModal('Encarregado substituído com sucesso!', 2000);
             
             // Recarregar os dados do processo
             await carregarDadosProcesso();
