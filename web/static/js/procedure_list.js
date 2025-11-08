@@ -185,6 +185,16 @@ function closeAlert(alertId) {
 // Função para carregar todos os procedimentos com cálculo de prazos
 async function carregarProcedimentos() {
     console.log("📝 Iniciando carregamento de procedimentos com prazos...");
+    
+    // Mostrar loader e ocultar tabela e empty state
+    const loaderContainer = document.getElementById('loaderContainer');
+    const emptyState = document.getElementById('emptyState');
+    const tableResponsive = document.querySelector('.table-responsive');
+    
+    if (loaderContainer) loaderContainer.style.display = 'flex';
+    if (emptyState) emptyState.style.display = 'none';
+    if (tableResponsive) tableResponsive.style.display = 'none';
+    
     try {
         // Obter termo de busca
         const searchInput = document.getElementById('searchInput');
@@ -227,6 +237,9 @@ async function carregarProcedimentos() {
             // Atualizar controles de paginação
             updatePaginationControls();
             
+            // Ocultar loader
+            if (loaderContainer) loaderContainer.style.display = 'none';
+            
             // Verificar imediatamente se temos procedimentos
             if (todosOsProcedimentos.length === 0) {
                 console.log("⚠️ Nenhum procedimento encontrado, mostrando mensagem");
@@ -249,11 +262,15 @@ async function carregarProcedimentos() {
                 exibirProcedimentos();
             }
         } else {
+            // Ocultar loader em caso de erro
+            if (loaderContainer) loaderContainer.style.display = 'none';
             console.error('❌ Erro retornado pelo servidor:', resultado.mensagem);
             showAlert(resultado.mensagem || 'Erro ao carregar procedimentos!', 'error');
             mostrarMensagemErro('Erro ao carregar registros', resultado.mensagem);
         }
     } catch (error) {
+        // Ocultar loader em caso de exceção
+        if (loaderContainer) loaderContainer.style.display = 'none';
         console.error('❌ Erro ao carregar procedimentos:', error);
         console.error('❌ Tipo do erro:', typeof error);
         console.error('❌ Stack trace:', error.stack);
