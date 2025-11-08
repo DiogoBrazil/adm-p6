@@ -1348,11 +1348,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Carregar opções dos filtros do banco de dados completo
     carregarOpcoesDosFiltros();
     
-    // Verificar estado da tabela após pequenos intervalos
-    setTimeout(verificarEstadoVazioTabela, 500);
-    setTimeout(verificarEstadoVazioTabela, 1000);
-    setTimeout(verificarEstadoVazioTabela, 2000);
-    
     // Busca em tempo real
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
