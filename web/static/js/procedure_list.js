@@ -891,7 +891,6 @@ async function salvarProrrogacao() {
 // Função para buscar procedimentos
 function buscarProcedimentos() {
     const termoBusca = document.getElementById('searchInput').value.toLowerCase().trim();
-    const clearButton = document.getElementById('clearButton');
     
     // Clear do timeout anterior para implementar debounce
     if (searchTimeout) {
@@ -904,12 +903,8 @@ function buscarProcedimentos() {
         carregarProcedimentos(); // Recarregar com o novo termo de busca
     }, 300);
     
-    // Controlar visibilidade do botão de limpar
-    if (termoBusca === '') {
-        clearButton.style.display = 'none';
-    } else {
-        clearButton.style.display = 'inline-block';
-    }
+    // Atualizar visibilidade do botão de limpar
+    atualizarVisibilidadeBotaoLimpar();
 }
 
 // === SISTEMA DE FILTROS COM MODAL ===
@@ -1122,8 +1117,9 @@ async function limparFiltros() {
     // Recarregar dados sem filtros (mantendo busca se existir)
     await carregarProcedimentos();
     
-    // Atualizar indicador visual
+    // Atualizar indicadores visuais
     atualizarIndicadorFiltros();
+    atualizarVisibilidadeBotaoLimpar();
     
     // Mensagem removida conforme solicitado
     // showAlert('Todos os filtros foram limpos!', 'success');
@@ -1131,22 +1127,38 @@ async function limparFiltros() {
 
 // Função para limpar busca e filtros
 function limparBusca() {
-    console.log("🧹 Limpando busca...");
+    console.log("🧹 Limpando busca e filtros...");
     
     // Limpar campo de busca
     document.getElementById('searchInput').value = '';
     
+    // Limpar valores dos selects
+    document.getElementById('filtroTipo').value = '';
+    document.getElementById('filtroAno').value = '';
+    document.getElementById('filtroOrigem').value = '';
+    document.getElementById('filtroLocalFatos').value = '';
+    document.getElementById('filtroDocumento').value = '';
+    document.getElementById('filtroSituacao').value = '';
+    document.getElementById('filtroDataInicio').value = '';
+    document.getElementById('filtroDataFim').value = '';
+    
+    // Limpar campos de datalist
+    limparCampoDatalist('filtroEncarregado');
+    limparCampoDatalist('filtroPmEnvolvido');
+    limparCampoDatalist('filtroVitima');
+    
+    // Resetar filtros
+    filtrosAtivos = {};
+    
     // Resetar para primeira página
     currentPage = 1;
     
-    // Recarregar dados (mantendo filtros se existirem)
+    // Recarregar dados sem busca e sem filtros
     carregarProcedimentos();
     
-    // Ocultar botão limpar busca
-    const clearButton = document.getElementById('clearButton');
-    if (clearButton) {
-        clearButton.style.display = 'none';
-    }
+    // Atualizar indicadores visuais
+    atualizarIndicadorFiltros();
+    atualizarVisibilidadeBotaoLimpar();
 }
 
 // Função para atualizar indicador visual de filtros ativos
@@ -1172,18 +1184,26 @@ function atualizarIndicadorFiltros() {
         indicador.textContent = filtrosAplicados;
         toggleBtn.appendChild(indicador);
     }
+    
+    // Atualizar visibilidade do botão de limpar
+    atualizarVisibilidadeBotaoLimpar();
 }
 
-// Função para limpar busca
-function limparBusca() {
-    const searchInput = document.getElementById('searchInput');
+// Função para atualizar visibilidade do botão de limpar
+function atualizarVisibilidadeBotaoLimpar() {
     const clearButton = document.getElementById('clearButton');
+    const searchInput = document.getElementById('searchInput');
     
-    if (searchInput) {
-        searchInput.value = '';
-        currentPage = 1; // Resetar para primeira página
+    if (!clearButton || !searchInput) return;
+    
+    const termoBusca = searchInput.value.toLowerCase().trim();
+    const temFiltrosAtivos = Object.values(filtrosAtivos).some(valor => valor && valor.trim());
+    
+    // Mostrar botão se houver busca OU filtros ativos
+    if (termoBusca !== '' || temFiltrosAtivos) {
+        clearButton.style.display = 'inline-block';
+    } else {
         clearButton.style.display = 'none';
-        carregarProcedimentos(); // Recarregar sem filtro de busca
     }
 }
 
