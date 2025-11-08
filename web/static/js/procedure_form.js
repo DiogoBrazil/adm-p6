@@ -4516,13 +4516,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Event listener para o botão de indícios do PM principal
-    const btnIndiciosPmPrincipal = document.getElementById('btnIndiciosPmPrincipal');
-    if (btnIndiciosPmPrincipal) {
-        btnIndiciosPmPrincipal.addEventListener('click', function() {
-            abrirIndiciosPM(0, 'principal');
-        });
-    }
+    // Event listener para o botão de indícios do PM principal - REMOVIDO (botão não é mais usado)
+    // const btnIndiciosPmPrincipal = document.getElementById('btnIndiciosPmPrincipal');
+    // if (btnIndiciosPmPrincipal) {
+    //     btnIndiciosPmPrincipal.addEventListener('click', function() {
+    //         abrirIndiciosPM(0, 'principal');
+    //     });
+    // }
 });
 
 // ============================================
@@ -4651,19 +4651,19 @@ async function atualizarVisualizacaoPMsEnvolvidos() {
                     badge = `<span class="badge bg-info ms-2">${totalIndicios} indícios</span>`;
                 }
                 
-                // Atualizar PM principal
-                if (pm.ordem === 1) {
-                    const btnIndiciosPrincipal = document.getElementById('btnIndiciosPmPrincipal');
-                    if (btnIndiciosPrincipal) {
-                        if (totalIndicios > 0) {
-                            btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> ${totalIndicios} Indícios`;
-                            btnIndiciosPrincipal.style.background = '#28a745';
-                        } else {
-                            btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> Indícios`;
-                            btnIndiciosPrincipal.style.background = '#17a2b8';
-                        }
-                    }
-                }
+                // Atualizar PM principal - DESABILITADO (botão removido)
+                // if (pm.ordem === 1) {
+                //     const btnIndiciosPrincipal = document.getElementById('btnIndiciosPmPrincipal');
+                //     if (btnIndiciosPrincipal) {
+                //         if (totalIndicios > 0) {
+                //             btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> ${totalIndicios} Indícios`;
+                //             btnIndiciosPrincipal.style.background = '#28a745';
+                //         } else {
+                //             btnIndiciosPrincipal.innerHTML = `<i class="fas fa-search-plus"></i> Indícios`;
+                //             btnIndiciosPrincipal.style.background = '#17a2b8';
+                //         }
+                //     }
+                // }
             });
         }
     } catch (error) {
@@ -4672,13 +4672,14 @@ async function atualizarVisualizacaoPMsEnvolvidos() {
 }
 
 /**
- * Mostra/esconde o botão de indícios do PM principal conforme necessário
+ * Mostra/esconde o botão de indícios do PM principal conforme necessário - DESABILITADO (botão removido)
  */
 function toggleBotaoIndiciosPmPrincipal(mostrar) {
-    const btnIndicios = document.getElementById('btnIndiciosPmPrincipal');
-    if (btnIndicios) {
-        btnIndicios.style.display = mostrar ? 'block' : 'none';
-    }
+    // Função desabilitada - botão de indícios do PM principal foi removido
+    // const btnIndicios = document.getElementById('btnIndiciosPmPrincipal');
+    // if (btnIndicios) {
+    //     btnIndicios.style.display = mostrar ? 'block' : 'none';
+    // }
 }
 
 // Expor função globalmente para callback do modal
