@@ -3792,8 +3792,8 @@ def atualizar_processo(
                     
                     if indicios_registro:
                         # Atualizar registro existente
-                        pm_indicios_id = indicios_registro[0]
-                        print(f"� Atualizando registro de indícios existente: {pm_indicios_id}")
+                        pm_indicios_id = indicios_registro['id']
+                        print(f"🔄 Atualizando registro de indícios existente: {pm_indicios_id}")
                         
                         # Limpar apenas os vínculos de crimes/rdpm/art29
                         cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = %s", (pm_indicios_id,))
