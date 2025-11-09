@@ -3792,7 +3792,7 @@ def atualizar_processo(
                         indicios_registro = cursor.fetchone()
                         
                         if indicios_registro:
-                            pm_indicios_id = indicios_registro[0]
+                            pm_indicios_id = indicios_registro['id']
                             
                             # Deletar vínculos
                             cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = %s", (pm_indicios_id,))

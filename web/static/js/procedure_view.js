@@ -202,12 +202,26 @@ function populateProcedureData(data) {
     document.getElementById('infoNaturezaProcedimento').textContent = data.natureza_procedimento || '-';
     document.getElementById('infoSolucaoFinal') && (document.getElementById('infoSolucaoFinal').textContent = data.solucao_final || '-');
     // Novos campos: solução/penalidade e remessa/julgamento
-    document.getElementById('infoSolucaoTipo') && (document.getElementById('infoSolucaoTipo').textContent = data.solucao_tipo || '-');
+    // Mapear valores de solução FP
+    const solucaoLabel = (function(v) {
+        if (v === 'Sugerido_Arquivamento') return 'Sugerido o arquivamento';
+        if (v === 'Sugerido_Sindicancia') return 'Sugerido a abertura de Sindicância';
+        if (v === 'Sugerido_IPM') return 'Sugerido a abertura de IPM';
+        if (v === 'Sugerido_PADS') return 'Sugerido a abertura de PADS';
+        if (v === 'Sugerido_PAD') return 'Sugerido a abertura de PAD';
+        if (v === 'Sugerido_CD') return 'Sugerido a abertura de CD';
+        if (v === 'Sugerido_CJ') return 'Sugerido a abertura de CJ';
+        return v;
+    })(data.solucao_tipo);
+    document.getElementById('infoSolucaoTipo') && (document.getElementById('infoSolucaoTipo').textContent = solucaoLabel || '-');
     // Mapear enum ASCII para rótulo com acento
     const penalLabel = (function(v){
         if (v === 'Prisao') return 'Prisão';
         if (v === 'Detencao') return 'Detenção';
         if (v === 'Repreensao') return 'Repreensão';
+        if (v === 'Licenciado_Disciplina') return 'Licenciado a bem da disciplina';
+        if (v === 'Excluido_Disciplina') return 'Excluído a bem da disciplina';
+        if (v === 'Demitido_ExOficio') return 'Demitido ex-ofício';
         return v;
     })(data.penalidade_tipo);
     const penalTxt = (penalLabel ? penalLabel : '-') +

@@ -988,7 +988,27 @@ function wireNovosControlesPosResumo() {
         const base = [{ v: '', t: 'Selecione...' }];
         const optsProc = [ { v: 'Punido', t: 'Punido' }, { v: 'Absolvido', t: 'Absolvido' }, { v: 'Arquivado', t: 'Arquivado' } ];
         const optsProced = [ { v: 'Homologado', t: 'Homologado' }, { v: 'Avocado', t: 'Avocado' }, { v: 'Arquivado', t: 'Arquivado' } ];
-        const arr = isProcesso() ? optsProc : optsProced;
+        const optsFP = [
+            { v: 'Sugerido_Arquivamento', t: 'Sugerido o arquivamento' },
+            { v: 'Sugerido_Sindicancia', t: 'Sugerido a abertura de Sindicância' },
+            { v: 'Sugerido_IPM', t: 'Sugerido a abertura de IPM' },
+            { v: 'Sugerido_PADS', t: 'Sugerido a abertura de PADS' },
+            { v: 'Sugerido_PAD', t: 'Sugerido a abertura de PAD' },
+            { v: 'Sugerido_CD', t: 'Sugerido a abertura de CD' },
+            { v: 'Sugerido_CJ', t: 'Sugerido a abertura de CJ' }
+        ];
+        
+        // Verificar se é FP
+        const tipoProcedimento = document.getElementById('tipo_procedimento')?.value || '';
+        let arr;
+        if (isProcesso()) {
+            arr = optsProc;
+        } else if (tipoProcedimento === 'FP') {
+            arr = optsFP;
+        } else {
+            arr = optsProced;
+        }
+        
         [...base, ...arr].forEach(o => {
             const op = document.createElement('option');
             op.value = o.v; op.textContent = o.t; selSolucao.appendChild(op);
@@ -1066,14 +1086,16 @@ function wireNovosControlesPosResumo() {
         const containerIndiciosAdicionados = document.getElementById('container_indicios_adicionados');
         
         if (containerBtnIndicios) {
-            // Botão só aparece se: checkbox marcado, tipo selecionado E for procedimento
-            const mostrarBotaoIndicios = active && sol !== '' && isProcedimento();
+            // Botão só aparece se: checkbox marcado, tipo selecionado E for procedimento (exceto FP)
+            const tipoProcedimento = document.getElementById('tipo_procedimento')?.value || '';
+            const mostrarBotaoIndicios = active && sol !== '' && isProcedimento() && tipoProcedimento !== 'FP';
             containerBtnIndicios.style.display = mostrarBotaoIndicios ? 'block' : 'none';
         }
         
         if (containerIndiciosAdicionados) {
-            // Container de indícios também só aparece para procedimentos
-            containerIndiciosAdicionados.style.display = (active && isProcedimento()) ? 'block' : 'none';
+            // Container de indícios também só aparece para procedimentos (exceto FP)
+            const tipoProcedimento = document.getElementById('tipo_procedimento')?.value || '';
+            containerIndiciosAdicionados.style.display = (active && isProcedimento() && tipoProcedimento !== 'FP') ? 'block' : 'none';
         }
 
         const showIndCats = active && isProcedimento() && (sol === 'Homologado' || sol === 'Avocado');
@@ -2844,6 +2866,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fields.tipoProcedimento.addEventListener('change', function() {
             updateFormVisibility();
             ajustarCamposCartaPrecatoria(this.value);
+            popularOpcoesSolucao();
         });
     }
     if (fields.tipoProcesso) fields.tipoProcesso.addEventListener('change', updateFormVisibility);
