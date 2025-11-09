@@ -3034,6 +3034,35 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const data_recebimento = document.getElementById('data_recebimento')?.value || null;
     const escrivao_id = document.getElementById('escrivao_id')?.value || null;
     const status_pm = document.getElementById('status_pm')?.value || null;
+    
+    // Validação de datas futuras
+    const dataAtual = new Date();
+    dataAtual.setHours(0, 0, 0, 0); // Zera as horas para comparar apenas a data
+    
+    const camposDatas = [
+        { campo: 'data_instauracao', valor: data_instauracao, nome: 'Data de Instauração' },
+        { campo: 'data_recebimento', valor: data_recebimento, nome: 'Data de Recebimento' }
+    ];
+    
+    // Verificar também os campos de conclusão se estiverem visíveis
+    const dataConclusao = document.getElementById('data_conclusao')?.value || null;
+    const dataRemessa = document.getElementById('data_remessa_encarregado')?.value || null;
+    const dataJulgamento = document.getElementById('data_julgamento')?.value || null;
+    
+    if (dataConclusao) camposDatas.push({ campo: 'data_conclusao', valor: dataConclusao, nome: 'Data de Conclusão' });
+    if (dataRemessa) camposDatas.push({ campo: 'data_remessa_encarregado', valor: dataRemessa, nome: 'Data de Remessa ao Encarregado' });
+    if (dataJulgamento) camposDatas.push({ campo: 'data_julgamento', valor: dataJulgamento, nome: 'Data de Julgamento' });
+    
+    for (const { campo, valor, nome } of camposDatas) {
+        if (valor) {
+            const dataInformada = new Date(valor + 'T00:00:00');
+            if (dataInformada > dataAtual) {
+                showAlert(`A ${nome} não pode ser maior que a data atual!`, 'error');
+                document.getElementById(campo)?.focus();
+                return;
+            }
+        }
+    }
     const nome_pm_id = document.getElementById('nome_pm')?.value || null;
     const nome_vitima = document.getElementById('nome_vitima')?.value?.toUpperCase() || null;
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
