@@ -588,7 +588,7 @@
         }
 
         .header-table {
-            width: 100%;
+            width: calc(100% - 8px); /* Compensar largura do scrollbar */
             border-collapse: separate;
             border-spacing: 0;
             margin: 0;
@@ -646,6 +646,7 @@
             padding: 12px 8px;
             border-right: 1px solid rgba(255, 255, 255, 0.2);
             white-space: nowrap;
+            box-sizing: border-box;
         }
 
         .header-table th:first-child, .body-table td:first-child {
@@ -734,7 +735,7 @@
         .body-table td {
             color: #333;
             font-size: 14px;
-            border-right: 1px solid #e9ecef;
+            border-right: 1px solid #dee2e6;
         }
 
         .encarregado-cell {
