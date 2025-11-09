@@ -1486,7 +1486,7 @@ def obter_anos_disponiveis():
             ORDER BY ano DESC
         ''')
         
-        anos = [row[0] for row in cursor.fetchall()]
+        anos = [row['ano'] for row in cursor.fetchall()]
         conn.close()
         
         return {
@@ -5463,14 +5463,14 @@ def obter_processos_usuario_responsavel(user_id):
         processos = []
         for row in cursor.fetchall():
             processos.append({
-                "id": row[0],
-                "tipo": row[1],
-                "tipo_detalhe": row[2],
-                "numero_processo": row[3],
-                "objeto": row[4],
-                "data_instauracao": row[5],
-                "status": row[6],
-                "conclusao_data": row[7]
+                "id": row['id'],
+                "tipo": row['tipo_geral'],
+                "tipo_detalhe": row['tipo_detalhe'],
+                "numero_processo": row['numero'],
+                "objeto": row['resumo_fatos'],
+                "data_instauracao": row['data_instauracao'],
+                "status": row['status_pm'],
+                "conclusao_data": row['data_conclusao']
             })
         
         conn.close()
@@ -5498,14 +5498,14 @@ def obter_processos_usuario_escrivao(user_id):
         processos = []
         for row in cursor.fetchall():
             processos.append({
-                "id": row[0],
-                "tipo": row[1],
-                "tipo_detalhe": row[2],
-                "numero_processo": row[3],
-                "objeto": row[4],
-                "data_instauracao": row[5],
-                "status": row[6],
-                "conclusao_data": row[7]
+                "id": row['id'],
+                "tipo": row['tipo_geral'],
+                "tipo_detalhe": row['tipo_detalhe'],
+                "numero_processo": row['numero'],
+                "objeto": row['resumo_fatos'],
+                "data_instauracao": row['data_instauracao'],
+                "status": row['status_pm'],
+                "conclusao_data": row['data_conclusao']
             })
         
         conn.close()
@@ -5540,15 +5540,15 @@ def obter_processos_usuario_envolvido(user_id):
         processos = []
         for row in cursor.fetchall():
             processos.append({
-                "id": row[0],
-                "tipo": row[1],
-                "tipo_detalhe": row[2],
-                "numero_processo": row[3],
-                "objeto": row[4],
-                "data_instauracao": row[5],
-                "status": row[6],
-                "conclusao_data": row[7],
-                "status_envolvido": row[8]
+                "id": row['id'],
+                "tipo": row['tipo_geral'],
+                "tipo_detalhe": row['tipo_detalhe'],
+                "numero_processo": row['numero'],
+                "objeto": row['resumo_fatos'],
+                "data_instauracao": row['data_instauracao'],
+                "status": row['status_pm'],
+                "conclusao_data": row['data_conclusao'],
+                "status_envolvido": row['status_envolvido']
             })
         
         conn.close()
@@ -7312,7 +7312,7 @@ def obter_anos_relatorio_anual():
             ORDER BY ano DESC
         """)
         
-        anos = [row[0] for row in cursor.fetchall() if row[0]]
+        anos = [row['ano'] for row in cursor.fetchall() if row['ano']]
         
         return {
             "sucesso": True,
@@ -7369,7 +7369,7 @@ def gerar_relatorio_anual(ano):
             AND ativo = TRUE
             GROUP BY tipo_detalhe
         """, (str(ano),))
-        processos_por_tipo = {row[0]: row[1] for row in cursor.fetchall()}
+        processos_por_tipo = {row['tipo_detalhe']: row['qtd'] for row in cursor.fetchall()}
         
         # Procedimentos por tipo_detalhe (apenas procedimentos)
         cursor.execute("""
@@ -7380,7 +7380,7 @@ def gerar_relatorio_anual(ano):
             AND ativo = TRUE
             GROUP BY tipo_detalhe
         """, (str(ano),))
-        procedimentos_por_tipo = {row[0]: row[1] for row in cursor.fetchall()}
+        procedimentos_por_tipo = {row['tipo_detalhe']: row['qtd'] for row in cursor.fetchall()}
         
         # ============ ESTATÍSTICAS POR STATUS ============
         
@@ -7398,7 +7398,7 @@ def gerar_relatorio_anual(ano):
             AND ativo = TRUE
             GROUP BY status
         """, (str(ano),))
-        processos_status = {row[0]: row[1] for row in cursor.fetchall()}
+        processos_status = {row['status']: row['qtd'] for row in cursor.fetchall()}
         
         # Status dos procedimentos
         cursor.execute("""
@@ -7414,7 +7414,7 @@ def gerar_relatorio_anual(ano):
             AND ativo = TRUE
             GROUP BY status
         """, (str(ano),))
-        procedimentos_status = {row[0]: row[1] for row in cursor.fetchall()}
+        procedimentos_status = {row['status']: row['qtd'] for row in cursor.fetchall()}
         
         # ============ ESTATÍSTICAS ESPECÍFICAS - IPM/SINDICÂNCIA ============
         
@@ -7434,7 +7434,7 @@ def gerar_relatorio_anual(ano):
         indicios_crime = 0
         indicios_transgressao = 0
         for row in cursor.fetchall():
-            categorias = row[0] or ''
+            categorias = row['indicios_categorias'] or ''
             if 'crime' in categorias.lower():
                 indicios_crime += 1
             if 'transgressao' in categorias.lower() or 'rdpm' in categorias.lower():
@@ -7459,11 +7459,11 @@ def gerar_relatorio_anual(ano):
         punidos = 0
         absolvidos_arquivados = 0
         for row in cursor.fetchall():
-            solucao = (row[0] or '').lower()
+            solucao = (row['solucao_tipo'] or '').lower()
             if 'punido' in solucao or 'punicao' in solucao:
-                punidos += row[1]
+                punidos += row['qtd']
             elif 'absolvido' in solucao or 'arquivado' in solucao or 'absolvicao' in solucao:
-                absolvidos_arquivados += row[1]
+                absolvidos_arquivados += row['qtd']
         
         # ============ MONTAR ESTRUTURA DE DADOS ============
         
@@ -7721,17 +7721,17 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
             """, (processo_id,))
             
             for row in cursor.fetchall():
-                pm_envolvido_id = row[4]
+                pm_envolvido_id = row['pm_envolvido_id']
                 
                 # Buscar indícios específicos deste PM
                 indicios_pm = _obter_indicios_por_pm(cursor, pm_envolvido_id)
                 
                 pms.append({
-                    "nome": row[0],
-                    "posto_graduacao": row[1], 
-                    "matricula": row[2],
-                    "tipo_envolvimento": row[3] or "Envolvido",
-                    "completo": f"{row[1]} {row[2]} {row[0]}".strip(),
+                    "nome": row['nome'],
+                    "posto_graduacao": row['posto_graduacao'], 
+                    "matricula": row['matricula'],
+                    "tipo_envolvimento": row['tipo_envolvimento'] or "Envolvido",
+                    "completo": f"{row['posto_graduacao']} {row['matricula']} {row['nome']}".strip(),
                     "indicios": indicios_pm
                 })
         else:
@@ -7751,10 +7751,10 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                 # Buscar transgressões do campo JSON
                 indicios_processo = {"categorias": [], "crimes": [], "transgressoes": [], "art29": []}
                 
-                if row[4]:  # transgressoes_ids
+                if row['transgressoes_ids']:  # transgressoes_ids
                     try:
                         import json
-                        transgressoes_json = json.loads(row[4])
+                        transgressoes_json = json.loads(row['transgressoes_ids'])
                         
                         if isinstance(transgressoes_json, list):
                             for trans in transgressoes_json:
@@ -7771,17 +7771,17 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                                     rdpm_row = cursor.fetchone()
                                     if rdpm_row:
                                         # Determinar artigo baseado na gravidade
-                                        gravidade = rdpm_row[2].lower()
+                                        gravidade = rdpm_row['gravidade'].lower()
                                         artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
                                         artigo = artigo_map.get(gravidade, '15')
                                         
                                         indicios_processo["transgressoes"].append({
-                                            "inciso": rdpm_row[0],
-                                            "texto": rdpm_row[1],
-                                            "gravidade": rdpm_row[2],
+                                            "inciso": rdpm_row['inciso'],
+                                            "texto": rdpm_row['texto'],
+                                            "gravidade": rdpm_row['gravidade'],
                                             "artigo": artigo,
                                             "tipo": "rdpm",
-                                            "texto_completo": f"Inciso {rdpm_row[0]}, do RDPM - {rdpm_row[1]} (art. {artigo} - {rdpm_row[2]})"
+                                            "texto_completo": f"Inciso {rdpm_row['inciso']}, do RDPM - {rdpm_row['texto']} (art. {artigo} - {rdpm_row['gravidade']})"
                                         })
                                 
                                 elif trans_tipo == 'estatuto':
@@ -7794,9 +7794,9 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                                     art29_row = cursor.fetchone()
                                     if art29_row:
                                         art29_obj = {
-                                            "inciso": art29_row[0],
-                                            "texto": art29_row[1],
-                                            "texto_completo": f"Art. 29, Inciso {art29_row[0]}, do Decreto Lei 09A/1982 - {art29_row[1]}"
+                                            "inciso": art29_row['inciso'],
+                                            "texto": art29_row['texto'],
+                                            "texto_completo": f"Art. 29, Inciso {art29_row['inciso']}, do Decreto Lei 09A/1982 - {art29_row['texto']}"
                                         }
                                         
                                         # Se houver analogia RDPM, adicionar como complemento
@@ -7811,20 +7811,20 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                                                 rdpm_row = cursor.fetchone()
                                                 if rdpm_row:
                                                     # Determinar artigo baseado na gravidade
-                                                    gravidade = rdpm_row[2].lower()
+                                                    gravidade = rdpm_row['gravidade'].lower()
                                                     artigo_map = {'leve': '15', 'media': '16', 'grave': '17'}
                                                     artigo = artigo_map.get(gravidade, '15')
                                                     
                                                     art29_obj["analogia"] = {
-                                                        "inciso": rdpm_row[0],
-                                                        "texto": rdpm_row[1],
-                                                        "gravidade": rdpm_row[2],
+                                                        "inciso": rdpm_row['inciso'],
+                                                        "texto": rdpm_row['texto'],
+                                                        "gravidade": rdpm_row['gravidade'],
                                                         "artigo": artigo
                                                     }
                                                     # Atualizar texto_completo para incluir a analogia
                                                     art29_obj["texto_completo"] = (
-                                                        f"Art. 29, Inciso {art29_row[0]}, do Decreto Lei 09A/1982 - {art29_row[1]}\n"
-                                                        f"  Analogia RDPM: Inciso {rdpm_row[0]} - {rdpm_row[1]} (art. {artigo} - {rdpm_row[2]})"
+                                                        f"Art. 29, Inciso {art29_row['inciso']}, do Decreto Lei 09A/1982 - {art29_row['texto']}\n"
+                                                        f"  Analogia RDPM: Inciso {rdpm_row['inciso']} - {rdpm_row['texto']} (art. {artigo} - {rdpm_row['gravidade']})"
                                                     )
                                         
                                         indicios_processo["art29"].append(art29_obj)
@@ -7832,11 +7832,11 @@ def _obter_pms_envolvidos_para_mapa(cursor, processo_id, tipo_geral):
                         print(f"Erro ao processar transgressões JSON: {e}")
                 
                 pms.append({
-                    "nome": row[1],
-                    "posto_graduacao": row[2],
-                    "matricula": row[3], 
-                    "tipo_envolvimento": row[0] or "Acusado",
-                    "completo": f"{row[2]} {row[3]} {row[1]}".strip(),
+                    "nome": row['nome'],
+                    "posto_graduacao": row['posto_graduacao'],
+                    "matricula": row['matricula'], 
+                    "tipo_envolvimento": row['status_pm'] or "Acusado",
+                    "completo": f"{row['posto_graduacao']} {row['matricula']} {row['nome']}".strip(),
                     "indicios": indicios_processo
                 })
                 
