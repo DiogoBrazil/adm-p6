@@ -1955,10 +1955,9 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
         
         dados = []
         for row in resultados:
-            crime, total = row
             dados.append({
-                'crime': crime,
-                'quantidade': total
+                'crime': row['descricao_artigo'],
+                'quantidade': row['total']
             })
         
         return {
@@ -1973,8 +1972,8 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
 @eel.expose
 def obter_estatistica_crimes_comuns(ano=None):
     """
-    Estatística 8: Crimes comuns apontados em SR e IPM
-    Lista todos os crimes comuns vinculados a IPMs e SRs
+    Estatística 8: Contravenções penais e crimes comuns apontados em SR e IPM
+    Lista todos os crimes comuns e contravenções penais vinculados a IPMs e SRs
     """
     try:
         conn = get_pg_connection()
@@ -1982,7 +1981,7 @@ def obter_estatistica_crimes_comuns(ano=None):
         
         where_clause = """WHERE p.tipo_detalhe IN ('IPM', 'SR') 
                          AND p.ativo = TRUE 
-                         AND cc.tipo = 'Crime'
+                         AND cc.tipo IN ('Crime', 'Contravenção Penal')
                          AND pei.categorias_indicios LIKE '%%Indícios de crime comum%%'"""
         params = []
         
@@ -1992,15 +1991,17 @@ def obter_estatistica_crimes_comuns(ano=None):
         
         cursor.execute(f'''
             SELECT 
+                cc.artigo,
                 cc.descricao_artigo,
+                cc.tipo,
                 COUNT(DISTINCT pei.procedimento_id) as total
             FROM pm_envolvido_indicios pei
             JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
             JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
             JOIN processos_procedimentos p ON pei.procedimento_id = p.id
             {where_clause}
-            GROUP BY cc.descricao_artigo
-            ORDER BY total DESC
+            GROUP BY cc.artigo, cc.descricao_artigo, cc.tipo
+            ORDER BY total DESC, cc.artigo
         ''', params)
         
         resultados = cursor.fetchall()
@@ -2008,10 +2009,11 @@ def obter_estatistica_crimes_comuns(ano=None):
         
         dados = []
         for row in resultados:
-            crime, total = row
             dados.append({
-                'crime': crime,
-                'quantidade': total
+                'artigo': row['artigo'],
+                'descricao': row['descricao_artigo'],
+                'classificacao': 'Crime Comum' if row['tipo'] == 'Crime' else 'Contravenção Penal',
+                'quantidade': row['total']
             })
         
         return {
@@ -2405,11 +2407,25 @@ def registrar_processo(
             print(f"🔍 Verificando indícios por PM recebidos: {indicios_por_pm}")
             print(f"🔍 Tipo dos indícios por PM: {type(indicios_por_pm)}")
             
+            # FALLBACK: Se não houver indicios_por_pm mas houver indícios globais E PM único,
+            # converter indícios globais para o formato por PM
+            if not indicios_por_pm and nome_pm_id and (indicios_crimes or indicios_rdpm or indicios_art29):
+                print(f"🔄 FALLBACK: Convertendo indícios globais para formato por PM (PM único: {nome_pm_id})")
+                indicios_por_pm = {
+                    nome_pm_id: {
+                        'categorias': [cat.strip() for cat in (indicios_categorias or '').split(',') if cat.strip()],
+                        'crimes': [{'id': cid} for cid in (indicios_crimes or [])],
+                        'rdpm': [{'id': rid} for rid in (indicios_rdpm or [])],
+                        'art29': [{'id': aid} for aid in (indicios_art29 or [])]
+                    }
+                }
+                print(f"✅ Indícios convertidos para PM {nome_pm_id}: {indicios_por_pm[nome_pm_id]}")
+            
             if indicios_por_pm and isinstance(indicios_por_pm, dict):
                 print(f"🔧 Processando indícios por PM via formulário: {len(indicios_por_pm)} PMs com dados")
                 
                 for pm_id, dados_indicios in indicios_por_pm.items():
-                    print(f"� Salvando indícios para PM {pm_id}")
+                    print(f"💾 Salvando indícios para PM {pm_id}")
                     
                     if not dados_indicios:
                         print(f"⚠️ PM {pm_id} sem dados de indícios")
@@ -3121,15 +3137,41 @@ def obter_processo(processo_id):
 
         # Carregar indícios por PM para procedimentos
         indicios_por_pm = {}
-        if processo['tipo_geral'] == 'procedimento' and pms_envolvidos:
+        if processo['tipo_geral'] == 'procedimento':
             print(f"🔍 Carregando indícios por PM para procedimento {processo_id}")
-            for pm_envolvido in pms_envolvidos:
-                pm_envolvido_id = pm_envolvido.get('pm_envolvido_id')
-                if pm_envolvido_id:
+            
+            # Caso 1: Procedimentos com múltiplos PMs (IPM, ITM, etc.)
+            if pms_envolvidos:
+                for pm_envolvido in pms_envolvidos:
+                    pm_envolvido_id = pm_envolvido.get('pm_envolvido_id')
+                    if pm_envolvido_id:
+                        indicios_pm = buscar_indicios_por_pm(pm_envolvido_id)
+                        if indicios_pm:
+                            indicios_por_pm[pm_envolvido['id']] = indicios_pm
+                            print(f"✅ Indícios carregados para PM {pm_envolvido['nome_completo']}: {indicios_pm}")
+            
+            # Caso 2: Procedimentos com único PM (SR, outros)
+            # Para compatibilidade, buscar também indícios do PM principal (nome_pm_id)
+            elif processo['nome_pm_id']:
+                print(f"🔍 Procedimento com PM único, buscando indícios do PM principal ID {processo['nome_pm_id']}")
+                # Buscar pm_envolvido_id na tabela de relacionamento
+                conn_temp = db_manager.get_connection()
+                cursor_temp = conn_temp.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cursor_temp.execute("""
+                    SELECT id FROM procedimento_pms_envolvidos 
+                    WHERE procedimento_id = %s AND pm_id = %s
+                """, (processo_id, processo['nome_pm_id']))
+                pm_envolvido_result = cursor_temp.fetchone()
+                conn_temp.close()
+                
+                if pm_envolvido_result:
+                    pm_envolvido_id = pm_envolvido_result['id']
                     indicios_pm = buscar_indicios_por_pm(pm_envolvido_id)
                     if indicios_pm:
-                        indicios_por_pm[pm_envolvido['id']] = indicios_pm
-                        print(f"✅ Indícios carregados para PM {pm_envolvido['nome_completo']}: {indicios_pm}")
+                        # Usar o nome_pm_id como chave para manter compatibilidade com frontend
+                        indicios_por_pm[processo['nome_pm_id']] = indicios_pm
+                        print(f"✅ Indícios carregados para PM único (ID {processo['nome_pm_id']}): {indicios_pm}")
+            
             print(f"📋 Total de PMs com indícios carregados: {len(indicios_por_pm)}")
 
         # Montar nomes completos das funções de processo (campos adicionados ao final)

@@ -1066,7 +1066,7 @@ function renderizarPaginaCrimesComuns() {
         <div class="statistics-title">
             <div class="statistics-title-left">
                 <i class="fas fa-balance-scale-right"></i>
-                Crimes comuns apontados em SR e IPM
+                Contravenções penais e crimes comuns apontados em SR e IPM
             </div>
             <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
@@ -1075,20 +1075,21 @@ function renderizarPaginaCrimesComuns() {
         <table class="motoristas-table" id="tabelaCrimesComunsVisualizacao">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Crime Comum</th>
-                    <th style="text-align: center;">Quantidade de Processos</th>
+                    <th>Classificação</th>
+                    <th>Artigo</th>
+                    <th>Descrição</th>
+                    <th style="text-align: center;">Quantidade de Procedimentos</th>
                 </tr>
             </thead>
             <tbody>
     `;
     
     dadosPagina.forEach((item, index) => {
-        const numeroGlobal = inicio + index + 1;
         html += `
             <tr>
-                <td>${numeroGlobal}</td>
-                <td class="motorista-nome">${item.crime}</td>
+                <td>${item.classificacao}</td>
+                <td style="text-align: center;"><strong>Art. ${item.artigo}</strong></td>
+                <td class="motorista-nome">${item.descricao}</td>
                 <td style="text-align: center;">
                     <span class="sinistros-count">${item.quantidade}</span>
                 </td>
@@ -1109,7 +1110,7 @@ function renderizarPaginaCrimesComuns() {
                 </button>
             </div>
             <div class="pagination-info">
-                Página ${paginaAtual} de ${totalPaginas} (${dados.length} crimes comuns)
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} registros)
             </div>
         </div>
     `;
@@ -1119,9 +1120,10 @@ function renderizarPaginaCrimesComuns() {
         <table class="motoristas-table data-table-pdf" id="tabelaCrimesComunsCompleta">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Crime Comum</th>
-                    <th style="text-align: center;">Quantidade de Processos</th>
+                    <th>Classificação</th>
+                    <th>Artigo</th>
+                    <th>Descrição</th>
+                    <th style="text-align: center;">Quantidade de Procedimentos</th>
                 </tr>
             </thead>
             <tbody>
@@ -1130,8 +1132,9 @@ function renderizarPaginaCrimesComuns() {
     dados.forEach((item, index) => {
         html += `
             <tr>
-                <td>${index + 1}</td>
-                <td class="motorista-nome">${item.crime}</td>
+                <td>${item.classificacao}</td>
+                <td style="text-align: center;"><strong>Art. ${item.artigo}</strong></td>
+                <td class="motorista-nome">${item.descricao}</td>
                 <td style="text-align: center;">
                     <span class="sinistros-count">${item.quantidade}</span>
                 </td>
