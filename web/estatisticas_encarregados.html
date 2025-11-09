@@ -656,6 +656,18 @@
             overflow-wrap: break-word;
         }
 
+        /* Larguras específicas para colunas menores */
+        .header-table th:nth-child(2), .body-table td:nth-child(2),  /* SR */
+        .header-table th:nth-child(3), .body-table td:nth-child(3),  /* SV */
+        .header-table th:nth-child(4), .body-table td:nth-child(4) { /* FP */
+            width: 5%;
+        }
+
+        /* Largura maior para coluna Escrivão */
+        .header-table th:nth-child(6), .body-table td:nth-child(6) { /* Escrivão */
+            width: 10%;
+        }
+
         .header-table th:last-child, .body-table td:last-child {
             border-right: none;
         }
@@ -671,6 +683,10 @@
             transition: all 0.3s;
             position: relative;
             background: inherit;
+        }
+
+        th.sortable {
+            padding-right: 30px !important;
         }
 
         th:hover {
