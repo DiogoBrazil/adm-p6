@@ -16,14 +16,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     await carregarUsuarioLogado();
     await carregarAuditorias();
     
+    // Configurar indicadores iniciais
+    atualizarIndicadorFiltros();
+    
     // Event listeners
     document.getElementById('searchInput').addEventListener('input', debounce(function(e) {
         searchTerm = (e.target.value || '').trim();
         currentPage = 1;
         carregarAuditorias();
         
-        // Mostrar/ocultar botão limpar
-        document.getElementById('clearButton').style.display = searchTerm ? 'inline-flex' : 'none';
+        // Atualizar visibilidade do botão limpar
+        atualizarVisibilidadeBotaoLimpar();
     }, 500));
     
     document.getElementById('prevPage').addEventListener('click', function() {
@@ -216,10 +219,18 @@ function debounce(func, wait) {
 
 function limparBusca() {
     document.getElementById('searchInput').value = '';
-    document.getElementById('clearButton').style.display = 'none';
     searchTerm = '';
+    
+    // Limpar filtros também
+    document.getElementById('filterOperacao').value = '';
+    document.getElementById('filterTabela').value = '';
+    filtros = { operacao: '', tabela: '' };
+    
     currentPage = 1;
     carregarAuditorias();
+    
+    // Atualizar indicador visual
+    atualizarIndicadorFiltros();
 }
 
 function abrirModalFiltros() {
@@ -236,6 +247,9 @@ function aplicarFiltros() {
     currentPage = 1;
     fecharModalFiltros();
     carregarAuditorias();
+    
+    // Atualizar indicador visual
+    atualizarIndicadorFiltros();
 }
 
 function limparFiltros() {
@@ -245,6 +259,55 @@ function limparFiltros() {
     currentPage = 1;
     fecharModalFiltros();
     carregarAuditorias();
+    
+    // Atualizar indicador visual
+    atualizarIndicadorFiltros();
+}
+
+// ========== INDICADORES VISUAIS ==========
+
+function atualizarIndicadorFiltros() {
+    const toggleBtn = document.getElementById('filterToggle');
+    let filtrosAplicados = 0;
+    
+    // Contar quantos filtros estão ativos
+    Object.values(filtros).forEach(valor => {
+        if (valor && valor.trim()) filtrosAplicados++;
+    });
+    
+    // Remover indicador anterior
+    const indicadorExistente = toggleBtn.querySelector('.filter-indicator');
+    if (indicadorExistente) {
+        indicadorExistente.remove();
+    }
+    
+    // Adicionar novo indicador se houver filtros ativos
+    if (filtrosAplicados > 0) {
+        const indicador = document.createElement('span');
+        indicador.className = 'filter-indicator';
+        indicador.textContent = filtrosAplicados;
+        toggleBtn.appendChild(indicador);
+    }
+    
+    // Atualizar visibilidade do botão de limpar
+    atualizarVisibilidadeBotaoLimpar();
+}
+
+function atualizarVisibilidadeBotaoLimpar() {
+    const clearButton = document.getElementById('clearButton');
+    const searchInput = document.getElementById('searchInput');
+    
+    if (!clearButton || !searchInput) return;
+    
+    const termoBusca = searchInput.value.trim();
+    const temFiltrosAtivos = Object.values(filtros).some(valor => valor && valor.trim());
+    
+    // Mostrar botão se houver busca OU filtros ativos
+    if (termoBusca !== '' || temFiltrosAtivos) {
+        clearButton.style.display = 'inline-flex';
+    } else {
+        clearButton.style.display = 'none';
+    }
 }
 
 // ========== ALERTAS ==========
