@@ -818,7 +818,7 @@ class ModalIndiciosSolucao {
         // Criar estrutura de dados compatível com o backend
         const novosCrimes = this.crimesSelecionados.map(crime => ({ id: crime.id }));
         const novosRdpm = this.transgressoesSelecionadas.filter(t => t.tipo === 'rdpm').map(trans => ({ id: trans.id }));
-        const novosArt29 = this.transgressoesSelecionadas.filter(t => t.tipo === 'estatuto').map(trans => ({ id: trans.id }));
+        const novosArt29 = this.transgressoesSelecionadas.filter(t => t.tipo === 'art29').map(trans => ({ id: trans.id }));
         
         // Buscar dados existentes para fazer merge
         const dadosExistentes = (typeof indiciosPorPM !== 'undefined' && indiciosPorPM[pmSelecionado]) 

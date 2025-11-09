@@ -2366,10 +2366,10 @@ def registrar_processo(
             print(f"🔍 Tipo dos indícios por PM: {type(indicios_por_pm)}")
             
             if indicios_por_pm and isinstance(indicios_por_pm, dict):
-                print(f"🔧 Processando indícios por PM: {len(indicios_por_pm)} PMs")
+                print(f"🔧 Processando indícios por PM via formulário: {len(indicios_por_pm)} PMs com dados")
                 
                 for pm_id, dados_indicios in indicios_por_pm.items():
-                    print(f"🔍 Processando PM {pm_id}: {dados_indicios}")
+                    print(f"� Salvando indícios para PM {pm_id}")
                     
                     if not dados_indicios:
                         print(f"⚠️ PM {pm_id} sem dados de indícios")
@@ -2386,57 +2386,22 @@ def registrar_processo(
                         print(f"⚠️ PM {pm_id} não encontrado na tabela procedimento_pms_envolvidos")
                         continue
                         
-                    pm_envolvido_id = pm_envolvido_result[0]
+                    pm_envolvido_id = pm_envolvido_result['id']
                     
-                    # Chamar função para salvar indícios deste PM
-                    try:
-                        from uuid import uuid4
+                    # Usar a função dedicada para salvar indícios
+                    resultado = salvar_indicios_pm_envolvido(pm_envolvido_id, dados_indicios)
+                    
+                    if resultado.get('sucesso'):
+                        # Extrair contagens para log
+                        categorias = dados_indicios.get('categorias', [])
+                        crimes = dados_indicios.get('crimes', [])
+                        rdpm = dados_indicios.get('rdpm', [])
+                        art29 = dados_indicios.get('art29', [])
+                        print(f"✅ Indícios salvos para PM {pm_id}: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
+                    else:
+                        print(f"❌ Falha ao salvar indícios do PM {pm_id}: {resultado.get('mensagem', 'Erro desconhecido')}")
                         
-                        categoria = dados_indicios.get('categoria', '')
-                        if categoria:
-                            # Inserir registro principal
-                            indicios_main_id = str(uuid4())
-                            # Converter categoria em array JSON para categorias_indicios
-                            import json
-                            categorias_array = [cat.strip() for cat in categoria.split(',') if cat.strip()]
-                            categorias_json = json.dumps(categorias_array)
-                            
-                            cursor.execute("""
-                                INSERT INTO pm_envolvido_indicios (id, pm_envolvido_id, procedimento_id, categoria, categorias_indicios)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (indicios_main_id, pm_envolvido_id, processo_id, categoria, categorias_json))
-                            
-                            # Inserir crimes
-                            crimes = dados_indicios.get('crimes', [])
-                            for crime in crimes:
-                                crime_id = crime.get('id') if isinstance(crime, dict) else crime
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_crimes (id, pm_indicios_id, crime_id)
-                                    VALUES (%s, %s, %s)
-                                """, (str(uuid4()), indicios_main_id, crime_id))
-                            
-                            # Inserir transgressões RDPM
-                            rdpm = dados_indicios.get('rdpm', [])
-                            for trans in rdpm:
-                                trans_id = trans.get('id') if isinstance(trans, dict) else trans
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_rdpm (id, pm_indicios_id, transgressao_id)
-                                    VALUES (%s, %s, %s)
-                                """, (str(uuid4()), indicios_main_id, trans_id))
-                            
-                            # Inserir infrações Art. 29
-                            art29 = dados_indicios.get('art29', [])
-                            for infracao in art29:
-                                infracao_id = infracao.get('id') if isinstance(infracao, dict) else infracao
-                                cursor.execute("""
-                                    INSERT INTO pm_envolvido_art29 (id, pm_indicios_id, art29_id)
-                                    VALUES (%s, %s, %s)
-                                """, (str(uuid4()), indicios_main_id, infracao_id))
-                            
-                            print(f"✅ Indícios salvos para PM {pm_id}: {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
-                            
-                    except Exception as e:
-                        print(f"❌ Erro ao salvar indícios do PM {pm_id}: {e}")
+                print(f"🎯 Processamento de indícios por PM concluído: {len(indicios_por_pm)} PMs processados")
                         
         except Exception as _e:
             print(f"Aviso: falha ao processar indícios por PM: {_e}")
@@ -6246,7 +6211,8 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
             conn.close()
             return {"sucesso": False, "mensagem": "PM envolvido não encontrado"}
         
-        procedimento_id = pm_data[0]
+        procedimento_id = pm_data['procedimento_id']
+        print(f"📋 Procedimento ID: {procedimento_id}")
         
         # Buscar ID do registro de indícios existente (se houver)
         cursor.execute("SELECT id FROM pm_envolvido_indicios WHERE pm_envolvido_id = %s AND ativo = TRUE", (pm_envolvido_id,))
@@ -6254,8 +6220,9 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
         
         if indicios_registro:
             # Atualizar registro existente
-            pm_indicios_id = indicios_registro[0]
+            pm_indicios_id = indicios_registro['id']
             print(f"🔄 Atualizando registro de indícios existente: {pm_indicios_id}")
+            print(f"🗑️ Removendo vínculos antigos...")
             
             # Limpar apenas os vínculos de crimes/rdpm/art29
             cursor.execute("DELETE FROM pm_envolvido_crimes WHERE pm_indicios_id = %s", (pm_indicios_id,))
@@ -6354,7 +6321,7 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         
         # Carregar categorias
         cursor.execute("SELECT categoria FROM pm_envolvido_indicios WHERE pm_envolvido_id = %s", (pm_envolvido_id,))
-        indicios['categorias'] = [row[0] for row in cursor.fetchall()]
+        indicios['categorias'] = [row['categoria'] for row in cursor.fetchall() if row['categoria']]
         
         # Carregar crimes/contravenções com detalhes
         cursor.execute("""
@@ -6367,14 +6334,14 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         
         for row in cursor.fetchall():
             indicios['crimes'].append({
-                'id': row[0],
-                'tipo': row[1],
-                'dispositivo_legal': row[2],
-                'artigo': row[3],
-                'descricao_artigo': row[4],
-                'paragrafo': row[5] or '',
-                'inciso': row[6] or '',
-                'alinea': row[7] or ''
+                'id': row['id'],
+                'tipo': row['tipo'],
+                'dispositivo_legal': row['dispositivo_legal'],
+                'artigo': row['artigo'],
+                'descricao_artigo': row['descricao_artigo'],
+                'paragrafo': row['paragrafo'] or '',
+                'inciso': row['inciso'] or '',
+                'alinea': row['alinea'] or ''
             })
         
         # Carregar transgressões RDPM com detalhes
@@ -6387,12 +6354,12 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         
         for row in cursor.fetchall():
             indicios['rdpm'].append({
-                'id': row[0],
-                'artigo': row[1],
-                'gravidade': row[2],
-                'inciso': row[3],
-                'texto': row[4],
-                'natureza': row[5]
+                'id': row['id'],
+                'artigo': row['artigo'],
+                'gravidade': row['gravidade'],
+                'inciso': row['inciso'],
+                'texto': row['texto'],
+                'natureza': row.get('natureza', row['gravidade'])
             })
         
         # Carregar infrações Art. 29 com detalhes
@@ -6405,9 +6372,9 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         
         for row in cursor.fetchall():
             indicios['art29'].append({
-                'id': row[0],
-                'inciso': row[1],
-                'texto': row[2]
+                'id': row['id'],
+                'inciso': row['inciso'],
+                'texto': row['texto']
             })
         
         conn.close()
