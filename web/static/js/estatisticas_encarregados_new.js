@@ -214,20 +214,33 @@ function exportData() {
     }
 }
 
+// Função para atualizar visibilidade do botão limpar
+function atualizarVisibilidadeBotaoLimpar() {
+    const clearButton = document.getElementById('clearButton');
+    const searchInput = document.getElementById('searchInput');
+    
+    if (!clearButton || !searchInput) return;
+    
+    const termoBusca = searchInput.value.trim();
+    const temFiltrosAtivos = Object.values(filtrosAtivos).some(valor => valor && valor.trim());
+    
+    // Mostrar botão se houver busca OU filtros ativos
+    if (termoBusca !== '' || temFiltrosAtivos) {
+        clearButton.style.display = 'flex';
+    } else {
+        clearButton.style.display = 'none';
+    }
+}
+
 // Função para inicializar event listeners
 function inicializarEventListeners() {
     // Busca em tempo real
     const searchInput = document.getElementById('searchInput');
-    const clearButton = document.getElementById('clearButton');
     
     if (searchInput) {
         searchInput.addEventListener('input', function() {
-            // Mostrar/esconder botão limpar
-            if (this.value.trim() !== '') {
-                clearButton.style.display = 'flex';
-            } else {
-                clearButton.style.display = 'none';
-            }
+            // Atualizar visibilidade do botão limpar
+            atualizarVisibilidadeBotaoLimpar();
             
             // Renderizar tabela
             renderTable();
@@ -235,15 +248,40 @@ function inicializarEventListeners() {
     }
 }
 
-// Função para limpar busca
+// Função para limpar busca e filtros
 function limparBusca() {
     const searchInput = document.getElementById('searchInput');
     const clearButton = document.getElementById('clearButton');
     
+    // Limpar campo de busca
     if (searchInput) {
         searchInput.value = '';
+    }
+    
+    // Limpar filtros ativos
+    filtrosAtivos.encarregado = '';
+    filtrosAtivos.tipoFeito = '';
+    
+    // Resetar selects do modal se estiverem presentes
+    const encarregadoSelect = document.getElementById('filtro-encarregado');
+    const tipoFeitoSelect = document.getElementById('filtro-tipo-feito');
+    
+    if (encarregadoSelect) encarregadoSelect.value = '';
+    if (tipoFeitoSelect) tipoFeitoSelect.value = '';
+    
+    // Esconder botão limpar
+    if (clearButton) {
         clearButton.style.display = 'none';
-        renderTable();
+    }
+    
+    // Renderizar tabela sem filtros
+    renderTable();
+    
+    // Atualizar indicador de filtros
+    atualizarIndicadorFiltros();
+    
+    // Focar no campo de busca
+    if (searchInput) {
         searchInput.focus();
     }
 }
@@ -418,6 +456,9 @@ function aplicarFiltrosModal() {
         
         // Atualizar indicador de filtros ativos
         atualizarIndicadorFiltros();
+        
+        // Atualizar visibilidade do botão limpar
+        atualizarVisibilidadeBotaoLimpar();
     }
 }
 
@@ -444,6 +485,9 @@ function limparFiltrosModal() {
     
     // Atualizar indicador de filtros ativos
     atualizarIndicadorFiltros();
+    
+    // Atualizar visibilidade do botão limpar
+    atualizarVisibilidadeBotaoLimpar();
 }
 
 // Função para aplicar filtros aos dados
