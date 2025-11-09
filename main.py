@@ -1761,14 +1761,13 @@ def obter_top10_transgressoes(ano=None):
         
         dados = []
         for row in resultados:
-            transgressao_id, inciso, gravidade, texto, ocorrencias = row
-            artigo = gravidade_map.get(gravidade.lower(), '%s')
+            artigo = gravidade_map.get(row['gravidade'].lower(), '%s')
             
             dados.append({
-                'transgressao_id': transgressao_id,
-                'artigo_label': f"Art. {artigo}, Inciso {inciso}",
-                'descricao_curta': texto[:50] + '...' if len(texto) > 50 else texto,
-                'quantidade': ocorrencias
+                'transgressao_id': row['id'],
+                'artigo_label': f"Art. {artigo}, Inciso {row['inciso']}",
+                'descricao_curta': row['texto'][:50] + '...' if len(row['texto']) > 50 else row['texto'],
+                'quantidade': row['ocorrencias']
             })
         
         # Adicionar Art. 29 se houver
@@ -1793,7 +1792,7 @@ def obter_top10_transgressoes(ano=None):
                 INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
                 {where_clause_sr}
             ) as trans
-            INNER JOIN transgressoes t ON trans.transgressao_id = t.id
+            INNER JOIN infracoes_estatuto_art29 t ON trans.transgressao_id = t.id
             GROUP BY t.id, t.inciso, t.texto
             ORDER BY ocorrencias DESC
             LIMIT 10
@@ -1802,12 +1801,11 @@ def obter_top10_transgressoes(ano=None):
         art29_resultados = cursor.fetchall()
         
         for row in art29_resultados:
-            transgressao_id, inciso, texto, ocorrencias = row
             dados.append({
-                'transgressao_id': transgressao_id,
-                'artigo_label': f"Art. 29, Inciso {inciso}",
-                'descricao_curta': texto[:50] + '...' if len(texto) > 50 else texto,
-                'quantidade': ocorrencias
+                'transgressao_id': row['id'],
+                'artigo_label': f"Art. 29, Inciso {row['inciso']}",
+                'descricao_curta': row['texto'][:50] + '...' if len(row['texto']) > 50 else row['texto'],
+                'quantidade': row['ocorrencias']
             })
         
         # Ordenar todos por ocorrências e pegar top 10
@@ -1859,10 +1857,9 @@ def obter_ranking_motoristas_sinistros(ano=None):
         
         dados = []
         for row in resultados:
-            posto, matricula, nome, total = row
             dados.append({
-                'pm_completo': f"{posto} {matricula} {nome}",
-                'total_sinistros': total
+                'pm_completo': f"{row['posto_graduacao']} {row['matricula']} {row['nome']}",
+                'total_sinistros': row['total_sinistros']
             })
         
         return {
@@ -1906,10 +1903,9 @@ def obter_estatistica_naturezas_apuradas(ano=None):
         
         dados = []
         for row in resultados:
-            natureza, total = row
             dados.append({
-                'natureza': natureza,
-                'quantidade': total
+                'natureza': row['natureza_procedimento'],
+                'quantidade': row['total']
             })
         
         return {
