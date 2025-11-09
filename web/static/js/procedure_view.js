@@ -200,7 +200,7 @@ function populateProcedureData(data) {
     
     // Natureza e Solução
     document.getElementById('infoNaturezaProcedimento').textContent = data.natureza_procedimento || '-';
-    document.getElementById('infoSolucaoFinal').textContent = data.solucao_final || '-';
+    document.getElementById('infoSolucaoFinal') && (document.getElementById('infoSolucaoFinal').textContent = data.solucao_final || '-');
     // Novos campos: solução/penalidade e remessa/julgamento
     document.getElementById('infoSolucaoTipo') && (document.getElementById('infoSolucaoTipo').textContent = data.solucao_tipo || '-');
     // Mapear enum ASCII para rótulo com acento
