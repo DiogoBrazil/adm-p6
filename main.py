@@ -1559,12 +1559,15 @@ def obter_estatistica_ipm_indicios(ano=None):
             where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
             params.append(ano)
         
-        # Crime Militar (verifica no JSON categorias_indicios)
+        # Crime Militar (conta total de crimes militares cadastrados em IPMs/IPPMs concluídos)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
-            FROM processos_procedimentos p
-            INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
+            SELECT COUNT(DISTINCT pec.id) as count
+            FROM pm_envolvido_crimes pec
+            INNER JOIN pm_envolvido_indicios i ON pec.pm_indicios_id = i.id
+            INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+            INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
             {where_clause}
+            AND cc.tipo = 'Crime'
             AND (i.categorias_indicios LIKE '%%crime militar%%' OR i.categoria LIKE '%%crime militar%%')
         ''', params)
         crime_militar = cursor.fetchone()['count']
@@ -1641,13 +1644,15 @@ def obter_estatistica_sr_indicios(ano=None):
             where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
             params.append(ano)
         
-        # Crime Comum (verifica no JSON categorias_indicios)
+        # Crime Comum (conta total de crimes E contravenções cadastrados em SRs concluídos)
         cursor.execute(f'''
-            SELECT COUNT(DISTINCT p.id) as count
-            FROM processos_procedimentos p
-            INNER JOIN pm_envolvido_indicios i ON p.id = i.procedimento_id
+            SELECT COUNT(DISTINCT pec.id) as count
+            FROM pm_envolvido_crimes pec
+            INNER JOIN pm_envolvido_indicios i ON pec.pm_indicios_id = i.id
+            INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+            INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
             {where_clause}
-            AND (i.categorias_indicios LIKE '%%crime comum%%' OR i.categoria LIKE '%%crime comum%%')
+            AND cc.tipo IN ('Crime', 'Contravenção Penal')
         ''', params)
         crime_comum = cursor.fetchone()['count']
         
