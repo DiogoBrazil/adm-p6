@@ -592,6 +592,7 @@
             border-collapse: separate;
             border-spacing: 0;
             margin: 0;
+            table-layout: fixed;
         }
 
         .header-table thead {
@@ -616,6 +617,7 @@
             border-collapse: separate;
             border-spacing: 0;
             margin: 0;
+            table-layout: fixed;
         }
 
         /* Scrollbar customizada */
@@ -639,14 +641,19 @@
 
         /* Estilos unificados para ambas as tabelas */
         .header-table th, .body-table td {
-            width: 10%; /* Largura uniforme para alinhamento */
+            width: 7.5%; /* Largura uniforme para alinhamento */
             text-align: center;
-            padding: 15px;
+            padding: 12px 8px;
             border-right: 1px solid rgba(255, 255, 255, 0.2);
+            white-space: nowrap;
         }
 
         .header-table th:first-child, .body-table td:first-child {
-            width: 20%; /* Coluna do encarregado mais larga */
+            width: 22%; /* Coluna do encarregado mais larga */
+            text-align: left;
+            white-space: normal; /* Permitir quebra de linha */
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .header-table th:last-child, .body-table td:last-child {
@@ -716,22 +723,27 @@
 
         .encarregado-cell {
             display: flex;
-            align-items: center;
-            justify-content: center;
+            align-items: flex-start;
+            justify-content: flex-start;
             gap: 10px;
+            width: 100%;
         }
 
         .encarregado-info {
             display: flex;
             flex-direction: column;
-            text-align: center;
+            text-align: left;
+            width: 100%;
         }
 
         .encarregado-name {
             font-weight: 600;
             color: #333;
             font-size: 14px;
-            text-align: center;
+            text-align: left;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            line-height: 1.4;
         }
 
         .process-count {
@@ -945,6 +957,11 @@
             color: #7b1fa2;
         }
 
+        .tipo-badge.sv {
+            background: #e1f5fe;
+            color: #0277bd;
+        }
+
         .tipo-badge.pads {
             background: #fff3e0;
             color: #f57c00;
@@ -1057,6 +1074,7 @@
                             <tr>
                                 <th class="sortable" onclick="sortTable('nome')">Encarregado</th>
                                 <th class="sortable" onclick="sortTable('sr')">SR</th>
+                                <th class="sortable" onclick="sortTable('sv')">SV</th>
                                 <th class="sortable" onclick="sortTable('fp')">FP</th>
                                 <th class="sortable" onclick="sortTable('ipm')">IPM</th>
                                 <th class="sortable" onclick="sortTable('escrivao')">Escrivão</th>
@@ -1113,6 +1131,7 @@
                         <select id="filtro-tipo-feito" class="filter-select-modal">
                             <option value="">Todos os Tipos</option>
                             <option value="SR">SR</option>
+                            <option value="SV">SV</option>
                             <option value="FP">FP</option>
                             <option value="IPM">IPM</option>
                             <option value="Escrivão">Escrivão</option>

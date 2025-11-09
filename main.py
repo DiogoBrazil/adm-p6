@@ -1208,7 +1208,7 @@ def obter_estatisticas_encarregados():
             
             # Inicializar contadores
             contadores = {
-                'sr': 0, 'fp': 0, 'ipm': 0, 'escrivao': 0,
+                'sr': 0, 'sv': 0, 'fp': 0, 'ipm': 0, 'escrivao': 0,
                 'pads': 0, 'pad': 0, 'cd': 0, 'cj': 0
             }
             
@@ -1221,6 +1221,16 @@ def obter_estatisticas_encarregados():
             ''', (enc_id,))
             result = cursor.fetchone()
             contadores['sr'] = result['count'] if result else 0
+            
+            # SV - Sindicância de Veículo (como responsável)
+            cursor.execute('''
+                SELECT COUNT(*) as count FROM processos_procedimentos 
+                WHERE responsavel_id = %s 
+                AND tipo_detalhe = 'SV'
+                AND ativo = TRUE
+            ''', (enc_id,))
+            result = cursor.fetchone()
+            contadores['sv'] = result['count'] if result else 0
             
             # FP - Feito Preliminar (como responsável)
             cursor.execute('''

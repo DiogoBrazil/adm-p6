@@ -77,7 +77,7 @@ async function carregarEstatisticas() {
             
             // Calcular totais para cada encarregado
             dadosEstatisticas.forEach(enc => {
-                enc.total = enc.sr + enc.fp + enc.ipm + enc.escrivao + enc.pads + enc.pad + enc.pade + enc.cd + enc.cj + enc.cp;
+                enc.total = enc.sr + (enc.sv || 0) + enc.fp + enc.ipm + enc.escrivao + enc.pads + enc.pad + enc.pade + enc.cd + enc.cj + enc.cp;
             });
             
             // Renderizar tabela
@@ -141,6 +141,7 @@ function renderTable() {
                     </div>
                 </td>
                 <td><span class="process-count ${getCountClass(enc.sr, 3)}">${enc.sr}</span></td>
+                <td><span class="process-count ${getCountClass(enc.sv || 0, 2)}">${enc.sv || 0}</span></td>
                 <td><span class="process-count ${getCountClass(enc.fp, 2)}">${enc.fp}</span></td>
                 <td><span class="process-count ${getCountClass(enc.ipm, 2)}">${enc.ipm}</span></td>
                 <td><span class="process-count ${getCountClass(enc.escrivao, 2)}">${enc.escrivao}</span></td>
@@ -190,10 +191,10 @@ function sortTable(field) {
 // Função para exportar dados
 function exportData() {
     try {
-        let csv = 'Encarregado,SR,FP,IPM,Escrivão,PADS,PAD,PADE,CD,CJ,CP,Total\n';
+        let csv = 'Encarregado,SR,SV,FP,IPM,Escrivão,PADS,PAD,PADE,CD,CJ,CP,Total\n';
         
         dadosFiltrados.forEach(enc => {
-            csv += `"${enc.nome}",${enc.sr},${enc.fp},${enc.ipm},${enc.escrivao},${enc.pads},${enc.pad},${enc.pade},${enc.cd},${enc.cj},${enc.cp},${enc.total}\n`;
+            csv += `"${enc.nome}",${enc.sr},${enc.sv || 0},${enc.fp},${enc.ipm},${enc.escrivao},${enc.pads},${enc.pad},${enc.pade},${enc.cd},${enc.cj},${enc.cp},${enc.total}\n`;
         });
         
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -474,6 +475,7 @@ function aplicarFiltros() {
             // Mapear tipo de feito para propriedade
             const tipoMap = {
                 'SR': 'sr',
+                'SV': 'sv',
                 'FP': 'fp', 
                 'IPM': 'ipm',
                 'Escrivão': 'escrivao',
@@ -529,6 +531,7 @@ function renderTableWithFilters() {
                     </div>
                 </td>
                 <td><span class="process-count ${getCountClass(enc.sr, 3)}">${enc.sr}</span></td>
+                <td><span class="process-count ${getCountClass(enc.sv || 0, 2)}">${enc.sv || 0}</span></td>
                 <td><span class="process-count ${getCountClass(enc.fp, 2)}">${enc.fp}</span></td>
                 <td><span class="process-count ${getCountClass(enc.ipm, 2)}">${enc.ipm}</span></td>
                 <td><span class="process-count ${getCountClass(enc.escrivao, 2)}">${enc.escrivao}</span></td>
