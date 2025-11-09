@@ -4481,11 +4481,14 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 p.processo_sei ILIKE %s OR p.numero_portaria ILIKE %s OR p.numero_memorando ILIKE %s OR
                 p.numero_feito ILIKE %s OR 
                 COALESCE(u_resp.nome, '') ILIKE %s OR
+                COALESCE(u_pres.nome, '') ILIKE %s OR
+                COALESCE(u_int.nome, '') ILIKE %s OR
+                COALESCE(u_escr.nome, '') ILIKE %s OR
                 COALESCE(u_pm.nome, '') ILIKE %s OR
                 COALESCE(p.resumo_fatos, '') ILIKE %s
             )"""
             search_term_like = f"%{search_term}%"
-            search_params = [search_term_like] * 10
+            search_params = [search_term_like] * 13
 
         # Adicionar filtros avançados se fornecidos
         if filtros:
@@ -4510,13 +4513,26 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
                 search_params.append(filtros['status'])
 
             if filtros.get('encarregado'):
+                # Buscar por responsável OU presidente OU interrogante OU escrivão do processo
                 where_clause += """ AND (
                     TRIM(COALESCE(
                         u_resp.posto_graduacao || ' ' || u_resp.matricula || ' ' || u_resp.nome,
                         ''
+                    )) = %s OR
+                    TRIM(COALESCE(
+                        u_pres.posto_graduacao || ' ' || u_pres.matricula || ' ' || u_pres.nome,
+                        ''
+                    )) = %s OR
+                    TRIM(COALESCE(
+                        u_int.posto_graduacao || ' ' || u_int.matricula || ' ' || u_int.nome,
+                        ''
+                    )) = %s OR
+                    TRIM(COALESCE(
+                        u_escr.posto_graduacao || ' ' || u_escr.matricula || ' ' || u_escr.nome,
+                        ''
                     )) = %s
                 )"""
-                search_params.append(filtros['encarregado'])
+                search_params.extend([filtros['encarregado']] * 4)
 
             if filtros.get('ano'):
                 # Priorizar data_instauracao, depois data_recebimento, depois created_at
@@ -4601,6 +4617,9 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
             LEFT JOIN usuarios u_pm ON p.nome_pm_id = u_pm.id
+            LEFT JOIN usuarios u_pres ON p.presidente_id = u_pres.id
+            LEFT JOIN usuarios u_int ON p.interrogante_id = u_int.id
+            LEFT JOIN usuarios u_escr ON p.escrivao_processo_id = u_escr.id
             {where_clause}
         """
         
