@@ -3050,7 +3050,7 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     const dataJulgamento = document.getElementById('data_julgamento')?.value || null;
     
     if (dataConclusao) camposDatas.push({ campo: 'data_conclusao', valor: dataConclusao, nome: 'Data de Conclusão' });
-    if (dataRemessa) camposDatas.push({ campo: 'data_remessa_encarregado', valor: dataRemessa, nome: 'Data de Remessa ao Encarregado' });
+    if (dataRemessa) camposDatas.push({ campo: 'data_remessa_encarregado', valor: dataRemessa, nome: 'Data de Remessa do Encarregado' });
     if (dataJulgamento) camposDatas.push({ campo: 'data_julgamento', valor: dataJulgamento, nome: 'Data de Julgamento' });
     
     for (const { campo, valor, nome } of camposDatas) {
