@@ -707,7 +707,7 @@ function renderizarPaginaMotoristas() {
         <div class="statistics-title">
             <div class="statistics-title-left">
                 <i class="fas fa-car-crash"></i>
-                Ranking de motoristas em sinistro com viatura PM
+                Ranking de motoristas envolvidos em sinistro de trânsito com viatura PM
             </div>
             <button id="btnDownloadPDF" class="btn-download-pdf hide-in-pdf" onclick="baixarPDF()">
                 <i class="fas fa-file-pdf"></i> Baixar PDF
