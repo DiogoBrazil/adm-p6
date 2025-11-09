@@ -1939,6 +1939,7 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
         
         cursor.execute(f'''
             SELECT 
+                cc.artigo,
                 cc.descricao_artigo,
                 COUNT(DISTINCT pei.procedimento_id) as total
             FROM pm_envolvido_indicios pei
@@ -1946,8 +1947,8 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
             JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
             JOIN processos_procedimentos p ON pei.procedimento_id = p.id
             {where_clause}
-            GROUP BY cc.descricao_artigo
-            ORDER BY total DESC
+            GROUP BY cc.artigo, cc.descricao_artigo
+            ORDER BY total DESC, cc.artigo
         ''', params)
         
         resultados = cursor.fetchall()
@@ -1956,7 +1957,8 @@ def obter_estatistica_crimes_militares_ipm(ano=None):
         dados = []
         for row in resultados:
             dados.append({
-                'crime': row['descricao_artigo'],
+                'artigo': row['artigo'],
+                'descricao': row['descricao_artigo'],
                 'quantidade': row['total']
             })
         

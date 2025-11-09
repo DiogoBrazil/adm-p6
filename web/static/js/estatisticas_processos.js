@@ -955,8 +955,8 @@ function renderizarPaginaCrimesMilitares() {
         <table class="motoristas-table" id="tabelaCrimesMilitaresVisualizacao">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Crime Militar</th>
+                    <th>Artigo</th>
+                    <th>Descrição</th>
                     <th style="text-align: center;">Quantidade de IPMs</th>
                 </tr>
             </thead>
@@ -964,11 +964,10 @@ function renderizarPaginaCrimesMilitares() {
     `;
     
     dadosPagina.forEach((item, index) => {
-        const numeroGlobal = inicio + index + 1;
         html += `
             <tr>
-                <td>${numeroGlobal}</td>
-                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;"><strong>Art. ${item.artigo}</strong></td>
+                <td class="motorista-nome">${item.descricao}</td>
                 <td style="text-align: center;">
                     <span class="sinistros-count">${item.quantidade}</span>
                 </td>
@@ -989,7 +988,7 @@ function renderizarPaginaCrimesMilitares() {
                 </button>
             </div>
             <div class="pagination-info">
-                Página ${paginaAtual} de ${totalPaginas} (${dados.length} crimes militares)
+                Página ${paginaAtual} de ${totalPaginas} (${dados.length} registros)
             </div>
         </div>
     `;
@@ -999,8 +998,8 @@ function renderizarPaginaCrimesMilitares() {
         <table class="motoristas-table data-table-pdf" id="tabelaCrimesMilitaresCompleta">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Crime Militar</th>
+                    <th>Artigo</th>
+                    <th>Descrição</th>
                     <th style="text-align: center;">Quantidade de IPMs</th>
                 </tr>
             </thead>
@@ -1010,8 +1009,8 @@ function renderizarPaginaCrimesMilitares() {
     dados.forEach((item, index) => {
         html += `
             <tr>
-                <td>${index + 1}</td>
-                <td class="motorista-nome">${item.crime}</td>
+                <td style="text-align: center;"><strong>Art. ${item.artigo}</strong></td>
+                <td class="motorista-nome">${item.descricao}</td>
                 <td style="text-align: center;">
                     <span class="sinistros-count">${item.quantidade}</span>
                 </td>
