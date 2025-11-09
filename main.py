@@ -2451,8 +2451,8 @@ def registrar_processo(
                         
                     pm_envolvido_id = pm_envolvido_result['id']
                     
-                    # Usar a função dedicada para salvar indícios
-                    resultado = salvar_indicios_pm_envolvido(pm_envolvido_id, dados_indicios)
+                    # Usar a função dedicada para salvar indícios (passando conexão e cursor)
+                    resultado = salvar_indicios_pm_envolvido(pm_envolvido_id, dados_indicios, conn, cursor)
                     
                     if resultado.get('sucesso'):
                         # Extrair contagens para log
@@ -6399,7 +6399,7 @@ def excluir_infracao_estatuto_art29(infracao_id):
 # ====================================================================
 
 @eel.expose
-def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
+def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data, conn=None, cursor=None):
     """
     Salva os indícios específicos de um PM envolvido
     
@@ -6412,6 +6412,8 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
             'rdpm': [{'id': 'trans_id1'}, {'id': 'trans_id2'}],
             'art29': [{'id': 'art29_id1'}, {'id': 'art29_id2'}]
         }
+        conn: Conexão com o banco (opcional, cria uma nova se não fornecida)
+        cursor: Cursor do banco (opcional, cria um novo se não fornecido)
     """
     import json
     try:
@@ -6423,8 +6425,14 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
         print(f"📋 Dados recebidos completos:")
         print(json.dumps(indicios_data, indent=2, ensure_ascii=False))
         
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # Usar conexão fornecida ou criar nova
+        fechar_conexao = False
+        if conn is None:
+            conn = db_manager.get_connection()
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            fechar_conexao = True
+        elif cursor is None:
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Verificar se o PM envolvido existe
         cursor.execute("SELECT procedimento_id FROM procedimento_pms_envolvidos WHERE id = %s", (pm_envolvido_id,))
@@ -6505,8 +6513,10 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data):
                 VALUES (%s, %s, %s)
             """, (str(uuid.uuid4()), pm_indicios_id, art29_id))
         
-        conn.commit()
-        conn.close()
+        # Só fazer commit e fechar se criamos a conexão localmente
+        if fechar_conexao:
+            conn.commit()
+            conn.close()
         
         print(f"✅ Indícios salvos: {len(categorias)} categorias, {len(crimes)} crimes, {len(rdpm)} RDPM, {len(art29)} Art.29")
         return {"sucesso": True, "mensagem": "Indícios salvos com sucesso"}
