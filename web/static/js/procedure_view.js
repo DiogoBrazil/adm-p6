@@ -131,8 +131,19 @@ function getProcedureIdFromURL() {
 
 // Função para carregar dados do procedimento
 async function loadProcedureData() {
+    // Mostrar loader
+    const loaderContainer = document.getElementById('loaderContainer');
+    const contentContainer = document.querySelector('.procedure-container');
+    
+    if (loaderContainer) loaderContainer.style.display = 'flex';
+    if (contentContainer) contentContainer.style.display = 'none';
+    
     try {
         const data = await eel.obter_procedimento_completo(currentProcedureId)();
+        
+        // Ocultar loader
+        if (loaderContainer) loaderContainer.style.display = 'none';
+        if (contentContainer) contentContainer.style.display = 'block';
         
         if (data.sucesso) {
             procedureData = data.procedimento;
@@ -144,6 +155,10 @@ async function loadProcedureData() {
             }, 2000);
         }
     } catch (error) {
+        // Ocultar loader em caso de erro
+        if (loaderContainer) loaderContainer.style.display = 'none';
+        if (contentContainer) contentContainer.style.display = 'block';
+        
         console.error('Erro ao carregar procedimento:', error);
         showAlert('Erro ao carregar dados do procedimento!', 'error');
         setTimeout(() => {
