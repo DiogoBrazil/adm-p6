@@ -423,10 +423,10 @@
                     </td>
                     <td style="text-align: center;">
                         <div style="display: flex; gap: 5px; justify-content: center;">
-                            <button class="btn-action btn-edit" onclick="editarInfracao(${infracao.id})" title="Editar">
+                            <button class="btn-action btn-edit" onclick="editarInfracao('${infracao.id}')" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn-action btn-delete" onclick="confirmarExclusaoInfracao(${infracao.id}, '${incisoEscaped}', '${textoEscaped}')" title="Excluir">
+                            <button class="btn-action btn-delete" onclick="confirmarExclusaoInfracao('${infracao.id}', '${incisoEscaped}', '${textoEscaped}')" title="Excluir">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -538,6 +538,7 @@
         }
 
         function confirmarExclusaoInfracao(id, inciso, texto) {
+            console.log('📝 ID recebido para exclusão:', id, 'Tipo:', typeof id);
             infracaoParaExcluir = id;
             
             const modalConfirmacao = document.getElementById('modalConfirmacao');
@@ -558,7 +559,7 @@
             try {
                 console.log(`🗑️ Excluindo infração ID: ${infracaoParaExcluir}`);
                 
-                const resultado = await eel.excluir_infracao_estatuto_art29(parseInt(infracaoParaExcluir))();
+                const resultado = await eel.excluir_infracao_estatuto_art29(infracaoParaExcluir)();
                 
                 if (resultado.success) {
                     console.log('✅ Infração excluída com sucesso');

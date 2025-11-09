@@ -6094,18 +6094,20 @@ def criar_infracao_estatuto_art29(inciso, texto):
             conn.close()
             return {'success': False, 'error': f'Já existe uma infração com o inciso "{inciso}"'}
         
+        # Gerar novo UUID
+        novo_id = str(uuid.uuid4())
+        
         # Inserir nova infração
         cursor.execute("""
-            INSERT INTO infracoes_estatuto_art29 (inciso, texto, ativo)
-            VALUES (%s, %s, TRUE)
-        """, (inciso, texto))
+            INSERT INTO infracoes_estatuto_art29 (id, inciso, texto, ativo)
+            VALUES (%s, %s, %s, TRUE)
+        """, (novo_id, inciso, texto))
         
-        infracao_id = cursor.lastrowid
         conn.commit()
         conn.close()
         
-        print(f"✅ Infração criada com sucesso - ID: {infracao_id}")
-        return {'success': True, 'data': {'id': infracao_id, 'inciso': inciso, 'texto': texto}}
+        print(f"✅ Infração criada com sucesso - ID: {novo_id}")
+        return {'success': True, 'data': {'id': novo_id, 'inciso': inciso, 'texto': texto}}
         
     except Exception as e:
         print(f"❌ Erro ao criar infração do Art. 29: {e}")
@@ -6197,8 +6199,9 @@ def excluir_infracao_estatuto_art29(infracao_id):
         conn.commit()
         conn.close()
         
-        print(f"✅ Infração {infracao[0]} excluída com sucesso")
-        return {'success': True, 'message': f'Infração {infracao[0]} excluída com sucesso'}
+        inciso = infracao['inciso']
+        print(f"✅ Infração {inciso} excluída com sucesso")
+        return {'success': True, 'message': f'Infração {inciso} excluída com sucesso'}
         
     except Exception as e:
         print(f"❌ Erro ao excluir infração do Art. 29: {e}")

@@ -407,7 +407,7 @@
                 
                 mostrarLoading(true);
                 
-                const resultado = await eel.obter_infracao_estatuto_art29(parseInt(id))();
+                const resultado = await eel.obter_infracao_estatuto_art29(id)();
                 
                 if (resultado.success) {
                     const infracao = resultado.data;
@@ -461,7 +461,7 @@
                 
                 let resultado;
                 if (modoEdicao) {
-                    resultado = await eel.editar_infracao_estatuto_art29(parseInt(infracaoId), inciso, texto)();
+                    resultado = await eel.editar_infracao_estatuto_art29(infracaoId, inciso, texto)();
                 } else {
                     resultado = await eel.criar_infracao_estatuto_art29(inciso, texto)();
                 }
