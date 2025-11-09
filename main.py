@@ -22,6 +22,36 @@ class DatabaseManager:
         # Configuração está em db_config.py
         self.init_database()
     
+    def registrar_auditoria(self, tabela, registro_id, operacao, usuario_id=None):
+        """
+        Registra operação de auditoria no banco de dados
+        
+        Args:
+            tabela (str): Nome da tabela afetada
+            registro_id (str): ID do registro afetado
+            operacao (str): Tipo de operação: 'CREATE', 'UPDATE', 'DELETE'
+            usuario_id (str): ID do usuário que realizou a operação (opcional)
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            auditoria_id = str(uuid.uuid4())
+            
+            cursor.execute('''
+                INSERT INTO auditoria (id, tabela, registro_id, operacao, usuario_id, timestamp)
+                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ''', (auditoria_id, tabela, registro_id, operacao, usuario_id))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"✓ Auditoria registrada: {operacao} na tabela {tabela} (registro: {registro_id})")
+            
+        except Exception as e:
+            print(f"⚠️ Erro ao registrar auditoria: {e}")
+            # Não levanta exceção para não interromper operação principal
+    
     def get_connection(self):
         """Retorna conexão com o banco PostgreSQL"""
         return get_pg_connection()
@@ -253,6 +283,12 @@ class DatabaseManager:
                 return {"sucesso": False, "mensagem": "Usuário não encontrado ou já inativo."}
             
             conn.close()
+            
+            # Registrar auditoria
+            global usuario_logado
+            usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+            self.registrar_auditoria('usuarios', user_id, 'DELETE', usuario_id_logado)
+            
             return {"sucesso": True, "mensagem": "Usuário desativado com sucesso!"}
             
         except Exception as e:
@@ -753,6 +789,10 @@ def cadastrar_usuario(tipo_usuario, posto_graduacao, nome, matricula, is_encarre
         conn.commit()
         conn.close()
         
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('usuarios', user_id, 'CREATE', usuario_id_logado)
+        
         # Mensagem de sucesso padronizada
         return {
             "sucesso": True, 
@@ -1134,6 +1174,10 @@ def atualizar_usuario(user_id, user_type, tipo_usuario, posto_graduacao, nome, m
         
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('usuarios', user_id, 'UPDATE', usuario_id_logado)
         
         return {"sucesso": True, "mensagem": "Usuário atualizado com sucesso!"}
         
@@ -2408,6 +2452,11 @@ def registrar_processo(
 
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('processos_procedimentos', processo_id, 'CREATE', usuario_id_logado)
+        
         print(f"✅ Processo registrado com sucesso: {numero}")
         return {"sucesso": True, "mensagem": "Processo/Procedimento registrado com sucesso!"}
 
@@ -2639,6 +2688,10 @@ def excluir_processo(processo_id):
         
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('processos_procedimentos', processo_id, 'DELETE', usuario_id_logado)
         
         return {"sucesso": True, "mensagem": "Processo/Procedimento excluído com sucesso!"}
     except Exception as e:
@@ -3859,6 +3912,10 @@ def atualizar_processo(
 
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('processos_procedimentos', processo_id, 'UPDATE', usuario_id_logado)
 
         return {"sucesso": True, "mensagem": "Processo/Procedimento atualizado com sucesso!"}
     except psycopg2.IntegrityError as e:
@@ -5456,6 +5513,111 @@ def obter_processos_usuario_envolvido(user_id):
         print(f"Erro ao obter processos como envolvido: {e}")
         return {"sucesso": False, "erro": str(e)}
 
+@eel.expose
+def listar_auditorias(search_term=None, page=1, per_page=10, filtros=None):
+    """
+    Lista auditorias com paginação e filtros
+    
+    Args:
+        search_term: Termo de busca (usuário, tabela, registro)
+        page: Página atual
+        per_page: Registros por página
+        filtros: Dict com filtros (operacao, tabela)
+    """
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Construir WHERE clause
+        where_conditions = []
+        params = []
+        
+        # Filtro de busca por texto
+        if search_term and search_term.strip():
+            where_conditions.append("""(
+                LOWER(u.nome) LIKE LOWER(%s) OR
+                LOWER(a.tabela) LIKE LOWER(%s) OR
+                LOWER(a.registro_id) LIKE LOWER(%s)
+            )""")
+            search_pattern = f"%{search_term.strip()}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
+        
+        # Filtros específicos
+        if filtros:
+            if filtros.get('operacao'):
+                where_conditions.append("a.operacao = %s")
+                params.append(filtros['operacao'])
+            
+            if filtros.get('tabela'):
+                where_conditions.append("a.tabela = %s")
+                params.append(filtros['tabela'])
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        # Contar total de registros
+        count_query = f"""
+            SELECT COUNT(*) as total
+            FROM auditoria a
+            LEFT JOIN usuarios u ON a.usuario_id = u.id
+            {where_clause}
+        """
+        cursor.execute(count_query, params)
+        total = cursor.fetchone()['total']
+        total_pages = (total + per_page - 1) // per_page
+        
+        # Buscar registros da página
+        offset = (page - 1) * per_page
+        query = f"""
+            SELECT 
+                a.tabela,
+                a.registro_id,
+                a.operacao,
+                a.timestamp,
+                COALESCE(u.nome, 'Sistema') as usuario_nome,
+                COALESCE(u.posto_graduacao, '') as usuario_posto
+            FROM auditoria a
+            LEFT JOIN usuarios u ON a.usuario_id = u.id
+            {where_clause}
+            ORDER BY a.timestamp DESC
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(query, params + [per_page, offset])
+        auditorias = cursor.fetchall()
+        
+        conn.close()
+        
+        # Formatar resultados
+        resultado = []
+        for aud in auditorias:
+            resultado.append({
+                'tabela': aud['tabela'],
+                'registro_id': aud['registro_id'],
+                'operacao': aud['operacao'],
+                'timestamp': aud['timestamp'].isoformat() if aud['timestamp'] else None,
+                'usuario_nome': f"{aud['usuario_posto']} {aud['usuario_nome']}".strip() if aud['usuario_posto'] else aud['usuario_nome']
+            })
+        
+        return {
+            'sucesso': True,
+            'auditorias': resultado,
+            'total': total,
+            'total_pages': total_pages,
+            'current_page': page,
+            'per_page': per_page
+        }
+        
+    except Exception as e:
+        print(f"Erro ao listar auditorias: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'sucesso': False,
+            'mensagem': f'Erro ao listar auditorias: {str(e)}',
+            'auditorias': [],
+            'total': 0,
+            'total_pages': 0
+        }
+
 def main():
     """Função principal"""
     print("🚀 Iniciando Sistema de Login com Cadastro...")
@@ -5815,9 +5977,16 @@ def cadastrar_transgressao(dados_transgressao):
             datetime.now().isoformat()
         ))
         
-        transgressao_id = cursor.lastrowid
+        # PostgreSQL não tem lastrowid, precisa usar RETURNING
+        cursor.execute('SELECT lastval()')
+        transgressao_id = cursor.fetchone()[0]
+        
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('transgressoes', str(transgressao_id), 'CREATE', usuario_id_logado)
         
         print(f"✅ Transgressão cadastrada: ID {transgressao_id}")
         return {'success': True, 'message': 'Transgressão cadastrada com sucesso', 'id': transgressao_id}
@@ -5919,6 +6088,10 @@ def atualizar_transgressao(dados_transgressao):
         conn.commit()
         conn.close()
         
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('transgressoes', str(dados_transgressao['id']), 'UPDATE', usuario_id_logado)
+        
         print(f"✅ Transgressão atualizada: Artigo {artigo} - {dados_transgressao['inciso']}")
         return {'success': True, 'message': 'Transgressão atualizada com sucesso'}
         
@@ -5947,6 +6120,10 @@ def excluir_transgressao(transgressao_id):
         cursor.execute('DELETE FROM transgressoes WHERE id = %s', (transgressao_id,))
         conn.commit()
         conn.close()
+        
+        # Registrar auditoria
+        usuario_id_logado = usuario_logado['id'] if usuario_logado else None
+        db_manager.registrar_auditoria('transgressoes', str(transgressao_id), 'DELETE', usuario_id_logado)
         
         print(f"✅ Transgressão excluída: {transgressao[0]} - {transgressao[1]}")
         return {'success': True, 'message': 'Transgressão excluída com sucesso'}

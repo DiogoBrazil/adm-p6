@@ -736,16 +736,24 @@
 
         <!-- Menu -->
         <nav class="menu">
-            <!-- Usuários -->
+            <!-- Administração -->
             <div class="menu-item">
-                <a href="#" class="menu-link" data-tooltip="Usuários" onclick="toggleDropdown(this)">
-                    <span class="menu-icon">👥</span>
-                    <span class="menu-text">Usuários</span>
+                <a href="#" class="menu-link" data-tooltip="Administração" onclick="toggleDropdown(this)">
+                    <span class="menu-icon">⚙️</span>
+                    <span class="menu-text">Administração</span>
                     <span class="menu-arrow">▼</span>
                 </a>
                 <div class="dropdown">
-                    <a href="user_form.html" class="dropdown-item">Cadastrar</a>
-                    <a href="user_list.html" class="dropdown-item">Listar</a>
+                    <a class="dropdown-item" onclick="toggleSubdropdown(this)">
+                        <span>Usuários</span>
+                        <span class="sub-arrow">▼</span>
+                    </a>
+                    <div class="subdropdown">
+                        <a href="user_form.html" class="subdropdown-item">Cadastrar</a>
+                        <a href="user_list.html" class="subdropdown-item">Listar</a>
+                    </div>
+                    
+                    <a href="auditoria_list.html" class="dropdown-item">Auditoria</a>
                 </div>
             </div>
 

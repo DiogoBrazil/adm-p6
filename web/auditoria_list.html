@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoria do Sistema - P6/7ºBPM</title>
+    <script type="text/javascript" src="/eel.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/dashboard.css">
+    <link rel="stylesheet" href="static/css/users.css">
+    <link rel="stylesheet" href="static/css/procedures.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-dashboard">
+                <img src="static/images/bpm.png" alt="7º BPM" class="logo-image">
+                <h1>Seção de Justiça e Disciplina - 7ºBPM</h1>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Carregando...</h3>
+                        <p id="userEmail">usuário</p>
+                    </div>
+                </div>
+                
+                <button class="btn-logout" onclick="realizarLogout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Sair
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="alertContainer"></div>
+        
+        <div class="user-management">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <i class="fas fa-clipboard-list page-icon"></i>
+                    Auditoria do Sistema
+                </h1>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-clipboard-list"></i>
+                    <h2>Registro de Operações</h2>
+                </div>
+                
+                <div class="actions">
+                    <!-- Área de Busca -->
+                    <div class="search-area">
+                        <input type="text" id="searchInput" placeholder="Buscar por usuário, tabela ou registro...">
+                        <button onclick="limparBusca()" id="clearButton" class="btn-icon btn-clear" style="display: none;">
+                            <i class="fas fa-times"></i> Limpar
+                        </button>
+                        <button onclick="abrirModalFiltros()" id="filterToggle" class="btn-icon btn-filter">
+                            <i class="fas fa-filter"></i> Filtros
+                        </button>
+                    </div>
+                    
+                    <!-- Botão Início -->
+                    <div class="main-actions">
+                        <button onclick="window.location.href='dashboard.html'" class="btn-icon btn-home">
+                            <i class="fas fa-home"></i> Início
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th width="20%" style="text-align:left;">Usuário</th>
+                                <th width="20%" style="text-align:center;">Tabela</th>
+                                <th width="20%" style="text-align:center;">Registro</th>
+                                <th width="10%" style="text-align:center;">Operação</th>
+                                <th width="30%" style="text-align:center;">Data e Hora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditoriaTableBody">
+                            <!-- Os registros serão carregados aqui -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Controles de Paginação -->
+                <div class="pagination-controls">
+                    <button id="prevPage" class="btn-pagination" disabled>
+                        <i class="fas fa-chevron-left"></i> Anterior
+                    </button>
+                    <span id="pageInfo">Página 1 de 1</span>
+                    <button id="nextPage" class="btn-pagination" disabled>
+                        Próxima <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <i class="fas fa-clipboard-list"></i>
+                    <h3>Nenhum registro de auditoria encontrado</h3>
+                    <p>Não há operações registradas ou sua pesquisa não encontrou resultados.</p>
+                </div>
+
+                <!-- Loader -->
+                <div class="loader-container" id="loaderContainer" style="display: none;">
+                    <div class="loader">
+                        <div class="cell d-0"></div>
+                        <div class="cell d-1"></div>
+                        <div class="cell d-2"></div>
+                        <div class="cell d-1"></div>
+                        <div class="cell d-2"></div>
+                        <div class="cell d-2"></div>
+                        <div class="cell d-3"></div>
+                        <div class="cell d-3"></div>
+                        <div class="cell d-4"></div>
+                    </div>
+                    <p style="margin-top: 20px; color: #666; text-align: center;">Carregando registros de auditoria...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Filtros -->
+    <div id="filterModal" class="modal-feedback" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>Filtros de Auditoria</h3>
+                <button class="btn-close" onclick="fecharModalFiltros()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="filterOperacao">Operação:</label>
+                    <select id="filterOperacao" class="form-control">
+                        <option value="">Todas</option>
+                        <option value="CREATE">CREATE</option>
+                        <option value="UPDATE">UPDATE</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="filterTabela">Tabela:</label>
+                    <select id="filterTabela" class="form-control">
+                        <option value="">Todas</option>
+                        <option value="usuarios">Usuários</option>
+                        <option value="processos_procedimentos">Processos/Procedimentos</option>
+                        <option value="transgressoes">Transgressões</option>
+                        <option value="crimes_contravencoes">Crimes/Contravenções</option>
+                        <option value="infracoes_estatuto_art29">Infrações Art. 29</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button onclick="aplicarFiltros()" class="btn-primary">
+                    <i class="fas fa-check"></i> Aplicar
+                </button>
+                <button onclick="limparFiltros()" class="btn-secondary">
+                    <i class="fas fa-eraser"></i> Limpar Filtros
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estilos adicionais -->
+    <style>
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            margin: 30px auto 20px auto;
+            padding: 0 20px;
+        }
+        
+        .search-area,
+        .main-actions {
+            align-items: center;
+            min-height: 44px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #dee2e6;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .empty-state p {
+            font-size: 1rem;
+            color: #6c757d;
+        }
+
+        #searchInput {
+            max-width: 400px !important;
+            min-width: 350px;
+        }
+
+        /* Badge de operação */
+        .badge-operacao {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+
+        .badge-create {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .badge-update {
+            background-color: #ffc107;
+            color: #000;
+        }
+
+        .badge-delete {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        /* Nome de tabela formatado */
+        .tabela-nome {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: #495057;
+        }
+
+        @media (max-width: 768px) {
+            #searchInput {
+                min-width: 250px;
+                max-width: 100% !important;
+            }
+            
+            .actions {
+                padding: 0 10px;
+            }
+        }
+    </style>
+
+    <script src="static/js/auditoria_list.js"></script>
+</body>
+</html>
