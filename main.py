@@ -7124,6 +7124,99 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
         return {"sucesso": False, "mensagem": f"Erro ao gerar mapa: {str(e)}"}
 
 @eel.expose
+def gerar_mapa_completo(mes, ano):
+    """Gera mapa mensal completo com todos os tipos de processo/procedimento"""
+    try:
+        # Converter mes e ano para inteiros
+        mes = int(mes)
+        ano = int(ano)
+        
+        conn = db_manager.get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Obter todos os tipos de processo distintos que existem no banco
+        cursor.execute("""
+            SELECT DISTINCT tipo_detalhe
+            FROM processos_procedimentos 
+            WHERE ativo = TRUE
+            ORDER BY tipo_detalhe
+        """)
+        tipos = cursor.fetchall()
+        
+        conn.close()
+        
+        # Gerar mapa para cada tipo
+        dados_completos = {}
+        total_geral = 0
+        total_concluidos_geral = 0
+        total_andamento_geral = 0
+        
+        ultimo_resultado = None
+        for tipo in tipos:
+            try:
+                tipo_detalhe = tipo['tipo_detalhe']
+                resultado = gerar_mapa_mensal(mes, ano, tipo_detalhe)
+                ultimo_resultado = resultado
+                
+                if resultado['sucesso'] and len(resultado['dados']) > 0:
+                    dados_completos[tipo_detalhe] = {
+                        'nome_completo': tipo_detalhe,  # Usar o próprio tipo como nome
+                        'dados': resultado['dados'],
+                        'meta': resultado['meta']
+                    }
+                    total_geral += resultado['meta']['total_processos']
+                    total_concluidos_geral += resultado['meta']['total_concluidos']
+                    total_andamento_geral += resultado['meta']['total_andamento']
+            except Exception as e_tipo:
+                print(f"❌ Erro ao processar tipo {tipo_detalhe}: {e_tipo}")
+                import traceback
+                traceback.print_exc()
+                raise
+        
+        # Nome do mês
+        mes_nome = [
+            "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ][mes]
+        
+        # Se não houver dados em nenhum tipo
+        if not dados_completos:
+            return {
+                "sucesso": True,
+                "dados": {},
+                "meta": {
+                    "mes": mes,
+                    "ano": ano,
+                    "mes_nome": mes_nome,
+                    "tipo_processo": "COMPLETO",
+                    "total_processos": 0,
+                    "total_concluidos": 0,
+                    "total_andamento": 0,
+                    "data_geracao": datetime.now().strftime("%d/%m/%Y às %H:%M")
+                }
+            }
+        
+        return {
+            "sucesso": True,
+            "dados": dados_completos,
+            "meta": {
+                "mes": mes,
+                "ano": ano,
+                "mes_nome": mes_nome,
+                "tipo_processo": "COMPLETO",
+                "total_processos": total_geral,
+                "total_concluidos": total_concluidos_geral,
+                "total_andamento": total_andamento_geral,
+                "data_geracao": datetime.now().strftime("%d/%m/%Y às %H:%M"),
+                "tipos_incluidos": list(dados_completos.keys())
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao gerar mapa completo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao gerar mapa completo: {str(e)}"}
+
+@eel.expose
 def salvar_mapa_mensal(dados_mapa, usuario_id=None):
     """Salva um mapa mensal gerado para acesso posterior"""
     try:

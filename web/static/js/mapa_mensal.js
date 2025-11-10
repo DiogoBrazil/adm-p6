@@ -191,6 +191,19 @@ async function carregarTiposProcesso() {
             // Limpar opções existentes (exceto a primeira)
             selectTipo.innerHTML = '<option value="">Selecione...</option>';
             
+            // Adicionar opção de Mapa Completo no topo
+            const optionCompleto = document.createElement('option');
+            optionCompleto.value = 'COMPLETO';
+            optionCompleto.textContent = '📋 Mapa Completo (Todos os tipos)';
+            selectTipo.appendChild(optionCompleto);
+            
+            // Adicionar separador visual (desabilitado)
+            const separador = document.createElement('option');
+            separador.disabled = true;
+            separador.textContent = '──────────────────────';
+            selectTipo.appendChild(separador);
+            
+            // Adicionar tipos individuais
             resultado.tipos.forEach(tipo => {
                 const option = document.createElement('option');
                 option.value = tipo.codigo;
@@ -228,15 +241,33 @@ async function gerarMapaMensal() {
         ocultarResultados();
         ocultarDownloadContainer();
         
-        const resultado = await eel.gerar_mapa_mensal(mes, ano, tipoProcesso)();
+        // Verificar se é mapa completo
+        let resultado;
+        if (tipoProcesso === 'COMPLETO') {
+            resultado = await eel.gerar_mapa_completo(mes, ano)();
+        } else {
+            resultado = await eel.gerar_mapa_mensal(mes, ano, tipoProcesso)();
+        }
         
         if (resultado.sucesso) {
-            console.log(`✅ Mapa gerado: ${resultado.dados.length} processos encontrados`);
+            // Para mapa completo, contar total de processos de todos os tipos
+            const totalProcessos = tipoProcesso === 'COMPLETO' 
+                ? Object.values(resultado.dados).reduce((sum, tipo) => sum + tipo.dados.length, 0)
+                : resultado.dados.length;
+            
+            console.log(`✅ Mapa gerado: ${totalProcessos} processos encontrados`);
             
             // Verificar se há dados
-            if (!resultado.dados || resultado.dados.length === 0) {
-                mostrarModalSemDados(tipoProcesso, mes, ano);
-                return;
+            if (tipoProcesso === 'COMPLETO') {
+                if (!resultado.dados || Object.keys(resultado.dados).length === 0) {
+                    mostrarModalSemDados(tipoProcesso, mes, ano);
+                    return;
+                }
+            } else {
+                if (!resultado.dados || resultado.dados.length === 0) {
+                    mostrarModalSemDados(tipoProcesso, mes, ano);
+                    return;
+                }
             }
             
             // Salvar mapa automaticamente
@@ -1311,6 +1342,68 @@ function extrairEstatisticas(statsElement) {
     return stats;
 }
 
+async function gerarPDFMapaCompleto(resultado) {
+    const { PDFDocument } = PDFLib;
+    
+    // Criar PDF principal que vai conter todos os tipos
+    const pdfFinal = await PDFDocument.create();
+    
+    let totalTipos = Object.keys(resultado.dados).length;
+    let tipoAtual = 0;
+    
+    // Gerar PDFs individuais para cada tipo e combiná-los
+    for (const [sigla, dadosTipo] of Object.entries(resultado.dados)) {
+        tipoAtual++;
+        console.log(`📄 Gerando PDF ${tipoAtual}/${totalTipos}: ${sigla}`);
+        
+        // Armazenar temporariamente o tipo e dados atuais
+        const tipoAnterior = window.tipoProcessoAtual;
+        const dadosAnteriores = window.dadosProcessos;
+        
+        window.tipoProcessoAtual = sigla;
+        window.dadosProcessos = dadosTipo.dados;
+        
+        // Criar estrutura de resultado individual para este tipo
+        const resultadoIndividual = {
+            sucesso: true,
+            dados: dadosTipo.dados,
+            meta: dadosTipo.meta
+        };
+        
+        // Construir conteúdo usando a função existente
+        const conteudo = construirConteudoPDFParaDownload(resultadoIndividual);
+        
+        // Gerar PDF em memória usando a função existente com flag especial
+        const pdfBytes = await gerarDocumentoPDF(conteudo, conteudo.titulo + '__RETURN_BYTES__');
+        
+        // Carregar o PDF gerado
+        const pdfTipo = await PDFDocument.load(pdfBytes);
+        
+        // Copiar todas as páginas deste PDF para o PDF final
+        const paginas = await pdfFinal.copyPages(pdfTipo, pdfTipo.getPageIndices());
+        paginas.forEach(pagina => pdfFinal.addPage(pagina));
+        
+        // Restaurar valores anteriores
+        window.tipoProcessoAtual = tipoAnterior;
+        window.dadosProcessos = dadosAnteriores;
+    }
+    
+    // Salvar PDF combinado
+    const pdfFinalBytes = await pdfFinal.save();
+    const blob = new Blob([pdfFinalBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Mapa_Completo_${resultado.meta.mes_nome}_${resultado.meta.ano}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    console.log(`✅ PDF completo gerado com ${pdfFinal.getPageCount()} páginas`);
+    
+    // Restaurar estado
+    window.tipoProcessoAtual = 'COMPLETO';
+}
+
 async function gerarDocumentoPDF(content, titulo) {
     const { jsPDF } = window.jspdf;
     
@@ -1889,8 +1982,14 @@ async function gerarDocumentoPDF(content, titulo) {
         pdf.text('Sistema ADM-P6', pageWidth - margin, footerY + 8, { align: 'right' });
     }
     
-    // Salvar PDF
+    // Salvar PDF ou retornar bytes
     const nomeArquivo = `Mapa_Mensal_Detalhado_${content.titulo.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    
+    // Se titulo termina com '__RETURN_BYTES__', retornar ArrayBuffer ao invés de baixar
+    if (titulo && titulo.endsWith('__RETURN_BYTES__')) {
+        return pdf.output('arraybuffer');
+    }
+    
     pdf.save(nomeArquivo);
 }
 
@@ -2162,11 +2261,16 @@ async function downloadMapaGerado() {
         btnDownload.disabled = true;
         btnDownload.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Gerando PDF...';
         
-        // Construir conteúdo para PDF
-        const conteudo = construirConteudoPDFParaDownload(window.ultimoMapaGerado);
-        
-        // Gerar e baixar PDF
-        await gerarDocumentoPDF(conteudo, conteudo.titulo);
+        // Verificar se é mapa completo
+        if (window.tipoProcessoAtual === 'COMPLETO') {
+            await gerarPDFMapaCompleto(window.ultimoMapaGerado);
+        } else {
+            // Construir conteúdo para PDF individual
+            const conteudo = construirConteudoPDFParaDownload(window.ultimoMapaGerado);
+            
+            // Gerar e baixar PDF
+            await gerarDocumentoPDF(conteudo, conteudo.titulo);
+        }
         
         // Restaurar botão antes de ocultar
         btnDownload.disabled = false;
