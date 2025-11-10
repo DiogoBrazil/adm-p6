@@ -7331,7 +7331,7 @@ def listar_mapas_anteriores():
                 "total_concluidos": mapa['total_concluidos'],
                 "total_andamento": mapa['total_andamento'],
                 "usuario_nome": mapa['usuario_nome'],
-                "data_geracao": mapa['data_geracao'],
+                "data_geracao": mapa['data_geracao'].isoformat() if mapa['data_geracao'] else None,
                 "nome_arquivo": mapa['nome_arquivo']
             })
         
