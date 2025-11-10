@@ -5317,7 +5317,11 @@ def obter_estatisticas_usuario(user_id, user_type):
             "encarregado_pads": 0,
             "encarregado_ipm": 0,
             "encarregado_pad": 0,  # PAD
+            "encarregado_pade": 0,  # PADE
             "encarregado_feito_preliminar": 0,  # FP
+            "encarregado_cp": 0,  # CP
+            "encarregado_cd": 0,  # CD
+            "encarregado_cj": 0,  # CJ
             "escrivao": 0,
             "envolvido_sindicado": 0,
             "envolvido_acusado": 0,
@@ -5365,14 +5369,46 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["encarregado_pad"] = cursor.fetchone()['count']
         
-        # 6. Escrivão
+        # 6. Encarregado de PADE
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = %s AND ativo = TRUE 
+            AND tipo_detalhe = 'PADE'
+        """, (user_id,))
+        estatisticas["encarregado_pade"] = cursor.fetchone()['count']
+        
+        # 7. Encarregado de CP
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = %s AND ativo = TRUE 
+            AND tipo_detalhe = 'CP'
+        """, (user_id,))
+        estatisticas["encarregado_cp"] = cursor.fetchone()['count']
+        
+        # 8. Encarregado de CD
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = %s AND ativo = TRUE 
+            AND tipo_detalhe = 'CD'
+        """, (user_id,))
+        estatisticas["encarregado_cd"] = cursor.fetchone()['count']
+        
+        # 9. Encarregado de CJ
+        cursor.execute("""
+            SELECT COUNT(*) FROM processos_procedimentos 
+            WHERE responsavel_id = %s AND ativo = TRUE 
+            AND tipo_detalhe = 'CJ'
+        """, (user_id,))
+        estatisticas["encarregado_cj"] = cursor.fetchone()['count']
+        
+        # 10. Escrivão
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE escrivao_id = %s AND ativo = TRUE
         """, (user_id,))
         estatisticas["escrivao"] = cursor.fetchone()['count']
         
-        # 7. Envolvido como sindicado (status_pm = 'Sindicado')
+        # 11. Envolvido como sindicado (status_pm = 'Sindicado')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE nome_pm_id = %s AND ativo = TRUE 
@@ -5380,7 +5416,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["envolvido_sindicado"] = cursor.fetchone()['count']
         
-        # 8. Envolvido como acusado (status_pm = 'Acusado')
+        # 12. Envolvido como acusado (status_pm = 'Acusado')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE nome_pm_id = %s AND ativo = TRUE 
@@ -5388,7 +5424,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["envolvido_acusado"] = cursor.fetchone()['count']
         
-        # 9. Envolvido como indiciado (status_pm = 'Indiciado')
+        # 13. Envolvido como indiciado (status_pm = 'Indiciado')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE nome_pm_id = %s AND ativo = TRUE 
@@ -5396,7 +5432,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["envolvido_indiciado"] = cursor.fetchone()['count']
         
-        # 10. Envolvido como investigado (status_pm = 'Investigado')
+        # 14. Envolvido como investigado (status_pm = 'Investigado')
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
             WHERE nome_pm_id = %s AND ativo = TRUE 
@@ -5404,7 +5440,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["envolvido_investigado"] = cursor.fetchone()['count']
         
-        # 11. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
+        # 15. Também verificar na tabela de múltiplos PMs envolvidos (para procedimentos)
         cursor.execute("""
             SELECT COUNT(*) FROM procedimento_pms_envolvidos pme
             JOIN processos_procedimentos p ON pme.procedimento_id = p.id

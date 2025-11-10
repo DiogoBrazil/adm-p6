@@ -290,16 +290,40 @@ function updateDetailedStats(stats) {
             gradient: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)'
         },
         { 
+            label: 'PADE', 
+            value: stats.encarregado_pade, 
+            desc: 'Encarregado de PADE', 
+            gradient: 'linear-gradient(135deg, #20c997 0%, #1a9d87 100%)'
+        },
+        { 
             label: 'Feito Preliminar', 
             value: stats.encarregado_feito_preliminar, 
             desc: 'Encarregado de FP', 
-            gradient: 'linear-gradient(135deg, #20c997 0%, #1a9d87 100%)'
+            gradient: 'linear-gradient(135deg, #fd7e14 0%, #dc6502 100%)'
+        },
+        { 
+            label: 'Carta Precatória', 
+            value: stats.encarregado_cp, 
+            desc: 'Encarregado de CP', 
+            gradient: 'linear-gradient(135deg, #e83e8c 0%, #d91a72 100%)'
+        },
+        { 
+            label: 'Conselho Disciplina', 
+            value: stats.encarregado_cd, 
+            desc: 'Encarregado de CD', 
+            gradient: 'linear-gradient(135deg, #6610f2 0%, #5a0bc2 100%)'
+        },
+        { 
+            label: 'Conselho Justificação', 
+            value: stats.encarregado_cj, 
+            desc: 'Encarregado de CJ', 
+            gradient: 'linear-gradient(135deg, #fd7e14 0%, #e66a00 100%)'
         },
         { 
             label: 'Escrivão', 
             value: stats.escrivao, 
             desc: 'Atuando como escrivão', 
-            gradient: 'linear-gradient(135deg, #fd7e14 0%, #dc6502 100%)'
+            gradient: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)'
         }
     ];
     

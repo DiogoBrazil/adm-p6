@@ -39,15 +39,6 @@
 
     <div class="main-container">
         <div id="alertContainer"></div>
-        
-        <!-- Breadcrumb -->
-        <nav class="breadcrumb">
-            <ol>
-                <li><a href="dashboard.html"><i class="fas fa-home"></i> Início</a></li>
-                <li><a href="user_list.html"><i class="fas fa-users"></i> Usuários</a></li>
-                <li class="active"><i class="fas fa-eye"></i> Visualizar</li>
-            </ol>
-        </nav>
 
         <div class="view-container">
             <!-- Header do usuário -->
@@ -67,6 +58,10 @@
                     <button class="btn-action-large edit" onclick="editCurrentUser()" title="Editar Usuário">
                         <i class="fas fa-edit"></i>
                         Editar
+                    </button>
+                    <button class="btn-action-large back" onclick="window.location.href='dashboard.html'" title="Início">
+                        <i class="fas fa-home"></i>
+                        Início
                     </button>
                     <button class="btn-action-large back" onclick="goBack()" title="Voltar">
                         <i class="fas fa-arrow-left"></i>
