@@ -10,7 +10,7 @@ import os
 
 # Configurações do Banco de Dados PostgreSQL
 DB_CONFIG = {
-    'host': '192.168.0.137',
+    'host': '10.39.41.60',
     'port': 5432,
     'database': 'app_db',
     'user': 'app_user',
