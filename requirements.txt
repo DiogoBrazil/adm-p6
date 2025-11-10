@@ -1,27 +1,32 @@
-# Dependências principais
+altgraph==0.17.4
+bcrypt==4.0.1
 bottle==0.13.4
 bottle-websocket==0.2.9
+cffi==2.0.0
+colorama==0.4.6
+coverage==7.11.3
 Eel==0.18.2
 future==1.0.0
 gevent==25.5.1
 gevent-websocket==0.10.1
 greenlet==3.2.3
 importlib_resources==6.5.2
+iniconfig==2.3.0
+packaging==25.0
+pefile==2023.2.7
+pillow==12.0.0
+pluggy==1.6.0
+psycopg2-binary==2.9.11
+pycparser==2.23
+pyinstaller==6.16.0
+pyinstaller-hooks-contrib==2025.9
 pyparsing==3.2.3
+pytest==7.4.3
+pytest-cov==4.1.0
+pywin32-ctypes==0.2.3
+reportlab==4.0.7
+schedule==1.2.0
+setuptools==80.9.0
 typing_extensions==4.14.1
 zope.event==5.1.1
 zope.interface==7.2
-
-# Banco de Dados PostgreSQL
-psycopg2-binary==2.9.11
-
-# Novas dependências para melhorias de segurança
-bcrypt==4.0.1
-schedule==1.2.0
-
-# Geração de PDFs e Relatórios
-reportlab==4.0.7
-
-# Dependências para desenvolvimento e testes
-pytest==7.4.3
-pytest-cov==4.1.0
