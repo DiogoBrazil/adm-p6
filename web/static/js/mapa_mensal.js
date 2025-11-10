@@ -1517,7 +1517,17 @@ async function gerarDocumentoPDF(content, titulo) {
                 pdf.setTextColor(255, 255, 255);
                 pdf.text('CAMPO', margin + 2, tableY + 5);
                 pdf.text('INFORMAÇÃO', margin + colWidths[0] + 2, tableY + 5);
-                const tituloIndicios = window.tipoProcessoAtual === 'PADS' ? 'TRANSGRESSÕES PRATICADAS' : 'INDÍCIOS APONTADOS';
+                
+                // Definir título da 3ª coluna baseado no tipo (mesma lógica do cabeçalho inicial)
+                let tituloIndicios;
+                if (window.tipoProcessoAtual === 'PADS') {
+                    tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
+                } else if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+                    tituloIndicios = 'SOLUÇÃO';
+                } else {
+                    tituloIndicios = 'INDÍCIOS APONTADOS';
+                }
+                
                 pdf.text(tituloIndicios, margin + colWidths[0] + colWidths[1] + 2, tableY + 5);
                 tableY += 8;
                 pdf.setTextColor(0, 0, 0);
