@@ -281,8 +281,15 @@ function toggleOperatorFields() {
     if (isOperadorChecked) {
         operatorFields.style.display = 'block';
         emailField.setAttribute('required', 'required');
-        senhaField.setAttribute('required', 'required');
         perfilField.setAttribute('required', 'required');
+        
+        // Senha só é obrigatória na criação, não na edição
+        if (!modoEdicao) {
+            senhaField.setAttribute('required', 'required');
+        } else {
+            senhaField.removeAttribute('required');
+        }
+        
         console.log('Campos de operador exibidos e marcados como obrigatórios'); // Debug
     } else {
         operatorFields.style.display = 'none';

@@ -451,14 +451,8 @@ async function carregarUsuarioLogado() {
             document.getElementById('userName').textContent = resultado.usuario.nome;
             document.getElementById('userEmail').textContent = resultado.usuario.email;
             
-            // Verifica se é admin
-            if (!resultado.usuario.is_admin) {
-                showAlert('Acesso negado! Apenas administradores podem acessar esta área.', 'error');
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 2000);
-                return false;
-            }
+            // Todos os usuários logados têm acesso ao dashboard
+            // Funcionalidades específicas de admin são controladas por permissões individuais
             
             return true;
         } else {
