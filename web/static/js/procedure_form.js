@@ -3257,6 +3257,21 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     console.log('📋 Indícios por PM:', indicios_por_pm);
     console.log('📋 Total de PMs com indícios:', Object.keys(indicios_por_pm).length);
 
+        // Mostrar loader
+        const loader = document.getElementById('saveLoader');
+        console.log('🔍 Loader element:', loader);
+        if (loader) {
+            console.log('⏳ Mostrando loader...');
+            loader.style.display = 'flex';
+            const messageEl = loader.querySelector('.loader-message');
+            if (messageEl) {
+                messageEl.textContent = editandoProcedimento ? 'Atualizando...' : 'Salvando...';
+                console.log('📝 Mensagem do loader:', messageEl.textContent);
+            }
+        } else {
+            console.error('❌ Elemento loader não encontrado!');
+        }
+
         let result;
         if (editandoProcedimento) {
             // Modo edição
@@ -3363,16 +3378,38 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
                 deprecante,
                 pessoas_inquiridas
             )();
-        }        if (result.sucesso) {
+        }
+        
+        // Garantir que o loader fique visível por pelo menos 500ms
+        const startTime = Date.now();
+        const minDisplayTime = 500;
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
+        
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+        
+        // Esconder loader antes de mostrar o modal
+        console.log('✅ Escondendo loader...');
+        if (loader) {
+            loader.style.display = 'none';
+        }
+        
+        if (result && result.sucesso) {
             showAlert(result.mensagem, 'success');
             // Redireciona para listagem tanto no cadastro quanto na edição após sucesso
             setTimeout(() => {
                 window.location.href = 'procedure_list.html';
             }, 1200); // Aguarda 1.2s para mostrar o modal
-        } else {
+        } else if (result) {
             showAlert(result.mensagem, 'error');
         }
     } catch (error) {
+        // Esconder loader em caso de erro
+        console.log('❌ Erro capturado, escondendo loader...');
+        if (loader) {
+            loader.style.display = 'none';
+        }
+        
         console.error('Erro ao salvar processo/procedimento:', error);
         console.error('Detalhes do erro:', {
             message: error.message,
