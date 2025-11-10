@@ -3197,12 +3197,32 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         }
     }
 
+    // Mostrar loader ANTES de validação de duplicidade e processamento
+    const loader = document.getElementById('saveLoader');
+    console.log('🔍 Loader element:', loader);
+    if (loader) {
+        console.log('⏳ Mostrando loader...');
+        loader.style.display = 'flex';
+        const messageEl = loader.querySelector('.loader-message');
+        if (messageEl) {
+            messageEl.textContent = editandoProcedimento ? 'Atualizando...' : 'Salvando...';
+            console.log('📝 Mensagem do loader:', messageEl.textContent);
+        }
+    } else {
+        console.error('❌ Elemento loader não encontrado!');
+    }
+
     // Validação de número duplicado (apenas para cadastro novo)
     if (!editandoProcedimento) {
         const anoInstauracao = data_instauracao ? new Date(data_instauracao).getFullYear().toString() : new Date().getFullYear().toString();
         const isDuplicado = await validarNumeroDuplicado(numero_documento, documento_iniciador, local_origem, data_instauracao);
         
         if (isDuplicado) {
+            // Esconder loader antes de mostrar erro
+            if (loader) {
+                loader.style.display = 'none';
+            }
+            
             const tipoGeral = document.getElementById('tipo_geral')?.value;
             let tipoDetalhe = '';
             
@@ -3256,21 +3276,6 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
     });
     console.log('📋 Indícios por PM:', indicios_por_pm);
     console.log('📋 Total de PMs com indícios:', Object.keys(indicios_por_pm).length);
-
-        // Mostrar loader
-        const loader = document.getElementById('saveLoader');
-        console.log('🔍 Loader element:', loader);
-        if (loader) {
-            console.log('⏳ Mostrando loader...');
-            loader.style.display = 'flex';
-            const messageEl = loader.querySelector('.loader-message');
-            if (messageEl) {
-                messageEl.textContent = editandoProcedimento ? 'Atualizando...' : 'Salvando...';
-                console.log('📝 Mensagem do loader:', messageEl.textContent);
-            }
-        } else {
-            console.error('❌ Elemento loader não encontrado!');
-        }
 
         let result;
         if (editandoProcedimento) {
