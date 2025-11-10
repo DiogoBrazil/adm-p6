@@ -6975,7 +6975,10 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
                 COALESCE(u_inter.matricula, '') as interrogante_matricula,
                 COALESCE(u_esc_proc.nome, '') as escrivao_processo_nome,
                 COALESCE(u_esc_proc.posto_graduacao, '') as escrivao_processo_posto,
-                COALESCE(u_esc_proc.matricula, '') as escrivao_processo_matricula
+                COALESCE(u_esc_proc.matricula, '') as escrivao_processo_matricula,
+                -- Dados de CP (Carta Precatória)
+                p.unidade_deprecada,
+                p.deprecante
             FROM processos_procedimentos p
             LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
             LEFT JOIN usuarios u_pres ON p.presidente_id = u_pres.id
@@ -7078,6 +7081,11 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
                     "matricula": processo['escrivao_processo_matricula'],
                     "completo": f"{processo['escrivao_processo_posto']} {processo['escrivao_processo_matricula']} {processo['escrivao_processo_nome']}".strip() if processo['escrivao_processo_nome'] else ""
                 } if processo['escrivao_processo_id'] else None
+            
+            # Adicionar dados de CP (Carta Precatória)
+            if processo['tipo_detalhe'] == 'CP':
+                dados_processo["unidade_deprecada"] = processo['unidade_deprecada']
+                dados_processo["deprecante"] = processo['deprecante']
             
             dados_mapa.append(dados_processo)
         

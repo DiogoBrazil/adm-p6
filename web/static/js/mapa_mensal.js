@@ -1730,6 +1730,15 @@ async function gerarDocumentoPDF(content, titulo) {
         const linhasEsq = [];
         linhasEsq.push(['Documento/Número:', processo.detalhes.numeroPortaria, false]);
         linhasEsq.push(['Número de controle:', processo.detalhes.numeroControle, false]);
+        
+        // Adicionar Unidade Deprecante para CP
+        if (window.tipoProcessoAtual === 'CP') {
+            const dadosOriginais = window.dadosProcessos ? 
+                window.dadosProcessos.find(p => p.id == processo.id) : null;
+            const unidadeDeprecada = dadosOriginais?.unidade_deprecada || 'Não informado';
+            linhasEsq.push(['Unidade Deprecante:', unidadeDeprecada, false]);
+        }
+        
         linhasEsq.push(['Data Instauração:', processo.detalhes.dataInstauracao, false]);
         linhasEsq.push(['Data Remessa:', processo.detalhes.solucaoCompleta.dataRemessa, false]);
         if (['PAD', 'PADS', 'CD', 'CJ'].includes(window.tipoProcessoAtual)) {
