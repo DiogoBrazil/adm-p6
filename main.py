@@ -7474,27 +7474,61 @@ def gerar_relatorio_anual(ano):
         
         # ============ ESTATÍSTICAS POR TIPO ============
         
-        # Processos por tipo_detalhe (apenas processos)
+        # Processos por tipo_detalhe com status (apenas processos)
         cursor.execute("""
-            SELECT tipo_detalhe, COUNT(*) as qtd 
+            SELECT 
+                tipo_detalhe,
+                CASE 
+                    WHEN concluido = TRUE THEN 'Concluído'
+                    ELSE 'Em Andamento'
+                END as status,
+                COUNT(*) as qtd 
             FROM processos_procedimentos 
             WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
             AND tipo_geral = 'processo'
             AND ativo = TRUE
-            GROUP BY tipo_detalhe
+            GROUP BY tipo_detalhe, status
         """, (str(ano),))
-        processos_por_tipo = {row['tipo_detalhe']: row['qtd'] for row in cursor.fetchall()}
         
-        # Procedimentos por tipo_detalhe (apenas procedimentos)
+        processos_por_tipo = {}
+        for row in cursor.fetchall():
+            tipo = row['tipo_detalhe']
+            if tipo not in processos_por_tipo:
+                processos_por_tipo[tipo] = {'total': 0, 'concluido': 0, 'andamento': 0}
+            
+            processos_por_tipo[tipo]['total'] += row['qtd']
+            if row['status'] == 'Concluído':
+                processos_por_tipo[tipo]['concluido'] = row['qtd']
+            else:
+                processos_por_tipo[tipo]['andamento'] = row['qtd']
+        
+        # Procedimentos por tipo_detalhe com status (apenas procedimentos)
         cursor.execute("""
-            SELECT tipo_detalhe, COUNT(*) as qtd 
+            SELECT 
+                tipo_detalhe,
+                CASE 
+                    WHEN concluido = TRUE THEN 'Concluído'
+                    ELSE 'Em Andamento'
+                END as status,
+                COUNT(*) as qtd 
             FROM processos_procedimentos 
             WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
             AND tipo_geral = 'procedimento'
             AND ativo = TRUE
-            GROUP BY tipo_detalhe
+            GROUP BY tipo_detalhe, status
         """, (str(ano),))
-        procedimentos_por_tipo = {row['tipo_detalhe']: row['qtd'] for row in cursor.fetchall()}
+        
+        procedimentos_por_tipo = {}
+        for row in cursor.fetchall():
+            tipo = row['tipo_detalhe']
+            if tipo not in procedimentos_por_tipo:
+                procedimentos_por_tipo[tipo] = {'total': 0, 'concluido': 0, 'andamento': 0}
+            
+            procedimentos_por_tipo[tipo]['total'] += row['qtd']
+            if row['status'] == 'Concluído':
+                procedimentos_por_tipo[tipo]['concluido'] = row['qtd']
+            else:
+                procedimentos_por_tipo[tipo]['andamento'] = row['qtd']
         
         # ============ ESTATÍSTICAS POR STATUS ============
         
@@ -7543,6 +7577,7 @@ def gerar_relatorio_anual(ano):
             AND concluido = TRUE
             AND ativo = TRUE
             AND indicios_categorias IS NOT NULL
+            GROUP BY indicios_categorias
         """, (str(ano),))
         
         indicios_crime = 0
@@ -7727,22 +7762,34 @@ def _gerar_pdf_relatorio_anual(estatisticas):
     if estatisticas['processos_por_tipo'] or estatisticas['procedimentos_por_tipo']:
         elements.append(Paragraph("📈 DISTRIBUIÇÃO POR TIPO", subtitulo_style))
         
-        # Combinar todos os tipos
-        dados_tipos = [['Tipo', 'Categoria', 'Quantidade']]
+        # Combinar todos os tipos com status
+        dados_tipos = [['Tipo', 'Categoria', 'Em Andamento', 'Concluído', 'Quantidade Total']]
         
-        for tipo, qtd in estatisticas['processos_por_tipo'].items():
-            dados_tipos.append([tipo, 'Processo', str(qtd)])
+        for tipo, info in estatisticas['processos_por_tipo'].items():
+            dados_tipos.append([
+                tipo, 
+                'Processo', 
+                str(info['andamento']), 
+                str(info['concluido']), 
+                str(info['total'])
+            ])
         
-        for tipo, qtd in estatisticas['procedimentos_por_tipo'].items():
-            dados_tipos.append([tipo, 'Procedimento', str(qtd)])
+        for tipo, info in estatisticas['procedimentos_por_tipo'].items():
+            dados_tipos.append([
+                tipo, 
+                'Procedimento', 
+                str(info['andamento']), 
+                str(info['concluido']), 
+                str(info['total'])
+            ])
         
-        tabela_tipos = Table(dados_tipos, colWidths=[7*cm, 5*cm, 5*cm])
+        tabela_tipos = Table(dados_tipos, colWidths=[4*cm, 3.5*cm, 3*cm, 3*cm, 3.5*cm])
         tabela_tipos.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2a5298')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
