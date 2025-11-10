@@ -930,9 +930,40 @@ async function gerarRelatorioHTMLParaImpressao(content) {
     const getLabelSolucao = (tipo) => ['PAD','PADS','CD','CJ'].includes(tipo) ? 'DECISÃO FINAL' : 'SOLUÇÃO';
 
     const montarIndiciosPMHTML = (procId, tipo) => {
-        if (!['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) return '';
+        console.log('🔧 montarIndiciosPMHTML chamado:', { procId, tipo });
+        
+        if (!['IPM','SR','PADS','PAD','CD','CJ','FP'].includes(tipo)) {
+            console.log('❌ Tipo não suportado:', tipo);
+            return '';
+        }
+        
         const dadosOriginais = (window.dadosProcessos || []).find(p => String(p.id) === String(procId));
-        if (!dadosOriginais) return '';
+        if (!dadosOriginais) {
+            console.log('❌ Dados originais não encontrados para:', procId);
+            console.log('   window.dadosProcessos disponível:', !!window.dadosProcessos);
+            return '';
+        }
+        
+        // Para FP, mostrar tipo de solução se concluído, senão nada
+        if (tipo === 'FP') {
+            if (dadosOriginais.concluido && dadosOriginais.solucao) {
+                const tipoSolucao = dadosOriginais.solucao.solucao_tipo || dadosOriginais.solucao_tipo;
+                if (tipoSolucao) {
+                    // Mapeamento de valores do banco para texto legível
+                    const mapaSolucoes = {
+                        'Sugerido_IPM': 'Sugerido abertura de IPM',
+                        'Sugerido_Sindicancia': 'Sugerido abertura de Sindicância',
+                        'Sugerido_PAD': 'Sugerido instauração de PAD',
+                        'Arquivado': 'Arquivado',
+                        'Homologado': 'Homologado'
+                    };
+                    
+                    const tipoSolucaoFormatado = mapaSolucoes[tipoSolucao] || tipoSolucao.replace(/_/g, ' ');
+                    return `<div class="pm-muted">${tipoSolucaoFormatado}</div>`;
+                }
+            }
+            return ''; // Em andamento não mostra nada
+        }
         
         // Para PAD/CD/CJ, mostrar tipo de penalidade se concluído, senão nada
         if (['PAD','CD','CJ'].includes(tipo)) {
@@ -1045,13 +1076,13 @@ async function gerarRelatorioHTMLParaImpressao(content) {
         ];
 
         // Índicios/Transgressões para IPM/SR e PADS/PAD/CD/CJ
-        if (['IPM','SR','PADS','PAD','CD','CJ'].includes(tipo)) {
+        if (['IPM','SR','PADS','PAD','CD','CJ','FP'].includes(tipo)) {
             const indiciosHTML = montarIndiciosPMHTML(p.id, tipo);
             if (indiciosHTML) {
                 let tituloIndicios;
                 if (tipoAtual === 'PADS') {
                     tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
-                } else if (['PAD','CD','CJ'].includes(tipoAtual)) {
+                } else if (['PAD','CD','CJ','FP'].includes(tipoAtual)) {
                     tituloIndicios = 'SOLUÇÃO';
                 } else {
                     tituloIndicios = 'INDÍCIOS APONTADOS';
@@ -1215,7 +1246,8 @@ function criarConteudoPDF(titulo, infoMapa, estatisticas) {
                 (dadosOriginais?.data_conclusao ? formatarData(dadosOriginais.data_conclusao) : 'Não informado'),
             numeroPortaria: dadosOriginais?.numero_portaria ? 
                 `Portaria nº ${dadosOriginais.numero_portaria}/${dadosOriginais.ano}` : 
-                (dadosOriginais?.numero_memorando ? `Memorando nº ${dadosOriginais.numero_memorando}/${dadosOriginais.ano}` : 'Não informado'),
+                (dadosOriginais?.numero_memorando ? `Memorando nº ${dadosOriginais.numero_memorando}/${dadosOriginais.ano}` : 
+                (dadosOriginais?.numero_feito ? `Feito Preliminar nº ${dadosOriginais.numero_feito}/${dadosOriginais.ano}` : 'Não informado')),
             numeroControle: dadosOriginais?.numero || 'Não informado',
             numeroRGF: dadosOriginais?.numero_rgf || 'Não informado',
             resumoFatos: dadosOriginais?.resumo_fatos || 'Não informado',
@@ -1522,7 +1554,7 @@ async function gerarDocumentoPDF(content, titulo) {
                 let tituloIndicios;
                 if (window.tipoProcessoAtual === 'PADS') {
                     tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
-                } else if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+                } else if (['PAD','CD','CJ','FP'].includes(window.tipoProcessoAtual)) {
                     tituloIndicios = 'SOLUÇÃO';
                 } else {
                     tituloIndicios = 'INDÍCIOS APONTADOS';
@@ -1601,7 +1633,7 @@ async function gerarDocumentoPDF(content, titulo) {
             let tituloIndicios;
             if (window.tipoProcessoAtual === 'PADS') {
                 tituloIndicios = 'TRANSGRESSÕES PRATICADAS';
-            } else if (['PAD','CD','CJ'].includes(window.tipoProcessoAtual)) {
+            } else if (['PAD','CD','CJ','FP'].includes(window.tipoProcessoAtual)) {
                 tituloIndicios = 'SOLUÇÃO';
             } else {
                 tituloIndicios = 'INDÍCIOS APONTADOS';
@@ -1638,7 +1670,7 @@ async function gerarDocumentoPDF(content, titulo) {
         }
         
         if ((['IPM', 'SR'].includes(window.tipoProcessoAtual) && processo.status === 'Concluído') || 
-            (['PADS', 'PAD', 'CD', 'CJ'].includes(window.tipoProcessoAtual))) {
+            (['PADS', 'PAD', 'CD', 'CJ', 'FP'].includes(window.tipoProcessoAtual))) {
             const dadosOriginais = window.dadosProcessos ?
                 window.dadosProcessos.find(p => p.id == processo.id) : null;
             if (dadosOriginais) {
@@ -1652,6 +1684,29 @@ async function gerarDocumentoPDF(content, titulo) {
                         linhasIndicios.push({ text: `${penalidade}${dias}`, bold: false });
                     }
                     // Se em andamento, não adiciona nada (linhasIndicios fica vazio)
+                }
+                // Para FP, mostrar tipo de solução se concluído
+                else if (window.tipoProcessoAtual === 'FP') {
+                    if (dadosOriginais.concluido && dadosOriginais.solucao) {
+                        const tipoSolucao = dadosOriginais.solucao.solucao_tipo || dadosOriginais.solucao_tipo;
+                        if (tipoSolucao) {
+                            // Formatar tipo de solução para exibição mais legível
+                            let tipoSolucaoFormatado = tipoSolucao;
+                            
+                            // Mapeamento de valores do banco para texto legível
+                            const mapaSolucoes = {
+                                'Sugerido_IPM': 'Sugerido abertura de IPM',
+                                'Sugerido_Sindicancia': 'Sugerido abertura de Sindicância',
+                                'Sugerido_PAD': 'Sugerido instauração de PAD',
+                                'Arquivado': 'Arquivado',
+                                'Homologado': 'Homologado'
+                            };
+                            
+                            tipoSolucaoFormatado = mapaSolucoes[tipoSolucao] || tipoSolucao.replace(/_/g, ' ');
+                            linhasIndicios.push({ text: tipoSolucaoFormatado, bold: false });
+                        }
+                    }
+                    // Se em andamento ou sem solução, não adiciona nada (linhasIndicios fica vazio)
                 }
                 // Para IPM/SR/PADS, mostrar indícios por PM
                 else if (dadosOriginais.pms_envolvidos && dadosOriginais.pms_envolvidos.length > 0) {

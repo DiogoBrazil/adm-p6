@@ -7003,10 +7003,17 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
         ))
         
         processos = cursor.fetchall()
+        print(f"📊 Mapa Mensal {tipo_processo} - {mes}/{ano}: {len(processos)} processos encontrados")
+        
         dados_mapa = []
         
         for processo in processos:
             processo_id = processo['id']
+            
+            # Log para debug
+            print(f"  - Processo #{processo['numero']}: ano_instauracao={processo['ano_instauracao']}, "
+                  f"data_instauracao={processo['data_instauracao']}, concluido={processo['concluido']}, "
+                  f"solucao_tipo={processo['solucao_tipo']}")
             
             # Obter dados de PMs envolvidos
             pms_envolvidos = _obter_pms_envolvidos_para_mapa(cursor, processo_id, processo['tipo_geral'])
