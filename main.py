@@ -5361,20 +5361,22 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["encarregado_feito_preliminar"] = cursor.fetchone()['count']
         
-        # 5. Encarregado de PAD
+        # 5. PAD (como responsável, presidente, interrogante ou escrivão do processo)
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE responsavel_id = %s AND ativo = TRUE 
+            WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
+            AND ativo = TRUE 
             AND tipo_detalhe = 'PAD'
-        """, (user_id,))
+        """, (user_id, user_id, user_id, user_id))
         estatisticas["encarregado_pad"] = cursor.fetchone()['count']
         
-        # 6. Encarregado de PADE
+        # 6. PADE (como responsável, presidente, interrogante ou escrivão do processo)
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE responsavel_id = %s AND ativo = TRUE 
+            WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
+            AND ativo = TRUE 
             AND tipo_detalhe = 'PADE'
-        """, (user_id,))
+        """, (user_id, user_id, user_id, user_id))
         estatisticas["encarregado_pade"] = cursor.fetchone()['count']
         
         # 7. Encarregado de CP
@@ -5385,20 +5387,22 @@ def obter_estatisticas_usuario(user_id, user_type):
         """, (user_id,))
         estatisticas["encarregado_cp"] = cursor.fetchone()['count']
         
-        # 8. Encarregado de CD
+        # 8. CD (como responsável, presidente, interrogante ou escrivão do processo)
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE responsavel_id = %s AND ativo = TRUE 
+            WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
+            AND ativo = TRUE 
             AND tipo_detalhe = 'CD'
-        """, (user_id,))
+        """, (user_id, user_id, user_id, user_id))
         estatisticas["encarregado_cd"] = cursor.fetchone()['count']
         
-        # 9. Encarregado de CJ
+        # 9. CJ (como responsável, presidente, interrogante ou escrivão do processo)
         cursor.execute("""
             SELECT COUNT(*) FROM processos_procedimentos 
-            WHERE responsavel_id = %s AND ativo = TRUE 
+            WHERE (responsavel_id = %s OR presidente_id = %s OR interrogante_id = %s OR escrivao_processo_id = %s)
+            AND ativo = TRUE 
             AND tipo_detalhe = 'CJ'
-        """, (user_id,))
+        """, (user_id, user_id, user_id, user_id))
         estatisticas["encarregado_cj"] = cursor.fetchone()['count']
         
         # 10. Escrivão
