@@ -781,6 +781,11 @@ function showModalFeedback(message, type = 'error') {
 // Inicialização da página
 // ============================
 document.addEventListener('DOMContentLoaded', async () => {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Detectar modo edição por querystring ?id=
     try {
         const params = new URLSearchParams(window.location.search);

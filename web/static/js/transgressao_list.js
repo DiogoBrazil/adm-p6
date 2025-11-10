@@ -16,6 +16,11 @@ let transgressaoParaExcluir = null;
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🔧 Iniciando sistema de transgressões...');
     
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     const autenticado = await verificarAutenticacao();
     if (!autenticado) {
         return; // Para a execução se não estiver autenticado

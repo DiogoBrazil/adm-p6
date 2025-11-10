@@ -240,6 +240,11 @@ function clearSearch() {
 
 // Inicialização da página
 document.addEventListener('DOMContentLoaded', async () => {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Carrega dados do usuário logado primeiro
     const loginOk = await carregarUsuarioLogado();
     if (loginOk) {

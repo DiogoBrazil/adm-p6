@@ -6,6 +6,9 @@ let usuarioLogado = null;
 
 // Event listeners principais
 document.addEventListener('DOMContentLoaded', async function() {
+    // Inicializar sistema de permissões
+    await window.permissoes.inicializar();
+    
     // Inicializar funcionalidades do sidebar
     initializeSidebar();
     

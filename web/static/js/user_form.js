@@ -331,6 +331,11 @@ function showAlert(message, type = 'info') {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM carregado, iniciando configuração...'); // Debug
     
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Carregar usuário logado
     await carregarUsuarioLogado();
     

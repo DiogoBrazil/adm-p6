@@ -8,6 +8,11 @@ let currentSort = { field: 'nome', order: 'asc' };
 
 // Event listeners principais
 document.addEventListener('DOMContentLoaded', async function() {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Carregar dados do usuário
     const loginOk = await carregarUsuarioLogado();
     if (loginOk) {
@@ -31,15 +36,6 @@ async function carregarUsuarioLogado() {
             usuarioLogado = resultado.usuario;
             document.getElementById('userName').textContent = resultado.usuario.nome;
             document.getElementById('userEmail').textContent = resultado.usuario.email;
-            
-            // Verifica se é admin
-            if (!resultado.usuario.is_admin) {
-                showAlert('Acesso negado! Apenas administradores podem acessar esta área.', 'error');
-                setTimeout(() => {
-                    window.location.href = 'login.html';
-                }, 2000);
-                return false;
-            }
             
             return true;
         } else {

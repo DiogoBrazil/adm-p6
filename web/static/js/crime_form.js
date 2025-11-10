@@ -11,6 +11,11 @@ let crimeId = null;
 // ============================================
 
 document.addEventListener('DOMContentLoaded', async function() {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     const autenticado = await verificarAutenticacao();
     if (!autenticado) {
         return; // Para a execução se não estiver autenticado

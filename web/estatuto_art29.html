@@ -248,6 +248,7 @@
         <div class="message">Saindo...</div>
     </div>
 
+    <script src="static/js/permissions.js"></script>
     <script>
         // Variáveis globais
         let usuarioLogado = null;
@@ -260,6 +261,11 @@
         // Inicialização
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('🔧 Iniciando sistema de infrações do Art. 29...');
+            
+            // Inicializar sistema de permissões
+            if (window.permissoes) {
+                await window.permissoes.inicializar();
+            }
             
             const autenticado = await verificarAutenticacao();
             if (!autenticado) {

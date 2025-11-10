@@ -20,7 +20,12 @@ function formatarPenalidade(penalidade) {
     return mapeamento[penalidade] || penalidade;
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     inicializarMapaMensal();
 });
 
@@ -2397,7 +2402,12 @@ function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
     }
 
     const meta = mapaSalvo?.meta || {};
-    const dados = mapaSalvo?.dados || [];
+    // Garantir que dados é sempre um array
+    let dados = mapaSalvo?.dados || [];
+    if (!Array.isArray(dados)) {
+        console.warn('⚠️ dados não é array, convertendo:', dados);
+        dados = [];
+    }
 
     // Disponibiliza dados originais para trechos do gerador que consultam o array completo
     window.tipoProcessoAtual = meta.tipo_processo || '';
@@ -2483,8 +2493,10 @@ async function visualizarMapaAnterior(mapaId, botaoEl) {
         const resultado = await eel.obter_dados_mapa_salvo(mapaId)();
         
         if (resultado.sucesso) {
+            console.log('📦 Dados do mapa recebidos:', resultado.dados_mapa);
             // Normalizar dados salvos para o formato consumido pelo gerador e criar PDF idêntico ao atual
             const conteudo = construirConteudoPDFDeMapaSalvo(resultado.dados_mapa);
+            console.log('📋 Conteúdo construído:', conteudo);
             await gerarDocumentoPDF(conteudo, resultado.titulo);
         } else {
             mostrarAlerta('Erro ao carregar mapa: ' + resultado.mensagem, 'danger');

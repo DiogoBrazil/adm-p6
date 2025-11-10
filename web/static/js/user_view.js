@@ -430,6 +430,11 @@ function goBack() {
 
 // Inicialização da página
 document.addEventListener('DOMContentLoaded', async () => {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Obter parâmetros da URL
     const params = getUrlParams();
     

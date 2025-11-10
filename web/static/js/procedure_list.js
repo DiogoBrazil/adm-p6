@@ -529,6 +529,7 @@ function exibirProcedimentos() {
                             <button class="btn-action view-btn" onclick="visualizarProcedimento('${procedimento.id}')" title="Visualizar">
                                 <i class="fas fa-eye"></i>
                             </button>
+                            ${window.permissoes && window.permissoes.temPermissaoEscrita() ? `
                             <button class="btn-action" onclick="abrirModalAndamentos('${procedimento.id}', '${numero.replace(/'/g, '\\\'')}')" title="Andamentos">
                                 <i class="fas fa-history"></i>
                             </button>
@@ -544,6 +545,7 @@ function exibirProcedimentos() {
                             <button onclick="excluirProcedimento('${procedimento.id}', '${numero.replace(/'/g, '\\\'')}')" class="btn-delete" title="Excluir">
                                 <i class="fas fa-trash"></i>
                             </button>
+                            ` : ''}
                         </div>
                     </td>
                 </tr>
@@ -1345,8 +1347,11 @@ function verificarEstadoVazioTabela() {
 }
 
 // Event listeners
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log("DOM carregado, inicializando...");
+
+    // Inicializar sistema de permissões
+    await window.permissoes.inicializar();
 
     // Verificar se os elementos existem
     const emptyState = document.getElementById('emptyState');

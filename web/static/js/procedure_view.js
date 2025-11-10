@@ -768,6 +768,11 @@ function voltarParaLista() {
 
 // Inicialização da página
 document.addEventListener('DOMContentLoaded', async () => {
+    // Inicializar sistema de permissões
+    if (window.permissoes) {
+        await window.permissoes.inicializar();
+    }
+    
     // Obter ID do procedimento da URL
     currentProcedureId = getProcedureIdFromURL();
     
