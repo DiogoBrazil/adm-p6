@@ -4161,11 +4161,11 @@ def listar_andamentos_processo(processo_id):
                 except Exception:
                     andamentos = []
 
-            # Ordenar por data (mais recente primeiro)
+            # Ordenar por data (crescente: mais antigo primeiro)
             andamentos_ordenados = sorted(
                 andamentos,
                 key=lambda x: x.get('data', ''),
-                reverse=True
+                reverse=False
             )
 
             # Formatar andamentos
