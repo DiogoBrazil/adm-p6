@@ -901,18 +901,20 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         categorias_json = indicios_result['categorias_indicios']
         categoria_texto = indicios_result['categoria']
         
-        # Parse das categorias do JSON
+        # Parse das categorias (JSONB vira list/dict via psycopg2)
         categorias = []
-        if categorias_json:
-            try:
-                import json
-                categorias = json.loads(categorias_json)
-                if not isinstance(categorias, list):
-                    categorias = [str(categorias)]
-            except:
-                if categoria_texto:
-                    categorias = [categoria_texto]
-        elif categoria_texto:
+        if categorias_json is not None:
+            if isinstance(categorias_json, list):
+                categorias = categorias_json
+            elif isinstance(categorias_json, dict):
+                categorias = list(categorias_json.values())
+            elif isinstance(categorias_json, str) and categorias_json.strip():
+                try:
+                    import json
+                    categorias = json.loads(categorias_json)
+                except Exception:
+                    categorias = [categorias_json]
+        if not categorias and categoria_texto:
             categorias = [categoria_texto]
         
         # Buscar crimes associados
@@ -2794,10 +2796,13 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
         # Atualizar histórico
         historico_atualizado = []
         if historico_atual:
-            try:
-                historico_atualizado = json.loads(historico_atual)
-            except:
-                pass
+            if isinstance(historico_atual, list):
+                historico_atualizado = historico_atual
+            elif isinstance(historico_atual, str):
+                try:
+                    historico_atualizado = json.loads(historico_atual)
+                except Exception:
+                    historico_atualizado = []
         
         historico_atualizado.append(registro_substituicao)
         historico_json = json.dumps(historico_atualizado, ensure_ascii=False)
@@ -2847,10 +2852,13 @@ def obter_historico_encarregados(processo_id):
         
         historico = []
         if historico_json:
-            try:
-                historico = json.loads(historico_json)
-            except (json.JSONDecodeError, TypeError):
-                pass
+            if isinstance(historico_json, list):
+                historico = historico_json
+            elif isinstance(historico_json, str):
+                try:
+                    historico = json.loads(historico_json)
+                except Exception:
+                    historico = []
 
         # O primeiro encarregado é o 'encarregado_anterior' do primeiro registro do histórico.
         # Se não houver histórico, o responsável atual é o primeiro.
@@ -2914,7 +2922,7 @@ def obter_processo(processo_id):
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
                 p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
-                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias::text AS indicios_categorias,
                 -- Dados completos do responsável
                 COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
                 COALESCE(u_resp.matricula, '') as responsavel_matricula,
@@ -3288,7 +3296,7 @@ def obter_procedimento_completo(procedimento_id):
                 p.numero_controle, p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
                 p.natureza_processo, p.natureza_procedimento, p.solucao_final,
                 p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids,
-                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias::text AS indicios_categorias,
                 p.presidente_id, p.interrogante_id, p.escrivao_processo_id
             FROM processos_procedimentos p
             WHERE p.id = %s AND p.ativo = TRUE
@@ -4142,31 +4150,35 @@ def listar_andamentos_processo(processo_id):
         conn.close()
         
         if result and result['andamentos']:
-            try:
-                # Parse do JSON
-                import json
-                andamentos = json.loads(result['andamentos'])
-                
-                # Ordenar por data (mais recente primeiro)
-                andamentos_ordenados = sorted(
-                    andamentos, 
-                    key=lambda x: x.get('data', ''), 
-                    reverse=True
-                )
-                
-                # Formatar andamentos
-                andamentos_formatados = []
-                for and_ in andamentos_ordenados:
-                    andamentos_formatados.append({
-                        "id": and_.get('id', ''),
-                        "data": and_.get('data', ''),
-                        "descricao": and_.get('texto', ''),
-                        "usuario_nome": and_.get('usuario', 'Sistema')
-                    })
-                
-                return {"sucesso": True, "andamentos": andamentos_formatados}
-            except json.JSONDecodeError:
-                return {"sucesso": True, "andamentos": []}
+            raw = result['andamentos']
+            # Tratar JSONB nativo (lista) ou string JSON
+            if isinstance(raw, list):
+                andamentos = raw
+            else:
+                try:
+                    import json
+                    andamentos = json.loads(raw) if isinstance(raw, str) and raw.strip() else []
+                except Exception:
+                    andamentos = []
+
+            # Ordenar por data (mais recente primeiro)
+            andamentos_ordenados = sorted(
+                andamentos,
+                key=lambda x: x.get('data', ''),
+                reverse=True
+            )
+
+            # Formatar andamentos
+            andamentos_formatados = []
+            for and_ in andamentos_ordenados:
+                andamentos_formatados.append({
+                    "id": and_.get('id', ''),
+                    "data": and_.get('data', ''),
+                    "descricao": and_.get('texto', '') or and_.get('descricao', ''),
+                    "usuario_nome": and_.get('usuario', 'Sistema')
+                })
+
+            return {"sucesso": True, "andamentos": andamentos_formatados}
         
         return {"sucesso": True, "andamentos": []}
         
@@ -4411,10 +4423,15 @@ def adicionar_andamento(processo_id, texto, usuario_nome=None):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos existentes ou criar lista vazia
-        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
-        try:
-            andamentos = json.loads(andamentos_json)
-        except:
+        raw_andamentos = result['andamentos'] if result['andamentos'] else []
+        if isinstance(raw_andamentos, list):
+            andamentos = raw_andamentos
+        elif isinstance(raw_andamentos, str) and raw_andamentos.strip():
+            try:
+                andamentos = json.loads(raw_andamentos)
+            except Exception:
+                andamentos = []
+        else:
             andamentos = []
         
         # Criar novo andamento
@@ -4466,12 +4483,17 @@ def listar_andamentos(processo_id):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos
-        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
-        print(f"DEBUG listar_andamentos: andamentos_json type={type(andamentos_json)}, value={andamentos_json}")
-        try:
-            andamentos = json.loads(andamentos_json)
-        except Exception as parse_error:
-            print(f"Erro ao fazer parse de andamentos: {parse_error}")
+        raw_andamentos = result['andamentos'] if result['andamentos'] else []
+        print(f"DEBUG listar_andamentos: andamentos_json type={type(raw_andamentos)}, value={raw_andamentos}")
+        if isinstance(raw_andamentos, list):
+            andamentos = raw_andamentos
+        elif isinstance(raw_andamentos, str) and raw_andamentos.strip():
+            try:
+                andamentos = json.loads(raw_andamentos)
+            except Exception as parse_error:
+                print(f"Erro ao fazer parse de andamentos: {parse_error}")
+                andamentos = []
+        else:
             andamentos = []
         
         return {
@@ -4502,10 +4524,15 @@ def remover_andamento(processo_id, andamento_id):
             return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado"}
         
         # Parse andamentos existentes
-        andamentos_json = result['andamentos'] if result['andamentos'] else '[]'
-        try:
-            andamentos = json.loads(andamentos_json)
-        except:
+        raw_andamentos = result['andamentos'] if result['andamentos'] else []
+        if isinstance(raw_andamentos, list):
+            andamentos = raw_andamentos
+        elif isinstance(raw_andamentos, str) and raw_andamentos.strip():
+            try:
+                andamentos = json.loads(raw_andamentos)
+            except Exception:
+                andamentos = []
+        else:
             andamentos = []
         
         # Remover andamento específico
@@ -7400,8 +7427,14 @@ def obter_dados_mapa_salvo(mapa_id):
         if not resultado:
             return {"sucesso": False, "mensagem": "Mapa não encontrado"}
         
-        # Deserializar dados JSON
-        dados_mapa = json.loads(resultado['dados_mapa'])
+        # Dados podem vir como JSONB (dict) diretamente
+        dados_mapa = resultado['dados_mapa']
+        if isinstance(dados_mapa, str) and dados_mapa.strip():
+            try:
+                import json
+                dados_mapa = json.loads(dados_mapa)
+            except Exception:
+                dados_mapa = {}
         
         return {
             "sucesso": True,
@@ -7609,7 +7642,7 @@ def gerar_relatorio_anual(ano):
         # Indícios (crime vs transgressão) - usando campo indicios_categorias
         cursor.execute("""
             SELECT 
-                indicios_categorias,
+                indicios_categorias::text AS indicios_categorias,
                 COUNT(*) as qtd
             FROM processos_procedimentos 
             WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
@@ -7617,7 +7650,7 @@ def gerar_relatorio_anual(ano):
             AND concluido = TRUE
             AND ativo = TRUE
             AND indicios_categorias IS NOT NULL
-            GROUP BY indicios_categorias
+            GROUP BY indicios_categorias::text
         """, (str(ano),))
         
         indicios_crime = 0
@@ -8065,15 +8098,18 @@ def _obter_indicios_por_pm(cursor, pm_envolvido_id):
         pm_indicios_id = pm_indicios['id']
         categorias_json = pm_indicios['categorias_indicios']
         
-        # Processar categorias de indícios
+        # Processar categorias de indícios (JSONB nativo com fallback string)
         if categorias_json:
-            try:
-                import json
-                categorias = json.loads(categorias_json)
-                if isinstance(categorias, list):
-                    indicios["categorias"] = categorias
-            except:
-                pass
+            if isinstance(categorias_json, list):
+                indicios["categorias"] = categorias_json
+            elif isinstance(categorias_json, str) and categorias_json.strip():
+                try:
+                    import json
+                    categorias = json.loads(categorias_json)
+                    if isinstance(categorias, list):
+                        indicios["categorias"] = categorias
+                except Exception:
+                    pass
         
         # Buscar crimes específicos do PM
         cursor.execute("""
@@ -8312,20 +8348,25 @@ def _obter_ultima_movimentacao(cursor, processo_id):
         
         result = cursor.fetchone()
         if result and result['andamentos']:
-            try:
-                import json
-                andamentos = json.loads(result['andamentos'])
-                if andamentos and len(andamentos) > 0:
-                    # Pegar o primeiro andamento (mais recente)
-                    ultimo_andamento = andamentos[0]
-                    return {
-                        "data": ultimo_andamento.get("data", "").split()[0] if ultimo_andamento.get("data") else None,  # Pegar só a data, sem hora
-                        "tipo": "outro",  # Tipo padrão para andamentos JSON
-                        "descricao": ultimo_andamento.get("texto", ""),
-                        "destino": None
-                    }
-            except Exception as e:
-                print(f"Erro ao processar andamentos JSON: {e}")
+            raw = result['andamentos']
+            andamentos = []
+            if isinstance(raw, list):
+                andamentos = raw
+            elif isinstance(raw, str) and raw.strip():
+                try:
+                    import json
+                    andamentos = json.loads(raw)
+                except Exception as e:
+                    print(f"Erro ao processar andamentos JSON: {e}")
+                    andamentos = []
+            if andamentos:
+                ultimo_andamento = andamentos[0]
+                return {
+                    "data": ultimo_andamento.get("data", "").split()[0] if ultimo_andamento.get("data") else None,
+                    "tipo": "outro",
+                    "descricao": ultimo_andamento.get("texto", ""),
+                    "destino": None
+                }
         
     except Exception as e:
         print(f"Erro ao obter última movimentação: {e}")
