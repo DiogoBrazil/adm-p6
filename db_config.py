@@ -8,13 +8,13 @@ from psycopg2 import OperationalError, DatabaseError
 import sys
 import os
 
-# Configurações do Banco de Dados PostgreSQL
+# Configurações do Banco de Dados PostgreSQL (env tem prioridade)
 DB_CONFIG = {
-    'host': '192.168.0.137',
-    'port': 5432,
-    'database': 'app_db',
-    'user': 'app_user',
-    'password': 'p67bpm'
+    'host': os.getenv('DB_HOST', '192.168.0.137'),
+    'port': int(os.getenv('DB_PORT', 5432)),
+    'database': os.getenv('DB_NAME', 'app_db'),
+    'user': os.getenv('DB_USER', 'app_user'),
+    'password': os.getenv('DB_PASSWORD', 'p67bpm'),
 }
 
 

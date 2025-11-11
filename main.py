@@ -4,6 +4,7 @@ import psycopg2
 import psycopg2.extras
 from db_config import get_pg_connection, init_postgres_manager
 import hashlib
+import bcrypt
 import os
 import sys
 from datetime import datetime, timedelta
@@ -165,26 +166,52 @@ class DatabaseManager:
             print("👤 Usuário admin criado: admin@sistema.com / 123456\n   ID: " + admin_id)
     
     def hash_password(self, password):
-        """Gera hash da senha usando SHA-256"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Gera hash seguro com bcrypt (substitui SHA-256 legado)"""
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def _is_bcrypt_hash(self, hashed):
+        return isinstance(hashed, str) and hashed.startswith('$2')
     
     def verify_login(self, email, senha):
         """Verifica credenciais de login na nova estrutura unificada"""
         conn = self.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        senha_hash = self.hash_password(senha)
-        
-        # Buscar usuário que é operador (precisa de senha)
+        # Buscar por email e verificar senha com suporte a bcrypt e SHA-256 legado
         cursor.execute('''
-            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, email, 
-                   is_encarregado, is_operador, perfil, created_at, updated_at
+            SELECT id, tipo_usuario, posto_graduacao, nome, matricula, email,
+                   is_encarregado, is_operador, perfil, created_at, updated_at, senha
             FROM usuarios
-            WHERE email = %s AND senha = %s AND ativo = TRUE AND is_operador = TRUE
-        ''', (email, senha_hash))
+            WHERE email = %s AND ativo = TRUE AND is_operador = TRUE
+        ''', (email,))
         user = cursor.fetchone()
-        
-        if user:
+
+        if not user:
+            conn.close()
+            return None
+
+        stored = user.get('senha')
+        ok = False
+        upgraded = False
+        if stored and self._is_bcrypt_hash(stored):
+            try:
+                ok = bcrypt.checkpw(senha.encode('utf-8'), stored.encode('utf-8'))
+            except Exception:
+                ok = False
+        else:
+            # legado sha256
+            ok = (hashlib.sha256(senha.encode()).hexdigest() == (stored or ''))
+            if ok:
+                try:
+                    novo = self.hash_password(senha)
+                    cursor.execute("UPDATE usuarios SET senha = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s", (novo, user['id']))
+                    upgraded = True
+                except Exception:
+                    pass
+
+        if ok:
+            if upgraded:
+                conn.commit()
             conn.close()
             return {
                 "id": user['id'],
@@ -201,7 +228,7 @@ class DatabaseManager:
                 "updated_at": str(user['updated_at']),
                 "nome_completo": f"{user['posto_graduacao']} {user['nome']}"
             }
-        
+
         conn.close()
         return None
     
