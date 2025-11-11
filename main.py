@@ -1,5 +1,6 @@
 # main.py - Sistema Login com Cadastro usando PostgreSQL
 import eel
+import logging
 import psycopg2
 import psycopg2.extras
 from db_config import get_pg_connection, init_postgres_manager
@@ -432,6 +433,11 @@ db_manager = DatabaseManager()
 prazos_manager = PrazosAndamentosManager()
 
 # Inicializar Eel
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s [%(name)s] %(message)s'
+)
+logger = logging.getLogger("app")
 eel.init('web')
 
 # Adicionar rota HTTP para buscar transgressões
@@ -657,6 +663,20 @@ def buscar_municipios_distritos(termo=''):
 
 # Variável para usuário logado
 usuario_logado = None
+
+def _guard_login():
+    """Retorna erro padrão se não houver usuário logado."""
+    global usuario_logado
+    if not usuario_logado:
+        return {"sucesso": False, "mensagem": "Sessão expirada. Faça login novamente."}
+    return None
+
+def _guard_admin():
+    """Retorna erro se usuário não for admin."""
+    global usuario_logado
+    if not usuario_logado or not usuario_logado.get('is_admin'):
+        return {"sucesso": False, "mensagem": "Acesso negado: apenas administradores."}
+    return None
 
 @eel.expose
 def obter_usuario_por_id(user_id, user_type):
@@ -2203,6 +2223,8 @@ def registrar_processo(
         print(f"❌ Documento iniciador inválido: {documento_iniciador}")
         return {"sucesso": False, "mensagem": f"Documento iniciador inválido. Valores permitidos: {', '.join(documentos_validos)}"}
     
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2724,6 +2746,8 @@ def _determinar_natureza_processo(natureza_original, transgressoes_selecionadas)
 @eel.expose
 def excluir_processo(processo_id):
     """Exclui um processo/procedimento (soft delete)"""
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2748,6 +2772,8 @@ def excluir_processo(processo_id):
 @eel.expose
 def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None):
     """Substitui o encarregado de um processo/procedimento e registra no histórico"""
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -3600,6 +3626,8 @@ def atualizar_processo(
     """Atualiza um processo/procedimento existente"""
     import json
     
+    g = _guard_login()
+    if g: return g
     try:
         # Converter concluido para boolean (caso venha como int do frontend)
         if isinstance(concluido, int):
@@ -5663,6 +5691,8 @@ def listar_auditorias(search_term=None, page=1, per_page=10, filtros=None):
         per_page: Registros por página
         filtros: Dict com filtros (operacao, tabela)
     """
+    g = _guard_admin()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -5832,6 +5862,8 @@ def validar_campos_crime(dados_crime):
 @eel.expose
 def listar_crimes_contravencoes():
     """Lista todos os crimes e contravenções cadastrados"""
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -5875,6 +5907,8 @@ def listar_crimes_contravencoes():
 @eel.expose
 def excluir_crime_contravencao(crime_id):
     """Exclui (desativa) um crime/contravenção pelo ID"""
+    g = _guard_admin()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -5901,6 +5935,8 @@ def excluir_crime_contravencao(crime_id):
 @eel.expose
 def cadastrar_crime(dados_crime):
     """Cadastra um novo crime/contravenção"""
+    g = _guard_admin()
+    if g: return g
     try:
         # Validar campos antes de cadastrar
         validation_errors = validar_campos_crime(dados_crime)
@@ -5946,6 +5982,8 @@ def cadastrar_crime(dados_crime):
 @eel.expose
 def obter_crime_por_id(crime_id):
     """Obtém um crime/contravenção específico pelo ID"""
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -6039,6 +6077,8 @@ def atualizar_crime(dados_crime):
 @eel.expose
 def listar_todas_transgressoes():
     """Lista todas as transgressões disciplinares com paginação e busca"""
+    g = _guard_login()
+    if g: return g
     try:
         print("📄 Listando transgressões disciplinares...")
         
@@ -6075,6 +6115,8 @@ def listar_todas_transgressoes():
 @eel.expose
 def cadastrar_transgressao(dados_transgressao):
     """Cadastra uma nova transgressão disciplinar"""
+    g = _guard_admin()
+    if g: return g
     try:
         artigo = dados_transgressao.get('artigo')
         gravidade = dados_transgressao.get('gravidade')
@@ -6137,6 +6179,8 @@ def cadastrar_transgressao(dados_transgressao):
 @eel.expose
 def obter_transgressao_por_id(transgressao_id):
     """Obtém uma transgressão específica pelo ID"""
+    g = _guard_login()
+    if g: return g
     try:
         print(f"🔍 Buscando transgressão ID: {transgressao_id}")
         
@@ -6175,6 +6219,8 @@ def obter_transgressao_por_id(transgressao_id):
 @eel.expose
 def atualizar_transgressao(dados_transgressao):
     """Atualiza uma transgressão existente"""
+    g = _guard_admin()
+    if g: return g
     try:
         artigo = dados_transgressao.get('artigo')
         gravidade = dados_transgressao.get('gravidade')
@@ -6241,6 +6287,8 @@ def atualizar_transgressao(dados_transgressao):
 @eel.expose
 def excluir_transgressao(transgressao_id):
     """Exclui uma transgressão pelo ID"""
+    g = _guard_admin()
+    if g: return g
     try:
         print(f"🗑️ Excluindo transgressão ID: {transgressao_id}")
         
@@ -6314,6 +6362,8 @@ def listar_infracoes_estatuto_art29():
 @eel.expose
 def obter_infracao_estatuto_art29(infracao_id):
     """Obtém uma infração específica do Art. 29 por ID"""
+    g = _guard_login()
+    if g: return g
     try:
         print(f"📋 Obtendo infração do Art. 29 com ID: {infracao_id}")
         
@@ -6397,6 +6447,8 @@ def criar_infracao_estatuto_art29(inciso, texto):
 @eel.expose
 def editar_infracao_estatuto_art29(infracao_id, inciso, texto):
     """Edita uma infração do Art. 29 existente"""
+    g = _guard_admin()
+    if g: return g
     try:
         print(f"✏️ Editando infração do Art. 29 - ID: {infracao_id}")
         
@@ -6453,6 +6505,8 @@ def editar_infracao_estatuto_art29(infracao_id, inciso, texto):
 @eel.expose
 def excluir_infracao_estatuto_art29(infracao_id):
     """Exclui (desativa) uma infração do Art. 29"""
+    g = _guard_admin()
+    if g: return g
     try:
         print(f"🗑️ Excluindo infração do Art. 29 - ID: {infracao_id}")
         
@@ -7313,6 +7367,8 @@ def gerar_mapa_completo(mes, ano):
 @eel.expose
 def salvar_mapa_mensal(dados_mapa, usuario_id=None):
     """Salva um mapa mensal gerado para acesso posterior"""
+    g = _guard_login()
+    if g: return g
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -7477,6 +7533,8 @@ def obter_dados_mapa_salvo(mapa_id):
 @eel.expose
 def excluir_mapa_salvo(mapa_id):
     """Exclui um mapa salvo (soft delete)"""
+    g = _guard_login()
+    if g: return g
     try:
         print(f"🗑️ Excluindo mapa ID: {mapa_id}")
         
