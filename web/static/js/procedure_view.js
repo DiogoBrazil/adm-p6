@@ -732,15 +732,23 @@ async function loadIndicios(data) {
         </div>`);
     }
 
-    // Categorias livres (JSON texto) - campo legado
+    // Categorias livres (agora JSONB array; mantém fallback para legado)
     if (data.indicios_categorias && Object.keys(indiciosPorPm).length === 0) {
         let catText = '';
-        try {
-            const cats = JSON.parse(data.indicios_categorias);
-            if (Array.isArray(cats)) catText = cats.join(', ');
-            else if (typeof cats === 'object') catText = Object.values(cats).join(', ');
-        } catch (_) {
-            catText = data.indicios_categorias;
+        const rawCats = data.indicios_categorias;
+        if (Array.isArray(rawCats)) {
+            catText = rawCats.join(', ');
+        } else if (typeof rawCats === 'string') {
+            try {
+                const cats = JSON.parse(rawCats);
+                if (Array.isArray(cats)) catText = cats.join(', ');
+                else if (typeof cats === 'object' && cats) catText = Object.values(cats).join(', ');
+                else catText = rawCats;
+            } catch (_) {
+                catText = rawCats;
+            }
+        } else if (typeof rawCats === 'object' && rawCats) {
+            catText = Object.values(rawCats).join(', ');
         }
         if (catText && String(catText).trim() !== '') {
             sec.push(`

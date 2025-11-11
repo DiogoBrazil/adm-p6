@@ -1901,15 +1901,24 @@ async function preencherFormularioEdicao(procedimento) {
                         penDias.value = procedimento.penalidade_dias != null ? String(procedimento.penalidade_dias) : '';
                     }
                 }
-                // Categorias de indícios
+                // Categorias de indícios (JSONB array; mantém fallback legado)
                 if (procedimento.indicios_categorias) {
                     const selCats = document.getElementById('indicios_categorias_select');
                     const hidCats = document.getElementById('indicios_categorias');
                     let arr = [];
-                    try {
-                        const parsed = JSON.parse(procedimento.indicios_categorias);
-                        if (Array.isArray(parsed)) arr = parsed;
-                    } catch { arr = [procedimento.indicios_categorias]; }
+                    const raw = procedimento.indicios_categorias;
+                    if (Array.isArray(raw)) {
+                        arr = raw;
+                    } else if (typeof raw === 'string') {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed)) arr = parsed;
+                            else if (parsed && typeof parsed === 'object') arr = Object.values(parsed);
+                            else arr = [raw];
+                        } catch { arr = [raw]; }
+                    } else if (raw && typeof raw === 'object') {
+                        arr = Object.values(raw);
+                    }
                     if (selCats) {
                         const setVals = new Set(arr);
                         Array.from(selCats.options).forEach(o => { o.selected = setVals.has(o.value); });

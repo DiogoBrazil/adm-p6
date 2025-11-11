@@ -2922,7 +2922,7 @@ def obter_processo(processo_id):
                 p.nome_vitima, p.natureza_processo, p.natureza_procedimento, p.resumo_fatos,
                 p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf, p.numero_controle,
                 p.concluido, p.data_conclusao, p.solucao_final, p.transgressoes_ids,
-                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias::text AS indicios_categorias,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
                 -- Dados completos do responsável
                 COALESCE(u_resp.posto_graduacao, '') as responsavel_posto,
                 COALESCE(u_resp.matricula, '') as responsavel_matricula,
@@ -3296,7 +3296,7 @@ def obter_procedimento_completo(procedimento_id):
                 p.numero_controle, p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
                 p.natureza_processo, p.natureza_procedimento, p.solucao_final,
                 p.created_at, p.updated_at, p.ano_instauracao, p.transgressoes_ids,
-                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias::text AS indicios_categorias,
+                p.data_remessa_encarregado, p.data_julgamento, p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias, p.indicios_categorias,
                 p.presidente_id, p.interrogante_id, p.escrivao_processo_id
             FROM processos_procedimentos p
             WHERE p.id = %s AND p.ativo = TRUE
