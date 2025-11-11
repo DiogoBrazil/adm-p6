@@ -7639,28 +7639,50 @@ def gerar_relatorio_anual(ano):
         
         # ============ ESTATÍSTICAS ESPECÍFICAS - IPM/SINDICÂNCIA ============
         
-        # Indícios (crime vs transgressão) - usando campo indicios_categorias
+        # Indícios (crime vs transgressão) - agora usando JSONB (sem cast) via funções JSONB
+        # Contagem de registros com 'crime' em indicios_categorias (array JSONB)
         cursor.execute("""
-            SELECT 
-                indicios_categorias::text AS indicios_categorias,
-                COUNT(*) as qtd
-            FROM processos_procedimentos 
+            SELECT COUNT(*) AS qtd
+            FROM processos_procedimentos
             WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
-            AND tipo_detalhe IN ('IPM', 'Sindicância')
-            AND concluido = TRUE
-            AND ativo = TRUE
-            AND indicios_categorias IS NOT NULL
-            GROUP BY indicios_categorias::text
+              AND tipo_detalhe IN ('IPM', 'Sindicância')
+              AND concluido = TRUE
+              AND ativo = TRUE
+              AND indicios_categorias IS NOT NULL
+              AND (
+                -- Se for array JSONB, verifica elementos
+                (jsonb_typeof(indicios_categorias) = 'array' AND EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val)
+                    WHERE lower(val) LIKE '%crime%'
+                ))
+                OR
+                -- Se for string JSON (legado), trata como texto
+                (jsonb_typeof(indicios_categorias) = 'string' AND lower(indicios_categorias::text) LIKE '%crime%')
+              )
         """, (str(ano),))
-        
-        indicios_crime = 0
-        indicios_transgressao = 0
-        for row in cursor.fetchall():
-            categorias = row['indicios_categorias'] or ''
-            if 'crime' in categorias.lower():
-                indicios_crime += 1
-            if 'transgressao' in categorias.lower() or 'rdpm' in categorias.lower():
-                indicios_transgressao += 1
+        indicios_crime = cursor.fetchone()['qtd']
+
+        # Contagem de registros com 'transgressao' ou 'rdpm'
+        cursor.execute("""
+            SELECT COUNT(*) AS qtd
+            FROM processos_procedimentos
+            WHERE TO_CHAR(data_instauracao, 'YYYY') = %s
+              AND tipo_detalhe IN ('IPM', 'Sindicância')
+              AND concluido = TRUE
+              AND ativo = TRUE
+              AND indicios_categorias IS NOT NULL
+              AND (
+                (jsonb_typeof(indicios_categorias) = 'array' AND EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val)
+                    WHERE lower(val) LIKE '%transgressao%' OR lower(val) LIKE '%rdpm%'
+                ))
+                OR
+                (jsonb_typeof(indicios_categorias) = 'string' AND (
+                    lower(indicios_categorias::text) LIKE '%transgressao%' OR lower(indicios_categorias::text) LIKE '%rdpm%'
+                ))
+              )
+        """, (str(ano),))
+        indicios_transgressao = cursor.fetchone()['qtd']
         
         # ============ ESTATÍSTICAS ESPECÍFICAS - PAD/PADS ============
         
