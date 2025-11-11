@@ -491,7 +491,7 @@ async function loadObservacoes(data) {
                                 return `
                                     <tr class="andamento-row">
                                         <td>
-                                            <span class="andamento-numero">#${resultado.andamentos.length - index}</span>
+                                            <span class="andamento-numero">#${index + 1}</span>
                                         </td>
                                         <td>
                                             <span class="andamento-data">
