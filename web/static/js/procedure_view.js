@@ -477,7 +477,6 @@ async function loadObservacoes(data) {
                     <table class="table andamentos-table">
                         <thead>
                             <tr>
-                                <th style="width: 80px;">#</th>
                                 <th style="width: 150px;">Data</th>
                                 <th style="width: 200px;">Responsável</th>
                                 <th>Descrição</th>
@@ -490,9 +489,6 @@ async function loadObservacoes(data) {
                                 
                                 return `
                                     <tr class="andamento-row">
-                                        <td>
-                                            <span class="andamento-numero">#${index + 1}</span>
-                                        </td>
                                         <td>
                                             <span class="andamento-data">
                                                 <i class="fas fa-calendar"></i> ${dataFormatada}
@@ -815,12 +811,12 @@ async function loadPrazos(procedureId) {
         // placeholder de carregando já está no HTML; vamos manter se demorar
         const resp = await eel.listar_prazos_processo(procedureId)();
         if (!resp || !resp.sucesso) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#b00;">${(resp && resp.mensagem) || 'Erro ao carregar prazos'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b00;">${(resp && resp.mensagem) || 'Erro ao carregar prazos'}</td></tr>`;
             return;
         }
         const prazos = resp.prazos || [];
         if (prazos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#777;">Nenhum prazo registrado</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#777;">Nenhum prazo registrado</td></tr>';
             return;
         }
         const rows = prazos.map(p => {
@@ -839,12 +835,11 @@ async function loadPrazos(procedureId) {
                 <td style="text-align:center;">${diasTxt}</td>
                 <td>${portaria}</td>
                 <td>${dataPortaria}</td>
-                <td style="text-align:center;">${isInicial ? '-' : (p.ordem_prorrogacao || '-')}</td>
             </tr>`;
         }).join('');
         tbody.innerHTML = rows;
     } catch (err) {
         console.error('Erro ao carregar prazos:', err);
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#b00;">Erro ao carregar prazos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b00;">Erro ao carregar prazos</td></tr>';
     }
 }
