@@ -208,20 +208,26 @@ class PrazosAndamentosManager:
             conn.close()
             result = []
             for r in rows:
+                # Converter datas para string no formato ISO
+                data_inicio_str = r['data_inicio'].isoformat() if r['data_inicio'] else None
+                data_vencimento_str = r['data_vencimento'].isoformat() if r['data_vencimento'] else None
+                data_portaria_str = r['data_portaria'].isoformat() if r['data_portaria'] else None
+                created_at_str = r['created_at'].isoformat() if r['created_at'] else None
+                
                 result.append({
                     "id": r['id'],
                     "tipo_prazo": r['tipo_prazo'],
-                    "data_inicio": r['data_inicio'],
-                    "data_vencimento": r['data_vencimento'],
+                    "data_inicio": data_inicio_str,
+                    "data_vencimento": data_vencimento_str,
                     "dias_adicionados": r['dias_adicionados'],
                     "motivo": r['motivo'],
                     "autorizado_por": r['autorizado_por'],
                     "autorizado_tipo": r['autorizado_tipo'],
                     "ativo": bool(r['ativo']),
                     "numero_portaria": r['numero_portaria'],
-                    "data_portaria": r['data_portaria'],
+                    "data_portaria": data_portaria_str,
                     "ordem_prorrogacao": r['ordem_prorrogacao'],
-                    "created_at": r['created_at']
+                    "created_at": created_at_str
                 })
             return result
         except Exception as e:

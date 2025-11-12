@@ -201,9 +201,19 @@ def listar_andamentos(db_manager, processo_id: str) -> Dict[str, Any]:
         else:
             andamentos = []
 
+        # Mapear campos para compatibilidade com frontend
+        andamentos_formatados = []
+        for andamento in andamentos:
+            andamentos_formatados.append({
+                "id": andamento.get("id"),
+                "data": andamento.get("data"),
+                "descricao": andamento.get("texto") or andamento.get("descricao") or "Sem descrição",
+                "usuario_nome": andamento.get("usuario") or andamento.get("usuario_nome") or "Sistema"
+            })
+
         return {
             "sucesso": True,
-            "andamentos": andamentos
+            "andamentos": andamentos_formatados
         }
 
     except Exception as e:

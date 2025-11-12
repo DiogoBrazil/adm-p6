@@ -781,4 +781,84 @@
     }
 }
 
+/* Estilos específicos para tabela de prazos */
+#tabelaPrazos {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+}
+
+#tabelaPrazos thead {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+#tabelaPrazos thead th {
+    padding: 16px 20px;
+    font-weight: 600;
+    text-align: center;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    vertical-align: middle;
+}
+
+#tabelaPrazos thead th:last-child {
+    border-right: none;
+}
+
+#tabelaPrazos tbody tr {
+    transition: all 0.3s ease;
+    border-bottom: 1px solid #dee2e6;
+}
+
+#tabelaPrazos tbody tr:last-child {
+    border-bottom: none;
+}
+
+#tabelaPrazos tbody tr:hover {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
+}
+
+#tabelaPrazos tbody td {
+    padding: 18px 20px;
+    vertical-align: middle;
+    font-size: 0.9rem;
+    color: #2d3748;
+    text-align: center;
+    border-right: 1px solid #e9ecef;
+}
+
+#tabelaPrazos tbody td:last-child {
+    border-right: none;
+}
+
+#tabelaPrazos tbody td:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+/* Badge de status ativo */
+.badge-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.badge-status.em-prazo {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+
+
 
