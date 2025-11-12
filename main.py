@@ -14,6 +14,9 @@ import time
 import json
 import traceback
 from bottle import route, request, response
+from app import catalogos as catalogos_mod
+from app import rdpm as rdpm_mod
+from app import art29 as art29_mod
 from prazos_andamentos_manager import PrazosAndamentosManager
 
 class DatabaseManager:
@@ -5864,45 +5867,8 @@ def listar_crimes_contravencoes():
     """Lista todos os crimes e contravenções cadastrados"""
     g = _guard_login()
     if g: return g
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute('''
-            SELECT 
-                id,
-                tipo,
-                dispositivo_legal,
-                artigo,
-                descricao_artigo,
-                paragrafo,
-                inciso,
-                alinea,
-                ativo
-            FROM crimes_contravencoes
-            ORDER BY tipo, dispositivo_legal, artigo
-        ''')
-        crimes = cursor.fetchall()
-        conn.close()
-        
-        # Converte em lista de dicionários
-        result = []
-        for crime in crimes:
-            result.append({
-                'id': crime['id'],
-                'tipo': crime['tipo'],
-                'dispositivo_legal': crime['dispositivo_legal'],
-                'artigo': crime['artigo'],
-                'descricao_artigo': crime['descricao_artigo'],
-                'paragrafo': crime['paragrafo'] if crime['paragrafo'] else '',
-                'inciso': crime['inciso'] if crime['inciso'] else '',
-                'alinea': crime['alinea'] if crime['alinea'] else '',
-                'ativo': bool(crime['ativo'])
-            })
-        
-        return {'success': True, 'data': result}
-    except Exception as e:
-        print(f"Erro ao listar crimes: {e}")
-        return {'success': False, 'error': str(e)}
+    from app import catalogos as catalogos_mod
+    return catalogos_mod.listar_crimes_contravencoes(db_manager)
 
 @eel.expose
 def excluir_crime_contravencao(crime_id):
