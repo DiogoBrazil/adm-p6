@@ -1809,10 +1809,34 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('tipo_procedimento').value = procedimento.tipo_detalhe || '';
         }
         
+        // Disparar evento change no tipo_detalhe para mostrar campos condicionais
+        await new Promise(resolve => setTimeout(resolve, 150));
+        if (procedimento.tipo_geral === 'procedimento' && document.getElementById('tipo_procedimento')) {
+            document.getElementById('tipo_procedimento').dispatchEvent(new Event('change'));
+        }
+        
+        // Aguardar mais um pouco para garantir que campos condicionais foram exibidos
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
         // Preencher natureza_procedimento APÓS os campos serem exibidos
         if (procedimento.natureza_procedimento && document.getElementById('natureza_procedimento')) {
             document.getElementById('natureza_procedimento').value = procedimento.natureza_procedimento;
             console.log('✅ Natureza do procedimento preenchida após exibição:', procedimento.natureza_procedimento);
+        }
+        
+        // Preencher nome_vitima APÓS os campos serem exibidos
+        console.log('🔍 Verificando nome_vitima:', {
+            valor: procedimento.nome_vitima,
+            existe: !!procedimento.nome_vitima,
+            campo_existe: !!document.getElementById('nome_vitima'),
+            campo_visivel: document.getElementById('nome_vitima')?.offsetParent !== null
+        });
+        
+        if (procedimento.nome_vitima && document.getElementById('nome_vitima')) {
+            document.getElementById('nome_vitima').value = procedimento.nome_vitima;
+            console.log('✅ Nome da vítima/ofendido preenchido após exibição:', procedimento.nome_vitima);
+        } else if (procedimento.nome_vitima) {
+            console.log('⚠️ Campo nome_vitima não encontrado ou não visível ainda');
         }
         
         // Aguardar mais um pouco e disparar change nos status para mostrar botões corretos
