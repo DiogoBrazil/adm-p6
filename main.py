@@ -5875,28 +5875,8 @@ def excluir_crime_contravencao(crime_id):
     """Exclui (desativa) um crime/contravenção pelo ID"""
     g = _guard_admin()
     if g: return g
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Ao invés de excluir fisicamente, apenas desativa
-        cursor.execute('''
-            UPDATE crimes_contravencoes 
-            SET ativo = FALSE 
-            WHERE id = %s
-        ''', (crime_id,))
-        
-        if cursor.rowcount == 0:
-            conn.close()
-            return {'success': False, 'error': 'Crime não encontrado'}
-        
-        conn.commit()
-        conn.close()
-        
-        return {'success': True, 'message': 'Crime/contravenção desativado com sucesso'}
-    except Exception as e:
-        print(f"Erro ao excluir crime: {e}")
-        return {'success': False, 'error': str(e)}
+    from app import catalogos as catalogos_mod
+    return catalogos_mod.excluir_crime_contravencao(db_manager, crime_id)
 
 @eel.expose
 def cadastrar_crime(dados_crime):
@@ -5923,47 +5903,15 @@ def cadastrar_crime(dados_crime):
             INSERT INTO crimes_contravencoes 
             (id, tipo, dispositivo_legal, artigo, descricao_artigo, 
              paragrafo, inciso, alinea, ativo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (
-            crime_id,
-            dados_crime['tipo'],
-            dados_crime['dispositivo_legal'],
-            dados_crime['artigo'],
-            dados_crime['descricao_artigo'],
-            dados_crime.get('paragrafo', ''),
-            dados_crime.get('inciso', ''),
-            dados_crime.get('alinea', ''),
-            dados_crime.get('ativo', True)
-        ))
-        
-        conn.commit()
-        conn.close()
-        
+    # Validação
+    validation_errors = validar_campos_crime(dados_crime)
+    if validation_errors:
+        return {'success': False, 'error': 'Erro de validação: ' + '; '.join(validation_errors)}
+    from app import catalogos as catalogos_mod
+    r = catalogos_mod.cadastrar_crime(db_manager, dados_crime)
+    if r.get('success'):
         print(f"✅ Crime cadastrado: {dados_crime['tipo']} - Art. {dados_crime['artigo']}")
-        return {'success': True, 'message': 'Crime/contravenção cadastrado com sucesso', 'id': crime_id}
-    except Exception as e:
-        print(f"Erro ao cadastrar crime: {e}")
-        return {'success': False, 'error': str(e)}
-
-@eel.expose
-def obter_crime_por_id(crime_id):
-    """Obtém um crime/contravenção específico pelo ID"""
-    g = _guard_login()
-    if g: return g
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute('''
-            SELECT 
-                id,
-                tipo,
-                dispositivo_legal,
-                artigo,
-                descricao_artigo,
-                paragrafo,
-                inciso,
-                alinea,
-                ativo
+    return r
             FROM crimes_contravencoes
             WHERE id = %s
         ''', (crime_id,))
@@ -6002,45 +5950,8 @@ def atualizar_crime(dados_crime):
                 'error': 'Erro de validação: ' + '; '.join(validation_errors)
             }
         
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Atualizar crime
-        cursor.execute('''
-            UPDATE crimes_contravencoes 
-            SET tipo = %s, dispositivo_legal = %s, artigo = %s, descricao_artigo = %s,
-                paragrafo = %s, inciso = %s, alinea = %s, ativo = %s
-            WHERE id = %s
-        ''', (
-            dados_crime['tipo'],
-            dados_crime['dispositivo_legal'],
-            dados_crime['artigo'],
-            dados_crime['descricao_artigo'],
-            dados_crime.get('paragrafo', ''),
-            dados_crime.get('inciso', ''),
-            dados_crime.get('alinea', ''),
-            dados_crime.get('ativo', True),
-            dados_crime['id']
-        ))
-        
-        if cursor.rowcount == 0:
-            conn.close()
-            return {'success': False, 'error': 'Crime não encontrado'}
-        
-        conn.commit()
-        conn.close()
-        
-        print(f"✅ Crime atualizado: {dados_crime['tipo']} - Art. {dados_crime['artigo']}")
-        return {'success': True, 'message': 'Crime/contravenção atualizado com sucesso'}
-    except Exception as e:
-        print(f"Erro ao atualizar crime: {e}")
-        return {'success': False, 'error': str(e)}
-
-# ====================================================================
-# FUNÇÕES DE TRANSGRESSÕES DISCIPLINARES - CRUD COMPLETO
-# ====================================================================
-
-@eel.expose
+    from app import catalogos as catalogos_mod
+    return catalogos_mod.obter_crime_por_id(db_manager, crime_id)
 def listar_todas_transgressoes():
     """Lista todas as transgressões disciplinares com paginação e busca"""
     g = _guard_login()
@@ -6082,48 +5993,15 @@ def listar_todas_transgressoes():
 def cadastrar_transgressao(dados_transgressao):
     """Cadastra uma nova transgressão disciplinar"""
     g = _guard_admin()
-    if g: return g
-    try:
-        artigo = dados_transgressao.get('artigo')
-        gravidade = dados_transgressao.get('gravidade')
-        
-        print(f"📝 Cadastrando transgressão: Artigo {artigo} ({gravidade}) - {dados_transgressao['inciso']}")
-        
-        # Validação básica
-        if not artigo or not dados_transgressao.get('inciso') or not dados_transgressao.get('texto'):
-            return {'success': False, 'error': 'Artigo, inciso e texto são obrigatórios'}
-        
-        # Validar artigo (deve ser 15, 16 ou 17)
-        if artigo not in [15, 16, 17]:
-            return {'success': False, 'error': 'Artigo deve ser 15, 16 ou 17'}
-        
-        conn = db_manager.get_connection()
-        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Verificar se já existe uma transgressão com a mesma gravidade e inciso
-        cursor.execute('''
-            SELECT id, gravidade, inciso FROM transgressoes 
-            WHERE LOWER(gravidade) = LOWER(%s) AND UPPER(inciso) = UPPER(%s)
-        ''', (gravidade, dados_transgressao['inciso']))
-        
-        duplicata = cursor.fetchone()
-        if duplicata:
-            conn.close()
-            return {'success': False, 'error': f'Já existe uma transgressão {duplicata[1]} com inciso {duplicata[2]}. Verifique os dados informados.'}
-        
-        # Inserir nova transgressão (agora com artigo)
-        cursor.execute('''
-            INSERT INTO transgressoes (artigo, gravidade, inciso, texto, ativo, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (
-            artigo,
-            gravidade,
-            dados_transgressao['inciso'],
-            dados_transgressao['texto'],
-            dados_transgressao.get('ativo', True),
-            datetime.now().isoformat()
-        ))
-        
+    # Validar campos antes de atualizar
+    validation_errors = validar_campos_crime(dados_crime)
+    if validation_errors:
+        return {'success': False, 'error': 'Erro de validação: ' + '; '.join(validation_errors)}
+    from app import catalogos as catalogos_mod
+    r = catalogos_mod.atualizar_crime(db_manager, dados_crime)
+    if r.get('success'):
+        print(f"✅ Crime atualizado: {dados_crime['tipo']} - Art. {dados_crime['artigo']}")
+    return r
         # PostgreSQL não tem lastrowid, precisa usar RETURNING
         cursor.execute('SELECT lastval()')
         transgressao_id = cursor.fetchone()[0]
