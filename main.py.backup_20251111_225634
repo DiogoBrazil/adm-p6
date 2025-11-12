@@ -610,7 +610,7 @@ def api_buscar_municipios_distritos():
     except Exception as e:
         return json.dumps({"erro": f"Erro ao buscar municípios/distritos: {str(e)}"})
 
-# @eel.expose  # FUNÇÃO AUXILIAR - Pode ser migrada para catalogos router se necessário
+@eel.expose
 def buscar_municipios_distritos(termo=''):
     """Função EEL para buscar municípios e distritos de Rondônia"""
     try:
@@ -704,14 +704,13 @@ helpers = {
     'set_usuario_logado': _set_usuario_logado
 }
 
-# Registrar rotas inicialmente sem legacy_functions (serão registradas depois)
 registrar_todas_rotas(eel, db_manager, prazos_manager, guards, helpers)
 
 # ====================================================================
 # FUNÇÕES @eel.expose MIGRADAS PARA ROUTERS - MAPA DE MIGRAÇÃO
 # ====================================================================
 # 
-# ✅ MIGRAÇÃO COMPLETA - Todas as 73 funções # @eel.expose  # MIGRADO PARA ROUTERS foram migradas
+# ✅ MIGRAÇÃO COMPLETA - Todas as 73 funções @eel.expose foram migradas
 # para routers modulares. O registro é feito via registrar_todas_rotas().
 #
 # MAPA DE MIGRAÇÃO:
@@ -759,18 +758,18 @@ registrar_todas_rotas(eel, db_manager, prazos_manager, guards, helpers)
 # 📁 app/routers/art29.py (já migrado anteriormente)
 # 📁 app/routers/processos.py (já migrado anteriormente)
 #
-# TOTAL: 73 funções # @eel.expose  # MIGRADO PARA ROUTERS migradas ✅
+# TOTAL: 73 funções @eel.expose migradas ✅
 #
 # IMPORTANTE: As funções antigas abaixo foram mantidas temporariamente
 # para fins de referência e troubleshooting. Elas NÃO são mais registradas
-# como # @eel.expose  # MIGRADO PARA ROUTERS - apenas os routers modulares são ativos.
+# como @eel.expose - apenas os routers modulares são ativos.
 # ====================================================================
 
 ## MIGRADO: obter_usuario_por_id -> app/routers/usuarios.py
 ## MIGRADO: cadastrar_usuario -> app/routers/usuarios.py
 
 # Continua com o resto do código legado...
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def cadastrar_usuario_old_DEPRECATED(tipo_usuario, posto_graduacao, nome, matricula, is_encarregado=False, is_operador=False, email=None, senha=None, perfil=None):
     """DEPRECATED - Cadastra novo usuário na estrutura unificada"""
     
@@ -1036,12 +1035,12 @@ def buscar_indicios_por_pm(pm_envolvido_id):
         traceback.print_exc()
         return None
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_usuarios(search_term=None, page=1, per_page=10):
     """Lista todos os usuários cadastrados com paginação e pesquisa"""
     return db_manager.get_paginated_users(search_term, page, per_page)
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_todos_usuarios():
     """Lista todos os usuários da nova estrutura unificada"""
     conn = db_manager.get_connection()
@@ -1092,7 +1091,7 @@ def listar_todos_usuarios():
         print(f"Erro ao listar usuários: {e}")
         return []
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_encarregados_operadores():
     """Lista todos os usuários que são encarregados ou operadores"""
     conn = db_manager.get_connection()
@@ -1136,7 +1135,7 @@ def listar_encarregados_operadores():
         print(f"Erro ao listar encarregados/operadores: {e}")
         return []
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_usuario_detalhado(user_id, user_type):
     """Obtém detalhes completos de um usuário para edição"""
     try:
@@ -1175,7 +1174,7 @@ def obter_usuario_detalhado(user_id, user_type):
         print(f"Erro ao obter usuário detalhado: {e}")
         return {"sucesso": False, "mensagem": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def atualizar_usuario(user_id, user_type, tipo_usuario, posto_graduacao, nome, matricula, 
                       is_encarregado, is_operador, email, senha, perfil):
     """Atualiza um usuário existente com todos os campos"""
@@ -1232,7 +1231,7 @@ def atualizar_usuario(user_id, user_type, tipo_usuario, posto_graduacao, nome, m
         print(f"Erro ao atualizar usuário: {e}")
         return {"sucesso": False, "mensagem": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def atualizar_usuario_old(user_id, user_type, posto_graduacao, matricula, nome, email, senha=None, profile=None):
     """Atualiza um usuário existente (versão antiga - manter por compatibilidade)"""
     # Validações básicas
@@ -1258,19 +1257,19 @@ def atualizar_usuario_old(user_id, user_type, posto_graduacao, matricula, nome, 
 
     return db_manager.update_user(user_id, user_type, posto_graduacao, matricula, nome, email, senha, profile)
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def delete_user(user_id, user_type):
     """Desativa um usuário"""
     return db_manager.delete_user(user_id, user_type)
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def verificar_admin():
     """Verifica se usuário logado é admin"""
     if usuario_logado and usuario_logado.get('tipo') == 'operador':
         return usuario_logado.get('profile') == 'admin'
     return False
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_estatisticas_encarregados():
     """Retorna estatísticas detalhadas por encarregado"""
     try:
@@ -1446,7 +1445,7 @@ def obter_estatisticas_encarregados():
     except Exception as e:
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_ultimos_feitos_encarregado(encarregado_id):
     """
     Obtém os 3 feitos mais recentes de um encarregado.
@@ -1519,7 +1518,7 @@ def obter_ultimos_feitos_encarregado(encarregado_id):
 
 # ======== FUNÇÕES DE ESTATÍSTICAS POR TIPO DE PROCESSO ========
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_anos_disponiveis():
     """Retorna lista de anos com processos/procedimentos cadastrados"""
     try:
@@ -1562,12 +1561,12 @@ def obter_anos_disponiveis():
 
 ## Processos - obter_estatisticas_processos_andamento migrado para app/routers/processos.py
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_estatisticas():
     """Retorna estatísticas do sistema"""
     return db_manager.get_stats()
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def registrar_processo(
     numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
@@ -1968,14 +1967,7 @@ def registrar_processo(
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao registrar processo/procedimento: {str(e)}"}
 
-def _registrar_processo_wrapper(*args, **kwargs):
-    """Wrapper para registrar_processo"""
-    return registrar_processo(*args, **kwargs)
-
-# Expor com o nome correto
-eel._exposed_functions['registrar_processo'] = _registrar_processo_wrapper
-
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_processos():
     """Lista todos os processos cadastrados"""
     conn = db_manager.get_connection()
@@ -2141,13 +2133,6 @@ def listar_processos():
     
     return resultado
 
-def _listar_processos_wrapper():
-    """Wrapper para listar_processos"""
-    return listar_processos()
-
-# Expor com o nome correto
-eel._exposed_functions['listar_processos'] = _listar_processos_wrapper
-
 def _determinar_natureza_processo(natureza_original, transgressoes_selecionadas):
     """Determina a natureza do processo baseado nas transgressões selecionadas"""
     if not transgressoes_selecionadas:
@@ -2179,7 +2164,7 @@ def _determinar_natureza_processo(natureza_original, transgressoes_selecionadas)
 
 ## Processos - excluir_processo migrado para app/routers/processos.py
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None):
     """Substitui o encarregado de um processo/procedimento e registra no histórico"""
     g = _guard_login()
@@ -2285,7 +2270,7 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao substituir encarregado: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_historico_encarregados(processo_id):
     """Obtém o histórico de encarregados de um processo, garantindo que o primeiro seja incluído."""
     try:
@@ -2367,7 +2352,7 @@ def obter_historico_encarregados(processo_id):
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao obter histórico de encarregados: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_processo(processo_id):
     """Obtém dados de um processo específico para edição"""
     import json
@@ -2741,14 +2726,7 @@ def obter_processo(processo_id):
         print(f"Erro ao obter processo: {e}")
         return None
 
-def _obter_processo_wrapper(processo_id):
-    """Wrapper para obter_processo"""
-    return obter_processo(processo_id)
-
-# Expor com o nome correto
-eel._exposed_functions['obter_processo'] = _obter_processo_wrapper
-
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_procedimento_completo(procedimento_id):
     """Obtém dados consolidados para a página de visualização"""
     try:
@@ -2855,7 +2833,7 @@ def obter_procedimento_completo(procedimento_id):
         print(f"Erro em obter_procedimento_completo: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao obter procedimento: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_encarregados_procedimento(procedimento_id):
     """Retorna responsável e escrivão (se houver) para o procedimento.
     Para CJ, CD e PAD retorna presidente, interrogante e escrivão do processo."""
@@ -2944,7 +2922,7 @@ def obter_encarregados_procedimento(procedimento_id):
         print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter encarregados: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_envolvidos_procedimento(procedimento_id):
     """Retorna os envolvidos do procedimento (múltiplos para procedimentos ou único para processos)"""
     try:
@@ -3020,7 +2998,7 @@ def obter_envolvidos_procedimento(procedimento_id):
         print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter envolvidos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def atualizar_processo(
     processo_id, numero, tipo_geral, tipo_detalhe, documento_iniciador, processo_sei, responsavel_id, responsavel_tipo,
     local_origem=None, local_fatos=None, data_instauracao=None, data_recebimento=None, escrivao_id=None, status_pm=None, nome_pm_id=None,
@@ -3457,16 +3435,9 @@ def atualizar_processo(
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao atualizar processo/procedimento: {str(e)}"}
 
-def _atualizar_processo_wrapper(*args, **kwargs):
-    """Wrapper para atualizar_processo"""
-    return atualizar_processo(*args, **kwargs)
-
-# Expor com o nome correto
-eel._exposed_functions['atualizar_processo'] = _atualizar_processo_wrapper
-
 # ======== FUNÇÕES DE PRAZOS E ANDAMENTOS ========
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def definir_prazo_processo(processo_id, tipo_prazo, data_limite, descricao=None, responsavel_id=None):
     """Define um prazo para um processo"""
     try:
@@ -3481,7 +3452,7 @@ def definir_prazo_processo(processo_id, tipo_prazo, data_limite, descricao=None,
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao definir prazo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def prorrogar_prazo_processo(prazo_id, nova_data_limite, motivo_prorrogacao, responsavel_id=None):
     """Prorroga um prazo existente"""
     try:
@@ -3495,7 +3466,7 @@ def prorrogar_prazo_processo(prazo_id, nova_data_limite, motivo_prorrogacao, res
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao prorrogar prazo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def concluir_prazo_processo(prazo_id, observacoes=None, responsavel_id=None):
     """Marca um prazo como concluído"""
     try:
@@ -3508,7 +3479,7 @@ def concluir_prazo_processo(prazo_id, observacoes=None, responsavel_id=None):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao concluir prazo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_prazos_processo(processo_id):
     """Lista todos os prazos de um processo"""
     try:
@@ -3517,7 +3488,7 @@ def listar_prazos_processo(processo_id):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao listar prazos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def adicionar_prorrogacao(processo_id, dias_prorrogacao, numero_portaria=None, data_portaria=None, motivo=None, autorizado_por=None, autorizado_tipo=None):
     """Cria uma prorrogação para o prazo ativo do processo, seguindo a regra do dia seguinte ao vencimento."""
     try:
@@ -3534,7 +3505,7 @@ def adicionar_prorrogacao(processo_id, dias_prorrogacao, numero_portaria=None, d
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao adicionar prorrogação: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_prazos_vencendo(dias_antecedencia=7):
     """Obtém prazos que estão vencendo nos próximos dias"""
     try:
@@ -3543,7 +3514,7 @@ def obter_prazos_vencendo(dias_antecedencia=7):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter prazos vencendo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_prazos_vencidos():
     """Obtém prazos que já venceram"""
     try:
@@ -3552,7 +3523,7 @@ def obter_prazos_vencidos():
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter prazos vencidos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def backfill_tipos_funcoes_processo():
     """Backfill presidente_tipo/interrogante_tipo/escrivao_processo_tipo onde ID existe e tipo está NULL/errado."""
     try:
@@ -3595,7 +3566,7 @@ def backfill_tipos_funcoes_processo():
     except Exception as e:
         return {"sucesso": False, "mensagem": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def registrar_andamento_processo(processo_id, tipo_andamento, descricao, data_andamento=None, responsavel_id=None, observacoes=None):
     """Registra um novo andamento para um processo"""
     try:
@@ -3611,7 +3582,7 @@ def registrar_andamento_processo(processo_id, tipo_andamento, descricao, data_an
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao registrar andamento: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_andamentos_processo(processo_id):
     """Lista todos os andamentos de um processo"""
     try:
@@ -3666,7 +3637,7 @@ def listar_andamentos_processo(processo_id):
         return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
 
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def atualizar_status_detalhado_processo(processo_id, novo_status, observacoes=None, responsavel_id=None):
     """Atualiza o status detalhado de um processo"""
     try:
@@ -3680,7 +3651,7 @@ def atualizar_status_detalhado_processo(processo_id, novo_status, observacoes=No
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao atualizar status: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_status_detalhado_processo(processo_id):
     """Obtém o histórico de status detalhado de um processo"""
     try:
@@ -3689,7 +3660,7 @@ def obter_status_detalhado_processo(processo_id):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter status: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_dashboard_prazos():
     """Obtém dados para dashboard de prazos"""
     try:
@@ -3698,7 +3669,7 @@ def obter_dashboard_prazos():
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter dashboard: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def gerar_relatorio_processo(processo_id):
     """Gera relatório completo de um processo"""
     try:
@@ -3707,7 +3678,7 @@ def gerar_relatorio_processo(processo_id):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao gerar relatório: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def gerar_relatorio_prazos(filtros=None):
     """Gera relatório de prazos com filtros opcionais"""
     try:
@@ -3827,7 +3798,7 @@ def calcular_prazo_processo(tipo_detalhe, documento_iniciador, data_recebimento,
             "vencido": False
         }
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def calcular_prazo_por_processo(processo_id):
     """Calcula o prazo de um processo específico"""
     try:
@@ -3884,7 +3855,7 @@ def calcular_prazo_por_processo(processo_id):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao calcular prazo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def adicionar_andamento(processo_id, texto, usuario_nome=None):
     """Adiciona um novo andamento (progresso) ao processo/procedimento"""
     try:
@@ -3944,7 +3915,7 @@ def adicionar_andamento(processo_id, texto, usuario_nome=None):
         print(f"Erro ao adicionar andamento: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao adicionar andamento: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_andamentos(processo_id):
     """Lista todos os andamentos de um processo/procedimento"""
     try:
@@ -3985,7 +3956,7 @@ def listar_andamentos(processo_id):
         print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def remover_andamento(processo_id, andamento_id):
     """Remove um andamento específico do processo/procedimento"""
     try:
@@ -4036,7 +4007,7 @@ def remover_andamento(processo_id, andamento_id):
         print(f"Erro ao remover andamento: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao remover andamento: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=None):
     """Lista processos com cálculo de prazo automático, paginação e filtros avançados"""
     try:
@@ -4489,7 +4460,7 @@ def listar_processos_com_prazos(search_term=None, page=1, per_page=6, filtros=No
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao listar processos com prazos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_todos_processos_com_prazos():
     """Lista todos os processos com cálculo de prazo (sem paginação) - para compatibilidade"""
     try:
@@ -4502,7 +4473,7 @@ def listar_todos_processos_com_prazos():
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao listar todos os processos: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_dashboard_prazos_simples():
     """Obtém estatísticas simples de prazos para dashboard"""
     try:
@@ -4552,7 +4523,7 @@ def obter_dashboard_prazos_simples():
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter dashboard: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_tipos_prazo():
     """Retorna lista de tipos de prazo disponíveis"""
     tipos = [
@@ -4568,7 +4539,7 @@ def obter_tipos_prazo():
     ]
     return {"sucesso": True, "tipos": tipos}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_tipos_andamento():
     """Retorna lista de tipos de andamento disponíveis"""
     tipos = [
@@ -4590,7 +4561,7 @@ def obter_tipos_andamento():
     ]
     return {"sucesso": True, "tipos": tipos}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_status_processo():
     """Retorna lista de status disponíveis para processos"""
     status = [
@@ -4605,7 +4576,7 @@ def obter_status_processo():
     ]
     return {"sucesso": True, "status": status}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_opcoes_filtros():
     """Retorna todas as opções disponíveis para os filtros (baseado em todos os processos do banco)"""
     try:
@@ -4709,27 +4680,9 @@ def obter_opcoes_filtros():
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao obter opções de filtros: {str(e)}"}
 
-
-# Registrar funções legacy que dependem de funções definidas acima
-@eel.expose
-def _listar_processos_com_prazos_wrapper(search_term=None, page=1, per_page=6, filtros=None):
-    """Wrapper para listar_processos_com_prazos"""
-    return listar_processos_com_prazos(search_term, page, per_page, filtros)
-
-@eel.expose  
-def _obter_opcoes_filtros_wrapper():
-    """Wrapper para obter_opcoes_filtros"""
-    return obter_opcoes_filtros()
-
-# Expor com nomes corretos
-eel._exposed_functions['listar_processos_com_prazos'] = _listar_processos_com_prazos_wrapper
-eel._exposed_functions['obter_opcoes_filtros'] = _obter_opcoes_filtros_wrapper
-# Nota: listar_transgressoes_wrapper é exposto diretamente com @eel.expose após a função
-
-
 # ======== FUNÇÕES DE TRANSGRESSÕES ========
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_transgressoes(gravidade=None):
     """Lista transgressões por gravidade"""
     try:
@@ -4777,14 +4730,7 @@ def listar_transgressoes(gravidade=None):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao listar transgressões: {str(e)}"}
 
-def _listar_transgressoes_wrapper(gravidade=None):
-    """Wrapper para listar_transgressoes"""
-    return listar_transgressoes(gravidade)
-
-# Expor com o nome correto
-eel._exposed_functions['listar_transgressoes'] = _listar_transgressoes_wrapper
-
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def buscar_transgressoes(termo, gravidade=None):
     """Busca transgressões por termo"""
     try:
@@ -4836,7 +4782,7 @@ def buscar_transgressoes(termo, gravidade=None):
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao buscar transgressões: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_estatisticas_usuario(user_id, user_type):
     """Obtém estatísticas detalhadas de um usuário específico"""
     try:
@@ -5016,7 +4962,7 @@ def obter_estatisticas_usuario(user_id, user_type):
         print(f"Erro ao obter estatísticas do usuário: {e}")
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_processos_usuario_responsavel(user_id):
     """Obtém lista de processos/procedimentos onde o usuário é responsável (encarregado)"""
     try:
@@ -5051,7 +4997,7 @@ def obter_processos_usuario_responsavel(user_id):
         print(f"Erro ao obter processos como responsável: {e}")
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_processos_usuario_escrivao(user_id):
     """Obtém lista de processos/procedimentos onde o usuário é escrivão"""
     try:
@@ -5086,7 +5032,7 @@ def obter_processos_usuario_escrivao(user_id):
         print(f"Erro ao obter processos como escrivão: {e}")
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_processos_usuario_envolvido(user_id):
     """Obtém lista de processos/procedimentos onde o usuário é envolvido (sindicado, acusado, indiciado, investigado)"""
     try:
@@ -5129,7 +5075,7 @@ def obter_processos_usuario_envolvido(user_id):
         print(f"Erro ao obter processos como envolvido: {e}")
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_auditorias(search_term=None, page=1, per_page=10, filtros=None):
     """
     Lista auditorias com paginação e filtros
@@ -5273,7 +5219,7 @@ def main():
 # FUNÇÕES PARA INDÍCIOS POR PM ENVOLVIDO (MIGRAÇÃO 015)
 # ====================================================================
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data, conn=None, cursor=None):
     """
     Salva os indícios específicos de um PM envolvido
@@ -5402,7 +5348,7 @@ def salvar_indicios_pm_envolvido(pm_envolvido_id, indicios_data, conn=None, curs
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao salvar indícios: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def carregar_indicios_pm_envolvido(pm_envolvido_id):
     """
     Carrega os indícios específicos de um PM envolvido
@@ -5493,7 +5439,7 @@ def carregar_indicios_pm_envolvido(pm_envolvido_id):
         print(f"❌ Erro ao carregar indícios do PM: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao carregar indícios: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_pms_envolvidos_com_indicios(procedimento_id):
     """
     Lista todos os PMs envolvidos em um procedimento com seus indícios
@@ -5583,14 +5529,7 @@ def listar_pms_envolvidos_com_indicios(procedimento_id):
         print(f"❌ Erro ao listar PMs envolvidos: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao listar PMs envolvidos: {str(e)}"}
 
-def _listar_pms_envolvidos_com_indicios_wrapper(procedimento_id):
-    """Wrapper para listar_pms_envolvidos_com_indicios"""
-    return listar_pms_envolvidos_com_indicios(procedimento_id)
-
-# Expor com o nome correto
-eel._exposed_functions['listar_pms_envolvidos_com_indicios'] = _listar_pms_envolvidos_com_indicios_wrapper
-
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def remover_indicios_pm_envolvido(pm_envolvido_id):
     """
     Remove todos os indícios de um PM envolvido
@@ -5620,7 +5559,7 @@ def remover_indicios_pm_envolvido(pm_envolvido_id):
         print(f"❌ Erro ao remover indícios do PM: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao remover indícios: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def buscar_crimes_para_indicios(termo=''):
     """
     Busca crimes/contravenções para seleção de indícios
@@ -5687,7 +5626,7 @@ def buscar_crimes_para_indicios(termo=''):
         print(f"❌ Erro ao buscar crimes: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao buscar crimes: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def buscar_rdpm_para_indicios(termo='', gravidade=None):
     """
     Busca transgressões RDPM para seleção de indícios
@@ -5740,7 +5679,7 @@ def buscar_rdpm_para_indicios(termo='', gravidade=None):
         print(f"❌ Erro ao buscar transgressões RDPM: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao buscar transgressões: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def buscar_art29_para_indicios(termo=''):
     """
     Busca infrações do Art. 29 para seleção de indícios
@@ -5804,7 +5743,7 @@ def buscar_art29_para_indicios(termo=''):
 # GERAÇÃO DE MAPA MENSAL
 # ===============================
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def gerar_mapa_mensal(mes, ano, tipo_processo):
     """Gera o mapa mensal para um tipo específico de processo/procedimento"""
     try:
@@ -6005,7 +5944,7 @@ def gerar_mapa_mensal(mes, ano, tipo_processo):
         print(f"❌ Erro ao gerar mapa mensal: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao gerar mapa: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def gerar_mapa_completo(mes, ano):
     """Gera mapa mensal completo com todos os tipos de processo/procedimento"""
     try:
@@ -6098,7 +6037,7 @@ def gerar_mapa_completo(mes, ano):
         print(f"❌ Erro ao gerar mapa completo: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao gerar mapa completo: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def salvar_mapa_mensal(dados_mapa, usuario_id=None):
     """Salva um mapa mensal gerado para acesso posterior"""
     g = _guard_login()
@@ -6183,7 +6122,7 @@ def salvar_mapa_mensal(dados_mapa, usuario_id=None):
         print(f"❌ Erro ao salvar mapa: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao salvar mapa: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def listar_mapas_anteriores():
     """Lista todos os mapas salvos anteriormente"""
     try:
@@ -6225,7 +6164,7 @@ def listar_mapas_anteriores():
         print(f"❌ Erro ao listar mapas anteriores: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao listar mapas: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_dados_mapa_salvo(mapa_id):
     """Obtém os dados completos de um mapa salvo para regenerar o PDF"""
     try:
@@ -6264,7 +6203,7 @@ def obter_dados_mapa_salvo(mapa_id):
         print(f"❌ Erro ao obter dados do mapa: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao obter dados: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def excluir_mapa_salvo(mapa_id):
     """Exclui um mapa salvo (soft delete)"""
     g = _guard_login()
@@ -6303,7 +6242,7 @@ def excluir_mapa_salvo(mapa_id):
         print(f"❌ Erro ao excluir mapa: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao excluir mapa: {str(e)}"}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_anos_relatorio_anual():
     """Obtém lista de anos que possuem processos/procedimentos instaurados"""
     try:
@@ -6329,7 +6268,7 @@ def obter_anos_relatorio_anual():
         print(f"❌ Erro ao obter anos: {e}")
         return {"sucesso": False, "erro": str(e)}
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def gerar_relatorio_anual(ano):
     """Gera relatório anual completo com estatísticas e gráficos em PDF"""
     import base64
@@ -7214,7 +7153,7 @@ def _obter_ultima_movimentacao(cursor, processo_id):
     
     return None
 
-# @eel.expose  # MIGRADO PARA ROUTERS
+@eel.expose
 def obter_tipos_processo_para_mapa():
     """Obtém lista de tipos de processo/procedimento disponíveis para o mapa mensal"""
     try:

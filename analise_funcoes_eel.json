@@ -1,0 +1,959 @@
+{
+  "total_funcoes": 73,
+  "estatisticas": {
+    "com_guard_login": 5,
+    "com_guard_admin": 1,
+    "com_db_manager": 58,
+    "por_categoria": {
+      "catalogos": 1,
+      "auth": 12,
+      "outros": 10,
+      "estatisticas": 2,
+      "processos": 22,
+      "prazos_andamentos": 10,
+      "auditorias": 1,
+      "indicios": 7,
+      "mapas_relatorios": 8
+    }
+  },
+  "funcoes": [
+    {
+      "nome": "buscar_municipios_distritos",
+      "parametros": [
+        "termo"
+      ],
+      "linha": 617,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "catalogos"
+    },
+    {
+      "nome": "obter_usuario_por_id",
+      "parametros": [
+        "user_id",
+        "user_type"
+      ],
+      "linha": 707,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "cadastrar_usuario",
+      "parametros": [
+        "tipo_usuario",
+        "posto_graduacao",
+        "nome",
+        "matricula",
+        "is_encarregado",
+        "is_operador",
+        "email",
+        "senha",
+        "perfil"
+      ],
+      "linha": 766,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "listar_usuarios",
+      "parametros": [
+        "search_term",
+        "page",
+        "per_page"
+      ],
+      "linha": 1032,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "listar_todos_usuarios",
+      "parametros": [],
+      "linha": 1037,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "listar_encarregados_operadores",
+      "parametros": [],
+      "linha": 1088,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_usuario_detalhado",
+      "parametros": [
+        "user_id",
+        "user_type"
+      ],
+      "linha": 1132,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "atualizar_usuario",
+      "parametros": [
+        "user_id",
+        "user_type",
+        "tipo_usuario",
+        "posto_graduacao",
+        "nome",
+        "matricula",
+        "is_encarregado",
+        "is_operador",
+        "email",
+        "senha",
+        "perfil"
+      ],
+      "linha": 1171,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "atualizar_usuario_old",
+      "parametros": [
+        "user_id",
+        "user_type",
+        "posto_graduacao",
+        "matricula",
+        "nome",
+        "email",
+        "senha",
+        "profile"
+      ],
+      "linha": 1228,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "delete_user",
+      "parametros": [
+        "user_id",
+        "user_type"
+      ],
+      "linha": 1254,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "verificar_admin",
+      "parametros": [],
+      "linha": 1259,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_estatisticas_encarregados",
+      "parametros": [],
+      "linha": 1266,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "estatisticas"
+    },
+    {
+      "nome": "obter_ultimos_feitos_encarregado",
+      "parametros": [
+        "encarregado_id"
+      ],
+      "linha": 1442,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_anos_disponiveis",
+      "parametros": [],
+      "linha": 1515,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_estatisticas",
+      "parametros": [],
+      "linha": 1558,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "estatisticas"
+    },
+    {
+      "nome": "registrar_processo",
+      "parametros": [
+        "numero",
+        "tipo_geral",
+        "tipo_detalhe",
+        "documento_iniciador",
+        "processo_sei",
+        "responsavel_id",
+        "responsavel_tipo",
+        "local_origem",
+        "local_fatos",
+        "data_instauracao",
+        "data_recebimento",
+        "escrivao_id",
+        "status_pm",
+        "nome_pm_id",
+        "nome_vitima",
+        "natureza_processo",
+        "natureza_procedimento",
+        "motorista_id",
+        "resumo_fatos",
+        "numero_portaria",
+        "numero_memorando",
+        "numero_feito",
+        "numero_rgf",
+        "numero_controle",
+        "concluido",
+        "data_conclusao",
+        "solucao_final",
+        "pms_envolvidos",
+        "transgressoes_ids",
+        "# Novos campos (Migração 014) data_remessa_encarregado",
+        "data_julgamento",
+        "solucao_tipo",
+        "penalidade_tipo",
+        "penalidade_dias",
+        "indicios_categorias",
+        "indicios_crimes",
+        "indicios_rdpm",
+        "indicios_art29",
+        "# Novos indícios por PM (Migração 015) indicios_por_pm",
+        "# Novos campos para PAD",
+        "CD",
+        "CJ (Migração 018) presidente_id",
+        "presidente_tipo",
+        "interrogante_id",
+        "interrogante_tipo",
+        "escrivao_processo_id",
+        "escrivao_processo_tipo",
+        "# Novos campos para Carta Precatória (Migração 025) unidade_deprecada",
+        "deprecante",
+        "pessoas_inquiridas"
+      ],
+      "linha": 1563,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "listar_processos",
+      "parametros": [],
+      "linha": 1964,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "substituir_encarregado",
+      "parametros": [
+        "processo_id",
+        "novo_encarregado_id",
+        "justificativa"
+      ],
+      "linha": 2161,
+      "depende_db_manager": true,
+      "usa_guard_login": true,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_historico_encarregados",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 2267,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 2349,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_procedimento_completo",
+      "parametros": [
+        "procedimento_id"
+      ],
+      "linha": 2723,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_encarregados_procedimento",
+      "parametros": [
+        "procedimento_id"
+      ],
+      "linha": 2830,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_envolvidos_procedimento",
+      "parametros": [
+        "procedimento_id"
+      ],
+      "linha": 2919,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "atualizar_processo",
+      "parametros": [
+        "processo_id",
+        "numero",
+        "tipo_geral",
+        "tipo_detalhe",
+        "documento_iniciador",
+        "processo_sei",
+        "responsavel_id",
+        "responsavel_tipo",
+        "local_origem",
+        "local_fatos",
+        "data_instauracao",
+        "data_recebimento",
+        "escrivao_id",
+        "status_pm",
+        "nome_pm_id",
+        "nome_vitima",
+        "natureza_processo",
+        "natureza_procedimento",
+        "motorista_id",
+        "resumo_fatos",
+        "numero_portaria",
+        "numero_memorando",
+        "numero_feito",
+        "numero_rgf",
+        "numero_controle",
+        "concluido",
+        "data_conclusao",
+        "solucao_final",
+        "pms_envolvidos",
+        "transgressoes_ids",
+        "# Novos campos (Migração 014) data_remessa_encarregado",
+        "data_julgamento",
+        "solucao_tipo",
+        "penalidade_tipo",
+        "penalidade_dias",
+        "indicios_categorias",
+        "indicios_crimes",
+        "indicios_rdpm",
+        "indicios_art29",
+        "# Novos indícios por PM (Migração 015) indicios_por_pm",
+        "# Novos campos para PAD",
+        "CD",
+        "CJ (Migração 018) presidente_id",
+        "presidente_tipo",
+        "interrogante_id",
+        "interrogante_tipo",
+        "escrivao_processo_id",
+        "escrivao_processo_tipo",
+        "# Novos campos para Carta Precatória (Migração 025) unidade_deprecada",
+        "deprecante",
+        "pessoas_inquiridas"
+      ],
+      "linha": 2995,
+      "depende_db_manager": false,
+      "usa_guard_login": true,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "definir_prazo_processo",
+      "parametros": [
+        "processo_id",
+        "tipo_prazo",
+        "data_limite",
+        "descricao",
+        "responsavel_id"
+      ],
+      "linha": 3434,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "prorrogar_prazo_processo",
+      "parametros": [
+        "prazo_id",
+        "nova_data_limite",
+        "motivo_prorrogacao",
+        "responsavel_id"
+      ],
+      "linha": 3449,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "concluir_prazo_processo",
+      "parametros": [
+        "prazo_id",
+        "observacoes",
+        "responsavel_id"
+      ],
+      "linha": 3463,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "listar_prazos_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3476,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "adicionar_prorrogacao",
+      "parametros": [
+        "processo_id",
+        "dias_prorrogacao",
+        "numero_portaria",
+        "data_portaria",
+        "motivo",
+        "autorizado_por",
+        "autorizado_tipo"
+      ],
+      "linha": 3485,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_prazos_vencendo",
+      "parametros": [
+        "dias_antecedencia"
+      ],
+      "linha": 3502,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "obter_prazos_vencidos",
+      "parametros": [],
+      "linha": 3511,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "backfill_tipos_funcoes_processo",
+      "parametros": [],
+      "linha": 3520,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "registrar_andamento_processo",
+      "parametros": [
+        "processo_id",
+        "tipo_andamento",
+        "descricao",
+        "data_andamento",
+        "responsavel_id",
+        "observacoes"
+      ],
+      "linha": 3563,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "listar_andamentos_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3579,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "atualizar_status_detalhado_processo",
+      "parametros": [
+        "processo_id",
+        "novo_status",
+        "observacoes",
+        "responsavel_id"
+      ],
+      "linha": 3634,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_status_detalhado_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3648,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_dashboard_prazos",
+      "parametros": [],
+      "linha": 3657,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "gerar_relatorio_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3666,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "gerar_relatorio_prazos",
+      "parametros": [
+        "filtros"
+      ],
+      "linha": 3675,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "calcular_prazo_por_processo",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3795,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "adicionar_andamento",
+      "parametros": [
+        "processo_id",
+        "texto",
+        "usuario_nome"
+      ],
+      "linha": 3852,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "listar_andamentos",
+      "parametros": [
+        "processo_id"
+      ],
+      "linha": 3912,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "remover_andamento",
+      "parametros": [
+        "processo_id",
+        "andamento_id"
+      ],
+      "linha": 3953,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "listar_processos_com_prazos",
+      "parametros": [
+        "search_term",
+        "page",
+        "per_page",
+        "filtros"
+      ],
+      "linha": 4004,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "listar_todos_processos_com_prazos",
+      "parametros": [],
+      "linha": 4457,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_dashboard_prazos_simples",
+      "parametros": [],
+      "linha": 4470,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "obter_tipos_prazo",
+      "parametros": [],
+      "linha": 4520,
+      "depende_db_manager": false,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "obter_tipos_andamento",
+      "parametros": [],
+      "linha": 4536,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "prazos_andamentos"
+    },
+    {
+      "nome": "obter_status_processo",
+      "parametros": [],
+      "linha": 4558,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    },
+    {
+      "nome": "obter_opcoes_filtros",
+      "parametros": [],
+      "linha": 4573,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "listar_transgressoes",
+      "parametros": [
+        "gravidade"
+      ],
+      "linha": 4679,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "buscar_transgressoes",
+      "parametros": [
+        "termo",
+        "gravidade"
+      ],
+      "linha": 4727,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "outros"
+    },
+    {
+      "nome": "obter_estatisticas_usuario",
+      "parametros": [
+        "user_id",
+        "user_type"
+      ],
+      "linha": 4779,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "obter_processos_usuario_responsavel",
+      "parametros": [
+        "user_id"
+      ],
+      "linha": 4959,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "obter_processos_usuario_escrivao",
+      "parametros": [
+        "user_id"
+      ],
+      "linha": 4994,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "obter_processos_usuario_envolvido",
+      "parametros": [
+        "user_id"
+      ],
+      "linha": 5029,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "auth"
+    },
+    {
+      "nome": "listar_auditorias",
+      "parametros": [
+        "search_term",
+        "page",
+        "per_page",
+        "filtros"
+      ],
+      "linha": 5072,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": true,
+      "categoria": "auditorias"
+    },
+    {
+      "nome": "salvar_indicios_pm_envolvido",
+      "parametros": [
+        "pm_envolvido_id",
+        "indicios_data",
+        "conn",
+        "cursor"
+      ],
+      "linha": 5216,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "carregar_indicios_pm_envolvido",
+      "parametros": [
+        "pm_envolvido_id"
+      ],
+      "linha": 5345,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "listar_pms_envolvidos_com_indicios",
+      "parametros": [
+        "procedimento_id"
+      ],
+      "linha": 5436,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "remover_indicios_pm_envolvido",
+      "parametros": [
+        "pm_envolvido_id"
+      ],
+      "linha": 5526,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "buscar_crimes_para_indicios",
+      "parametros": [
+        "termo"
+      ],
+      "linha": 5556,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "buscar_rdpm_para_indicios",
+      "parametros": [
+        "termo",
+        "gravidade"
+      ],
+      "linha": 5623,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "buscar_art29_para_indicios",
+      "parametros": [
+        "termo"
+      ],
+      "linha": 5676,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "indicios"
+    },
+    {
+      "nome": "gerar_mapa_mensal",
+      "parametros": [
+        "mes",
+        "ano",
+        "tipo_processo"
+      ],
+      "linha": 5740,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "gerar_mapa_completo",
+      "parametros": [
+        "mes",
+        "ano"
+      ],
+      "linha": 5941,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "salvar_mapa_mensal",
+      "parametros": [
+        "dados_mapa",
+        "usuario_id"
+      ],
+      "linha": 6034,
+      "depende_db_manager": true,
+      "usa_guard_login": true,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "listar_mapas_anteriores",
+      "parametros": [],
+      "linha": 6119,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "obter_dados_mapa_salvo",
+      "parametros": [
+        "mapa_id"
+      ],
+      "linha": 6161,
+      "depende_db_manager": true,
+      "usa_guard_login": true,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "excluir_mapa_salvo",
+      "parametros": [
+        "mapa_id"
+      ],
+      "linha": 6200,
+      "depende_db_manager": true,
+      "usa_guard_login": true,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "obter_anos_relatorio_anual",
+      "parametros": [],
+      "linha": 6239,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "gerar_relatorio_anual",
+      "parametros": [
+        "ano"
+      ],
+      "linha": 6265,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "mapas_relatorios"
+    },
+    {
+      "nome": "obter_tipos_processo_para_mapa",
+      "parametros": [],
+      "linha": 7150,
+      "depende_db_manager": true,
+      "usa_guard_login": false,
+      "usa_guard_admin": false,
+      "categoria": "processos"
+    }
+  ]
+}
