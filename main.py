@@ -2367,6 +2367,10 @@ def obter_historico_encarregados(processo_id):
         traceback.print_exc()
         return {"sucesso": False, "mensagem": f"Erro ao obter histórico de encarregados: {str(e)}"}
 
+def _obter_historico_encarregados_wrapper(processo_id):
+    return obter_historico_encarregados(processo_id)
+eel._exposed_functions['obter_historico_encarregados'] = _obter_historico_encarregados_wrapper
+
 # @eel.expose  # MIGRADO PARA ROUTERS
 def obter_processo(processo_id):
     """Obtém dados de um processo específico para edição"""
@@ -2855,6 +2859,13 @@ def obter_procedimento_completo(procedimento_id):
         print(f"Erro em obter_procedimento_completo: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao obter procedimento: {str(e)}"}
 
+def _obter_procedimento_completo_wrapper(procedimento_id):
+    """Wrapper para obter_procedimento_completo"""
+    return obter_procedimento_completo(procedimento_id)
+
+# Expor com o nome correto
+eel._exposed_functions['obter_procedimento_completo'] = _obter_procedimento_completo_wrapper
+
 # @eel.expose  # MIGRADO PARA ROUTERS
 def obter_encarregados_procedimento(procedimento_id):
     """Retorna responsável e escrivão (se houver) para o procedimento.
@@ -2944,6 +2955,10 @@ def obter_encarregados_procedimento(procedimento_id):
         print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter encarregados: {str(e)}"}
 
+def _obter_encarregados_procedimento_wrapper(procedimento_id):
+    return obter_encarregados_procedimento(procedimento_id)
+eel._exposed_functions['obter_encarregados_procedimento'] = _obter_encarregados_procedimento_wrapper
+
 # @eel.expose  # MIGRADO PARA ROUTERS
 def obter_envolvidos_procedimento(procedimento_id):
     """Retorna os envolvidos do procedimento (múltiplos para procedimentos ou único para processos)"""
@@ -3019,6 +3034,10 @@ def obter_envolvidos_procedimento(procedimento_id):
         print(f"Erro em obter_envolvidos_procedimento: {e}")
         print(f"Traceback: {traceback.format_exc()}")
         return {"sucesso": False, "mensagem": f"Erro ao obter envolvidos: {str(e)}"}
+
+def _obter_envolvidos_procedimento_wrapper(procedimento_id):
+    return obter_envolvidos_procedimento(procedimento_id)
+eel._exposed_functions['obter_envolvidos_procedimento'] = _obter_envolvidos_procedimento_wrapper
 
 # @eel.expose  # MIGRADO PARA ROUTERS
 def atualizar_processo(

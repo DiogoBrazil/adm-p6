@@ -42,7 +42,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
         if err:
             return err
         
-        return prazos_service.listar_andamentos_processo(db_manager, processo_id)
+        return prazos_service.listar_andamentos(db_manager, processo_id)
     
     @eel.expose
     def remover_andamento(processo_id, andamento_id):
