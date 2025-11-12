@@ -170,11 +170,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
             conn = db_manager.get_connection()
             cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-            where_clause = (
-                "WHERE p.tipo_detalhe IN ('IPM', 'SR') AND p.ativo = TRUE "
-                "AND cc.tipo IN ('Crime', 'Contravenção Penal') "
-                "AND pei.categorias_indicios LIKE '%%Indícios de crime comum%%'"
-            )
+            where_clause = "WHERE p.tipo_detalhe IN ('IPM', 'IPPM', 'SR') AND p.ativo = TRUE"
             params = []
             if ano:
                 where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
@@ -182,13 +178,19 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
 
             cursor.execute(
                 f'''
-                SELECT cc.artigo, cc.descricao_artigo, cc.tipo, COUNT(DISTINCT pei.procedimento_id) as total
-                FROM pm_envolvido_indicios pei
-                JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
-                JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
-                JOIN processos_procedimentos p ON pei.procedimento_id = p.id
+                SELECT 
+                    cc.artigo, 
+                    cc.descricao_artigo, 
+                    cc.dispositivo_legal,
+                    cc.tipo, 
+                    COUNT(pec.id) as total
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios pei ON pei.procedimento_id = p.id
+                INNER JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
+                INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
                 {where_clause}
-                GROUP BY cc.artigo, cc.descricao_artigo, cc.tipo
+                AND cc.dispositivo_legal IN ('Código Penal', 'Lei de Contravenções Penais')
+                GROUP BY cc.artigo, cc.descricao_artigo, cc.dispositivo_legal, cc.tipo
                 ORDER BY total DESC, cc.artigo
                 ''',
                 params,
@@ -197,8 +199,8 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
             conn.close()
             dados = [
                 {
-                    'artigo': row['artigo'],
-                    'descricao': row['descricao_artigo'],
+                    'artigo': f"{row['dispositivo_legal']} - Art. {row['artigo']}",
+                    'descricao': row['descricao_artigo'] or '',
                     'classificacao': 'Crime Comum' if row['tipo'] == 'Crime' else 'Contravenção Penal',
                     'quantidade': row['total'],
                 }
@@ -489,10 +491,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
             conn = db_manager.get_connection()
             cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-            where_clause = (
-                "WHERE p.tipo_detalhe = 'IPM' AND p.ativo = TRUE AND cc.tipo = 'Crime' "
-                "AND pei.categorias_indicios LIKE '%%Indícios de crime militar%%'"
-            )
+            where_clause = "WHERE p.tipo_detalhe IN ('IPM', 'IPPM') AND p.ativo = TRUE"
             params = []
             if ano:
                 where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
@@ -500,13 +499,14 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
 
             cursor.execute(
                 f'''
-                SELECT cc.artigo, cc.descricao_artigo, COUNT(DISTINCT pei.procedimento_id) as total
-                FROM pm_envolvido_indicios pei
-                JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
-                JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
-                JOIN processos_procedimentos p ON pei.procedimento_id = p.id
+                SELECT cc.artigo, cc.descricao_artigo, cc.dispositivo_legal, COUNT(pec.id) as total
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios pei ON pei.procedimento_id = p.id
+                INNER JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
+                INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
                 {where_clause}
-                GROUP BY cc.artigo, cc.descricao_artigo
+                AND cc.dispositivo_legal = 'Código Penal Militar'
+                GROUP BY cc.artigo, cc.descricao_artigo, cc.dispositivo_legal
                 ORDER BY total DESC, cc.artigo
                 ''',
                 params,
@@ -515,8 +515,8 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
             conn.close()
             dados = [
                 {
-                    'artigo': row['artigo'],
-                    'descricao': row['descricao_artigo'],
+                    'artigo': f"{row['dispositivo_legal']} - Art. {row['artigo']}",
+                    'descricao': row['descricao_artigo'] or '',
                     'quantidade': row['total'],
                 }
                 for row in resultados
