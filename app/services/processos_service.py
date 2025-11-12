@@ -551,6 +551,20 @@ def registrar_processo(
         # Converter pessoas_inquiridas para JSON string se for array/lista
         if pessoas_inquiridas is not None and isinstance(pessoas_inquiridas, (list, tuple)):
             pessoas_inquiridas = json.dumps(pessoas_inquiridas, ensure_ascii=False)
+        
+        # Converter nome_vitima para JSON string se for array/lista
+        # Se já for string JSON, deixar como está
+        if nome_vitima is not None:
+            if isinstance(nome_vitima, (list, tuple)):
+                nome_vitima = json.dumps(nome_vitima, ensure_ascii=False)
+            elif isinstance(nome_vitima, str):
+                # Se for string, tentar fazer parse para verificar se é JSON
+                try:
+                    json.loads(nome_vitima)
+                    # Já é JSON válido, manter como está
+                except (json.JSONDecodeError, ValueError):
+                    # Não é JSON, é um nome simples - converter para array JSON
+                    nome_vitima = json.dumps([nome_vitima], ensure_ascii=False)
 
         # Debug: verificar TODOS os parâmetros da query SQL
         print(f"\n========== DEBUG SQL PARAMETERS ===========")
@@ -1652,9 +1666,19 @@ def atualizar_processo(
         if not local_fatos:
             return {"sucesso": False, "mensagem": "O campo 'Local onde ocorreram os fatos' é obrigatório."}
 
-        # Converter nome_vitima para maiúsculas se fornecido
-        if nome_vitima:
-            nome_vitima = nome_vitima.strip().upper()
+        # Converter nome_vitima para JSON string se for array/lista
+        # Se já for string JSON, deixar como está
+        if nome_vitima is not None:
+            if isinstance(nome_vitima, (list, tuple)):
+                nome_vitima = json.dumps(nome_vitima, ensure_ascii=False)
+            elif isinstance(nome_vitima, str):
+                # Se for string, tentar fazer parse para verificar se é JSON
+                try:
+                    json.loads(nome_vitima)
+                    # Já é JSON válido, manter como está
+                except (json.JSONDecodeError, ValueError):
+                    # Não é JSON, é um nome simples - converter para array JSON
+                    nome_vitima = json.dumps([nome_vitima], ensure_ascii=False)
 
         # Extrair ano da data de instauração se fornecida
         ano_instauracao = None

@@ -344,10 +344,25 @@
                     <small class="form-help">Lista de pessoas que serão inquiridas na carta precatória</small>
                 </div>
 
-                <!-- Campo dependente: Nome da Vítima -->
+                <!-- Campo dependente: Nome da Vítima/Ofendido -->
                 <div class="form-group" id="nome_vitima_group" style="display: none;">
                     <label for="nome_vitima">Nome da Vítima/Ofendido</label>
-                    <input type="text" id="nome_vitima">
+                    <div id="vitimas_list">
+                        <!-- Primeira vítima (sempre visível) -->
+                        <div class="vitima-item mb-2 d-flex align-items-center" id="vitima_1">
+                            <input type="text" 
+                                   class="form-control vitima-input" 
+                                   placeholder="Digite o nome da vítima/ofendido"
+                                   id="vitima_input_1">
+                        </div>
+                    </div>
+                    <button type="button" 
+                            class="btn btn-secondary btn-sm" 
+                            onclick="adicionarVitima()"
+                            style="margin-top: 15px;">
+                        <i class="fas fa-plus"></i> Adicionar mais vítima/ofendido
+                    </button>
+                    <small class="form-help">Lista de vítimas ou ofendidos no procedimento</small>
                 </div>
 
                 <!-- Campo de Infração (para PADS) -->

@@ -59,6 +59,57 @@ function coletarPessoasInquiridas() {
     return pessoas; // Retorna array, não JSON string
 }
 
+// Funções para gerenciar múltiplas vítimas/ofendidos
+let vitimasCount = 1;
+
+function adicionarVitima(nomeInicial = '') {
+    vitimasCount++;
+    const container = document.getElementById('vitimas_list');
+    
+    const novaLinha = document.createElement('div');
+    novaLinha.className = 'vitima-item mb-2 d-flex align-items-center';
+    novaLinha.id = `vitima_${vitimasCount}`;
+    
+    novaLinha.innerHTML = `
+        <input type="text" 
+               class="form-control vitima-input" 
+               placeholder="Digite o nome da vítima/ofendido"
+               id="vitima_input_${vitimasCount}"
+               value="${nomeInicial}"
+               style="flex: 1; max-width: calc(100% - 60px);">
+        <button type="button" 
+                class="btn btn-danger" 
+                onclick="removerVitima(${vitimasCount})"
+                title="Remover vítima/ofendido"
+                style="padding: 6px 12px; margin-left: 8px; flex-shrink: 0; background-color: #dc3545; border-color: #dc3545;">
+            <i class="fas fa-trash-alt"></i>
+        </button>
+    `;
+    
+    container.appendChild(novaLinha);
+}
+
+function removerVitima(id) {
+    const elemento = document.getElementById(`vitima_${id}`);
+    if (elemento) {
+        elemento.remove();
+    }
+}
+
+function coletarVitimas() {
+    const inputs = document.querySelectorAll('.vitima-input');
+    const vitimas = [];
+    
+    inputs.forEach(input => {
+        const valor = input.value.trim();
+        if (valor) {
+            vitimas.push(valor);
+        }
+    });
+    
+    return vitimas; // Retorna array, não JSON string
+}
+
 function ajustarCamposCartaPrecatoria(tipoProcedimento) {
     const isCP = (tipoProcedimento === 'CP');
     
@@ -112,15 +163,9 @@ function ajustarCamposCartaPrecatoria(tipoProcedimento) {
     // Para CP, solução final não é obrigatória (só data de remessa e data de conclusão)
     const solucaoFinalTextarea = document.getElementById('solucao_final');
     if (solucaoFinalTextarea) {
-        if (isCP) {
-            solucaoFinalTextarea.removeAttribute('required');
-        } else {
-            // Para outros procedimentos, manter obrigatório quando conclusão estiver marcada
-            const concluidoCheckbox = document.getElementById('concluido');
-            if (concluidoCheckbox && concluidoCheckbox.checked) {
-                solucaoFinalTextarea.setAttribute('required', 'required');
-            }
-        }
+        // SEMPRE remover required, pois updateConclusaoLogic controla isso
+        // e o campo está sempre oculto conforme lógica atual
+        solucaoFinalTextarea.removeAttribute('required');
     }
 }
 
@@ -1827,19 +1872,51 @@ async function preencherFormularioEdicao(procedimento) {
             console.log('✅ Natureza do procedimento preenchida após exibição:', procedimento.natureza_procedimento);
         }
         
-        // Preencher nome_vitima APÓS os campos serem exibidos
+        // Preencher nome_vitima (múltiplas vítimas) APÓS os campos serem exibidos
         console.log('🔍 Verificando nome_vitima:', {
             valor: procedimento.nome_vitima,
             existe: !!procedimento.nome_vitima,
-            campo_existe: !!document.getElementById('nome_vitima'),
-            campo_visivel: document.getElementById('nome_vitima')?.offsetParent !== null
+            tipo: typeof procedimento.nome_vitima
         });
         
-        if (procedimento.nome_vitima && document.getElementById('nome_vitima')) {
-            document.getElementById('nome_vitima').value = procedimento.nome_vitima;
-            console.log('✅ Nome da vítima/ofendido preenchido após exibição:', procedimento.nome_vitima);
-        } else if (procedimento.nome_vitima) {
-            console.log('⚠️ Campo nome_vitima não encontrado ou não visível ainda');
+        if (procedimento.nome_vitima) {
+            try {
+                console.log('📋 Tentando parsear nome_vitima...');
+                let vitimasList = procedimento.nome_vitima;
+                
+                // Se for string JSON, fazer parse
+                if (typeof vitimasList === 'string') {
+                    try {
+                        vitimasList = JSON.parse(vitimasList);
+                        console.log('📋 Parse JSON bem-sucedido:', vitimasList);
+                    } catch (e) {
+                        // Se não for JSON, é um nome único (formato antigo)
+                        vitimasList = [vitimasList];
+                        console.log('📋 Formato antigo detectado, convertendo para array:', vitimasList);
+                    }
+                }
+                
+                // Se for array, processar múltiplas vítimas
+                if (Array.isArray(vitimasList) && vitimasList.length > 0) {
+                    vitimasCount = 0; // Reset counter
+                    const container = document.getElementById('vitimas_list');
+                    container.innerHTML = ''; // Limpar lista
+                    
+                    console.log('📋 Adicionando vítimas à lista...');
+                    vitimasList.forEach((vitima, index) => {
+                        console.log(`  ${index + 1}. Adicionando: ${vitima}`);
+                        adicionarVitima(vitima);
+                    });
+                    console.log('✅ Vítimas/Ofendidos preenchidos:', vitimasList.length);
+                } else {
+                    console.log('⚠️ nome_vitima não é um array válido');
+                }
+            } catch (e) {
+                console.error('❌ Erro ao processar nome_vitima:', e);
+                console.error('Stack:', e.stack);
+            }
+        } else {
+            console.log('ℹ️ nome_vitima está vazio ou null');
         }
         
         // Aguardar mais um pouco e disparar change nos status para mostrar botões corretos
@@ -3111,7 +3188,11 @@ document.getElementById('processForm').addEventListener('submit', async (e) => {
         }
     }
     const nome_pm_id = document.getElementById('nome_pm')?.value || null;
-    const nome_vitima = document.getElementById('nome_vitima')?.value?.toUpperCase() || null;
+    
+    // Coletar múltiplas vítimas como array
+    const vitimas = coletarVitimas();
+    const nome_vitima = vitimas.length > 0 ? JSON.stringify(vitimas) : null;
+    
     const natureza_processo = document.getElementById('natureza_processo')?.value || null;
     const natureza_procedimento = document.getElementById('natureza_procedimento')?.value || null;
     const motorista_responsavel_id = document.getElementById('motorista_id')?.value || null;
