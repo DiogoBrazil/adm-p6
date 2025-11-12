@@ -2375,6 +2375,14 @@ def _obter_historico_encarregados_wrapper(processo_id):
     return obter_historico_encarregados(processo_id)
 eel._exposed_functions['obter_historico_encarregados'] = _obter_historico_encarregados_wrapper
 
+def _obter_estatisticas_encarregados_wrapper():
+    return obter_estatisticas_encarregados()
+eel._exposed_functions['obter_estatisticas_encarregados'] = _obter_estatisticas_encarregados_wrapper
+
+def _obter_ultimos_feitos_encarregado_wrapper(encarregado_id):
+    return obter_ultimos_feitos_encarregado(encarregado_id)
+eel._exposed_functions['obter_ultimos_feitos_encarregado'] = _obter_ultimos_feitos_encarregado_wrapper
+
 # @eel.expose  # MIGRADO PARA ROUTERS
 def obter_processo(processo_id):
     """Obtém dados de um processo específico para edição"""
