@@ -1809,6 +1809,12 @@ async function preencherFormularioEdicao(procedimento) {
             document.getElementById('tipo_procedimento').value = procedimento.tipo_detalhe || '';
         }
         
+        // Preencher natureza_procedimento APÓS os campos serem exibidos
+        if (procedimento.natureza_procedimento && document.getElementById('natureza_procedimento')) {
+            document.getElementById('natureza_procedimento').value = procedimento.natureza_procedimento;
+            console.log('✅ Natureza do procedimento preenchida após exibição:', procedimento.natureza_procedimento);
+        }
+        
         // Aguardar mais um pouco e disparar change nos status para mostrar botões corretos
         await new Promise(resolve => setTimeout(resolve, 100));
         if (document.getElementById('status_pm')) {
