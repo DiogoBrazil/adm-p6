@@ -1020,6 +1020,9 @@ function wireNovosControlesPosResumo() {
         });
         if ([...selSolucao.options].some(o => o.value === prev)) selSolucao.value = prev;
     }
+    
+    // Expor função globalmente para ser acessível em outros escopos
+    window.popularOpcoesSolucao = popularOpcoesSolucao;
 
     function popularOpcoesPenalidade() {
         const selPenalidade = document.getElementById('penalidade_tipo');
