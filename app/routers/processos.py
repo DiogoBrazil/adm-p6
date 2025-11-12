@@ -62,7 +62,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
 
     @eel.expose
     def obter_estatistica_ipm_indicios(ano=None):
-        """Quantidade de IPM/IPPM concluídos por tipo de indício."""
+        """Quantidade de indícios em IPM/IPPM concluídos por tipo."""
         g = guard_login()
         if g:
             return g
@@ -76,62 +76,79 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
                 where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
                 params.append(ano)
 
+            # Contar crimes militares (CPM)
             cursor.execute(
                 f'''
-                SELECT COUNT(DISTINCT pec.id) as count
-                FROM pm_envolvido_crimes pec
-                INNER JOIN pm_envolvido_indicios i ON pec.pm_indicios_id = i.id
-                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                SELECT COUNT(pec.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_crimes pec ON pec.pm_indicios_id = i.id
                 INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
                 {where_clause}
-                AND cc.tipo = 'Crime'
-                AND (i.categorias_indicios LIKE '%%crime militar%%' OR i.categoria LIKE '%%crime militar%%')
+                AND cc.dispositivo_legal = 'Código Penal Militar'
                 ''',
                 params,
             )
             crime_militar = cursor.fetchone()['count']
 
+            # Contar transgressões (RDPM + Art29)
             cursor.execute(
                 f'''
-                SELECT COUNT(DISTINCT p.id) as count
+                SELECT COUNT(r.id) as count
                 FROM processos_procedimentos p
-                WHERE p.id IN (
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
-                    UNION
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
-                )
-                {where_clause.replace('WHERE', 'AND')}
-                ''',
-                params,
-            )
-            transgressoes = cursor.fetchone()['count']
-
-            cursor.execute(
-                f'''
-                SELECT COUNT(DISTINCT p.id) as count
-                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_rdpm r ON r.pm_indicios_id = i.id
                 {where_clause}
-                AND p.id NOT IN (
-                    SELECT procedimento_id FROM pm_envolvido_indicios 
-                    WHERE categorias_indicios LIKE '%%crime militar%%' OR categoria LIKE '%%crime militar%%'
-                )
-                AND p.id NOT IN (
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
-                    UNION
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
-                )
                 ''',
                 params,
             )
-            sem_indicios = cursor.fetchone()['count']
+            rdpm_count = cursor.fetchone()['count']
+            
+            cursor.execute(
+                f'''
+                SELECT COUNT(a.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_art29 a ON a.pm_indicios_id = i.id
+                {where_clause}
+                ''',
+                params,
+            )
+            art29_count = cursor.fetchone()['count']
+            
+            transgressoes = rdpm_count + art29_count
+
+            # Contar indícios com "Não houve indícios"
+            cursor.execute(
+                f'''
+                SELECT COUNT(i.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                {where_clause}
+                AND (i.categoria ILIKE '%%não houve indícios%%'
+                     OR EXISTS (
+                         SELECT 1 FROM jsonb_array_elements_text(i.categorias_indicios) AS cat
+                         WHERE cat ILIKE '%%não houve indícios%%'
+                     ))
+                ''',
+                params,
+            )
+            nao_houve = cursor.fetchone()['count']
+            
+            # Contar processos sem indícios cadastrados (arquivados)
+            cursor.execute(
+                f'''
+                SELECT COUNT(DISTINCT p.id) as count
+                FROM processos_procedimentos p
+                LEFT JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                {where_clause}
+                AND i.id IS NULL
+                ''',
+                params,
+            )
+            arquivados = cursor.fetchone()['count']
+            
+            sem_indicios = nao_houve + arquivados
 
             conn.close()
             dados = [
@@ -193,7 +210,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
 
     @eel.expose
     def obter_estatistica_sr_indicios(ano=None):
-        """Quantidade de SR concluídos por tipo de indício."""
+        """Quantidade de indícios em SR concluídos por tipo."""
         g = guard_login()
         if g:
             return g
@@ -207,61 +224,79 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
                 where_clause += " AND TO_CHAR(p.data_instauracao, 'YYYY') = %s"
                 params.append(ano)
 
+            # Contar crimes comuns (CP + Contravenções)
             cursor.execute(
                 f'''
-                SELECT COUNT(DISTINCT pec.id) as count
-                FROM pm_envolvido_crimes pec
-                INNER JOIN pm_envolvido_indicios i ON pec.pm_indicios_id = i.id
-                INNER JOIN processos_procedimentos p ON i.procedimento_id = p.id
+                SELECT COUNT(pec.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_crimes pec ON pec.pm_indicios_id = i.id
                 INNER JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
                 {where_clause}
-                AND cc.tipo IN ('Crime', 'Contravenção Penal')
+                AND cc.dispositivo_legal IN ('Código Penal', 'Lei de Contravenções Penais')
                 ''',
                 params,
             )
             crime_comum = cursor.fetchone()['count']
 
+            # Contar transgressões (RDPM + Art29)
             cursor.execute(
                 f'''
-                SELECT COUNT(DISTINCT p.id) as count
+                SELECT COUNT(r.id) as count
                 FROM processos_procedimentos p
-                WHERE p.id IN (
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
-                    UNION
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
-                )
-                {where_clause.replace('WHERE', 'AND')}
-                ''',
-                params,
-            )
-            transgressoes = cursor.fetchone()['count']
-
-            cursor.execute(
-                f'''
-                SELECT COUNT(DISTINCT p.id) as count
-                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_rdpm r ON r.pm_indicios_id = i.id
                 {where_clause}
-                AND p.id NOT IN (
-                    SELECT procedimento_id FROM pm_envolvido_indicios 
-                    WHERE categorias_indicios LIKE '%%crime comum%%' OR categoria LIKE '%%crime comum%%'
-                )
-                AND p.id NOT IN (
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_rdpm r ON i.id = r.pm_indicios_id
-                    UNION
-                    SELECT i.procedimento_id 
-                    FROM pm_envolvido_indicios i
-                    INNER JOIN pm_envolvido_art29 a ON i.id = a.pm_indicios_id
-                )
                 ''',
                 params,
             )
-            sem_indicios = cursor.fetchone()['count']
+            rdpm_count = cursor.fetchone()['count']
+            
+            cursor.execute(
+                f'''
+                SELECT COUNT(a.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                INNER JOIN pm_envolvido_art29 a ON a.pm_indicios_id = i.id
+                {where_clause}
+                ''',
+                params,
+            )
+            art29_count = cursor.fetchone()['count']
+            
+            transgressoes = rdpm_count + art29_count
+
+            # Contar indícios com "Não houve indícios"
+            cursor.execute(
+                f'''
+                SELECT COUNT(i.id) as count
+                FROM processos_procedimentos p
+                INNER JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                {where_clause}
+                AND (i.categoria ILIKE '%%não houve indícios%%'
+                     OR EXISTS (
+                         SELECT 1 FROM jsonb_array_elements_text(i.categorias_indicios) AS cat
+                         WHERE cat ILIKE '%%não houve indícios%%'
+                     ))
+                ''',
+                params,
+            )
+            nao_houve = cursor.fetchone()['count']
+            
+            # Contar processos sem indícios cadastrados (arquivados)
+            cursor.execute(
+                f'''
+                SELECT COUNT(DISTINCT p.id) as count
+                FROM processos_procedimentos p
+                LEFT JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
+                {where_clause}
+                AND i.id IS NULL
+                ''',
+                params,
+            )
+            arquivados = cursor.fetchone()['count']
+            
+            sem_indicios = nao_houve + arquivados
 
             conn.close()
             dados = [
