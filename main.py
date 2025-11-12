@@ -2285,6 +2285,10 @@ def substituir_encarregado(processo_id, novo_encarregado_id, justificativa=None)
     except Exception as e:
         return {"sucesso": False, "mensagem": f"Erro ao substituir encarregado: {str(e)}"}
 
+def _substituir_encarregado_wrapper(processo_id, novo_encarregado_id, justificativa=None):
+    return substituir_encarregado(processo_id, novo_encarregado_id, justificativa)
+eel._exposed_functions['substituir_encarregado'] = _substituir_encarregado_wrapper
+
 # @eel.expose  # MIGRADO PARA ROUTERS
 def obter_historico_encarregados(processo_id):
     """Obtém o histórico de encarregados de um processo, garantindo que o primeiro seja incluído."""

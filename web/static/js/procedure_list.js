@@ -819,11 +819,11 @@ function criarModalProrrogacao() {
                 
                 <div class="form-row-prorrogacao">
                     <div class="form-group-prorrogacao">
-                        <label><i class="fas fa-file-alt"></i> Número da Portaria</label>
+                        <label><i class="fas fa-file-alt"></i> Número da Portaria/Ofício</label>
                         <input type="text" id="prorPortaria" placeholder="Ex: 123" class="form-control-prorrogacao" />
                     </div>
                     <div class="form-group-prorrogacao">
-                        <label><i class="fas fa-calendar"></i> Data da Portaria</label>
+                        <label><i class="fas fa-calendar"></i> Data da Portaria/Ofício</label>
                         <input type="date" id="prorDataPortaria" class="form-control-prorrogacao" />
                     </div>
                 </div>
