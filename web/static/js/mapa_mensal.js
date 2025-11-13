@@ -249,7 +249,7 @@ async function gerarMapaMensal() {
         // Verificar se é mapa completo
         let resultado;
         if (tipoProcesso === 'COMPLETO') {
-            resultado = await eel.gerar_mapa_completo(mes, ano)();
+            resultado = await eel.gerar_mapa_mensal_completo(mes, ano)();
         } else {
             resultado = await eel.gerar_mapa_mensal(mes, ano, tipoProcesso)();
         }

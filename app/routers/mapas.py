@@ -33,7 +33,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado=None):
         if err:
             return err
         
-        return mapas_service.gerar_mapa_mensal_completo(db_manager, mes, ano)
+        return mapas_service.gerar_mapa_completo(db_manager, mes, ano)
     
     @eel.expose
     def salvar_mapa_mensal(mes, ano, tipo_processo, dados_mapa, usuario_id=None):
