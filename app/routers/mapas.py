@@ -74,7 +74,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado=None):
         if err:
             return err
         
-        return mapas_service.listar_mapas_salvos(db_manager, mes, ano, tipo_processo)
+        return mapas_service.listar_mapas_anteriores(db_manager)
     
     @eel.expose
     def obter_mapa_salvo(mapa_id):
@@ -83,7 +83,7 @@ def register(eel, db_manager, guard_login, get_usuario_logado=None):
         if err:
             return err
         
-        return mapas_service.obter_mapa_salvo(db_manager, mapa_id)
+        return mapas_service.obter_dados_mapa_salvo(db_manager, mapa_id)
     
     @eel.expose
     def excluir_mapa_salvo(mapa_id):

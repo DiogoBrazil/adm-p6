@@ -2049,7 +2049,7 @@ async function carregarMapasAnteriores() {
             loadingEl.classList.remove('d-none');
         }
         
-        const resultado = await eel.listar_mapas_anteriores()();
+        const resultado = await eel.listar_mapas_salvos()();
         
         if (resultado.sucesso) {
             // Armazenar mapas globalmente
@@ -2490,7 +2490,7 @@ async function visualizarMapaAnterior(mapaId, botaoEl) {
             botao.disabled = true;
         }
         
-        const resultado = await eel.obter_dados_mapa_salvo(mapaId)();
+        const resultado = await eel.obter_mapa_salvo(mapaId)();
         
         if (resultado.sucesso) {
             console.log('📦 Dados do mapa recebidos:', resultado.dados_mapa);
