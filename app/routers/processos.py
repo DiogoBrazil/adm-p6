@@ -1,4 +1,5 @@
 from app import processos as processos_mod
+from app.services import processos_service
 import psycopg2.extras
 
 
@@ -59,6 +60,43 @@ def register(eel, db_manager, guard_login, get_usuario_logado):
             return {'sucesso': True, 'dados': dados}
         except Exception as e:
             return {'sucesso': False, 'erro': str(e)}
+
+    @eel.expose
+    def salvar_pdf_processo(processo_id, nome_arquivo, conteudo_base64, content_type=None):
+        """Salva ou atualiza o PDF associado ao processo."""
+        g = guard_login()
+        if g:
+            return g
+
+        return processos_service.salvar_pdf_processo(
+            db_manager,
+            processo_id,
+            nome_arquivo,
+            conteudo_base64,
+            content_type,
+        )
+
+    @eel.expose
+    def obter_pdf_processo(processo_id, incluir_conteudo=False):
+        """Obtém metadados e, opcionalmente, o conteúdo do PDF do processo."""
+        g = guard_login()
+        if g:
+            return g
+
+        return processos_service.obter_pdf_processo(
+            db_manager,
+            processo_id,
+            incluir_conteudo,
+        )
+
+    @eel.expose
+    def remover_pdf_processo(processo_id):
+        """Remove o PDF associado ao processo."""
+        g = guard_login()
+        if g:
+            return g
+
+        return processos_service.remover_pdf_processo(db_manager, processo_id)
 
     @eel.expose
     def obter_estatistica_ipm_indicios(ano=None):

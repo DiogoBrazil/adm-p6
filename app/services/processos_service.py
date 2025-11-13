@@ -3,6 +3,7 @@ Serviço de Processos e Procedimentos
 Contém todas as funções relacionadas a processos/procedimentos extraídas do main.py
 """
 
+import base64
 import json
 import uuid
 import psycopg2
@@ -2340,6 +2341,144 @@ def listar_andamentos_processo(db_manager, processo_id):
     except Exception as e:
         print(f"Erro ao listar andamentos: {e}")
         return {"sucesso": False, "mensagem": f"Erro ao listar andamentos: {str(e)}"}
+
+
+def obter_pdf_processo(db_manager, processo_id, incluir_conteudo=False):
+    """Recupera metadados (e opcionalmente o conteúdo) do PDF associado ao processo."""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute(
+            """
+            SELECT pdf_nome, pdf_content_type, pdf_tamanho, pdf_upload_em, pdf_arquivo
+            FROM processos_procedimentos
+            WHERE id = %s AND ativo = TRUE
+            """,
+            (processo_id,)
+        )
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row or not row.get('pdf_arquivo'):
+            return {"sucesso": True, "pdf": None}
+
+        pdf_bytes = row['pdf_arquivo']
+        if isinstance(pdf_bytes, memoryview):
+            pdf_bytes = pdf_bytes.tobytes()
+
+        pdf_info = {
+            "nome_arquivo": row.get('pdf_nome'),
+            "content_type": row.get('pdf_content_type') or 'application/pdf',
+            "tamanho": row.get('pdf_tamanho') or len(pdf_bytes),
+            "upload_em": row.get('pdf_upload_em').isoformat() if row.get('pdf_upload_em') else None,
+        }
+
+        if incluir_conteudo:
+            pdf_info["conteudo_base64"] = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        return {"sucesso": True, "pdf": pdf_info}
+
+    except Exception as e:
+        print(f"Erro ao obter PDF do processo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao obter PDF: {str(e)}"}
+
+
+def salvar_pdf_processo(db_manager, processo_id, nome_arquivo, conteudo_base64, content_type=None):
+    """Salva ou substitui o PDF do processo/procedimento."""
+    if not conteudo_base64:
+        return {"sucesso": False, "mensagem": "Conteúdo do PDF não informado."}
+
+    try:
+        pdf_bytes = base64.b64decode(conteudo_base64, validate=True)
+    except Exception:
+        return {"sucesso": False, "mensagem": "Arquivo PDF inválido ou corrompido."}
+
+    tamanho_bytes = len(pdf_bytes)
+    if tamanho_bytes == 0:
+        return {"sucesso": False, "mensagem": "O arquivo PDF está vazio."}
+
+    limite_bytes = 25 * 1024 * 1024  # 25 MB
+    if tamanho_bytes > limite_bytes:
+        return {"sucesso": False, "mensagem": "O PDF excede o limite de 25 MB."}
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute(
+            """
+            UPDATE processos_procedimentos
+            SET pdf_nome = %s,
+                pdf_content_type = %s,
+                pdf_tamanho = %s,
+                pdf_upload_em = CURRENT_TIMESTAMP,
+                pdf_arquivo = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND ativo = TRUE
+            RETURNING id
+            """,
+            (
+                nome_arquivo,
+                content_type or 'application/pdf',
+                tamanho_bytes,
+                psycopg2.Binary(pdf_bytes),
+                processo_id,
+            ),
+        )
+
+        updated = cursor.fetchone()
+        if not updated:
+            conn.rollback()
+            conn.close()
+            return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado ou inativo."}
+
+        conn.commit()
+        conn.close()
+
+        return {"sucesso": True, "mensagem": "PDF salvo com sucesso."}
+
+    except Exception as e:
+        print(f"Erro ao salvar PDF do processo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao salvar PDF: {str(e)}"}
+
+
+def remover_pdf_processo(db_manager, processo_id):
+    """Remove o PDF associado ao processo/procedimento."""
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cursor.execute(
+            """
+            UPDATE processos_procedimentos
+            SET pdf_nome = NULL,
+                pdf_content_type = NULL,
+                pdf_tamanho = NULL,
+                pdf_upload_em = NULL,
+                pdf_arquivo = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND ativo = TRUE
+            RETURNING id
+            """,
+            (processo_id,),
+        )
+
+        updated = cursor.fetchone()
+        if not updated:
+            conn.rollback()
+            conn.close()
+            return {"sucesso": False, "mensagem": "Processo/Procedimento não encontrado ou inativo."}
+
+        conn.commit()
+        conn.close()
+
+        return {"sucesso": True, "mensagem": "PDF removido com sucesso."}
+
+    except Exception as e:
+        print(f"Erro ao remover PDF do processo: {e}")
+        return {"sucesso": False, "mensagem": f"Erro ao remover PDF: {str(e)}"}
 
 
 def atualizar_status_detalhado_processo(prazos_manager, processo_id, novo_status, observacoes=None, responsavel_id=None):
