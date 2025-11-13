@@ -2299,12 +2299,39 @@ def listar_andamentos_processo(db_manager, processo_id):
             # Formatar andamentos
             andamentos_formatados = []
             for and_ in andamentos_ordenados:
-                andamentos_formatados.append({
-                    "id": and_.get('id', ''),
-                    "data": and_.get('data', ''),
-                    "descricao": and_.get('texto', '') or and_.get('descricao', ''),
-                    "usuario_nome": and_.get('usuario', 'Sistema')
+                if not isinstance(and_, dict):
+                    continue
+
+                texto_val = (
+                    and_.get('texto')
+                    or and_.get('descricao')
+                    or and_.get('descricao_andamento')
+                    or and_.get('observacoes')
+                )
+                if texto_val is None:
+                    texto = 'Sem descrição'
+                else:
+                    texto = str(texto_val).strip() or 'Sem descrição'
+
+                usuario_val = (
+                    and_.get('usuario')
+                    or and_.get('usuario_nome')
+                    or and_.get('responsavel_nome')
+                    or and_.get('responsavel')
+                )
+                usuario = str(usuario_val).strip() if usuario_val else 'Sistema'
+
+                andamento_formatado = and_.copy()
+                andamento_formatado.update({
+                    'id': and_.get('id'),
+                    'data': and_.get('data'),
+                    'texto': texto,
+                    'descricao': texto,
+                    'usuario': usuario,
+                    'usuario_nome': usuario
                 })
+
+                andamentos_formatados.append(andamento_formatado)
 
             return {"sucesso": True, "andamentos": andamentos_formatados}
 

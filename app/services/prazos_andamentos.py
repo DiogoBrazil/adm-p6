@@ -204,12 +204,39 @@ def listar_andamentos(db_manager, processo_id: str) -> Dict[str, Any]:
         # Mapear campos para compatibilidade com frontend
         andamentos_formatados = []
         for andamento in andamentos:
-            andamentos_formatados.append({
+            if not isinstance(andamento, dict):
+                continue
+
+            texto_val = (
+                andamento.get("texto")
+                or andamento.get("descricao")
+                or andamento.get("descricao_andamento")
+                or andamento.get("observacoes")
+            )
+            if texto_val is None:
+                texto = "Sem descrição"
+            else:
+                texto = str(texto_val).strip() or "Sem descrição"
+
+            usuario_val = (
+                andamento.get("usuario")
+                or andamento.get("usuario_nome")
+                or andamento.get("responsavel_nome")
+                or andamento.get("responsavel")
+            )
+            usuario = str(usuario_val).strip() if usuario_val else "Sistema"
+
+            andamento_formatado = andamento.copy()
+            andamento_formatado.update({
                 "id": andamento.get("id"),
                 "data": andamento.get("data"),
-                "descricao": andamento.get("texto") or andamento.get("descricao") or "Sem descrição",
-                "usuario_nome": andamento.get("usuario") or andamento.get("usuario_nome") or "Sistema"
+                "texto": texto,
+                "descricao": texto,
+                "usuario": usuario,
+                "usuario_nome": usuario
             })
+
+            andamentos_formatados.append(andamento_formatado)
 
         return {
             "sucesso": True,
