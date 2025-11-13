@@ -49,6 +49,28 @@ def register(eel, db_manager, guard_login, get_usuario_logado=None):
         meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
         
+        # Calcular totais baseado na estrutura dos dados
+        if tipo_processo == 'COMPLETO' and isinstance(dados_mapa, dict):
+            # Mapa completo: dados_mapa é {tipo: {dados: [...], totais: {...}}}
+            total_processos = sum(len(tipo_data.get('dados', [])) for tipo_data in dados_mapa.values())
+            total_concluidos = 0
+            total_andamento = 0
+            for tipo_data in dados_mapa.values():
+                for p in tipo_data.get('dados', []):
+                    if p.get('concluido'):
+                        total_concluidos += 1
+                    else:
+                        total_andamento += 1
+        elif isinstance(dados_mapa, list):
+            # Mapa individual: dados_mapa é uma lista de processos
+            total_processos = len(dados_mapa)
+            total_concluidos = sum(1 for p in dados_mapa if p.get('concluido'))
+            total_andamento = sum(1 for p in dados_mapa if not p.get('concluido'))
+        else:
+            total_processos = 0
+            total_concluidos = 0
+            total_andamento = 0
+        
         # Montar objeto de dados com metadata
         dados_completos = {
             'meta': {
@@ -56,9 +78,9 @@ def register(eel, db_manager, guard_login, get_usuario_logado=None):
                 'ano': int(ano),
                 'mes_nome': meses[int(mes)] if 1 <= int(mes) <= 12 else '',
                 'tipo_processo': tipo_processo,
-                'total_processos': len(dados_mapa) if isinstance(dados_mapa, list) else 0,
-                'total_concluidos': sum(1 for p in dados_mapa if p.get('concluido')) if isinstance(dados_mapa, list) else 0,
-                'total_andamento': sum(1 for p in dados_mapa if not p.get('concluido')) if isinstance(dados_mapa, list) else 0,
+                'total_processos': total_processos,
+                'total_concluidos': total_concluidos,
+                'total_andamento': total_andamento,
             },
             'dados': dados_mapa
         }

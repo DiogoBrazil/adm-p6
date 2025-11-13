@@ -20,6 +20,100 @@ function formatarPenalidade(penalidade) {
     return mapeamento[penalidade] || penalidade;
 }
 
+// Função para abrir PDF em modal dentro da página
+function abrirModalPDF(url, titulo) {
+    const modal = document.getElementById('modalPDFViewer');
+    const iframe = document.getElementById('iframePDF');
+    const tituloEl = document.getElementById('modalPDFTitulo');
+    const loading = document.getElementById('loadingPDF');
+    const btnFechar = document.getElementById('btnFecharModalPDF');
+    const btnDownload = document.getElementById('btnDownloadPDF');
+    
+    // Configurar título
+    if (tituloEl) {
+        tituloEl.innerHTML = `<i class="bi bi-file-pdf me-2"></i>${titulo || 'Visualizador de PDF'}`;
+    }
+    
+    // Mostrar modal e loading
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // Prevenir scroll da página
+    }
+    
+    if (loading) {
+        loading.classList.remove('hidden');
+    }
+    
+    // Carregar PDF no iframe
+    if (iframe) {
+        iframe.onload = function() {
+            if (loading) {
+                loading.classList.add('hidden');
+            }
+        };
+        iframe.src = url;
+    }
+    
+    // Configurar botão de fechar
+    if (btnFechar) {
+        btnFechar.onclick = function() {
+            fecharModalPDF();
+        };
+    }
+    
+    // Configurar botão de download
+    if (btnDownload) {
+        btnDownload.onclick = function() {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${titulo || 'Mapa'}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+    }
+    
+    // Fechar ao clicar fora do modal
+    modal.onclick = function(e) {
+        if (e.target === modal) {
+            fecharModalPDF();
+        }
+    };
+    
+    // Fechar com tecla ESC
+    document.addEventListener('keydown', handleEscapeKey);
+}
+
+// Função para fechar o modal de PDF
+function fecharModalPDF() {
+    const modal = document.getElementById('modalPDFViewer');
+    const iframe = document.getElementById('iframePDF');
+    const loading = document.getElementById('loadingPDF');
+    
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = ''; // Restaurar scroll
+    }
+    
+    if (iframe) {
+        iframe.src = ''; // Limpar iframe
+    }
+    
+    if (loading) {
+        loading.classList.remove('hidden');
+    }
+    
+    // Remover event listener do ESC
+    document.removeEventListener('keydown', handleEscapeKey);
+}
+
+// Handler para tecla ESC
+function handleEscapeKey(e) {
+    if (e.key === 'Escape') {
+        fecharModalPDF();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async function() {
     // Inicializar sistema de permissões
     if (window.permissoes) {
@@ -1409,7 +1503,86 @@ async function gerarPDFMapaCompleto(resultado) {
     window.tipoProcessoAtual = 'COMPLETO';
 }
 
-async function gerarDocumentoPDF(content, titulo) {
+async function gerarDocumentoPDF(content, titulo, opcoes = {}) {
+    const { jsPDF } = window.jspdf;
+    const apenasRetornar = opcoes.apenasRetornar || false; // Se true, retorna PDF sem abrir modal
+    
+    // Detectar se é um mapa completo com múltiplos tipos
+    if (content.isMapaCompleto && Array.isArray(content.secoesPorTipo)) {
+        console.log('📊 Gerando PDF de mapa completo com múltiplas seções');
+        
+        // Gerar PDF para cada seção e depois mesclá-los
+        const { PDFDocument } = window.PDFLib || {};
+        
+        if (!PDFDocument) {
+            console.error('❌ PDFLib não está carregada. Carregando a biblioteca...');
+            // Tentar carregar PDFLib dinamicamente
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // Gerar PDFs individuais para cada seção
+        const pdfBuffers = [];
+        for (const secao of content.secoesPorTipo) {
+            const pdfIndividual = await gerarDocumentoPDFIndividual(secao, secao.titulo);
+            const pdfBytes = pdfIndividual.output('arraybuffer');
+            pdfBuffers.push(pdfBytes);
+        }
+        
+        // Mesclar todos os PDFs usando PDFLib
+        const pdfFinal = await window.PDFLib.PDFDocument.create();
+        
+        for (const buffer of pdfBuffers) {
+            const pdfTemp = await window.PDFLib.PDFDocument.load(buffer);
+            const paginas = await pdfFinal.copyPages(pdfTemp, pdfTemp.getPageIndices());
+            paginas.forEach(pagina => pdfFinal.addPage(pagina));
+        }
+        
+        // Exportar PDF mesclado
+        const pdfMescladoBytes = await pdfFinal.save();
+        const blob = new Blob([pdfMescladoBytes], { type: 'application/pdf' });
+        
+        if (apenasRetornar) {
+            // Criar objeto compatível com jsPDF para uso consistente
+            return {
+                output: (type) => {
+                    if (type === 'blob') return blob;
+                    if (type === 'arraybuffer') return pdfMescladoBytes;
+                    throw new Error(`Tipo de output não suportado: ${type}`);
+                },
+                save: (nomeArquivo) => {
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = nomeArquivo;
+                    link.click();
+                }
+            };
+        }
+        
+        const url = URL.createObjectURL(blob);
+        abrirModalPDF(url, titulo || 'Mapa Completo');
+        return;
+    }
+    
+    // Caso normal: processar como mapa individual
+    const pdf = await gerarDocumentoPDFIndividual(content, titulo);
+    
+    if (apenasRetornar) {
+        return pdf;
+    }
+    
+    const blob = pdf.output('blob');
+    const url = URL.createObjectURL(blob);
+    abrirModalPDF(url, titulo || 'Mapa Mensal');
+}
+
+// Função auxiliar que gera PDF para um único tipo (individual ou parte de mapa completo)
+async function gerarDocumentoPDFIndividual(content, titulo) {
     const { jsPDF } = window.jspdf;
     
     // Criar PDF em orientação paisagem (horizontal)
@@ -1987,15 +2160,8 @@ async function gerarDocumentoPDF(content, titulo) {
         pdf.text('Sistema ADM-P6', pageWidth - margin, footerY + 8, { align: 'right' });
     }
     
-    // Salvar PDF ou retornar bytes
-    const nomeArquivo = `Mapa_Mensal_Detalhado_${content.titulo.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    
-    // Se titulo termina com '__RETURN_BYTES__', retornar ArrayBuffer ao invés de baixar
-    if (titulo && titulo.endsWith('__RETURN_BYTES__')) {
-        return pdf.output('arraybuffer');
-    }
-    
-    pdf.save(nomeArquivo);
+    // Retornar o objeto PDF (usado internamente ou para composição)
+    return pdf;
 }
 
 function mostrarEstadoVazio() {
@@ -2266,15 +2432,18 @@ async function downloadMapaGerado() {
         btnDownload.disabled = true;
         btnDownload.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Gerando PDF...';
         
-        // Verificar se é mapa completo
-        if (window.tipoProcessoAtual === 'COMPLETO') {
-            await gerarPDFMapaCompleto(window.ultimoMapaGerado);
-        } else {
-            // Construir conteúdo para PDF individual
-            const conteudo = construirConteudoPDFParaDownload(window.ultimoMapaGerado);
-            
-            // Gerar e baixar PDF
-            await gerarDocumentoPDF(conteudo, conteudo.titulo);
+        // Construir conteúdo (detecta automaticamente se é mapa completo ou individual)
+        const conteudo = window.tipoProcessoAtual === 'COMPLETO' 
+            ? construirConteudoPDFDeMapaSalvo(window.ultimoMapaGerado)
+            : construirConteudoPDFParaDownload(window.ultimoMapaGerado);
+        
+        // Gerar PDF (a função detecta automaticamente se precisa mesclar múltiplos tipos)
+        const pdf = await gerarDocumentoPDF(conteudo, conteudo.titulo || 'Mapa Mensal', { apenasRetornar: true });
+        
+        // Fazer download do PDF
+        if (pdf) {
+            const nomeArquivo = `Mapa_Mensal_${window.tipoProcessoAtual}_${new Date().toISOString().split('T')[0]}.pdf`;
+            pdf.save(nomeArquivo);
         }
         
         // Restaurar botão antes de ocultar
@@ -2391,56 +2560,40 @@ function construirConteudoPDFParaDownload(dadosResultado) {
     };
 }
 
-// Constrói o payload esperado por gerarDocumentoPDF a partir do JSON salvo no banco
-function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
-    // Se já estiver no formato novo, apenas retornar
-    if (mapaSalvo && Array.isArray(mapaSalvo.processos) && mapaSalvo.info && mapaSalvo.stats) {
-        // Configurar contexto auxiliar usado no gerador
-        window.tipoProcessoAtual = mapaSalvo.titulo?.split(' - ')?.[0] || mapaSalvo.meta?.tipo_processo || '';
-        window.dadosProcessos = mapaSalvo.processosOriginais || [];
-        return mapaSalvo;
-    }
-
+// Processa um tipo individual de mapa (usado internamente)
+function construirConteudoPDFDeMapaSalvoIndividual(mapaSalvo) {
     const meta = mapaSalvo?.meta || {};
-    // Garantir que dados é sempre um array
-    let dados = mapaSalvo?.dados || [];
-    if (!Array.isArray(dados)) {
-        console.warn('⚠️ dados não é array, convertendo:', dados);
-        dados = [];
-    }
-
-    // Disponibiliza dados originais para trechos do gerador que consultam o array completo
+    const dados = mapaSalvo?.dados || [];
+    
     window.tipoProcessoAtual = meta.tipo_processo || '';
     window.dadosProcessos = dados;
-
-    // Montar info e stats na mesma forma usada pelo gerador atual
+    
     const info = {
         'Período': meta.mes_nome && meta.ano ? `${meta.mes_nome}/${meta.ano}` : (meta.periodo_descricao || '—'),
         'Tipo': meta.tipo_processo || '—',
         'Data de Geração': meta.data_geracao || new Date().toLocaleString('pt-BR')
     };
-
+    
     const stats = {
         'Total': String(meta.total_processos ?? dados.length ?? 0),
         'Em Andamento': String(meta.total_andamento ?? (dados.filter(p => !p.concluido).length)),
         'Concluídos': String(meta.total_concluidos ?? (dados.filter(p => p.concluido).length))
     };
-
-    // Montar processos na estrutura consumida por gerarDocumentoPDF
+    
     const processos = dados.map((p, idx) => {
         const status = p.concluido ? 'Concluído' : 'Em Andamento';
         const numeroProc = `${p.numero}/${p.ano || (p.data_instauracao ? String(p.data_instauracao).slice(0,4) : '')}`;
         const encarregado = p?.responsavel?.completo || 'Não informado';
         const pmsStr = (Array.isArray(p.pms_envolvidos) ? p.pms_envolvidos.map(formatarPmParaExibicao) : []).join(', ') || 'Nenhum PM informado';
-
-        // Documento/número: Portaria ou Memorando conforme tipo
+        
+        const tipoProcesso = meta.tipo_processo;
         let documentoNumero = 'Não informado';
-        if (meta.tipo_processo === 'PADS' && p.numero_memorando) {
+        if (tipoProcesso === 'PADS' && p.numero_memorando) {
             documentoNumero = `Memorando nº ${p.numero_memorando}/${p.ano || ''}`;
         } else if (p.numero_portaria) {
             documentoNumero = `Portaria nº ${p.numero_portaria}/${p.ano || ''}`;
         }
-
+        
         const detalhes = {
             numeroPortaria: documentoNumero,
             numeroControle: p.numero || 'Não informado',
@@ -2450,13 +2603,13 @@ function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
             resumoFatos: p.resumo_fatos || 'Não informado',
             solucaoCompleta: {
                 dataRemessa: p?.solucao?.data_remessa ? formatarData(p.solucao.data_remessa) : 'Não informado',
-                dataJulgamento: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? (p?.solucao?.data_julgamento ? formatarData(p.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
-                penalidade: ['PAD','PADS','CD','CJ'].includes(meta.tipo_processo) ? (p?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica',
+                dataJulgamento: ['PAD','PADS','CD','CJ'].includes(tipoProcesso) ? (p?.solucao?.data_julgamento ? formatarData(p.solucao.data_julgamento) : 'Não informado') : 'Não se aplica',
+                penalidade: ['PAD','PADS','CD','CJ'].includes(tipoProcesso) ? (p?.solucao?.penalidade_tipo || 'Não se aplica') : 'Não se aplica',
             }
         };
-
+        
         const solucao = p.solucao_final || p?.solucao?.solucao_final || p?.solucao?.solucao_tipo || 'Não informado';
-
+        
         return {
             id: p.id,
             numero: String(idx + 1),
@@ -2469,13 +2622,79 @@ function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
             detalhes
         };
     });
-
+    
     return {
         titulo: `${meta.tipo_processo || ''} - ${meta.mes_nome || ''}/${meta.ano || ''}`,
         info,
         stats,
         processos
     };
+}
+
+// Constrói PDF de mapa completo com múltiplos tipos separados
+function construirPDFMapaCompleto(mapaSalvo) {
+    const meta = mapaSalvo?.meta || {};
+    const dados = mapaSalvo?.dados || {};
+    
+    // Array para armazenar conteúdo de cada tipo
+    const secoesPorTipo = [];
+    
+    // Processar cada tipo separadamente
+    for (const [tipo, tipoData] of Object.entries(dados)) {
+        if (!tipoData || !Array.isArray(tipoData.dados) || tipoData.dados.length === 0) {
+            continue;
+        }
+        
+        // Criar um "mini-mapa" para cada tipo
+        const miniMapa = {
+            meta: {
+                ...meta,
+                tipo_processo: tipo,
+                total_processos: tipoData.dados.length,
+                total_concluidos: tipoData.dados.filter(p => p.concluido).length,
+                total_andamento: tipoData.dados.filter(p => !p.concluido).length,
+            },
+            dados: tipoData.dados
+        };
+        
+        // Processar este tipo usando a lógica individual
+        const conteudoTipo = construirConteudoPDFDeMapaSalvoIndividual(miniMapa);
+        secoesPorTipo.push(conteudoTipo);
+    }
+    
+    // Retornar estrutura especial indicando que é mapa completo
+    return {
+        isMapaCompleto: true,
+        meta: meta,
+        secoesPorTipo: secoesPorTipo
+    };
+}
+
+// Constrói o payload esperado por gerarDocumentoPDF a partir do JSON salvo no banco
+function construirConteudoPDFDeMapaSalvo(mapaSalvo) {
+    // Se já estiver no formato novo, apenas retornar
+    if (mapaSalvo && Array.isArray(mapaSalvo.processos) && mapaSalvo.info && mapaSalvo.stats) {
+        // Configurar contexto auxiliar usado no gerador
+        window.tipoProcessoAtual = mapaSalvo.titulo?.split(' - ')?.[0] || mapaSalvo.meta?.tipo_processo || '';
+        window.dadosProcessos = mapaSalvo.processosOriginais || [];
+        return mapaSalvo;
+    }
+
+    const meta = mapaSalvo?.meta || {};
+    let dados = mapaSalvo?.dados || [];
+    
+    // Verificar se é mapa completo (dados é um objeto com múltiplos tipos)
+    if (!Array.isArray(dados) && typeof dados === 'object' && meta.tipo_processo === 'COMPLETO') {
+        // Mapa completo: retornar estrutura especial para processar separadamente
+        console.log('📊 Processando mapa completo - mantendo separação por tipos');
+        return construirPDFMapaCompleto(mapaSalvo);
+    } else if (!Array.isArray(dados)) {
+        console.warn('⚠️ dados não é array nem objeto válido, convertendo para array vazio:', dados);
+        dados = [];
+    }
+
+    // Caso normal: usar função individual
+    return construirConteudoPDFDeMapaSalvoIndividual(mapaSalvo);
 }
 
 async function visualizarMapaAnterior(mapaId, botaoEl) {
