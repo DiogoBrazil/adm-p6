@@ -23,6 +23,13 @@ def register(eel, db_manager, guard_login, guard_admin, get_usuario_logado):
         return catalogos_mod.listar_crimes_contravencoes(db_manager)
 
     @eel.expose
+    def obter_crime_por_id(crime_id):
+        g = guard_login()
+        if g:
+            return g
+        return catalogos_mod.obter_crime_por_id(db_manager, crime_id)
+
+    @eel.expose
     def excluir_crime_contravencao(crime_id):
         g = guard_admin()
         if g:
