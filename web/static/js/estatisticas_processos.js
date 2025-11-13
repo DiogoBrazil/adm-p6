@@ -8,6 +8,37 @@ document.addEventListener('DOMContentLoaded', async function() {
     await carregarAnos();
 });
 
+// Funções do modal de alerta
+function mostrarModalAlerta(mensagem, titulo = 'Atenção') {
+    const modal = document.getElementById('alertModal');
+    const titleElement = document.getElementById('alertModalTitle');
+    const messageElement = document.getElementById('alertModalMessage');
+    
+    titleElement.textContent = titulo;
+    messageElement.textContent = mensagem;
+    modal.style.display = 'flex';
+}
+
+function fecharModalAlerta() {
+    const modal = document.getElementById('alertModal');
+    modal.style.display = 'none';
+}
+
+// Fechar modal ao clicar fora dele
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('alertModal');
+    if (event.target === modal) {
+        fecharModalAlerta();
+    }
+});
+
+// Fechar modal com ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        fecharModalAlerta();
+    }
+});
+
 // Carregar anos disponíveis
 async function carregarAnos() {
     try {
@@ -191,7 +222,7 @@ async function gerarEstatistica() {
     const ano = document.getElementById('anoEstatistica').value;
     
     if (!tipo) {
-        alert('Por favor, selecione um tipo de estatística.');
+        mostrarModalAlerta('Por favor, selecione um tipo de estatística.');
         return;
     }
     
