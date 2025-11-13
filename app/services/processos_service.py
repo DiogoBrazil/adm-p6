@@ -2399,9 +2399,9 @@ def salvar_pdf_processo(db_manager, processo_id, nome_arquivo, conteudo_base64, 
     if tamanho_bytes == 0:
         return {"sucesso": False, "mensagem": "O arquivo PDF está vazio."}
 
-    limite_bytes = 25 * 1024 * 1024  # 25 MB
+    limite_bytes = 100 * 1024 * 1024  # 100 MB
     if tamanho_bytes > limite_bytes:
-        return {"sucesso": False, "mensagem": "O PDF excede o limite de 25 MB."}
+        return {"sucesso": False, "mensagem": "O PDF excede o limite de 100 MB."}
 
     try:
         conn = db_manager.get_connection()

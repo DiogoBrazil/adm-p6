@@ -12,10 +12,12 @@ let totalProcedures = 0;
 // Variável para debounce da busca
 let searchTimeout = null;
 
-const LIMITE_PDF_MB = 25;
+const LIMITE_PDF_MB = 100;
 let modalPdfProcesso;
 let pdfProcessoAtual = null;
 let arquivoPdfSelecionado = null;
+let pdfViewerUrlAtual = null;
+let pdfViewerNomeArquivo = 'documento.pdf';
 
 // Variáveis para autocomplete
 let opcoesEncarregados = [];
@@ -1569,6 +1571,7 @@ async function abrirModalPdfProcesso(processoId, numeroProcesso) {
         numeroEl.textContent = numeroProcesso || '—';
     }
 
+    definirCarregandoPdfProcesso(false);
     pdfProcessoAtual = null;
     resetarUploadPdf();
 
@@ -1587,6 +1590,7 @@ function fecharModalPdfProcesso() {
         return;
     }
 
+    definirCarregandoPdfProcesso(false);
     modalPdfProcesso.style.display = 'none';
     pdfProcessoAtual = null;
     resetarUploadPdf();
@@ -1597,6 +1601,12 @@ function criarModalPdfProcesso() {
     modalPdfProcesso.className = 'modal-processo-pdf-overlay';
     modalPdfProcesso.innerHTML = `
         <div class="modal-processo-pdf">
+            <div id="modalPdfLoader" class="modal-processo-pdf-loader">
+                <div class="loader-content">
+                    <div class="loader-ring"></div>
+                    <span id="modalPdfLoaderMensagem">Processando PDF...</span>
+                </div>
+            </div>
             <div class="modal-processo-pdf-header">
                 <h3><i class="fas fa-file-pdf"></i> Documento do Processo</h3>
                 <button class="modal-processo-pdf-close" type="button" onclick="fecharModalPdfProcesso()">&times;</button>
@@ -1631,9 +1641,6 @@ function criarModalPdfProcesso() {
                 <button class="btn-pdf-cancelar" type="button" onclick="fecharModalPdfProcesso()">
                     <i class="fas fa-times"></i> Fechar
                 </button>
-                <button id="btnSalvarPdf" class="btn-pdf-primary" type="button" disabled>
-                    <i class="fas fa-save"></i> Salvar PDF
-                </button>
             </div>
         </div>
     `;
@@ -1641,15 +1648,11 @@ function criarModalPdfProcesso() {
     document.body.appendChild(modalPdfProcesso);
 
     const inputArquivo = modalPdfProcesso.querySelector('#inputPdfArquivo');
-    const btnSalvar = modalPdfProcesso.querySelector('#btnSalvarPdf');
     const btnVisualizar = modalPdfProcesso.querySelector('#btnVisualizarPdf');
     const btnRemover = modalPdfProcesso.querySelector('#btnRemoverPdf');
 
     if (inputArquivo) {
         inputArquivo.addEventListener('change', aoSelecionarPdfArquivo);
-    }
-    if (btnSalvar) {
-        btnSalvar.addEventListener('click', salvarPdfProcessoAtual);
     }
     if (btnVisualizar) {
         btnVisualizar.addEventListener('click', visualizarPdfProcessoAtual);
@@ -1681,6 +1684,37 @@ function resetarUploadPdf() {
         mensagem.textContent = `Selecione um arquivo em formato PDF (até ${LIMITE_PDF_MB} MB).`;
     }
     atualizarEstadoModalPdf();
+}
+
+function definirCarregandoPdfProcesso(ativo, mensagem) {
+    if (!modalPdfProcesso) {
+        return;
+    }
+
+    const loader = modalPdfProcesso.querySelector('#modalPdfLoader');
+    const textoLoader = modalPdfProcesso.querySelector('#modalPdfLoaderMensagem');
+    if (loader) {
+        loader.classList.toggle('show', Boolean(ativo));
+    }
+    if (textoLoader && mensagem) {
+        textoLoader.textContent = mensagem;
+    }
+
+    const elementosBloquear = modalPdfProcesso.querySelectorAll(
+        '.modal-processo-pdf-actions button, .modal-processo-pdf-footer .btn-pdf-cancelar, #inputPdfArquivo'
+    );
+    elementosBloquear.forEach((elemento) => {
+        if (!elemento) {
+            return;
+        }
+        if (ativo) {
+            elemento.dataset.prevDisabled = elemento.disabled ? 'true' : 'false';
+            elemento.disabled = true;
+        } else if (elemento.dataset.prevDisabled) {
+            elemento.disabled = elemento.dataset.prevDisabled === 'true';
+            delete elemento.dataset.prevDisabled;
+        }
+    });
 }
 
 function aoSelecionarPdfArquivo(event) {
@@ -1718,6 +1752,7 @@ function aoSelecionarPdfArquivo(event) {
     }
 
     atualizarEstadoModalPdf();
+    salvarPdfProcessoSelecionado();
 }
 
 async function carregarInfoPdf(processoId) {
@@ -1748,7 +1783,6 @@ function atualizarEstadoModalPdf() {
     const infoContainer = modalPdfProcesso.querySelector('#pdfInfoAtual');
     const btnVisualizar = modalPdfProcesso.querySelector('#btnVisualizarPdf');
     const btnRemover = modalPdfProcesso.querySelector('#btnRemoverPdf');
-    const btnSalvar = modalPdfProcesso.querySelector('#btnSalvarPdf');
 
     if (infoContainer) {
         if (pdfProcessoAtual) {
@@ -1771,12 +1805,6 @@ function atualizarEstadoModalPdf() {
 
     if (btnRemover) {
         btnRemover.disabled = !pdfProcessoAtual;
-    }
-
-    if (btnSalvar) {
-        btnSalvar.disabled = !arquivoPdfSelecionado;
-        const textoAcao = pdfProcessoAtual ? 'Atualizar PDF' : 'Salvar PDF';
-        btnSalvar.innerHTML = `<i class="fas fa-save"></i> ${textoAcao}`;
     }
 }
 
@@ -1830,15 +1858,45 @@ function formatarDataUpload(isoString) {
     }
 }
 
-async function salvarPdfProcessoAtual() {
+
+async function visualizarPdfProcessoAtual() {
+    if (!modalPdfProcesso || !pdfProcessoAtual) {
+        return;
+    }
+
+    const processoId = modalPdfProcesso.dataset.processoId;
+    const tituloBase = modalPdfProcesso.querySelector('#pdfNumeroProcesso')?.textContent || 'Processo';
+
+    try {
+        definirCarregandoPdfProcesso(true, 'Abrindo PDF...');
+        const resultado = await eel.obter_pdf_processo(processoId, true)();
+        if (resultado.sucesso && resultado.pdf && resultado.pdf.conteudo_base64) {
+            const mime = resultado.pdf.content_type || 'application/pdf';
+            const base64Limpo = resultado.pdf.conteudo_base64.replace(/\s+/g, '');
+            const blob = base64ParaBlob(base64Limpo, mime);
+            const blobUrl = URL.createObjectURL(blob);
+            abrirModalPDF(blobUrl, `PDF - ${tituloBase}`, resultado.pdf.nome_arquivo || `${tituloBase}.pdf`);
+        } else {
+            showAlert(resultado.mensagem || 'PDF não encontrado.', 'error');
+        }
+    } catch (error) {
+        console.error('Erro ao visualizar PDF:', error);
+        showAlert('Erro ao abrir o PDF.', 'error');
+    } finally {
+        definirCarregandoPdfProcesso(false);
+        atualizarEstadoModalPdf();
+    }
+}
+
+async function salvarPdfProcessoSelecionado() {
     if (!modalPdfProcesso || !arquivoPdfSelecionado) {
-        showAlert('Selecione um arquivo PDF para enviar.', 'error');
         return;
     }
 
     const processoId = modalPdfProcesso.dataset.processoId;
 
     try {
+        definirCarregandoPdfProcesso(true, 'Salvando PDF...');
         const base64 = await lerArquivoComoBase64(arquivoPdfSelecionado);
         const resultado = await eel.salvar_pdf_processo(
             processoId,
@@ -1857,29 +1915,9 @@ async function salvarPdfProcessoAtual() {
     } catch (error) {
         console.error('Erro ao salvar PDF do processo:', error);
         showAlert('Erro ao salvar PDF do processo.', 'error');
-    }
-}
-
-async function visualizarPdfProcessoAtual() {
-    if (!modalPdfProcesso || !pdfProcessoAtual) {
-        return;
-    }
-
-    const processoId = modalPdfProcesso.dataset.processoId;
-    const tituloBase = modalPdfProcesso.querySelector('#pdfNumeroProcesso')?.textContent || 'Processo';
-
-    try {
-        const resultado = await eel.obter_pdf_processo(processoId, true)();
-        if (resultado.sucesso && resultado.pdf && resultado.pdf.conteudo_base64) {
-            const mime = resultado.pdf.content_type || 'application/pdf';
-            const dataUrl = `data:${mime};base64,${resultado.pdf.conteudo_base64}`;
-            abrirModalPDF(dataUrl, `PDF - ${tituloBase}`);
-        } else {
-            showAlert(resultado.mensagem || 'PDF não encontrado.', 'error');
-        }
-    } catch (error) {
-        console.error('Erro ao visualizar PDF:', error);
-        showAlert('Erro ao abrir o PDF.', 'error');
+    } finally {
+        definirCarregandoPdfProcesso(false);
+        atualizarEstadoModalPdf();
     }
 }
 
@@ -1895,6 +1933,7 @@ async function removerPdfProcessoAtual() {
     const processoId = modalPdfProcesso.dataset.processoId;
 
     try {
+        definirCarregandoPdfProcesso(true, 'Removendo PDF...');
         const resultado = await eel.remover_pdf_processo(processoId)();
         if (resultado.sucesso) {
             showAlert('PDF removido com sucesso!', 'success');
@@ -1906,6 +1945,9 @@ async function removerPdfProcessoAtual() {
     } catch (error) {
         console.error('Erro ao remover PDF do processo:', error);
         showAlert('Erro ao remover PDF.', 'error');
+    } finally {
+        definirCarregandoPdfProcesso(false);
+        atualizarEstadoModalPdf();
     }
 }
 
@@ -1924,7 +1966,24 @@ function lerArquivoComoBase64(arquivo) {
     });
 }
 
-function abrirModalPDF(url, titulo) {
+function base64ParaBlob(base64, mimeType = 'application/pdf') {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+    const sliceSize = 1024;
+
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+        const slice = byteCharacters.slice(offset, offset + sliceSize);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
+    }
+
+    return new Blob(byteArrays, { type: mimeType });
+}
+
+function abrirModalPDF(url, titulo, nomeArquivo = 'documento.pdf') {
     const modal = document.getElementById('modalPDFViewer');
     const iframe = document.getElementById('iframePDF');
     const tituloEl = document.getElementById('modalPDFTitulo');
@@ -1936,6 +1995,13 @@ function abrirModalPDF(url, titulo) {
         console.warn('Modal de PDF não encontrado na página.');
         return;
     }
+
+    if (pdfViewerUrlAtual && pdfViewerUrlAtual.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfViewerUrlAtual);
+    }
+
+    pdfViewerUrlAtual = url;
+    pdfViewerNomeArquivo = nomeArquivo || 'documento.pdf';
 
     if (tituloEl) {
         tituloEl.innerHTML = `<i class="fas fa-file-pdf"></i>${titulo ? ` ${titulo}` : ' Visualizador de PDF'}`;
@@ -1961,9 +2027,12 @@ function abrirModalPDF(url, titulo) {
 
     if (btnDownload) {
         btnDownload.onclick = function() {
+            if (!pdfViewerUrlAtual) {
+                return;
+            }
             const link = document.createElement('a');
-            link.href = url;
-            link.download = `${titulo || 'documento'}.pdf`;
+            link.href = pdfViewerUrlAtual;
+            link.download = pdfViewerNomeArquivo || `${titulo || 'documento'}.pdf`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -1998,6 +2067,13 @@ function fecharModalPDF() {
     if (loading) {
         loading.classList.add('hidden');
     }
+
+    if (pdfViewerUrlAtual && pdfViewerUrlAtual.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfViewerUrlAtual);
+    }
+
+    pdfViewerUrlAtual = null;
+    pdfViewerNomeArquivo = 'documento.pdf';
 
     document.removeEventListener('keydown', handleEscapeKey);
 }
