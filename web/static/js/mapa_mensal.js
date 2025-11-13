@@ -276,7 +276,7 @@ async function gerarMapaMensal() {
             }
             
             // Salvar mapa automaticamente
-            const salvamento = await salvarMapaAutomaticamente(resultado);
+            const salvamento = await salvarMapaAutomaticamente(mes, ano, tipoProcesso, resultado.dados);
             
             if (salvamento && salvamento.sucesso) {
                 // Armazenar dados globalmente para uso no download
@@ -2208,11 +2208,11 @@ function mostrarEstadoVazioMapas() {
     `;
 }
 
-async function salvarMapaAutomaticamente(dadosResultado) {
+async function salvarMapaAutomaticamente(mes, ano, tipoProcesso, dadosMapa) {
     try {
         console.log('💾 Salvando mapa automaticamente...');
         
-        const resultado = await eel.salvar_mapa_mensal(dadosResultado)();
+        const resultado = await eel.salvar_mapa_mensal(mes, ano, tipoProcesso, dadosMapa)();
         
         if (resultado.sucesso) {
             console.log('✅ Mapa salvo com sucesso');

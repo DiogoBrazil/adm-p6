@@ -57,7 +57,7 @@ def registrar_todas_rotas(eel, db_manager, prazos_manager, guards, helpers):
     prazos.register(eel, db_manager, guard_login, prazos_manager)
     andamentos.register(eel, db_manager, guard_login, get_usuario_logado)
     indicios.register(eel, db_manager, guard_login)
-    mapas.register(eel, db_manager, guard_login)
+    mapas.register(eel, db_manager, guard_login, get_usuario_logado)
     relatorios.register(eel, db_manager, guard_login)
     auditorias.register(eel, db_manager, guard_login, guard_admin)
     
