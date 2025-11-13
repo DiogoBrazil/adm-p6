@@ -2398,11 +2398,11 @@ function exibirDownloadContainer() {
     if (container) {
         container.classList.remove('d-none');
         
-        // Resetar botão de download para estado inicial
+        // Resetar botão para estado inicial
         const btnDownload = document.getElementById('btnDownloadMapa');
         if (btnDownload) {
             btnDownload.disabled = false;
-            btnDownload.innerHTML = '<i class="bi bi-download me-2"></i>Baixar Mapa em PDF';
+            btnDownload.innerHTML = '<i class="bi bi-eye me-2"></i>Visualizar PDF';
         }
         
         // Scroll suave até o container
@@ -2424,9 +2424,9 @@ async function downloadMapaGerado() {
             return;
         }
         
-        console.log('📥 Iniciando download do mapa...');
+        console.log('� Abrindo visualização do mapa...');
         
-        // Desabilitar botão durante o download
+        // Desabilitar botão durante a geração
         const btnDownload = document.getElementById('btnDownloadMapa');
         const textoOriginal = btnDownload.innerHTML;
         btnDownload.disabled = true;
@@ -2437,16 +2437,10 @@ async function downloadMapaGerado() {
             ? construirConteudoPDFDeMapaSalvo(window.ultimoMapaGerado)
             : construirConteudoPDFParaDownload(window.ultimoMapaGerado);
         
-        // Gerar PDF (a função detecta automaticamente se precisa mesclar múltiplos tipos)
-        const pdf = await gerarDocumentoPDF(conteudo, conteudo.titulo || 'Mapa Mensal', { apenasRetornar: true });
+        // Gerar PDF e abrir no modal (sem o flag apenasRetornar, abre o modal automaticamente)
+        await gerarDocumentoPDF(conteudo, conteudo.titulo || 'Mapa Mensal');
         
-        // Fazer download do PDF
-        if (pdf) {
-            const nomeArquivo = `Mapa_Mensal_${window.tipoProcessoAtual}_${new Date().toISOString().split('T')[0]}.pdf`;
-            pdf.save(nomeArquivo);
-        }
-        
-        // Restaurar botão antes de ocultar
+        // Restaurar botão
         btnDownload.disabled = false;
         btnDownload.innerHTML = '<i class="bi bi-download me-2"></i>Baixar Mapa em PDF';
         
