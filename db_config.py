@@ -10,11 +10,11 @@ import os
 
 # Configurações do Banco de Dados PostgreSQL (env tem prioridade)
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', '192.168.0.137'),
-    'port': int(os.getenv('DB_PORT', 5432)),
-    'database': os.getenv('DB_NAME', 'app_db'),
-    'user': os.getenv('DB_USER', 'app_user'),
-    'password': os.getenv('DB_PASSWORD', 'p67bpm'),
+    'host': os.getenv('DB_HOST', '0.0.0.0'),
+    'port': int(os.getenv('DB_PORT', 5438)),
+    'database': os.getenv('DB_NAME', 'adm_p6_db'),
+    'user': os.getenv('DB_USER', 'adm_p6_user'),
+    'password': os.getenv('DB_PASSWORD', 'adm_p6_password'),
 }
 
 
