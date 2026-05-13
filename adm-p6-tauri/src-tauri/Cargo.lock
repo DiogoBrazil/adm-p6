@@ -15,6 +15,7 @@ dependencies = [
  "base64 0.22.1",
  "bcrypt",
  "chrono",
+ "dotenvy",
  "hex",
  "serde",
  "serde_json",

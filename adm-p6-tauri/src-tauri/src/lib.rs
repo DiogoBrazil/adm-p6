@@ -16,6 +16,7 @@ use app_state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    dotenvy::dotenv().ok();
     let state = AppState::from_env();
 
     tauri::Builder::default()
