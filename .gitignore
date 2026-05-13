@@ -2,3 +2,5 @@
 web/static/js/user_form.js.backup
 *.pyc
 .env
+adm-p6-tauri/src-tauri/target/*
+adm-p6-tauri/src-tauri/node_modules

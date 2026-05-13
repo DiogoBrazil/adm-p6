@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Rust build output
+src-tauri/target/
+
+# Vite build output
+dist/
+
+# Environment variables
+src-tauri/.env
+.env
+
+# Tauri generated
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
