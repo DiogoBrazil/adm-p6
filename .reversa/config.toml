@@ -1,0 +1,69 @@
+# Reversa — Configuração do Projeto
+# Este arquivo é gerenciado pelo instalador. Para customizações, edite config.user.toml
+
+[project]
+name = "adm-p6"
+version = "1.0.0"
+
+[user]
+name = "ST-RIBEIRO"
+chat_language = "pt-br"
+doc_language = "Português"
+
+[output]
+folder = "_reversa_sdd"
+
+[agents]
+installed = [
+  "reversa",
+  "reversa-scout",
+  "reversa-archaeologist",
+  "reversa-detective",
+  "reversa-architect",
+  "reversa-writer",
+  "reversa-reviewer",
+  "reversa-visor",
+  "reversa-data-master",
+  "reversa-design-system",
+  "reversa-agents-help",
+  "reversa-reconstructor",
+  "reversa-migrate",
+  "reversa-paradigm-advisor",
+  "reversa-curator",
+  "reversa-strategist",
+  "reversa-designer",
+  "reversa-screen-translator",
+  "reversa-inspector",
+  "reversa-requirements",
+  "reversa-clarify",
+  "reversa-plan",
+  "reversa-to-do",
+  "reversa-audit",
+  "reversa-quality",
+  "reversa-coding",
+  "reversa-principles",
+  "reversa-resume",
+  "reversa-pricing-profile",
+  "reversa-pricing-size",
+  "reversa-pricing-estimate"
+]
+
+[engines]
+installed = [
+  "claude-code",
+  "codex",
+  "gemini-cli",
+  "antigravity",
+  "opencode"
+]
+
+[analysis]
+answer_mode = "chat"
+doc_level = "completo"
+
+[specs]
+layout = "feature-folder"
+granularity = "module"
+custom_folders = []
+scout_suggestion = "module"
+decided_at = "2026-05-12T00:00:00Z"

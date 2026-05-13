@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 2,
+  "startedAt": "2026-05-12T22:51:48Z",
+  "lastCheckpoint": "2026-05-12T22:51:48Z",
+  "completedAgents": [
+    "paradigm_advisor",
+    "curator",
+    "strategist",
+    "designer",
+    "screen_translator",
+    "inspector"
+  ],
+  "pendingAgents": [
+  ],
+  "currentAgent": {
+    "agent": null,
+    "phase": null,
+    "status": "complete",
+    "topologyApproved": true,
+    "screenModeApproved": true
+  },
+  "pendingDecisions": [
+  ],
+  "artifacts": {
+    "migration_brief": {
+      "path": "_reversa_sdd/migration/migration_brief.md",
+      "sha256": "5e7e12ffaee8080152d312cce99c197adca1e56389359fa9370624e57bc63a5f"
+    },
+    "paradigm_decision": {
+      "path": "_reversa_sdd/migration/paradigm_decision.md",
+      "sha256": "e46d734d892c426e647ce16acba7222f9aa246e9d82ba80131f156330e984da5"
+    },
+    "target_business_rules": {
+      "path": "_reversa_sdd/migration/target_business_rules.md",
+      "sha256": "e4b1e1550e08a20d14f5dd4325124fb1166c73b4fbe23191829bc95ef40098f8"
+    },
+    "discard_log": {
+      "path": "_reversa_sdd/migration/discard_log.md",
+      "sha256": "277e37d6fbea56f6e152856e9627a29851c959735636e980206cf59f13eb3386"
+    },
+    "ambiguity_log": {
+      "path": "_reversa_sdd/migration/ambiguity_log.md",
+      "sha256": "8f40b9b58ff5d1e6ae604137d68512254389a2a04e9c657830b96c0e32b567aa"
+    },
+    "migration_strategy": {
+      "path": "_reversa_sdd/migration/migration_strategy.md",
+      "sha256": "567813723fbf053d69b4608a897ce9b439ee50c7a39c71ebc25d05c8c42f45e7"
+    },
+    "risk_register": {
+      "path": "_reversa_sdd/migration/risk_register.md",
+      "sha256": "2f02d57fa389462812f5979ecaf163cd7f9f8d2e4535e02936850e157d67237e"
+    },
+    "cutover_plan": {
+      "path": "_reversa_sdd/migration/cutover_plan.md",
+      "sha256": "92e838a09c5652c6f9c5406550c59a10c9207709aca84513531e0781e9748d5d"
+    },
+    "topology_decision": {
+      "path": "_reversa_sdd/migration/topology_decision.md",
+      "sha256": "db21e52967ab40c3ef51227e08a413aa433bc8b3bf45bdb5b99f4ad3bfa9a155"
+    },
+    "target_architecture": {
+      "path": "_reversa_sdd/migration/target_architecture.md",
+      "sha256": "b5a46c601a9b2b151b8cc8d616c410226336456f228a022f0abc39ae73b98655"
+    },
+    "target_domain_model": {
+      "path": "_reversa_sdd/migration/target_domain_model.md",
+      "sha256": "73e3c15e67757c1610073e1604f18635e015c1953a9a069dd5201c459b9da35c"
+    },
+    "target_data_model": {
+      "path": "_reversa_sdd/migration/target_data_model.md",
+      "sha256": "50e93b2812338086cc4d3ac2ce65fbe31cb87ad14ba0261adfda28268bba92cb"
+    },
+    "data_migration_plan": {
+      "path": "_reversa_sdd/migration/data_migration_plan.md",
+      "sha256": "bcfe34aca48a6b9cda7ec2842bc85fb1bacfc482ffe0fd729f1afac5bb12aeb1"
+    },
+    "screen_inventory": {
+      "path": "_reversa_sdd/screens/inventory.json",
+      "sha256": "ea6eb1e291ef48fdc003b0f80a61009fc8df1a77d56a1c8e52ba70296eef0d62"
+    },
+    "screen_modernization_decision": {
+      "path": "_reversa_sdd/migration/screen_modernization_decision.md",
+      "sha256": "4bd7c76338e9a323af3aa6ea2682ebd5953cb91bbf035cbae7df6b97ccabb505"
+    },
+    "target_screens": {
+      "path": "_reversa_sdd/migration/target_screens.md",
+      "sha256": "a28631ba59e6acafc0b179d3eb23caa10769675a8b80fa5bb447668fb96a653a"
+    },
+    "screen_deviation_log": {
+      "path": "_reversa_sdd/migration/screen_deviation_log.md",
+      "sha256": "2d9f4ac16e48e61db4b2259dfce1bfa0b2a4d0927f227b0eb256d2bba3a991b1"
+    },
+    "tokens_derived": {
+      "path": "_reversa_sdd/design-system/tokens-derived.md",
+      "sha256": "120fa0e762dbda94ac39af1e45613c2addeee7f5873bfbc6a1afd648bd9daaaa"
+    },
+    "golden_manifest": {
+      "path": "_reversa_sdd/screens/golden/manifest.yaml",
+      "sha256": "54c4772e1a17c7a9055e801b31936a90211f17dbac38280c28d2f7e4d22bac73"
+    },
+    "parity_specs": {
+      "path": "_reversa_sdd/migration/parity_specs.md",
+      "sha256": "b84e9e6cf9f7e9f1faa2e1d95de263914c681df7b08abcb6b0c07786ba0270cd"
+    },
+    "parity_tests": {
+      "path": "_reversa_sdd/migration/parity_tests",
+      "sha256": "3d7199fc95174a4bc2d157ef5e70e11cdd2d52d2456fea47cfdb0a20e909acee",
+      "count": 12
+    },
+    "handoff": {
+      "path": "_reversa_sdd/migration/handoff.md",
+      "sha256": "b9dee0a67880766490f366ed3578a153ffba4035485f39fc8e3e31f3a45dafae"
+    }
+  },
+  "auto": false,
+  "engine": "codex",
+  "reversaVersion": "1.2.38",
+  "briefPath": "_reversa_sdd/migration/migration_brief.md",
+  "expectedLegacyArtifacts": "references/expected_legacy_artifacts.yaml"
+}

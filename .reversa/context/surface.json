@@ -1,0 +1,142 @@
+{
+  "generated_at": "2026-05-12T00:00:00Z",
+  "project_root": "/home/diogo/DEV/adm-p6",
+  "project_name": "adm-p6",
+  "project_display_name": "Gestão P6 — SJD GESTOR",
+  "domain": "Gestão disciplinar da Polícia Militar de Rondônia",
+  "app_type": "desktop",
+  "languages": [
+    { "name": "Python", "extensions": [".py"], "file_count": 39 },
+    { "name": "JavaScript", "extensions": [".js"], "file_count": 37 },
+    { "name": "HTML", "extensions": [".html"], "file_count": 26 },
+    { "name": "CSS", "extensions": [".css"], "file_count": 15 }
+  ],
+  "primary_language": "Python",
+  "frameworks": [
+    { "name": "Eel", "version": "0.18.2", "source": "requirements.txt", "role": "desktop_shell" },
+    { "name": "Bottle", "version": "0.13.4", "source": "requirements.txt", "role": "embedded_http_eel" },
+    { "name": "SQLAlchemy", "version": "2.0.44", "source": "requirements.txt", "role": "orm_migrations" },
+    { "name": "Alembic", "version": "1.17.1", "source": "requirements.txt", "role": "db_migrations" },
+    { "name": "psycopg2-binary", "version": "2.9.11", "source": "requirements.txt", "role": "db_driver" },
+    { "name": "ReportLab", "version": "4.0.7", "source": "requirements.txt", "role": "pdf_generation" },
+    { "name": "PyInstaller", "version": "6.16.0", "source": "requirements.txt", "role": "packaging" },
+    { "name": "bcrypt", "version": "4.0.1", "source": "requirements.txt", "role": "password_hashing" }
+  ],
+  "package_manager": "pip",
+  "python_version": "3.12",
+  "entry_points": [
+    { "path": "main.py", "type": "app_entry", "description": "Inicializa Eel, PostgreSQL, registra 73 rotas, abre login.html" },
+    { "path": "web/login.html", "type": "ui_entry", "description": "Primeira tela carregada pelo Eel" },
+    { "path": "app/routers/__init__.py", "type": "router_registry", "description": "registrar_todas_rotas() — centraliza registro de @eel.expose" }
+  ],
+  "config_files": [
+    ".env.example",
+    "alembic.ini",
+    "docker-compose.yml",
+    "requirements.txt"
+  ],
+  "ci_cd": [],
+  "docker": {
+    "compose": "docker-compose.yml",
+    "services": ["postgres:16 → porta 5438"]
+  },
+  "packaging": {
+    "tool": "PyInstaller 6.16.0",
+    "output": "Gestao-P6.exe",
+    "platform": "Windows",
+    "icon": "web/static/images/SJD-GESTOR.ico"
+  },
+  "database_hints": [
+    { "path": "alembic/versions/", "type": "migrations_dir", "count": 6 },
+    { "path": "alembic.ini", "type": "alembic_config" },
+    { "path": "db_config.py", "type": "connection_manager" },
+    { "path": "app/services/db.py", "type": "database_service" }
+  ],
+  "database": {
+    "engine": "PostgreSQL",
+    "version": "16",
+    "driver": "psycopg2-binary",
+    "port": 5438,
+    "database_name": "adm_p6_db",
+    "migration_policy": "reuse_unchanged",
+    "tables_detected": ["usuarios", "processos_procedimentos", "auditoria"]
+  },
+  "test_framework": "pytest",
+  "test_file_count": 0,
+  "modules": [
+    "auth",
+    "catalogos",
+    "rdpm",
+    "art29",
+    "processos",
+    "usuarios",
+    "prazos",
+    "andamentos",
+    "indicios",
+    "mapas",
+    "relatorios",
+    "auditorias"
+  ],
+  "module_details": {
+    "auth": { "router": "app/routers/auth.py", "functions": 3, "description": "Login, logout, sessão" },
+    "catalogos": { "router": "app/routers/catalogos.py", "functions": 2, "description": "Municípios e distritos de Rondônia" },
+    "rdpm": { "router": "app/routers/rdpm.py", "functions": 5, "description": "Catálogo de transgressões RDPM" },
+    "art29": { "router": "app/routers/art29.py", "functions": 5, "description": "Catálogo de infrações Art. 29 do Estatuto PM" },
+    "processos": { "router": "app/routers/processos.py", "functions": 22, "description": "PAD, CD, CJ, IPM, TA, AIT, RI — gestão completa" },
+    "usuarios": { "router": "app/routers/usuarios.py", "functions": 10, "description": "Gestão de policiais (Oficiais e Praças)" },
+    "prazos": { "router": "app/routers/prazos.py", "functions": 8, "description": "Prazos processuais e prorrogações" },
+    "andamentos": { "router": "app/routers/andamentos.py", "functions": 6, "description": "Andamentos e movimentações dos processos" },
+    "indicios": { "router": "app/routers/indicios.py", "functions": 7, "description": "Indícios por PM envolvido" },
+    "mapas": { "router": "app/routers/mapas.py", "functions": 6, "description": "Mapas mensais de ocorrências" },
+    "relatorios": { "router": "app/routers/relatorios.py", "functions": 7, "description": "Geração de PDFs e relatórios" },
+    "auditorias": { "router": "app/routers/auditorias.py", "functions": 5, "description": "Trilha de auditoria (CREATE/UPDATE/DELETE)" }
+  },
+  "eel_exposed_functions": {
+    "total": 73,
+    "by_module": {
+      "processos": 22,
+      "auth": 12,
+      "outros": 10,
+      "prazos_andamentos": 10,
+      "mapas_relatorios": 8,
+      "indicios": 7,
+      "estatisticas": 2,
+      "catalogos": 1,
+      "auditorias": 1
+    },
+    "reference": "ANALISE_FUNCOES_EEL.md"
+  },
+  "external_integrations": [],
+  "auth": {
+    "mechanism": "in-memory session (global variable)",
+    "password_hash": "bcrypt (with SHA-256 legacy migration)",
+    "roles": ["admin", "comum"],
+    "user_types": ["Oficial", "Praça"],
+    "guards": ["_guard_login", "_guard_admin"]
+  },
+  "total_files": 133,
+  "organization_suggestion": {
+    "granularity": "module",
+    "rationale": "O projeto tem 12 routers em app/routers/ nomeados por domínio (auth, catalogos, rdpm, art29, processos, usuarios, prazos, andamentos, indicios, mapas, relatorios, auditorias) — sinal claro de organização por módulo.",
+    "signals": [
+      {
+        "type": "top_level_domain_folders",
+        "evidence": [
+          "app/routers/auth.py",
+          "app/routers/catalogos.py",
+          "app/routers/rdpm.py",
+          "app/routers/art29.py",
+          "app/routers/processos.py",
+          "app/routers/usuarios.py",
+          "app/routers/prazos.py",
+          "app/routers/andamentos.py",
+          "app/routers/indicios.py",
+          "app/routers/mapas.py",
+          "app/routers/relatorios.py",
+          "app/routers/auditorias.py"
+        ]
+      }
+    ],
+    "features": []
+  }
+}

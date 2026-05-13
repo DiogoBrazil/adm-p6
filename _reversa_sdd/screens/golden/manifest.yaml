@@ -1,0 +1,24 @@
+schemaVersion: 1
+generatedAt: 2026-05-12T22:51:48Z
+reversa:
+  version: "1.2.38"
+producedBy: screen-translator
+sourcePlatform: html-eel
+targetPlatform: tauri
+oracleAvailable: false
+oracleHash: null
+oracleCommand: null
+
+normalizationRules:
+  - lineEndings: "\n"
+  - trimTrailingSpaces: true
+  - stripAnsiColors: false
+  - normalizeUtf8: true
+
+screens: []
+
+nonDeterministic: []
+
+skipped:
+  reason: "Modo modernizado aprovado; sem oraculo visual deterministico e sem screenshots legados no SDD. Inspector deve usar parity semantica."
+  emittedAt: 2026-05-12T22:51:48Z
