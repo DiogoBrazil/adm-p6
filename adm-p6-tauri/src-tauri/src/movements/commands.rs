@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth::guards::require_session;
 use crate::error::AppError;
-use crate::movements::domain::AddMovementRequest;
+use crate::movements::domain::{normalize_andamentos, AddMovementRequest};
 use crate::response::{from_result, ApiResponse};
 
 #[tauri::command]
@@ -43,12 +43,12 @@ pub async fn movements_list(
                 .bind(processo_id)
                 .fetch_one(&pool)
                 .await?;
-        let list: Value = row
+        let raw: Vec<Value> = row
             .0
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok())
-            .unwrap_or_else(|| Value::Array(vec![]));
-        Ok(list)
+            .unwrap_or_default();
+        Ok(Value::Array(normalize_andamentos(raw)))
     }.await).await)
 }
 

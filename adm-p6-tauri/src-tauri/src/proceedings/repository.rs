@@ -377,11 +377,9 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
     .fetch_optional(pool)
     .await?;
 
-    let andamentos: Vec<serde_json::Value> = row
-        .andamentos
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default();
+    let andamentos: Vec<serde_json::Value> = crate::movements::domain::normalize_andamentos(
+        row.andamentos.as_deref().and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default(),
+    );
 
     let historico_encarregados: Vec<serde_json::Value> = row
         .historico_encarregados

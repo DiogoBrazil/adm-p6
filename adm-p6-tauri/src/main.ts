@@ -26,6 +26,7 @@ type Route = {
   printable?: boolean;
   searchable?: boolean;
   detailCommand?: string;
+  itemsKey?: string;
 };
 
 type CrudField = {
@@ -54,7 +55,8 @@ const routes: Route[] = [
     csvExport: { tipoRelatorio: "processos" },
     printable: true,
     searchable: true,
-    detailCommand: "proceedings_get"
+    detailCommand: "proceedings_get",
+    itemsKey: "items"
   },
   {
     path: "/prazos",
@@ -197,7 +199,7 @@ const crudConfigs: Record<string, CrudConfig> = {
   "/catalogos/art29": {
     saveCommand: "legal_catalogs_save_art29",
     deleteCommand: "legal_catalogs_delete_art29",
-    idKind: "number",
+    idKind: "string",
     fields: [
       { name: "inciso", label: "Inciso", kind: "text", required: true },
       { name: "texto", label: "Texto", kind: "textarea", required: true }
@@ -216,7 +218,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       },
       {
         name: "tipo_detalhe", label: "Tipo", kind: "select", required: true,
-        options: ["IPM", "PADS", "SV", "PAD", "Sindicância", "Feito Preliminar", "Outros"]
+        options: ["PAD", "PADE", "CD", "CJ", "SR", "SV", "IPM", "FP", "CP", "PADS"]
       },
       {
         name: "documento_iniciador", label: "Doc. Iniciador", kind: "select", required: true,
@@ -239,12 +241,12 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "data_conclusao", label: "Data de Conclusão", kind: "date" },
       {
         name: "solucao_tipo", label: "Tipo de Solução", kind: "select",
-        options: ["Arquivamento", "Punição", "Absolvição", "Encaminhamento", "Outros"]
+        options: ["Punido", "Absolvido", "Arquivado", "Homologado", "Avocado"]
       },
       { name: "solucao_final", label: "Solução Final", kind: "textarea" },
       {
         name: "penalidade_tipo", label: "Penalidade", kind: "select",
-        options: ["Prisão", "Detenção", "Advertência", "Repreensão", "Outros"]
+        options: ["Prisao", "Detencao", "Advertencia", "Reprimenda"]
       },
       { name: "penalidade_dias", label: "Dias de Penalidade", kind: "number" }
     ]
@@ -370,7 +372,7 @@ function tableFrom(data: unknown, route: Route): string {
         <tbody>
           ${data.map((row, index) => `
             <tr data-row-index="${index}">
-              ${columns.map((column) => `<td>${escapeHtml(String((row as Record<string, unknown>)[column] ?? ""))}</td>`).join("")}
+              ${columns.map((column) => `<td>${escapeHtml(cellDisplay((row as Record<string, unknown>)[column]))}</td>`).join("")}
               ${hasCrud ? `
                 <td class="row-actions">
                   <button class="secondary small" data-edit-index="${index}">Editar</button>
@@ -593,15 +595,19 @@ async function renderRoute() {
     : {};
 
   const response = await call<unknown>(route.command, commandArgs);
-  currentRows = Array.isArray(response.data) ? response.data as Record<string, unknown>[] : [];
+  const rawData = response.data;
+  const listData = route.itemsKey
+    ? (rawData as Record<string, unknown>)?.[route.itemsKey]
+    : rawData;
+  currentRows = Array.isArray(listData) ? listData as Record<string, unknown>[] : [];
   const actions = crudActionBar(route);
   const extra = exportBar(route);
 
-  const isDashboard = route.path === "/dashboard" && !Array.isArray(response.data);
+  const isDashboard = route.path === "/dashboard" && !Array.isArray(rawData);
   const content = response.ok
     ? isDashboard
-      ? renderDashboard(response.data as Record<string, unknown>)
-      : tableFrom(response.data, route)
+      ? renderDashboard(rawData as Record<string, unknown>)
+      : tableFrom(listData, route)
     : `<p class="error">${response.error}</p>`;
 
   shell(`
@@ -632,6 +638,11 @@ function escapeHtml(value: string) {
     '"': "&quot;",
     "'": "&#039;"
   }[char] ?? char));
+}
+
+function cellDisplay(val: unknown): string {
+  if (typeof val === "boolean") return val ? "sim" : "não";
+  return String(val ?? "");
 }
 
 function renderDashboard(data: Record<string, unknown>) {
@@ -692,13 +703,20 @@ async function renderDetail(route: Route) {
     ["penalidade_tipo", "Penalidade"], ["penalidade_dias", "Dias"],
   ] as const;
 
-  const infoRows = INFO_FIELDS
-    .filter(([key]) => { const v = data[key]; return v !== null && v !== undefined && String(v).trim() !== ""; })
-    .map(([key, label]) => {
-      const v = data[key];
-      const display = typeof v === "boolean" ? (v ? "Sim" : "Não") : String(v);
-      return `<tr><th>${label}</th><td>${escapeHtml(display)}</td></tr>`;
-    }).join("");
+  const infoRows = isProceeding
+    ? INFO_FIELDS
+        .filter(([key]) => { const v = data[key]; return v !== null && v !== undefined && String(v).trim() !== ""; })
+        .map(([key, label]) => {
+          const v = data[key];
+          const display = typeof v === "boolean" ? (v ? "Sim" : "Não") : String(v);
+          return `<tr><th>${label}</th><td>${escapeHtml(display)}</td></tr>`;
+        }).join("")
+    : Object.entries(data)
+        .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== "" && typeof v !== "object")
+        .map(([key, v]) => {
+          const display = typeof v === "boolean" ? (v ? "Sim" : "Não") : String(v);
+          return `<tr><th>${escapeHtml(key)}</th><td>${escapeHtml(display)}</td></tr>`;
+        }).join("");
 
   const movementsHtml = isProceeding ? `
     <div class="detail-section">
@@ -885,7 +903,7 @@ async function renderDetail(route: Route) {
 
   document.querySelector<HTMLButtonElement>("#btn-view-pdf")?.addEventListener("click", async () => {
     const resp = await call<{ conteudo: string | null; content_type: string | null }>(
-      "proceedings_get_pdf", { id: detailId }
+      "proceedings_get_pdf", { processo_id: detailId, include_content: true }
     );
     if (!resp.ok || !resp.data?.conteudo) { alert("Falha ao carregar PDF."); return; }
     const bytes = Uint8Array.from(atob(resp.data.conteudo), (c) => c.charCodeAt(0));
@@ -895,7 +913,7 @@ async function renderDetail(route: Route) {
 
   document.querySelector<HTMLButtonElement>("#btn-remove-pdf")?.addEventListener("click", async () => {
     if (!confirm("Remover o PDF anexado?")) return;
-    const resp = await call("proceedings_remove_pdf", { id: detailId });
+    const resp = await call("proceedings_remove_pdf", { processo_id: detailId });
     if (!resp.ok) { alert(resp.error ?? "Falha ao remover PDF."); return; }
     void renderDetail(route);
   });
@@ -1368,6 +1386,21 @@ async function renderUsersList() {
   const items = resp.data?.items ?? [];
   const total = resp.data?.total ?? 0;
   currentRows = items as Record<string, unknown>[];
+  const COL_ALIASES: Record<string, string> = {
+    posto_graduacao: "POSTO/GRADUACAO",
+    tipo_usuario: "TIPO",
+    is_encarregado: "ENCARREGADO",
+    is_operador: "OPERADOR",
+  };
+  const displayItems = items.map((raw) => {
+    const r = raw as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (k === "id") continue;
+      out[COL_ALIASES[k] ?? k] = v;
+    }
+    return out;
+  });
   const usersRoute = routes.find((r) => r.path === "/usuarios/lista")!;
   const config = crudConfigs["/usuarios/lista"];
 
@@ -1385,7 +1418,7 @@ async function renderUsersList() {
         <button type="submit">Buscar</button>
         ${searchTerm ? `<button type="button" class="secondary small" id="clear-search">Limpar</button>` : ""}
       </form>
-      ${resp.ok ? tableFrom(items, usersRoute) : `<p class="error">${resp.error}</p>`}
+      ${resp.ok ? tableFrom(displayItems, usersRoute) : `<p class="error">${resp.error}</p>`}
     </section>
   `);
 
@@ -1438,10 +1471,10 @@ async function renderUserDetail(route: Route) {
 
   const [userResp, statsResp, respResp, escrivaoResp, envolvResp] = await Promise.all([
     call<Record<string, unknown>>("users_get", { id: detailId }),
-    call<UserStats>("users_statistics", { user_id: detailId }),
-    call<ProcItem[]>("users_proceedings_responsible", { user_id: detailId }),
-    call<ProcItem[]>("users_proceedings_escrivao", { user_id: detailId }),
-    call<ProcItem[]>("users_proceedings_involved", { user_id: detailId }),
+    call<UserStats>("users_statistics", { id: detailId }),
+    call<ProcItem[]>("users_proceedings_responsible", { id: detailId }),
+    call<ProcItem[]>("users_proceedings_escrivao", { id: detailId }),
+    call<ProcItem[]>("users_proceedings_involved", { id: detailId }),
   ]);
 
   const user = userResp.data ?? {};
@@ -1495,10 +1528,16 @@ async function renderUserDetail(route: Route) {
         ${statCard("PADS (enc.)", stats.encarregado_pads)}
         ${statCard("IPM (enc.)", stats.encarregado_ipm)}
         ${statCard("PAD (enc.)", stats.encarregado_pad)}
+        ${statCard("PADE (enc.)", stats.encarregado_pade)}
         ${statCard("Feito Prel. (enc.)", stats.encarregado_feito_preliminar)}
+        ${statCard("CP (enc.)", stats.encarregado_cp)}
+        ${statCard("CD (enc.)", stats.encarregado_cd)}
+        ${statCard("CJ (enc.)", stats.encarregado_cj)}
         ${statCard("Escrivão", stats.escrivao)}
-        ${statCard("Envolvido (sindicado)", stats.envolvido_sindicado)}
-        ${statCard("Envolvido (acusado)", stats.envolvido_acusado)}
+        ${statCard("Sindicado", stats.envolvido_sindicado)}
+        ${statCard("Acusado", stats.envolvido_acusado)}
+        ${statCard("Indiciado", stats.envolvido_indiciado)}
+        ${statCard("Investigado", stats.envolvido_investigado)}
       </div>
 
       <div class="detail-section">

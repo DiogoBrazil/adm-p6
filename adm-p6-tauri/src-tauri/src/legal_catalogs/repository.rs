@@ -86,7 +86,31 @@ pub async fn soft_delete_crime(tx: &mut Transaction<'_, Postgres>, id: &str) -> 
 pub async fn save_transgression(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveTransgressionRequest,
-) -> Result<i32, sqlx::Error> {
+) -> Result<i32, AppError> {
+    if let (Some(grav), Some(inc)) = (request.gravidade.as_deref(), request.inciso.as_deref()) {
+        if !grav.is_empty() && !inc.is_empty() {
+            let (count,): (i64,) = sqlx::query_as(
+                r#"
+                SELECT count(*)::bigint FROM transgressoes
+                WHERE lower(coalesce(gravidade,'')) = lower($1)
+                  AND lower(coalesce(inciso,'')) = lower($2)
+                  AND ($3::int IS NULL OR id != $3)
+                "#,
+            )
+            .bind(grav)
+            .bind(inc)
+            .bind(request.id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if count > 0 {
+                return Err(AppError::Domain(format!(
+                    "ja existe transgressao com gravidade '{}' e inciso '{}'",
+                    grav, inc
+                )));
+            }
+        }
+    }
+
     if let Some(id) = request.id {
         sqlx::query(
             r#"
@@ -147,7 +171,26 @@ pub async fn hard_delete_transgression(tx: &mut Transaction<'_, Postgres>, id: i
 pub async fn save_art29(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveArt29Request,
-) -> Result<String, sqlx::Error> {
+) -> Result<String, AppError> {
+    let (count,): (i64,) = sqlx::query_as(
+        r#"
+        SELECT count(*)::bigint FROM infracoes_estatuto_art29
+        WHERE lower(inciso) = lower($1)
+          AND coalesce(ativo, true) = true
+          AND ($2::text IS NULL OR id != $2)
+        "#,
+    )
+    .bind(&request.inciso)
+    .bind(request.id.as_deref())
+    .fetch_one(&mut **tx)
+    .await?;
+    if count > 0 {
+        return Err(AppError::Domain(format!(
+            "ja existe infracao ativa com inciso '{}'",
+            request.inciso
+        )));
+    }
+
     if let Some(id) = request.id.as_deref() {
         sqlx::query("UPDATE infracoes_estatuto_art29 SET inciso = $2, texto = $3 WHERE id = $1")
             .bind(id)
@@ -195,7 +238,7 @@ pub async fn get_crime_by_id(pool: &PgPool, id: &str) -> Result<Option<CrimeItem
 pub async fn list_transgressions(pool: &PgPool, limit: i64) -> Result<Vec<TransgressionItem>, sqlx::Error> {
     sqlx::query_as::<_, TransgressionItem>(
         r#"
-        SELECT id, artigo, gravidade, inciso, texto, ativo
+        SELECT id, artigo, initcap(gravidade) AS gravidade, inciso, texto, ativo
         FROM transgressoes
         WHERE coalesce(ativo, true) = true
         ORDER BY artigo NULLS LAST, inciso NULLS LAST
