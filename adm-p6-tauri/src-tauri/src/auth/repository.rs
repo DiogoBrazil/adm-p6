@@ -5,11 +5,13 @@ use super::domain::UserAuthRow;
 pub async fn find_operator_by_email(pool: &PgPool, email: &str) -> Result<Option<UserAuthRow>, sqlx::Error> {
     sqlx::query_as::<_, UserAuthRow>(
         r#"
-        SELECT id, nome, email, senha, perfil, is_operador, ativo
-        FROM usuarios
-        WHERE lower(email) = lower($1)
-          AND coalesce(is_operador, false) = true
-          AND coalesce(ativo, true) = true
+        SELECT u.id::text AS id, u.nome, u.email, u.senha,
+               pa.codigo AS perfil, u.is_operador, u.ativo
+        FROM usuarios u
+        LEFT JOIN perfis_acesso pa ON u.perfil_id = pa.id
+        WHERE lower(u.email) = lower($1)
+          AND coalesce(u.is_operador, false) = true
+          AND coalesce(u.ativo, true) = true
         LIMIT 1
         "#,
     )

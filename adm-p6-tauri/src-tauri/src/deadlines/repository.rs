@@ -1,6 +1,5 @@
 use chrono::NaiveDate;
 use sqlx::{PgPool, Postgres, Transaction};
-use uuid::Uuid;
 
 use crate::error::AppError;
 
@@ -24,14 +23,19 @@ pub async fn dashboard(pool: &PgPool) -> Result<DeadlineSummary, sqlx::Error> {
 pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>, sqlx::Error> {
     sqlx::query_as::<_, DeadlineItem>(
         r#"
-        SELECT id, processo_id, tipo_prazo, data_inicio, data_vencimento, dias_adicionados,
-               motivo, autorizado_por, autorizado_tipo, ativo,
-               numero_portaria, data_portaria, ordem_prorrogacao
-        FROM prazos_processo
-        WHERE processo_id = $1
+        SELECT pr.id::text AS id, pr.processo_id::text AS processo_id,
+               tp.codigo AS tipo_prazo,
+               pr.data_inicio, pr.data_vencimento, pr.dias_adicionados,
+               pr.motivo, pr.autorizado_por,
+               tda.codigo AS autorizado_tipo,
+               pr.ativo, pr.numero_portaria, pr.data_portaria, pr.ordem_prorrogacao
+        FROM prazos_processo pr
+        JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
+        LEFT JOIN tipo_doc_autorizacao_prazo tda ON tda.id = pr.autorizado_tipo_id
+        WHERE pr.processo_id = $1::uuid
         ORDER BY
-            CASE tipo_prazo WHEN 'inicial' THEN 0 ELSE 1 END,
-            COALESCE(ordem_prorrogacao, 0)
+            CASE tp.codigo WHEN 'inicial' THEN 0 ELSE 1 END,
+            COALESCE(pr.ordem_prorrogacao, 0)
         "#,
     )
     .bind(processo_id)
@@ -45,13 +49,13 @@ pub async fn upcoming(
 ) -> Result<Vec<UpcomingDeadlineItem>, sqlx::Error> {
     sqlx::query_as::<_, UpcomingDeadlineItem>(
         r#"
-        SELECT pr.processo_id,
+        SELECT pr.processo_id::text AS processo_id,
                p.numero AS numero_processo,
                p.tipo_detalhe,
                pr.data_vencimento,
                (pr.data_vencimento - CURRENT_DATE)::integer AS dias_restantes
         FROM prazos_processo pr
-        JOIN processos_procedimentos p ON p.id = pr.processo_id
+        JOIN v_processos p ON p.id = pr.processo_id
         WHERE coalesce(pr.ativo, true) = true
           AND coalesce(p.ativo, true) = true
           AND coalesce(p.concluido, false) = false
@@ -70,7 +74,7 @@ pub async fn close_active(
     processo_id: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE processo_id = $1 AND coalesce(ativo, true) = true",
+        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE processo_id = $1::uuid AND coalesce(ativo, true) = true",
     )
     .bind(processo_id)
     .execute(&mut **tx)
@@ -82,9 +86,8 @@ pub async fn add_extension(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddExtensionRequest,
 ) -> Result<String, AppError> {
-    // Fetch the current active deadline
     let current = sqlx::query_as::<_, (String, NaiveDate)>(
-        "SELECT id, data_vencimento FROM prazos_processo WHERE processo_id = $1 AND coalesce(ativo, true) = true ORDER BY created_at DESC NULLS LAST LIMIT 1",
+        "SELECT id::text AS id, data_vencimento FROM prazos_processo WHERE processo_id = $1::uuid AND coalesce(ativo, true) = true ORDER BY created_at DESC NULLS LAST LIMIT 1",
     )
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
@@ -93,39 +96,41 @@ pub async fn add_extension(
 
     let (current_id, current_venc) = current;
 
-    // Deactivate current deadline
     sqlx::query(
-        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
     )
     .bind(&current_id)
     .execute(&mut **tx)
     .await?;
 
-    // Calculate new dates: start = day after current vencimento; end = start + dias - 1
     let new_start = current_venc + chrono::Duration::days(1);
     let new_end = new_start + chrono::Duration::days((request.dias_prorrogacao - 1).max(0) as i64);
 
-    // Get next prorrogacao order
     let max_ordem: (Option<i32>,) = sqlx::query_as(
-        "SELECT MAX(ordem_prorrogacao) FROM prazos_processo WHERE processo_id = $1 AND tipo_prazo = 'prorrogacao'",
+        "SELECT MAX(ordem_prorrogacao) FROM prazos_processo WHERE processo_id = $1::uuid AND tipo_prazo_id = (SELECT id FROM tipos_prazo WHERE codigo = 'prorrogacao')",
     )
     .bind(&request.processo_id)
     .fetch_one(&mut **tx)
     .await?;
     let next_ordem = max_ordem.0.unwrap_or(0) + 1;
 
-    let new_id = Uuid::new_v4().to_string();
-    sqlx::query(
+    let new_id: String = sqlx::query_scalar(
         r#"
         INSERT INTO prazos_processo (
-            id, processo_id, tipo_prazo, data_inicio, data_vencimento, dias_adicionados,
-            motivo, autorizado_por, autorizado_tipo, ativo,
+            processo_id, tipo_prazo_id, data_inicio, data_vencimento, dias_adicionados,
+            motivo, autorizado_por, autorizado_tipo_id, ativo,
             numero_portaria, data_portaria, ordem_prorrogacao, created_at
         )
-        VALUES ($1, $2, 'prorrogacao', $3, $4, $5, $6, $7, $8, true, $9, $10, $11, CURRENT_TIMESTAMP)
+        VALUES (
+            $1::uuid,
+            (SELECT id FROM tipos_prazo WHERE codigo = 'prorrogacao'),
+            $2, $3, $4, $5, $6,
+            (SELECT id FROM tipo_doc_autorizacao_prazo WHERE codigo = $7),
+            true, $8, $9, $10, CURRENT_TIMESTAMP
+        )
+        RETURNING id::text
         "#,
     )
-    .bind(&new_id)
     .bind(&request.processo_id)
     .bind(new_start)
     .bind(new_end)
@@ -136,7 +141,7 @@ pub async fn add_extension(
     .bind(request.numero_portaria.as_deref())
     .bind(request.data_portaria)
     .bind(next_ordem)
-    .execute(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(new_id)
@@ -145,14 +150,14 @@ pub async fn add_extension(
 pub async fn overdue(pool: &PgPool) -> Result<Vec<OverdueDeadlineItem>, sqlx::Error> {
     sqlx::query_as::<_, OverdueDeadlineItem>(
         r#"
-        SELECT pr.processo_id,
+        SELECT pr.processo_id::text AS processo_id,
                p.numero AS numero_processo,
                p.tipo_detalhe,
                u.nome  AS responsavel_nome,
                pr.data_vencimento,
                (CURRENT_DATE - pr.data_vencimento)::integer AS dias_atraso
         FROM prazos_processo pr
-        JOIN processos_procedimentos p ON p.id = pr.processo_id
+        JOIN v_processos p ON p.id = pr.processo_id
         LEFT JOIN usuarios u ON u.id = p.responsavel_id
         WHERE coalesce(pr.ativo, true) = true
           AND coalesce(p.ativo, true) = true
@@ -173,20 +178,21 @@ pub async fn report(
     let ano = filter.ano.map(|a| a as i64);
     sqlx::query_as::<_, DeadlineReportItem>(
         r#"
-        SELECT pr.processo_id,
+        SELECT pr.processo_id::text AS processo_id,
                p.numero  AS numero_processo,
                p.tipo_detalhe,
                u.nome    AS responsavel_nome,
                pr.data_vencimento,
                (pr.data_vencimento - CURRENT_DATE)::integer AS dias_restantes,
-               pr.tipo_prazo
+               tp.codigo AS tipo_prazo
         FROM prazos_processo pr
-        JOIN processos_procedimentos p ON p.id = pr.processo_id
+        JOIN v_processos p ON p.id = pr.processo_id
+        JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
         LEFT JOIN usuarios u ON u.id = p.responsavel_id
         WHERE coalesce(pr.ativo, true) = true
           AND coalesce(p.ativo, true) = true
           AND ($1::text IS NULL OR p.tipo_detalhe = $1)
-          AND ($2::text IS NULL OR p.responsavel_id = $2)
+          AND ($2::text IS NULL OR p.responsavel_id = $2::uuid)
           AND (
                $3::boolean IS NULL
                OR ($3 = true  AND pr.data_vencimento <  CURRENT_DATE)

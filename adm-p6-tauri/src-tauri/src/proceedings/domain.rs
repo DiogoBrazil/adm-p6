@@ -39,22 +39,18 @@ pub struct CreateProceedingRequest {
     pub data_instauracao: Option<NaiveDate>,
     pub data_recebimento: Option<NaiveDate>,
     pub escrivao_id: Option<String>,
-    pub status_pm: Option<String>,
-    pub nome_pm_id: Option<String>,
     pub nome_vitima: Option<String>,
     pub natureza_processo: Option<String>,
-    pub natureza_procedimento: Option<String>,
     pub resumo_fatos: Option<String>,
     pub numero_portaria: Option<String>,
     pub numero_memorando: Option<String>,
     pub numero_feito: Option<String>,
     pub numero_rgf: Option<String>,
-    pub numero_controle: Option<String>,
     pub concluido: Option<bool>,
     pub data_conclusao: Option<NaiveDate>,
     pub solucao_final: Option<String>,
-    pub transgressoes_ids: Option<Vec<i32>>,
     pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_remessa_comissao: Option<NaiveDate>,
     pub data_julgamento: Option<NaiveDate>,
     pub solucao_tipo: Option<String>,
     pub penalidade_tipo: Option<String>,
@@ -62,7 +58,8 @@ pub struct CreateProceedingRequest {
     pub presidente_id: Option<String>,
     pub interrogante_id: Option<String>,
     pub escrivao_processo_id: Option<String>,
-    pub motorista_id: Option<String>,
+    pub unidade_deprecada: Option<String>,
+    pub deprecante: Option<String>,
     pub pms_envolvidos: Option<Vec<String>>,
 }
 
@@ -70,13 +67,6 @@ impl CreateProceedingRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.tipo_detalhe == "IPPM" {
             return Err("Tipo IPPM nao e permitido neste sistema".to_string());
-        }
-
-        if self.tipo_detalhe == "PADS" {
-            let empty = self.transgressoes_ids.as_ref().is_none_or(|v| v.is_empty());
-            if empty {
-                return Err("PADS exige ao menos uma transgressao associada".to_string());
-            }
         }
 
         let today = chrono::Local::now().date_naive();
@@ -120,7 +110,6 @@ impl CreateProceedingRequest {
         Ok(())
     }
 
-    // Prazo base em dias conforme regras do legado
     pub fn deadline_days(&self) -> i32 {
         if self.documento_iniciador == "Feito Preliminar" {
             return 15;
@@ -145,7 +134,6 @@ pub struct PmEnvolvido {
     pub nome: Option<String>,
     pub posto_graduacao: Option<String>,
     pub matricula: Option<String>,
-    pub pm_tipo: Option<String>,
     pub status_pm: Option<String>,
 }
 
@@ -172,22 +160,18 @@ pub struct ProceedingDetail {
     pub data_instauracao: Option<NaiveDate>,
     pub data_recebimento: Option<NaiveDate>,
     pub escrivao_id: Option<String>,
-    pub status_pm: Option<String>,
-    pub nome_pm_id: Option<String>,
     pub nome_vitima: Option<String>,
     pub natureza_processo: Option<String>,
-    pub natureza_procedimento: Option<String>,
     pub resumo_fatos: Option<String>,
     pub numero_portaria: Option<String>,
     pub numero_memorando: Option<String>,
     pub numero_feito: Option<String>,
     pub numero_rgf: Option<String>,
-    pub numero_controle: Option<String>,
     pub concluido: Option<bool>,
     pub data_conclusao: Option<NaiveDate>,
     pub solucao_final: Option<String>,
-    pub transgressoes_ids: Option<String>,
     pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_remessa_comissao: Option<NaiveDate>,
     pub data_julgamento: Option<NaiveDate>,
     pub solucao_tipo: Option<String>,
     pub penalidade_tipo: Option<String>,
@@ -195,13 +179,14 @@ pub struct ProceedingDetail {
     pub presidente_id: Option<String>,
     pub interrogante_id: Option<String>,
     pub escrivao_processo_id: Option<String>,
-    pub motorista_id: Option<String>,
+    pub unidade_deprecada: Option<String>,
+    pub deprecante: Option<String>,
+    pub indicios_categorias: Option<Value>,
     // joined user names
     pub responsavel_nome: Option<String>,
     pub responsavel_posto: Option<String>,
     pub responsavel_matricula: Option<String>,
     pub escrivao_nome: Option<String>,
-    pub nome_pm_nome: Option<String>,
     pub presidente_nome: Option<String>,
     pub interrogante_nome: Option<String>,
     pub escrivao_processo_nome: Option<String>,
@@ -311,7 +296,6 @@ pub struct ProceedingListResult {
     pub total: i64,
 }
 
-// UpdateProceedingRequest mirrors CreateProceedingRequest with a mandatory id
 #[derive(Debug, Deserialize)]
 pub struct UpdateProceedingRequest {
     pub id: String,
@@ -326,22 +310,18 @@ pub struct UpdateProceedingRequest {
     pub data_instauracao: Option<NaiveDate>,
     pub data_recebimento: Option<NaiveDate>,
     pub escrivao_id: Option<String>,
-    pub status_pm: Option<String>,
-    pub nome_pm_id: Option<String>,
     pub nome_vitima: Option<String>,
     pub natureza_processo: Option<String>,
-    pub natureza_procedimento: Option<String>,
     pub resumo_fatos: Option<String>,
     pub numero_portaria: Option<String>,
     pub numero_memorando: Option<String>,
     pub numero_feito: Option<String>,
     pub numero_rgf: Option<String>,
-    pub numero_controle: Option<String>,
     pub concluido: Option<bool>,
     pub data_conclusao: Option<NaiveDate>,
     pub solucao_final: Option<String>,
-    pub transgressoes_ids: Option<Vec<i32>>,
     pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_remessa_comissao: Option<NaiveDate>,
     pub data_julgamento: Option<NaiveDate>,
     pub solucao_tipo: Option<String>,
     pub penalidade_tipo: Option<String>,
@@ -349,7 +329,8 @@ pub struct UpdateProceedingRequest {
     pub presidente_id: Option<String>,
     pub interrogante_id: Option<String>,
     pub escrivao_processo_id: Option<String>,
-    pub motorista_id: Option<String>,
+    pub unidade_deprecada: Option<String>,
+    pub deprecante: Option<String>,
     pub pms_envolvidos: Option<Vec<String>>,
 }
 
@@ -357,12 +338,6 @@ impl UpdateProceedingRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.tipo_detalhe == "IPPM" {
             return Err("Tipo IPPM nao e permitido neste sistema".to_string());
-        }
-        if self.tipo_detalhe == "PADS" {
-            let empty = self.transgressoes_ids.as_ref().is_none_or(|v| v.is_empty());
-            if empty {
-                return Err("PADS exige ao menos uma transgressao associada".to_string());
-            }
         }
         let today = chrono::Local::now().date_naive();
         if let Some(d) = self.data_instauracao {

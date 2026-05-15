@@ -1,254 +1,387 @@
--- Migration 0001: Schema inicial do ADM P6
--- Aplicado diretamente no banco em 2026-05-12.
--- Este arquivo é registro histórico do schema criado.
+-- Migration 0001: Schema normalizado inicial do ADM P6
+-- Cria o schema completo e normalizado para adm_p6_db_normalized.
+-- Inclui todas as tabelas lookup com seed data e tabelas core normalizadas.
 
--- Extensões
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================
--- Catálogos / Tabelas de referência
+-- Tabelas lookup
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS locais_origem (
-    id   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    nome TEXT NOT NULL,
-    ativo BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE tipos_usuario (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipos_usuario (codigo, descricao) VALUES
+    ('Oficial', 'Oficial'),
+    ('Praça',   'Praça'),
+    ('Outro',   'Outro');
+
+CREATE TABLE perfis_acesso (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO perfis_acesso (codigo, descricao) VALUES
+    ('admin', 'Administrador'),
+    ('comum',  'Usuário Comum');
+
+CREATE TABLE tipos_detalhe_processo (
+    id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo          TEXT    NOT NULL UNIQUE,
+    descricao       TEXT    NOT NULL,
+    tipo_geral      TEXT    NOT NULL,
+    prazo_base_dias INTEGER NOT NULL,
+    ativo           BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipos_detalhe_processo (codigo, descricao, tipo_geral, prazo_base_dias) VALUES
+    ('PAD',  'Processo Administrativo Disciplinar',   'processo',     30),
+    ('PADE', 'Processo Apuratório de Dano ao Erário', 'processo',     30),
+    ('CD',   'Conselho de Disciplina',                'processo',     30),
+    ('CJ',   'Conselho de Justificação',              'processo',     30),
+    ('SR',   'Sindicância de Responsabilidade',       'procedimento', 30),
+    ('SV',   'Sindicância Verbal',                    'procedimento', 15),
+    ('IPM',  'Inquérito Policial Militar',            'processo',     40),
+    ('FP',   'Feito Preliminar',                      'procedimento', 30),
+    ('CP',   'Carta Precatória',                      'procedimento', 30),
+    ('PADS', 'PAD Simplificado',                      'processo',     30);
+
+CREATE TABLE documentos_iniciadores (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO documentos_iniciadores (codigo, descricao) VALUES
+    ('Portaria',              'Portaria'),
+    ('Memorando Disciplinar', 'Memorando Disciplinar'),
+    ('Feito Preliminar',      'Feito Preliminar'),
+    ('Ofício',                'Ofício'),
+    ('Despacho',              'Despacho'),
+    ('Outro',                 'Outro');
+
+CREATE TABLE solucoes_tipo (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO solucoes_tipo (codigo, descricao) VALUES
+    ('Punido',     'Punido'),
+    ('Absolvido',  'Absolvido'),
+    ('Arquivado',  'Arquivado'),
+    ('Homologado', 'Homologado'),
+    ('Avocado',    'Avocado');
+
+CREATE TABLE tipos_penalidade (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipos_penalidade (codigo, descricao) VALUES
+    ('Prisão',                         'Prisão'),
+    ('Detenção',                       'Detenção'),
+    ('Advertência',                    'Advertência'),
+    ('Repreensão',                     'Repreensão'),
+    ('Licenciado a bem da disciplina', 'Licenciado a bem da disciplina'),
+    ('Excluído a bem da disciplina',   'Excluído a bem da disciplina'),
+    ('Demitido ex-ofício',             'Demitido ex-ofício');
+
+CREATE TABLE natureza_transgressao (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO natureza_transgressao (codigo, descricao) VALUES
+    ('leve',  'Leve'),
+    ('media', 'Média'),
+    ('grave', 'Grave');
+
+CREATE TABLE status_envolvido (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO status_envolvido (codigo, descricao) VALUES
+    ('Sindicado',   'Sindicado'),
+    ('Acusado',     'Acusado'),
+    ('Indiciado',   'Indiciado'),
+    ('Investigado', 'Investigado');
+
+CREATE TABLE tipo_doc_autorizacao_prazo (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipo_doc_autorizacao_prazo (codigo, descricao) VALUES
+    ('Portaria',  'Portaria'),
+    ('Memorando', 'Memorando'),
+    ('Despacho',  'Despacho'),
+    ('Ofício',    'Ofício'),
+    ('Outro',     'Outro');
+
+CREATE TABLE tipos_prazo (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipos_prazo (codigo, descricao) VALUES
+    ('inicial',     'Prazo Inicial'),
+    ('prorrogacao', 'Prorrogação');
+
+CREATE TABLE tipos_infracao_penal (
+    id        UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo    TEXT    NOT NULL UNIQUE,
+    descricao TEXT    NOT NULL,
+    ativo     BOOLEAN NOT NULL DEFAULT true
+);
+INSERT INTO tipos_infracao_penal (codigo, descricao) VALUES
+    ('Crime',              'Crime'),
+    ('Contravenção Penal', 'Contravenção Penal');
+
+-- ============================================================
+-- Catálogos de dados (populados via aplicação ou importação)
+-- ============================================================
+
+CREATE TABLE locais_origem (
+    id         UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo     TEXT    NOT NULL,
+    descricao  TEXT    NOT NULL,
+    tipo       TEXT,
+    ativo      BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS postos_graduacoes (
-    id    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    nome  TEXT NOT NULL,
-    sigla TEXT,
-    ativo BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE postos_graduacoes (
+    id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo            TEXT    NOT NULL,
+    descricao         TEXT    NOT NULL,
+    tipo              TEXT    NOT NULL,
+    ordem_hierarquica INTEGER NOT NULL,
+    ativo             BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS naturezas (
-    id   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    nome TEXT NOT NULL,
-    ativo BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS municipios_distritos (
-    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    nome         TEXT NOT NULL,
-    tipo         TEXT,
+CREATE TABLE municipios_distritos (
+    id            UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome          TEXT    NOT NULL,
+    tipo          TEXT    NOT NULL,
     municipio_pai TEXT,
-    ativo        BOOLEAN DEFAULT true,
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ativo         BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS crimes_contravencoes (
-    id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tipo             TEXT,
-    dispositivo_legal TEXT,
-    artigo           TEXT NOT NULL,
-    descricao_artigo TEXT,
-    paragrafo        TEXT,
-    inciso           TEXT,
-    alinea           TEXT,
-    ativo            BOOLEAN DEFAULT true,
-    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE crimes_contravencoes (
+    id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo_id           UUID,
+    dispositivo_legal TEXT    NOT NULL,
+    artigo            TEXT    NOT NULL,
+    descricao_artigo  TEXT    NOT NULL,
+    paragrafo         TEXT,
+    inciso            TEXT,
+    alinea            TEXT,
+    ativo             BOOLEAN NOT NULL DEFAULT true,
+    data_criacao      DATE    NOT NULL DEFAULT CURRENT_DATE,
+    data_atualizacao  DATE    NOT NULL DEFAULT CURRENT_DATE,
+    CONSTRAINT fk_crime_tipo FOREIGN KEY (tipo_id) REFERENCES tipos_infracao_penal(id)
 );
+CREATE INDEX ix_crimes_ativo ON crimes_contravencoes (ativo);
 
-CREATE TABLE IF NOT EXISTS transgressoes (
-    id        SERIAL PRIMARY KEY,
-    artigo    INTEGER,
-    gravidade TEXT,
-    inciso    TEXT,
-    texto     TEXT NOT NULL,
-    ativo     BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE transgressoes (
+    id           UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    artigo       INTEGER,
+    gravidade_id UUID    NOT NULL,
+    inciso       TEXT    NOT NULL,
+    texto        TEXT    NOT NULL,
+    ativo        BOOLEAN NOT NULL DEFAULT true,
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_trans_grav FOREIGN KEY (gravidade_id) REFERENCES natureza_transgressao(id)
 );
+CREATE INDEX ix_trans_ativo ON transgressoes (ativo);
 
-CREATE TABLE IF NOT EXISTS infracoes_estatuto_art29 (
-    id     TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    inciso TEXT NOT NULL,
-    texto  TEXT NOT NULL,
-    ativo  BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE infracoes_estatuto_art29 (
+    id         UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    inciso     TEXT    NOT NULL,
+    texto      TEXT    NOT NULL,
+    ativo      BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX ix_art29_ativo  ON infracoes_estatuto_art29 (ativo);
+CREATE INDEX ix_art29_inciso ON infracoes_estatuto_art29 (inciso);
 
 -- ============================================================
--- Usuários / Autenticação
+-- Usuários
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS usuarios (
-    id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    nome           TEXT NOT NULL,
-    matricula      TEXT,
-    posto_graduacao TEXT,
-    email          TEXT,
-    senha_hash     TEXT,
-    perfil         TEXT NOT NULL DEFAULT 'usuario',
-    ativo          BOOLEAN DEFAULT true,
-    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE usuarios (
+    id                 UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    nome               TEXT    NOT NULL,
+    matricula          TEXT    NOT NULL,
+    tipo_usuario_id    UUID    NOT NULL,
+    posto_graduacao_id UUID    NOT NULL,
+    perfil_id          UUID,
+    is_encarregado     BOOLEAN NOT NULL DEFAULT false,
+    is_operador        BOOLEAN NOT NULL DEFAULT false,
+    email              TEXT,
+    senha              TEXT,
+    ativo              BOOLEAN NOT NULL DEFAULT true,
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_usr_tipo   FOREIGN KEY (tipo_usuario_id)    REFERENCES tipos_usuario(id),
+    CONSTRAINT fk_usr_posto  FOREIGN KEY (posto_graduacao_id) REFERENCES postos_graduacoes(id),
+    CONSTRAINT fk_usr_perfil FOREIGN KEY (perfil_id)          REFERENCES perfis_acesso(id)
 );
-
-CREATE TABLE IF NOT EXISTS sessoes (
-    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    usuario_id TEXT NOT NULL REFERENCES usuarios(id),
-    token      TEXT NOT NULL UNIQUE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+CREATE INDEX ix_user_nome        ON usuarios (nome);
+CREATE INDEX ix_user_encarregado ON usuarios (is_encarregado) WHERE ativo = true;
+CREATE INDEX ix_user_operador    ON usuarios (is_operador)    WHERE ativo = true;
 
 -- ============================================================
--- Processos / Procedimentos
+-- Processos / Procedimentos (tabela de roteamento)
+-- Cada processo/procedimento tem uma entrada aqui + uma entrada
+-- na tabela tipo-específica que compartilha o mesmo id.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS processos_procedimentos (
-    id                      TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    numero                  TEXT NOT NULL,
-    tipo_geral              TEXT NOT NULL,
-    tipo_detalhe            TEXT NOT NULL,
-    documento_iniciador     TEXT NOT NULL,
-    processo_sei            TEXT,
-    responsavel_id          TEXT REFERENCES usuarios(id),
-    responsavel_tipo        TEXT,
-    local_origem            TEXT,
-    local_fatos             TEXT,
-    data_instauracao        DATE,
-    data_recebimento        DATE,
-    escrivao_id             TEXT REFERENCES usuarios(id),
-    status_pm               TEXT,
-    nome_pm_id              TEXT REFERENCES usuarios(id),
-    nome_vitima             TEXT,
-    natureza_processo       TEXT,
-    natureza_procedimento   TEXT,
-    resumo_fatos            TEXT,
-    numero_portaria         TEXT,
-    numero_memorando        TEXT,
-    numero_feito            TEXT,
-    numero_rgf              TEXT,
-    numero_controle         TEXT,
-    concluido               BOOLEAN DEFAULT false,
-    data_conclusao          DATE,
-    solucao_final           TEXT,
-    solucao_tipo            TEXT,
-    penalidade_tipo         TEXT,
-    penalidade_dias         INTEGER,
-    transgressoes_ids       TEXT,
-    ano_instauracao         TEXT,
-    data_remessa_encarregado DATE,
-    data_julgamento         DATE,
-    presidente_id           TEXT REFERENCES usuarios(id),
-    presidente_tipo         TEXT,
-    interrogante_id         TEXT REFERENCES usuarios(id),
-    interrogante_tipo       TEXT,
-    escrivao_processo_id    TEXT REFERENCES usuarios(id),
-    escrivao_processo_tipo  TEXT,
-    motorista_id            TEXT REFERENCES usuarios(id),
-    andamentos              JSONB DEFAULT '[]'::jsonb,
-    historico_encarregados  JSONB DEFAULT '[]'::jsonb,
-    pdf_arquivo             BYTEA,
-    pdf_nome                TEXT,
-    pdf_content_type        TEXT,
-    pdf_tamanho             BIGINT,
-    pdf_upload_em           TIMESTAMP,
-    dados_mapa              JSONB,
-    ativo                   BOOLEAN DEFAULT true,
-    created_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS procedimento_pms_envolvidos (
-    id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    procedimento_id  TEXT NOT NULL REFERENCES processos_procedimentos(id),
-    pm_id            TEXT NOT NULL REFERENCES usuarios(id),
-    pm_tipo          TEXT NOT NULL DEFAULT 'usuario',
-    status_pm        TEXT,
-    ordem            INTEGER,
-    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE processos_procedimentos (
+    id              UUID NOT NULL DEFAULT gen_random_uuid(),
+    tipo_detalhe_id UUID NOT NULL,
+    CONSTRAINT pk_processos_procedimentos PRIMARY KEY (id),
+    CONSTRAINT fk_proc_tipo_det FOREIGN KEY (tipo_detalhe_id) REFERENCES tipos_detalhe_processo(id)
 );
 
 -- ============================================================
 -- Prazos
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS prazos_processo (
-    id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    processo_id       TEXT NOT NULL REFERENCES processos_procedimentos(id),
-    tipo_prazo        TEXT NOT NULL DEFAULT 'inicial',
-    data_inicio       DATE NOT NULL,
-    data_vencimento   DATE NOT NULL,
-    dias_adicionados  INTEGER,
-    motivo            TEXT,
-    autorizado_por    TEXT,
-    autorizado_tipo   TEXT,
-    numero_portaria   TEXT,
-    data_portaria     DATE,
-    ordem_prorrogacao INTEGER,
-    ativo             BOOLEAN DEFAULT true,
-    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE prazos_processo (
+    id                 UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    processo_id        UUID    NOT NULL,
+    data_inicio        DATE    NOT NULL,
+    data_vencimento    DATE    NOT NULL,
+    dias_adicionados   INTEGER NOT NULL DEFAULT 0,
+    motivo             TEXT,
+    autorizado_por     TEXT,
+    numero_portaria    TEXT,
+    data_portaria      DATE,
+    ordem_prorrogacao  INTEGER,
+    tipo_prazo_id      UUID    NOT NULL,
+    autorizado_tipo_id UUID,
+    ativo              BOOLEAN NOT NULL DEFAULT true,
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_prazo_proc     FOREIGN KEY (processo_id)        REFERENCES processos_procedimentos(id),
+    CONSTRAINT fk_prazo_tipo     FOREIGN KEY (tipo_prazo_id)      REFERENCES tipos_prazo(id),
+    CONSTRAINT fk_prazo_aut_tipo FOREIGN KEY (autorizado_tipo_id) REFERENCES tipo_doc_autorizacao_prazo(id)
 );
+CREATE INDEX ix_prazo_proc ON prazos_processo (processo_id);
+CREATE INDEX ix_prazo_venc ON prazos_processo (data_vencimento) WHERE ativo = true;
 
 -- ============================================================
--- Indícios (evidências)
+-- PMs envolvidos e indícios
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS pm_envolvido_indicios (
-    id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    pm_envolvido_id   TEXT NOT NULL REFERENCES procedimento_pms_envolvidos(id),
-    procedimento_id   TEXT NOT NULL REFERENCES processos_procedimentos(id),
-    categorias_indicios JSONB DEFAULT '[]'::jsonb,
-    categoria         TEXT DEFAULT '',
-    ativo             BOOLEAN DEFAULT true,
-    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE procedimento_pms_envolvidos (
+    id               UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    procedimento_id  UUID    NOT NULL,
+    pm_id            UUID    NOT NULL,
+    ordem            INTEGER NOT NULL DEFAULT 1,
+    status_pm_id     UUID,
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_pme_proc    FOREIGN KEY (procedimento_id) REFERENCES processos_procedimentos(id),
+    CONSTRAINT fk_pme_pm_user FOREIGN KEY (pm_id)           REFERENCES usuarios(id),
+    CONSTRAINT fk_pme_status  FOREIGN KEY (status_pm_id)    REFERENCES status_envolvido(id)
 );
 
-CREATE TABLE IF NOT EXISTS pm_envolvido_crimes (
-    id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    pm_indicios_id TEXT NOT NULL REFERENCES pm_envolvido_indicios(id),
-    crime_id       TEXT NOT NULL REFERENCES crimes_contravencoes(id),
-    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE pm_envolvido_indicios (
+    id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    procedimento_id     UUID    NOT NULL,
+    pm_envolvido_id     UUID    NOT NULL,
+    categorias_indicios JSONB   NOT NULL DEFAULT '[]'::jsonb,
+    categoria           TEXT,
+    ativo               BOOLEAN NOT NULL DEFAULT true,
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_pei_proc FOREIGN KEY (procedimento_id) REFERENCES processos_procedimentos(id),
+    CONSTRAINT fk_pei_pme  FOREIGN KEY (pm_envolvido_id) REFERENCES procedimento_pms_envolvidos(id)
+);
+CREATE INDEX ix_pei_categ_gin ON pm_envolvido_indicios USING GIN (categorias_indicios);
+
+CREATE TABLE pm_envolvido_crimes (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pm_indicios_id UUID NOT NULL,
+    crime_id       UUID NOT NULL,
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_pec_pei   FOREIGN KEY (pm_indicios_id) REFERENCES pm_envolvido_indicios(id),
+    CONSTRAINT fk_pec_crime FOREIGN KEY (crime_id)        REFERENCES crimes_contravencoes(id)
 );
 
-CREATE TABLE IF NOT EXISTS pm_envolvido_rdpm (
-    id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    pm_indicios_id TEXT NOT NULL REFERENCES pm_envolvido_indicios(id),
-    transgressao_id INTEGER NOT NULL REFERENCES transgressoes(id),
-    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE pm_envolvido_rdpm (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pm_indicios_id  UUID NOT NULL,
+    transgressao_id UUID NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_per_pei   FOREIGN KEY (pm_indicios_id)  REFERENCES pm_envolvido_indicios(id),
+    CONSTRAINT fk_per_trans FOREIGN KEY (transgressao_id) REFERENCES transgressoes(id)
 );
 
-CREATE TABLE IF NOT EXISTS pm_envolvido_art29 (
-    id             TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    pm_indicios_id TEXT NOT NULL REFERENCES pm_envolvido_indicios(id),
-    art29_id       TEXT NOT NULL REFERENCES infracoes_estatuto_art29(id),
-    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE pm_envolvido_art29 (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pm_indicios_id UUID NOT NULL,
+    art29_id       UUID NOT NULL,
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_pea_pei   FOREIGN KEY (pm_indicios_id) REFERENCES pm_envolvido_indicios(id),
+    CONSTRAINT fk_pea_art29 FOREIGN KEY (art29_id)       REFERENCES infracoes_estatuto_art29(id)
 );
 
 -- ============================================================
 -- Mapas e Relatórios
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS relatorios_salvos (
-    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tipo        TEXT NOT NULL,
-    titulo      TEXT NOT NULL,
-    dados       JSONB NOT NULL,
-    criado_por  TEXT REFERENCES usuarios(id),
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE mapas_salvos (
+    id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    titulo            TEXT    NOT NULL,
+    tipo_processo     TEXT    NOT NULL,
+    periodo_inicio    DATE    NOT NULL,
+    periodo_fim       DATE    NOT NULL,
+    periodo_descricao TEXT    NOT NULL,
+    total_processos   INTEGER NOT NULL DEFAULT 0,
+    total_concluidos  INTEGER NOT NULL DEFAULT 0,
+    total_andamento   INTEGER NOT NULL DEFAULT 0,
+    usuario_id        UUID    NOT NULL,
+    usuario_nome      TEXT    NOT NULL,
+    dados_mapa        JSONB   NOT NULL DEFAULT '{}'::jsonb,
+    arquivo_pdf       BYTEA,
+    nome_arquivo      TEXT,
+    data_geracao      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ativo             BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mapa_user FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
+CREATE INDEX ix_mapas_dados_gin ON mapas_salvos USING GIN (dados_mapa);
 
 -- ============================================================
 -- Auditoria
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS auditoria (
-    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tabela       TEXT NOT NULL,
-    registro_id  TEXT NOT NULL,
-    operacao     TEXT NOT NULL,
-    usuario_id   TEXT REFERENCES usuarios(id),
-    timestamp    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE auditoria (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tabela      TEXT NOT NULL,
+    registro_id TEXT NOT NULL,
+    operacao    TEXT NOT NULL,
+    usuario_id  UUID,
+    timestamp   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_audit_user FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
 );
+CREATE INDEX idx_auditoria_tabela      ON auditoria (tabela);
+CREATE INDEX idx_auditoria_registro_id ON auditoria (registro_id);
+CREATE INDEX idx_auditoria_operacao    ON auditoria (operacao);
+CREATE INDEX idx_auditoria_timestamp   ON auditoria ("timestamp" DESC);
+CREATE INDEX idx_auditoria_usuario_id  ON auditoria (usuario_id);

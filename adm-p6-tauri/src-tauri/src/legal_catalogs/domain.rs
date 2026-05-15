@@ -15,7 +15,7 @@ pub struct CrimeItem {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct TransgressionItem {
-    pub id: i32,
+    pub id: String,
     pub artigo: Option<i32>,
     pub gravidade: Option<String>,
     pub inciso: Option<String>,
@@ -66,7 +66,7 @@ impl SaveCrimeRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct SaveTransgressionRequest {
-    pub id: Option<i32>,
+    pub id: Option<String>,
     pub artigo: Option<i32>,
     pub gravidade: Option<String>,
     pub inciso: Option<String>,

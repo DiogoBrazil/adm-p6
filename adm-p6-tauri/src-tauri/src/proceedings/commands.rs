@@ -4,6 +4,7 @@ use crate::app_state::AppState;
 use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
+use chrono::Datelike;
 use crate::proceedings::domain::{
     CommonCrimeItem, CreateProceedingRequest, CreateProceedingResult, DriverRankingItem,
     IpmEvidenceStats, InProgressStats, MilitaryCrimeItem, NatureStatItem, PadsSolutionCount,
@@ -68,11 +69,11 @@ pub async fn proceedings_create(
 
         let pool = state.pool().await?;
 
-        let ano = request.data_instauracao.map(|d| d.format("%Y").to_string());
+        let ano = request.data_instauracao.map(|d| d.year());
         if repository::number_exists(
             &pool, &request.numero, &request.documento_iniciador,
             &request.tipo_detalhe, request.local_origem.as_deref(),
-            ano.as_deref(), None,
+            ano, None,
         ).await? {
             return Err(AppError::Domain(
                 "Numero de processo ja cadastrado para este local, tipo e ano".to_string(),
@@ -120,11 +121,11 @@ pub async fn proceedings_update(
 
         let pool = state.pool().await?;
 
-        let ano = request.data_instauracao.map(|d| d.format("%Y").to_string());
+        let ano = request.data_instauracao.map(|d| d.year());
         if repository::number_exists(
             &pool, &request.numero, &request.documento_iniciador,
             &request.tipo_detalhe, request.local_origem.as_deref(),
-            ano.as_deref(), Some(&request.id),
+            ano, Some(&request.id),
         ).await? {
             return Err(AppError::Domain(
                 "Numero de processo ja cadastrado para este local, tipo e ano".to_string(),

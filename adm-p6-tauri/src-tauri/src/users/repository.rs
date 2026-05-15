@@ -1,10 +1,29 @@
 use bcrypt::{hash, DEFAULT_COST};
 use sqlx::{PgPool, Postgres, Transaction};
-use uuid::Uuid;
 
 use crate::error::AppError;
 
 use super::domain::{SaveUserRequest, UserListItem, UserListResult, UserProcessItem, UserStatistics};
+
+const USER_LIST_SELECT: &str = r#"
+    SELECT u.id::text AS id, u.nome, u.matricula,
+           pg.codigo AS posto_graduacao,
+           tu.codigo AS tipo_usuario,
+           u.email,
+           pa.codigo AS perfil,
+           u.is_encarregado, u.is_operador, u.ativo
+    FROM usuarios u
+    JOIN postos_graduacoes pg ON pg.id = u.posto_graduacao_id
+    JOIN tipos_usuario tu     ON tu.id = u.tipo_usuario_id
+    LEFT JOIN perfis_acesso pa ON pa.id = u.perfil_id
+"#;
+
+const USER_PROCESS_QUERY: &str = r#"
+    SELECT p.id::text AS id, p.tipo_geral, p.tipo_detalhe, p.numero, p.resumo_fatos,
+           p.data_instauracao, p.data_conclusao, p.concluido
+    FROM v_processos p
+    WHERE coalesce(p.ativo, true) = true
+"#;
 
 pub async fn list_paginated(
     pool: &PgPool,
@@ -31,17 +50,14 @@ pub async fn list_paginated(
     .fetch_one(pool)
     .await?;
 
-    let items = sqlx::query_as::<_, UserListItem>(
-        r#"
-        SELECT id, nome, matricula, posto_graduacao, tipo_usuario, email, perfil,
-               is_encarregado, is_operador, ativo
-        FROM usuarios
-        WHERE coalesce(ativo, true) = true
-          AND ($1::text IS NULL OR nome ILIKE $1 OR matricula ILIKE $1)
-        ORDER BY nome
+    let items = sqlx::query_as::<_, UserListItem>(&format!(
+        r#"{USER_LIST_SELECT}
+        WHERE coalesce(u.ativo, true) = true
+          AND ($1::text IS NULL OR u.nome ILIKE $1 OR u.matricula ILIKE $1)
+        ORDER BY u.nome
         LIMIT $2 OFFSET $3
-        "#,
-    )
+        "#
+    ))
     .bind(pat)
     .bind(per_page)
     .bind(offset)
@@ -55,7 +71,6 @@ pub async fn create(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveUserRequest,
 ) -> Result<String, AppError> {
-    let id = Uuid::new_v4().to_string();
     let password_hash = match request.senha.as_deref() {
         Some(value) if !value.is_empty() => Some(
             hash(value, DEFAULT_COST)
@@ -64,17 +79,23 @@ pub async fn create(
         _ => None,
     };
 
-    sqlx::query(
+    let id: String = sqlx::query_scalar(
         r#"
         INSERT INTO usuarios (
-            id, tipo_usuario, posto_graduacao, nome, matricula,
-            is_encarregado, is_operador, email, senha, perfil, ativo,
-            created_at, updated_at
+            tipo_usuario_id, posto_graduacao_id, perfil_id,
+            nome, matricula, is_encarregado, is_operador,
+            email, senha, ativo, created_at, updated_at
         )
-        VALUES ($1, $2, $3, upper($4), $5, $6, $7, lower($8), $9, $10, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        SELECT tu.id, pg.id, pa.id,
+               upper($3), $4, $5, $6, lower($7), $8, true,
+               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM tipos_usuario tu
+        JOIN postos_graduacoes pg ON pg.codigo = $2
+        LEFT JOIN perfis_acesso pa ON pa.codigo = $9
+        WHERE tu.codigo = $1
+        RETURNING id::text
         "#,
     )
-    .bind(&id)
     .bind(&request.tipo_usuario)
     .bind(&request.posto_graduacao)
     .bind(&request.nome)
@@ -84,7 +105,7 @@ pub async fn create(
     .bind(request.email.as_deref())
     .bind(password_hash.as_deref())
     .bind(request.perfil.as_deref())
-    .execute(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(id)
@@ -110,17 +131,17 @@ pub async fn update(
     sqlx::query(
         r#"
         UPDATE usuarios
-        SET tipo_usuario = $2,
-            posto_graduacao = $3,
-            nome = upper($4),
-            matricula = $5,
-            is_encarregado = $6,
-            is_operador = $7,
-            email = lower($8),
-            perfil = $9,
-            senha = coalesce($10, senha),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
+        SET tipo_usuario_id    = (SELECT id FROM tipos_usuario    WHERE codigo = $2),
+            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE codigo = $3),
+            perfil_id          = (SELECT id FROM perfis_acesso    WHERE codigo = $9),
+            nome               = upper($4),
+            matricula          = $5,
+            is_encarregado     = $6,
+            is_operador        = $7,
+            email              = lower($8),
+            senha              = coalesce($10, senha),
+            updated_at         = CURRENT_TIMESTAMP
+        WHERE id = $1::uuid
         "#,
     )
     .bind(id)
@@ -143,7 +164,7 @@ pub async fn deactivate(
     tx: &mut Transaction<'_, Postgres>,
     id: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE usuarios SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1")
+    sqlx::query("UPDATE usuarios SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -154,7 +175,7 @@ pub async fn reactivate(
     tx: &mut Transaction<'_, Postgres>,
     id: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE usuarios SET ativo = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1")
+    sqlx::query("UPDATE usuarios SET ativo = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -162,29 +183,23 @@ pub async fn reactivate(
 }
 
 pub async fn list_encarregados(pool: &PgPool) -> Result<Vec<UserListItem>, sqlx::Error> {
-    sqlx::query_as::<_, UserListItem>(
-        r#"
-        SELECT id, nome, matricula, posto_graduacao, tipo_usuario, email, perfil,
-               is_encarregado, is_operador, ativo
-        FROM usuarios
-        WHERE coalesce(ativo, true) = true
-          AND (coalesce(is_encarregado, false) = true OR coalesce(is_operador, false) = true)
-        ORDER BY nome
-        "#,
-    )
+    sqlx::query_as::<_, UserListItem>(&format!(
+        r#"{USER_LIST_SELECT}
+        WHERE coalesce(u.ativo, true) = true
+          AND (coalesce(u.is_encarregado, false) = true OR coalesce(u.is_operador, false) = true)
+        ORDER BY u.nome
+        "#
+    ))
     .fetch_all(pool)
     .await
 }
 
 pub async fn get_by_id(pool: &PgPool, id: &str) -> Result<Option<UserListItem>, sqlx::Error> {
-    sqlx::query_as::<_, UserListItem>(
-        r#"
-        SELECT id, nome, matricula, posto_graduacao, tipo_usuario, email, perfil,
-               is_encarregado, is_operador, ativo
-        FROM usuarios
-        WHERE id = $1
-        "#,
-    )
+    sqlx::query_as::<_, UserListItem>(&format!(
+        r#"{USER_LIST_SELECT}
+        WHERE u.id = $1::uuid
+        "#
+    ))
     .bind(id)
     .fetch_optional(pool)
     .await
@@ -208,31 +223,33 @@ pub async fn statistics(pool: &PgPool, user_id: &str) -> Result<UserStatistics, 
     let s: StatsRow = sqlx::query_as(
         r#"
         SELECT
-          count(*) FILTER (WHERE tipo_detalhe IN ('SR','SV') AND responsavel_id = $1)::bigint
+          count(*) FILTER (WHERE tipo_detalhe IN ('SR','SV') AND responsavel_id = $1::uuid)::bigint
             AS encarregado_sindicancia,
-          count(*) FILTER (WHERE tipo_detalhe = 'PADS' AND responsavel_id = $1)::bigint
+          count(*) FILTER (WHERE tipo_detalhe = 'PADS' AND responsavel_id = $1::uuid)::bigint
             AS encarregado_pads,
-          count(*) FILTER (WHERE tipo_detalhe = 'IPM' AND responsavel_id = $1)::bigint
+          count(*) FILTER (WHERE tipo_detalhe = 'IPM' AND responsavel_id = $1::uuid)::bigint
             AS encarregado_ipm,
-          count(*) FILTER (WHERE tipo_detalhe = 'FP' AND responsavel_id = $1)::bigint
+          count(*) FILTER (WHERE tipo_detalhe = 'FP' AND responsavel_id = $1::uuid)::bigint
             AS encarregado_feito_preliminar,
-          count(*) FILTER (WHERE tipo_detalhe = 'CP' AND responsavel_id = $1)::bigint
+          count(*) FILTER (WHERE tipo_detalhe = 'CP' AND responsavel_id = $1::uuid)::bigint
             AS encarregado_cp,
           count(*) FILTER (WHERE tipo_detalhe = 'PAD'
-            AND (responsavel_id = $1 OR presidente_id = $1 OR interrogante_id = $1 OR escrivao_processo_id = $1))::bigint
+            AND (responsavel_id = $1::uuid OR presidente_id = $1::uuid
+                 OR interrogante_id = $1::uuid OR escrivao_processo_id = $1::uuid))::bigint
             AS encarregado_pad,
-          count(*) FILTER (WHERE tipo_detalhe = 'PADE'
-            AND (responsavel_id = $1 OR presidente_id = $1 OR interrogante_id = $1 OR escrivao_processo_id = $1))::bigint
+          count(*) FILTER (WHERE tipo_detalhe = 'PADE' AND responsavel_id = $1::uuid)::bigint
             AS encarregado_pade,
           count(*) FILTER (WHERE tipo_detalhe = 'CD'
-            AND (responsavel_id = $1 OR presidente_id = $1 OR interrogante_id = $1 OR escrivao_processo_id = $1))::bigint
+            AND (responsavel_id = $1::uuid OR presidente_id = $1::uuid
+                 OR interrogante_id = $1::uuid OR escrivao_processo_id = $1::uuid))::bigint
             AS encarregado_cd,
           count(*) FILTER (WHERE tipo_detalhe = 'CJ'
-            AND (responsavel_id = $1 OR presidente_id = $1 OR interrogante_id = $1 OR escrivao_processo_id = $1))::bigint
+            AND (responsavel_id = $1::uuid OR presidente_id = $1::uuid
+                 OR interrogante_id = $1::uuid OR escrivao_processo_id = $1::uuid))::bigint
             AS encarregado_cj,
-          count(*) FILTER (WHERE escrivao_id = $1)::bigint
+          count(*) FILTER (WHERE escrivao_id = $1::uuid OR escrivao_processo_id = $1::uuid)::bigint
             AS escrivao
-        FROM processos_procedimentos
+        FROM v_processos
         WHERE coalesce(ativo, true) = true
         "#,
     )
@@ -251,13 +268,14 @@ pub async fn statistics(pool: &PgPool, user_id: &str) -> Result<UserStatistics, 
     let e: EnvolvidoRow = sqlx::query_as(
         r#"
         SELECT
-          count(*) FILTER (WHERE lower(coalesce(pme.status_pm,'')) = 'sindicado')::bigint   AS envolvido_sindicado,
-          count(*) FILTER (WHERE lower(coalesce(pme.status_pm,'')) = 'acusado')::bigint     AS envolvido_acusado,
-          count(*) FILTER (WHERE lower(coalesce(pme.status_pm,'')) = 'indiciado')::bigint   AS envolvido_indiciado,
-          count(*) FILTER (WHERE lower(coalesce(pme.status_pm,'')) = 'investigado')::bigint AS envolvido_investigado
+          count(*) FILTER (WHERE se.codigo = 'Sindicado')::bigint   AS envolvido_sindicado,
+          count(*) FILTER (WHERE se.codigo = 'Acusado')::bigint     AS envolvido_acusado,
+          count(*) FILTER (WHERE se.codigo = 'Indiciado')::bigint   AS envolvido_indiciado,
+          count(*) FILTER (WHERE se.codigo = 'Investigado')::bigint AS envolvido_investigado
         FROM procedimento_pms_envolvidos pme
-        JOIN processos_procedimentos p ON pme.procedimento_id = p.id
-        WHERE pme.pm_id = $1 AND coalesce(p.ativo, true) = true
+        JOIN v_processos p ON p.id = pme.procedimento_id
+        JOIN status_envolvido se ON se.id = pme.status_pm_id
+        WHERE pme.pm_id = $1::uuid AND coalesce(p.ativo, true) = true
         "#,
     )
     .bind(user_id)
@@ -282,18 +300,12 @@ pub async fn statistics(pool: &PgPool, user_id: &str) -> Result<UserStatistics, 
     })
 }
 
-const USER_PROCESS_QUERY: &str =
-    "SELECT id, tipo_geral, tipo_detalhe, numero, resumo_fatos, \
-            data_instauracao, data_conclusao, concluido \
-     FROM processos_procedimentos \
-     WHERE coalesce(ativo, true) = true";
-
 pub async fn proceedings_as_responsible(
     pool: &PgPool,
     user_id: &str,
 ) -> Result<Vec<UserProcessItem>, sqlx::Error> {
     sqlx::query_as::<_, UserProcessItem>(&format!(
-        "{USER_PROCESS_QUERY} AND responsavel_id = $1 ORDER BY data_instauracao DESC"
+        "{USER_PROCESS_QUERY} AND p.responsavel_id = $1::uuid ORDER BY p.data_instauracao DESC"
     ))
     .bind(user_id)
     .fetch_all(pool)
@@ -305,7 +317,7 @@ pub async fn proceedings_as_escrivao(
     user_id: &str,
 ) -> Result<Vec<UserProcessItem>, sqlx::Error> {
     sqlx::query_as::<_, UserProcessItem>(&format!(
-        "{USER_PROCESS_QUERY} AND escrivao_id = $1 ORDER BY data_instauracao DESC"
+        "{USER_PROCESS_QUERY} AND (p.escrivao_id = $1::uuid OR p.escrivao_processo_id = $1::uuid) ORDER BY p.data_instauracao DESC"
     ))
     .bind(user_id)
     .fetch_all(pool)
@@ -317,16 +329,16 @@ pub async fn proceedings_as_involved(
     user_id: &str,
 ) -> Result<Vec<UserProcessItem>, sqlx::Error> {
     sqlx::query_as::<_, UserProcessItem>(
-        "SELECT DISTINCT p.id, p.tipo_geral, p.tipo_detalhe, p.numero, p.resumo_fatos, \
-                p.data_instauracao, p.data_conclusao, p.concluido \
-         FROM processos_procedimentos p \
-         LEFT JOIN procedimento_pms_envolvidos pme \
-           ON p.id = pme.procedimento_id AND pme.pm_id = $1 \
-         WHERE coalesce(p.ativo, true) = true \
-           AND (p.nome_pm_id = $1 OR pme.pm_id = $1) \
-           AND lower(coalesce(pme.status_pm, p.status_pm, '')) \
-               IN ('sindicado','acusado','indiciado','investigado') \
-         ORDER BY p.data_instauracao DESC",
+        r#"
+        SELECT DISTINCT p.id::text AS id, p.tipo_geral, p.tipo_detalhe, p.numero, p.resumo_fatos,
+               p.data_instauracao, p.data_conclusao, p.concluido
+        FROM v_processos p
+        JOIN procedimento_pms_envolvidos pme ON pme.procedimento_id = p.id AND pme.pm_id = $1::uuid
+        JOIN status_envolvido se ON se.id = pme.status_pm_id
+        WHERE coalesce(p.ativo, true) = true
+          AND se.codigo IN ('Sindicado','Acusado','Indiciado','Investigado')
+        ORDER BY p.data_instauracao DESC
+        "#,
     )
     .bind(user_id)
     .fetch_all(pool)

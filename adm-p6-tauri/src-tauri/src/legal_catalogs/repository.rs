@@ -1,5 +1,4 @@
 use sqlx::{PgPool, Postgres, Transaction};
-use uuid::Uuid;
 
 use crate::error::AppError;
 
@@ -8,11 +7,14 @@ use super::domain::{Art29Item, CrimeItem, LocalOrigemItem, MunicipalityItem, Nat
 pub async fn list_crimes(pool: &PgPool, limit: i64) -> Result<Vec<CrimeItem>, sqlx::Error> {
     sqlx::query_as::<_, CrimeItem>(
         r#"
-        SELECT id, tipo, dispositivo_legal, artigo, descricao_artigo,
-               paragrafo, inciso, alinea, ativo
-        FROM crimes_contravencoes
-        WHERE coalesce(ativo, true) = true
-        ORDER BY tipo, dispositivo_legal, artigo
+        SELECT c.id::text AS id,
+               ti.codigo AS tipo,
+               c.dispositivo_legal, c.artigo, c.descricao_artigo,
+               c.paragrafo, c.inciso, c.alinea, c.ativo
+        FROM crimes_contravencoes c
+        LEFT JOIN tipos_infracao_penal ti ON ti.id = c.tipo_id
+        WHERE coalesce(c.ativo, true) = true
+        ORDER BY ti.codigo, c.dispositivo_legal, c.artigo
         LIMIT $1
         "#,
     )
@@ -29,14 +31,14 @@ pub async fn save_crime(
         sqlx::query(
             r#"
             UPDATE crimes_contravencoes
-            SET tipo = $2,
+            SET tipo_id           = (SELECT id FROM tipos_infracao_penal WHERE codigo = $2),
                 dispositivo_legal = $3,
-                artigo = $4,
-                descricao_artigo = $5,
-                paragrafo = $6,
-                inciso = $7,
-                alinea = $8
-            WHERE id = $1
+                artigo            = $4,
+                descricao_artigo  = $5,
+                paragrafo         = $6,
+                inciso            = $7,
+                alinea            = $8
+            WHERE id = $1::uuid
             "#,
         )
         .bind(id)
@@ -51,17 +53,19 @@ pub async fn save_crime(
         .await?;
         Ok(id.to_string())
     } else {
-        let id = Uuid::new_v4().to_string();
-        sqlx::query(
+        let id: String = sqlx::query_scalar(
             r#"
             INSERT INTO crimes_contravencoes (
-                id, tipo, dispositivo_legal, artigo, descricao_artigo,
+                tipo_id, dispositivo_legal, artigo, descricao_artigo,
                 paragrafo, inciso, alinea, ativo
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+            VALUES (
+                (SELECT id FROM tipos_infracao_penal WHERE codigo = $1),
+                $2, $3, $4, $5, $6, $7, true
+            )
+            RETURNING id::text
             "#,
         )
-        .bind(&id)
         .bind(request.tipo.as_deref())
         .bind(request.dispositivo_legal.as_deref())
         .bind(&request.artigo)
@@ -69,14 +73,14 @@ pub async fn save_crime(
         .bind(request.paragrafo.as_deref())
         .bind(request.inciso.as_deref())
         .bind(request.alinea.as_deref())
-        .execute(&mut **tx)
+        .fetch_one(&mut **tx)
         .await?;
         Ok(id)
     }
 }
 
 pub async fn soft_delete_crime(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE crimes_contravencoes SET ativo = false WHERE id = $1")
+    sqlx::query("UPDATE crimes_contravencoes SET ativo = false WHERE id = $1::uuid")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -86,20 +90,20 @@ pub async fn soft_delete_crime(tx: &mut Transaction<'_, Postgres>, id: &str) -> 
 pub async fn save_transgression(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveTransgressionRequest,
-) -> Result<i32, AppError> {
+) -> Result<String, AppError> {
     if let (Some(grav), Some(inc)) = (request.gravidade.as_deref(), request.inciso.as_deref()) {
         if !grav.is_empty() && !inc.is_empty() {
             let (count,): (i64,) = sqlx::query_as(
                 r#"
                 SELECT count(*)::bigint FROM transgressoes
-                WHERE lower(coalesce(gravidade,'')) = lower($1)
-                  AND lower(coalesce(inciso,'')) = lower($2)
-                  AND ($3::int IS NULL OR id != $3)
+                WHERE gravidade_id = (SELECT id FROM natureza_transgressao WHERE codigo = $1)
+                  AND lower(inciso) = lower($2)
+                  AND ($3::uuid IS NULL OR id != $3::uuid)
                 "#,
             )
             .bind(grav)
             .bind(inc)
-            .bind(request.id)
+            .bind(request.id.as_deref())
             .fetch_one(&mut **tx)
             .await?;
             if count > 0 {
@@ -111,12 +115,15 @@ pub async fn save_transgression(
         }
     }
 
-    if let Some(id) = request.id {
+    if let Some(id) = request.id.as_deref() {
         sqlx::query(
             r#"
             UPDATE transgressoes
-            SET artigo = $2, gravidade = $3, inciso = $4, texto = $5
-            WHERE id = $1
+            SET artigo       = $2,
+                gravidade_id = (SELECT id FROM natureza_transgressao WHERE codigo = $3),
+                inciso       = $4,
+                texto        = $5
+            WHERE id = $1::uuid
             "#,
         )
         .bind(id)
@@ -126,13 +133,17 @@ pub async fn save_transgression(
         .bind(&request.texto)
         .execute(&mut **tx)
         .await?;
-        Ok(id)
+        Ok(id.to_string())
     } else {
-        let row: (i32,) = sqlx::query_as(
+        let new_id: String = sqlx::query_scalar(
             r#"
-            INSERT INTO transgressoes (artigo, gravidade, inciso, texto, ativo, created_at)
-            VALUES ($1, $2, $3, $4, true, CURRENT_TIMESTAMP)
-            RETURNING id
+            INSERT INTO transgressoes (artigo, gravidade_id, inciso, texto, ativo, created_at)
+            VALUES (
+                $1,
+                (SELECT id FROM natureza_transgressao WHERE codigo = $2),
+                $3, $4, true, CURRENT_TIMESTAMP
+            )
+            RETURNING id::text
             "#,
         )
         .bind(request.artigo)
@@ -141,18 +152,13 @@ pub async fn save_transgression(
         .bind(&request.texto)
         .fetch_one(&mut **tx)
         .await?;
-        Ok(row.0)
+        Ok(new_id)
     }
 }
 
-pub async fn referenced_transgression_count(pool: &PgPool, id: i32) -> Result<i64, sqlx::Error> {
+pub async fn referenced_transgression_count(pool: &PgPool, id: &str) -> Result<i64, sqlx::Error> {
     let row: (i64,) = sqlx::query_as(
-        r#"
-        SELECT (
-          (SELECT count(*) FROM pm_envolvido_rdpm WHERE transgressao_id = $1)
-          + (SELECT count(*) FROM procedimentos_indicios_rdpm WHERE transgressao_id = $1)
-        )::bigint
-        "#,
+        "SELECT count(*)::bigint FROM pm_envolvido_rdpm WHERE transgressao_id = $1::uuid",
     )
     .bind(id)
     .fetch_one(pool)
@@ -160,8 +166,8 @@ pub async fn referenced_transgression_count(pool: &PgPool, id: i32) -> Result<i6
     Ok(row.0)
 }
 
-pub async fn hard_delete_transgression(tx: &mut Transaction<'_, Postgres>, id: i32) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM transgressoes WHERE id = $1")
+pub async fn hard_delete_transgression(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM transgressoes WHERE id = $1::uuid")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -177,7 +183,7 @@ pub async fn save_art29(
         SELECT count(*)::bigint FROM infracoes_estatuto_art29
         WHERE lower(inciso) = lower($1)
           AND coalesce(ativo, true) = true
-          AND ($2::text IS NULL OR id != $2)
+          AND ($2::uuid IS NULL OR id != $2::uuid)
         "#,
     )
     .bind(&request.inciso)
@@ -192,7 +198,7 @@ pub async fn save_art29(
     }
 
     if let Some(id) = request.id.as_deref() {
-        sqlx::query("UPDATE infracoes_estatuto_art29 SET inciso = $2, texto = $3 WHERE id = $1")
+        sqlx::query("UPDATE infracoes_estatuto_art29 SET inciso = $2, texto = $3 WHERE id = $1::uuid")
             .bind(id)
             .bind(&request.inciso)
             .bind(&request.texto)
@@ -200,21 +206,19 @@ pub async fn save_art29(
             .await?;
         Ok(id.to_string())
     } else {
-        let id = Uuid::new_v4().to_string();
-        sqlx::query(
-            "INSERT INTO infracoes_estatuto_art29 (id, inciso, texto, ativo) VALUES ($1, $2, $3, true)",
+        let new_id: String = sqlx::query_scalar(
+            "INSERT INTO infracoes_estatuto_art29 (inciso, texto, ativo) VALUES ($1, $2, true) RETURNING id::text",
         )
-        .bind(&id)
         .bind(&request.inciso)
         .bind(&request.texto)
-        .execute(&mut **tx)
+        .fetch_one(&mut **tx)
         .await?;
-        Ok(id)
+        Ok(new_id)
     }
 }
 
 pub async fn soft_delete_art29(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE infracoes_estatuto_art29 SET ativo = false WHERE id = $1")
+    sqlx::query("UPDATE infracoes_estatuto_art29 SET ativo = false WHERE id = $1::uuid")
         .bind(id)
         .execute(&mut **tx)
         .await?;
@@ -224,10 +228,13 @@ pub async fn soft_delete_art29(tx: &mut Transaction<'_, Postgres>, id: &str) -> 
 pub async fn get_crime_by_id(pool: &PgPool, id: &str) -> Result<Option<CrimeItem>, sqlx::Error> {
     sqlx::query_as::<_, CrimeItem>(
         r#"
-        SELECT id, tipo, dispositivo_legal, artigo, descricao_artigo,
-               paragrafo, inciso, alinea, ativo
-        FROM crimes_contravencoes
-        WHERE id = $1
+        SELECT c.id::text AS id,
+               ti.codigo AS tipo,
+               c.dispositivo_legal, c.artigo, c.descricao_artigo,
+               c.paragrafo, c.inciso, c.alinea, c.ativo
+        FROM crimes_contravencoes c
+        LEFT JOIN tipos_infracao_penal ti ON ti.id = c.tipo_id
+        WHERE c.id = $1::uuid
         "#,
     )
     .bind(id)
@@ -238,10 +245,11 @@ pub async fn get_crime_by_id(pool: &PgPool, id: &str) -> Result<Option<CrimeItem
 pub async fn list_transgressions(pool: &PgPool, limit: i64) -> Result<Vec<TransgressionItem>, sqlx::Error> {
     sqlx::query_as::<_, TransgressionItem>(
         r#"
-        SELECT id, artigo, initcap(gravidade) AS gravidade, inciso, texto, ativo
-        FROM transgressoes
-        WHERE coalesce(ativo, true) = true
-        ORDER BY artigo NULLS LAST, inciso NULLS LAST
+        SELECT t.id::text AS id, t.artigo, nt.codigo AS gravidade, t.inciso, t.texto, t.ativo
+        FROM transgressoes t
+        JOIN natureza_transgressao nt ON nt.id = t.gravidade_id
+        WHERE coalesce(t.ativo, true) = true
+        ORDER BY t.artigo NULLS LAST, t.inciso NULLS LAST
         LIMIT $1
         "#,
     )
@@ -257,7 +265,7 @@ pub async fn search_municipalities(
     let pattern = if termo.is_empty() { None } else { Some(format!("%{termo}%")) };
     sqlx::query_as::<_, MunicipalityItem>(
         r#"
-        SELECT id, nome, tipo, municipio_pai,
+        SELECT id::text AS id, nome, tipo, municipio_pai,
                CASE WHEN tipo = 'Distrito' AND municipio_pai IS NOT NULL
                     THEN nome || ' (' || municipio_pai || ')'
                     ELSE nome
@@ -277,7 +285,7 @@ pub async fn search_municipalities(
 pub async fn list_art29(pool: &PgPool, limit: i64) -> Result<Vec<Art29Item>, sqlx::Error> {
     sqlx::query_as::<_, Art29Item>(
         r#"
-        SELECT id, inciso, texto, ativo
+        SELECT id::text AS id, inciso, texto, ativo
         FROM infracoes_estatuto_art29
         WHERE coalesce(ativo, true) = true
         ORDER BY length(inciso), inciso
@@ -289,9 +297,14 @@ pub async fn list_art29(pool: &PgPool, limit: i64) -> Result<Vec<Art29Item>, sql
     .await
 }
 
-pub async fn get_transgression_by_id(pool: &PgPool, id: i32) -> Result<Option<TransgressionItem>, sqlx::Error> {
+pub async fn get_transgression_by_id(pool: &PgPool, id: &str) -> Result<Option<TransgressionItem>, sqlx::Error> {
     sqlx::query_as::<_, TransgressionItem>(
-        "SELECT id, artigo, gravidade, inciso, texto, ativo FROM transgressoes WHERE id = $1",
+        r#"
+        SELECT t.id::text AS id, t.artigo, nt.codigo AS gravidade, t.inciso, t.texto, t.ativo
+        FROM transgressoes t
+        JOIN natureza_transgressao nt ON nt.id = t.gravidade_id
+        WHERE t.id = $1::uuid
+        "#,
     )
     .bind(id)
     .fetch_optional(pool)
@@ -300,7 +313,7 @@ pub async fn get_transgression_by_id(pool: &PgPool, id: i32) -> Result<Option<Tr
 
 pub async fn get_art29_by_id(pool: &PgPool, id: &str) -> Result<Option<Art29Item>, sqlx::Error> {
     sqlx::query_as::<_, Art29Item>(
-        "SELECT id, inciso, texto, ativo FROM infracoes_estatuto_art29 WHERE id = $1",
+        "SELECT id::text AS id, inciso, texto, ativo FROM infracoes_estatuto_art29 WHERE id = $1::uuid",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -309,7 +322,7 @@ pub async fn get_art29_by_id(pool: &PgPool, id: &str) -> Result<Option<Art29Item
 
 pub async fn list_locais_origem(pool: &PgPool) -> Result<Vec<LocalOrigemItem>, sqlx::Error> {
     sqlx::query_as::<_, LocalOrigemItem>(
-        "SELECT id, nome, ativo FROM locais_origem WHERE coalesce(ativo, true) = true ORDER BY nome",
+        "SELECT id::text AS id, codigo AS nome, ativo FROM locais_origem WHERE coalesce(ativo, true) = true ORDER BY codigo",
     )
     .fetch_all(pool)
     .await
@@ -317,7 +330,7 @@ pub async fn list_locais_origem(pool: &PgPool) -> Result<Vec<LocalOrigemItem>, s
 
 pub async fn list_postos_graduacoes(pool: &PgPool) -> Result<Vec<PostoGraduacaoItem>, sqlx::Error> {
     sqlx::query_as::<_, PostoGraduacaoItem>(
-        "SELECT id, nome, sigla, ativo FROM postos_graduacoes WHERE coalesce(ativo, true) = true ORDER BY nome",
+        "SELECT id::text AS id, codigo AS nome, NULL::text AS sigla, ativo FROM postos_graduacoes WHERE coalesce(ativo, true) = true ORDER BY ordem_hierarquica, codigo",
     )
     .fetch_all(pool)
     .await
@@ -325,7 +338,7 @@ pub async fn list_postos_graduacoes(pool: &PgPool) -> Result<Vec<PostoGraduacaoI
 
 pub async fn list_naturezas(pool: &PgPool) -> Result<Vec<NaturezaItem>, sqlx::Error> {
     sqlx::query_as::<_, NaturezaItem>(
-        "SELECT id, nome, ativo FROM naturezas WHERE coalesce(ativo, true) = true ORDER BY nome",
+        "SELECT id::text AS id, codigo AS nome, ativo FROM natureza_transgressao WHERE coalesce(ativo, true) = true ORDER BY codigo",
     )
     .fetch_all(pool)
     .await

@@ -17,7 +17,6 @@ use super::domain::{
 struct ProcessoMapRow {
     id: String,
     numero: Option<String>,
-    tipo_geral: Option<String>,
     tipo_detalhe: Option<String>,
     numero_portaria: Option<String>,
     numero_memorando: Option<String>,
@@ -142,9 +141,9 @@ fn last_movement(andamentos_text: &Option<String>) -> Option<Value> {
 
 async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, sqlx::Error> {
     let row: Option<IndiciosRow> = sqlx::query_as(
-        "SELECT id, categorias_indicios \
+        "SELECT id::text AS id, categorias_indicios \
          FROM pm_envolvido_indicios \
-         WHERE pm_envolvido_id = $1 AND coalesce(ativo, true) = true \
+         WHERE pm_envolvido_id = $1::uuid AND coalesce(ativo, true) = true \
          LIMIT 1",
     )
     .bind(pm_envolvido_id)
@@ -161,20 +160,23 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
         .unwrap_or_default();
 
     let crimes: Vec<CrimeMapRow> = sqlx::query_as(
-        "SELECT c.tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea \
+        "SELECT ti.codigo AS tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, \
+                c.paragrafo, c.inciso, c.alinea \
          FROM pm_envolvido_crimes pec \
          JOIN crimes_contravencoes c ON c.id = pec.crime_id \
-         WHERE pec.pm_indicios_id = $1 AND coalesce(c.ativo, true) = true",
+         LEFT JOIN tipos_infracao_penal ti ON ti.id = c.tipo_id \
+         WHERE pec.pm_indicios_id = $1::uuid AND coalesce(c.ativo, true) = true",
     )
     .bind(&indicios.id)
     .fetch_all(pool)
     .await?;
 
     let rdpm: Vec<RdpmMapRow> = sqlx::query_as(
-        "SELECT t.inciso, t.texto, t.gravidade \
+        "SELECT t.inciso, t.texto, nt.codigo AS gravidade \
          FROM pm_envolvido_rdpm per \
          JOIN transgressoes t ON t.id = per.transgressao_id \
-         WHERE per.pm_indicios_id = $1 AND coalesce(t.ativo, true) = true",
+         JOIN natureza_transgressao nt ON nt.id = t.gravidade_id \
+         WHERE per.pm_indicios_id = $1::uuid AND coalesce(t.ativo, true) = true",
     )
     .bind(&indicios.id)
     .fetch_all(pool)
@@ -184,7 +186,7 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
         "SELECT a.inciso, a.texto \
          FROM pm_envolvido_art29 pea \
          JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id \
-         WHERE pea.pm_indicios_id = $1 AND coalesce(a.ativo, true) = true",
+         WHERE pea.pm_indicios_id = $1::uuid AND coalesce(a.ativo, true) = true",
     )
     .bind(&indicios.id)
     .fetch_all(pool)
@@ -252,11 +254,13 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
 
 async fn pms_for_procedimento(pool: &PgPool, processo_id: &str) -> Result<Vec<Value>, sqlx::Error> {
     let rows: Vec<PmMapRow> = sqlx::query_as(
-        "SELECT u.nome, u.posto_graduacao, u.matricula, \
-                pme.status_pm as tipo_envolvimento, pme.id as pm_envolvido_id \
+        "SELECT u.nome, pg.codigo AS posto_graduacao, u.matricula, \
+                se.codigo AS tipo_envolvimento, pme.id::text AS pm_envolvido_id \
          FROM procedimento_pms_envolvidos pme \
          JOIN usuarios u ON pme.pm_id = u.id \
-         WHERE pme.procedimento_id = $1 \
+         JOIN postos_graduacoes pg ON u.posto_graduacao_id = pg.id \
+         LEFT JOIN status_envolvido se ON pme.status_pm_id = se.id \
+         WHERE pme.processo_id = $1::uuid \
          ORDER BY pme.ordem",
     )
     .bind(processo_id)
@@ -281,74 +285,43 @@ async fn pms_for_procedimento(pool: &PgPool, processo_id: &str) -> Result<Vec<Va
     Ok(result)
 }
 
-async fn pm_for_processo(pool: &PgPool, processo_id: &str) -> Result<Vec<Value>, sqlx::Error> {
-    #[derive(sqlx::FromRow)]
-    struct Row {
-        nome: Option<String>,
-        posto_graduacao: Option<String>,
-        matricula: Option<String>,
-        status_pm: Option<String>,
-    }
-
-    let row: Option<Row> = sqlx::query_as(
-        "SELECT u.nome, u.posto_graduacao, u.matricula, p.status_pm \
-         FROM processos_procedimentos p \
-         JOIN usuarios u ON p.nome_pm_id = u.id \
-         WHERE p.id = $1",
-    )
-    .bind(processo_id)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(match row {
-        None => vec![],
-        Some(p) => {
-            let nome = p.nome.as_deref().unwrap_or("");
-            let posto = p.posto_graduacao.as_deref().unwrap_or("");
-            let matricula = p.matricula.as_deref().unwrap_or("");
-            vec![json!({
-                "nome": nome,
-                "posto_graduacao": posto,
-                "matricula": matricula,
-                "tipo_envolvimento": p.status_pm.as_deref().unwrap_or("Acusado"),
-                "completo": user_completo(posto, matricula, nome),
-                "indicios": {"categorias": [], "crimes": [], "transgressoes": [], "art29": []},
-            })]
-        }
-    })
-}
-
 // ── Monthly map query ─────────────────────────────────────────────────────────
 
 const MONTHLY_MAP_QUERY: &str = r#"
 SELECT
-    p.id, p.numero, p.tipo_geral, p.tipo_detalhe,
+    p.id::text AS id, p.numero, p.tipo_geral, p.tipo_detalhe,
     p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
     p.data_instauracao, p.data_conclusao, p.data_remessa_encarregado, p.data_julgamento,
     p.resumo_fatos, p.nome_vitima, p.concluido, p.solucao_final, p.solucao_tipo,
     p.penalidade_tipo, p.penalidade_dias,
-    COALESCE(u_resp.nome, 'Não informado') AS responsavel_nome,
-    COALESCE(u_resp.posto_graduacao, '')   AS responsavel_posto,
-    COALESCE(u_resp.matricula, '')         AS responsavel_matricula,
+    COALESCE(u_resp.nome, 'Não informado')  AS responsavel_nome,
+    COALESCE(pg_resp.codigo, '')            AS responsavel_posto,
+    COALESCE(u_resp.matricula, '')          AS responsavel_matricula,
     CASE WHEN p.concluido = TRUE THEN 'Concluído' ELSE 'Em andamento' END AS status_processo,
     p.ano_instauracao,
-    p.presidente_id, p.interrogante_id, p.escrivao_processo_id,
-    COALESCE(u_pres.nome, '')         AS presidente_nome,
-    COALESCE(u_pres.posto_graduacao, '') AS presidente_posto,
-    COALESCE(u_pres.matricula, '')    AS presidente_matricula,
-    COALESCE(u_inter.nome, '')        AS interrogante_nome,
-    COALESCE(u_inter.posto_graduacao, '') AS interrogante_posto,
-    COALESCE(u_inter.matricula, '')   AS interrogante_matricula,
-    COALESCE(u_esc.nome, '')          AS escrivao_processo_nome,
-    COALESCE(u_esc.posto_graduacao, '') AS escrivao_processo_posto,
-    COALESCE(u_esc.matricula, '')     AS escrivao_processo_matricula,
+    p.presidente_id::text       AS presidente_id,
+    p.interrogante_id::text     AS interrogante_id,
+    p.escrivao_processo_id::text AS escrivao_processo_id,
+    COALESCE(u_pres.nome, '')        AS presidente_nome,
+    COALESCE(pg_pres.codigo, '')     AS presidente_posto,
+    COALESCE(u_pres.matricula, '')   AS presidente_matricula,
+    COALESCE(u_inter.nome, '')       AS interrogante_nome,
+    COALESCE(pg_inter.codigo, '')    AS interrogante_posto,
+    COALESCE(u_inter.matricula, '')  AS interrogante_matricula,
+    COALESCE(u_esc.nome, '')         AS escrivao_processo_nome,
+    COALESCE(pg_esc.codigo, '')      AS escrivao_processo_posto,
+    COALESCE(u_esc.matricula, '')    AS escrivao_processo_matricula,
     p.unidade_deprecada, p.deprecante,
     p.andamentos::text AS andamentos
-FROM processos_procedimentos p
-LEFT JOIN usuarios u_resp ON p.responsavel_id = u_resp.id
-LEFT JOIN usuarios u_pres ON p.presidente_id  = u_pres.id
-LEFT JOIN usuarios u_inter ON p.interrogante_id = u_inter.id
-LEFT JOIN usuarios u_esc ON p.escrivao_processo_id = u_esc.id
+FROM v_processos p
+LEFT JOIN usuarios u_resp    ON p.responsavel_id        = u_resp.id
+LEFT JOIN postos_graduacoes pg_resp  ON u_resp.posto_graduacao_id  = pg_resp.id
+LEFT JOIN usuarios u_pres    ON p.presidente_id         = u_pres.id
+LEFT JOIN postos_graduacoes pg_pres  ON u_pres.posto_graduacao_id  = pg_pres.id
+LEFT JOIN usuarios u_inter   ON p.interrogante_id       = u_inter.id
+LEFT JOIN postos_graduacoes pg_inter ON u_inter.posto_graduacao_id = pg_inter.id
+LEFT JOIN usuarios u_esc     ON p.escrivao_processo_id  = u_esc.id
+LEFT JOIN postos_graduacoes pg_esc   ON u_esc.posto_graduacao_id   = pg_esc.id
 WHERE coalesce(p.ativo, true) = true
   AND p.tipo_detalhe = $1
   AND (
@@ -365,10 +338,10 @@ pub async fn dashboard_summary(pool: &PgPool) -> Result<DashboardSummary, sqlx::
     sqlx::query_as::<_, DashboardSummary>(
         r#"
         SELECT
-          (SELECT count(*)::bigint FROM processos_procedimentos WHERE coalesce(ativo, true) = true)                                             AS total_processos,
-          (SELECT count(*)::bigint FROM processos_procedimentos WHERE coalesce(ativo, true) = true AND coalesce(concluido, false) = false)      AS em_andamento,
-          (SELECT count(*)::bigint FROM processos_procedimentos WHERE coalesce(ativo, true) = true AND coalesce(concluido, false) = true)       AS concluidos,
-          (SELECT count(*)::bigint FROM prazos_processo WHERE coalesce(ativo, true) = true AND data_vencimento < CURRENT_DATE)                  AS prazos_vencidos
+          (SELECT count(*)::bigint FROM v_processos WHERE coalesce(ativo, true) = true)                                        AS total_processos,
+          (SELECT count(*)::bigint FROM v_processos WHERE coalesce(ativo, true) = true AND coalesce(concluido, false) = false) AS em_andamento,
+          (SELECT count(*)::bigint FROM v_processos WHERE coalesce(ativo, true) = true AND coalesce(concluido, false) = true)  AS concluidos,
+          (SELECT count(*)::bigint FROM prazos_processo WHERE coalesce(ativo, true) = true AND data_vencimento < CURRENT_DATE) AS prazos_vencidos
         "#,
     )
     .fetch_one(pool)
@@ -396,7 +369,7 @@ pub async fn process_types(pool: &PgPool) -> Result<Vec<TipoProcessoItem>, sqlx:
     sqlx::query_as::<_, TipoProcessoItem>(
         r#"
         SELECT tipo_detalhe AS codigo, count(*)::bigint AS total
-        FROM processos_procedimentos
+        FROM v_processos
         WHERE coalesce(ativo, true) = true
         GROUP BY tipo_detalhe
         ORDER BY tipo_detalhe
@@ -428,14 +401,8 @@ pub async fn generate_monthly_map(
 
     let mut dados = Vec::with_capacity(rows.len());
     for row in &rows {
-        let tipo_geral = row.tipo_geral.as_deref().unwrap_or("");
-        let pms = if tipo_geral == "procedimento" {
-            pms_for_procedimento(pool, &row.id).await?
-        } else {
-            pm_for_processo(pool, &row.id).await?
-        };
+        let pms = pms_for_procedimento(pool, &row.id).await?;
 
-        // Aggregate indicios from PMs
         let mut all_crimes: Vec<Value> = Vec::new();
         let mut all_trans: Vec<Value> = Vec::new();
         let mut all_art29: Vec<Value> = Vec::new();
@@ -566,7 +533,7 @@ pub async fn generate_complete_map(
     req: &GenerateCompleteMapRequest,
 ) -> Result<CompleteMapResult, sqlx::Error> {
     let tipos: Vec<(String,)> = sqlx::query_as(
-        "SELECT DISTINCT tipo_detalhe FROM processos_procedimentos \
+        "SELECT DISTINCT tipo_detalhe FROM v_processos \
          WHERE coalesce(ativo, true) = true ORDER BY tipo_detalhe",
     )
     .fetch_all(pool)
@@ -709,7 +676,7 @@ pub async fn annual_statistics(
     let ano_i64 = ano as i64;
 
     let (total_processos,): (i64,) = sqlx::query_as(
-        "SELECT count(*)::bigint FROM processos_procedimentos \
+        "SELECT count(*)::bigint FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
            AND tipo_geral = 'processo' AND coalesce(ativo, true) = true",
     )
@@ -718,7 +685,7 @@ pub async fn annual_statistics(
     .await?;
 
     let (total_procedimentos,): (i64,) = sqlx::query_as(
-        "SELECT count(*)::bigint FROM processos_procedimentos \
+        "SELECT count(*)::bigint FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
            AND tipo_geral = 'procedimento' AND coalesce(ativo, true) = true",
     )
@@ -731,7 +698,7 @@ pub async fn annual_statistics(
                 count(*)::bigint as total, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = true)::bigint  as concluidos, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = false)::bigint as em_andamento \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
            AND tipo_geral = 'processo' AND coalesce(ativo, true) = true \
          GROUP BY tipo_detalhe ORDER BY tipo_detalhe",
@@ -745,7 +712,7 @@ pub async fn annual_statistics(
                 count(*)::bigint as total, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = true)::bigint  as concluidos, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = false)::bigint as em_andamento \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
            AND tipo_geral = 'procedimento' AND coalesce(ativo, true) = true \
          GROUP BY tipo_detalhe ORDER BY tipo_detalhe",
@@ -756,19 +723,16 @@ pub async fn annual_statistics(
 
     let (indicios_crime,): (i64,) = sqlx::query_as(
         "SELECT count(*)::bigint \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
-           AND tipo_detalhe IN ('IPM', 'Sindicância') \
+           AND tipo_detalhe IN ('IPM', 'SR', 'SV') \
            AND concluido = true \
            AND coalesce(ativo, true) = true \
            AND indicios_categorias IS NOT NULL \
-           AND (\
-             (jsonb_typeof(indicios_categorias) = 'array' AND EXISTS (\
-               SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val)\
-               WHERE lower(val) LIKE '%crime%'\
-             ))\
-             OR (jsonb_typeof(indicios_categorias) = 'string' \
-                 AND lower(indicios_categorias::text) LIKE '%crime%')\
+           AND jsonb_typeof(indicios_categorias) = 'array' \
+           AND EXISTS ( \
+             SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val) \
+             WHERE lower(val) LIKE '%crime%' \
            )",
     )
     .bind(ano_i64)
@@ -777,20 +741,16 @@ pub async fn annual_statistics(
 
     let (indicios_transgressao,): (i64,) = sqlx::query_as(
         "SELECT count(*)::bigint \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
-           AND tipo_detalhe IN ('IPM', 'Sindicância') \
+           AND tipo_detalhe IN ('IPM', 'SR', 'SV') \
            AND concluido = true \
            AND coalesce(ativo, true) = true \
            AND indicios_categorias IS NOT NULL \
-           AND (\
-             (jsonb_typeof(indicios_categorias) = 'array' AND EXISTS (\
-               SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val)\
-               WHERE lower(val) LIKE '%transgressao%' OR lower(val) LIKE '%rdpm%'\
-             ))\
-             OR (jsonb_typeof(indicios_categorias) = 'string' AND (\
-                 lower(indicios_categorias::text) LIKE '%transgressao%' \
-                 OR lower(indicios_categorias::text) LIKE '%rdpm%'))\
+           AND jsonb_typeof(indicios_categorias) = 'array' \
+           AND EXISTS ( \
+             SELECT 1 FROM jsonb_array_elements_text(indicios_categorias) AS e(val) \
+             WHERE lower(val) LIKE '%transgressao%' OR lower(val) LIKE '%rdpm%' \
            )",
     )
     .bind(ano_i64)
@@ -799,7 +759,7 @@ pub async fn annual_statistics(
 
     let solucoes: Vec<(Option<String>, i64)> = sqlx::query_as(
         "SELECT solucao_tipo, count(*)::bigint \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE EXTRACT(YEAR FROM data_instauracao)::bigint = $1 \
            AND tipo_detalhe IN ('PAD', 'PADS') \
            AND concluido = true \
@@ -846,18 +806,19 @@ pub async fn by_responsible(
 ) -> Result<Vec<ResponsavelRelatorio>, sqlx::Error> {
     let ano_i64 = ano.map(|a| a as i64);
     sqlx::query_as::<_, ResponsavelRelatorio>(
-        "SELECT p.responsavel_id, \
+        "SELECT p.responsavel_id::text AS responsavel_id, \
                 COALESCE(u.nome, 'Não informado') as responsavel_nome, \
-                COALESCE(u.posto_graduacao, '') as responsavel_posto, \
+                COALESCE(pg.codigo, '') as responsavel_posto, \
                 COALESCE(u.matricula, '') as responsavel_matricula, \
                 count(*)::bigint as total, \
                 count(*) FILTER (WHERE coalesce(p.concluido, false) = true)::bigint  as concluidos, \
                 count(*) FILTER (WHERE coalesce(p.concluido, false) = false)::bigint as em_andamento \
-         FROM processos_procedimentos p \
+         FROM v_processos p \
          LEFT JOIN usuarios u ON p.responsavel_id = u.id \
+         LEFT JOIN postos_graduacoes pg ON u.posto_graduacao_id = pg.id \
          WHERE coalesce(p.ativo, true) = true \
            AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1) \
-         GROUP BY p.responsavel_id, u.nome, u.posto_graduacao, u.matricula \
+         GROUP BY p.responsavel_id, u.nome, pg.codigo, u.matricula \
          ORDER BY total DESC \
          LIMIT 200",
     )
@@ -876,7 +837,7 @@ pub async fn by_type(
                 count(*)::bigint as total, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = true)::bigint  as concluidos, \
                 count(*) FILTER (WHERE coalesce(concluido, false) = false)::bigint as em_andamento \
-         FROM processos_procedimentos \
+         FROM v_processos \
          WHERE coalesce(ativo, true) = true \
            AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM data_instauracao)::bigint = $1) \
          GROUP BY tipo_detalhe, tipo_geral \
@@ -892,17 +853,18 @@ pub async fn overdue_deadlines(
     days_past: i32,
 ) -> Result<Vec<PrazoVencidoItem>, sqlx::Error> {
     sqlx::query_as::<_, PrazoVencidoItem>(
-        "SELECT p.id, p.numero, p.tipo_detalhe, \
+        "SELECT p.id::text AS id, p.numero, p.tipo_detalhe, \
                 COALESCE(u.nome, 'Não informado') as responsavel_nome, \
                 pr.data_vencimento, \
-                (CURRENT_DATE - pr.data_vencimento) as dias_atraso, \
-                pr.tipo_prazo as prazo_tipo \
+                (CURRENT_DATE - pr.data_vencimento)::integer as dias_atraso, \
+                tp.codigo AS prazo_tipo \
          FROM prazos_processo pr \
-         JOIN processos_procedimentos p ON pr.processo_id = p.id \
+         JOIN v_processos p ON pr.processo_id = p.id \
          LEFT JOIN usuarios u ON p.responsavel_id = u.id \
+         JOIN tipos_prazo tp ON pr.tipo_prazo_id = tp.id \
          WHERE coalesce(pr.ativo, true) = true \
            AND pr.data_vencimento < CURRENT_DATE \
-           AND (CURRENT_DATE - pr.data_vencimento) >= $1 \
+           AND (CURRENT_DATE - pr.data_vencimento)::integer >= $1 \
            AND coalesce(p.ativo, true) = true \
            AND coalesce(p.concluido, false) = false \
          ORDER BY dias_atraso DESC \
@@ -940,7 +902,7 @@ async fn csv_processos(pool: &PgPool, ano: Option<i32>) -> Result<String, sqlx::
         "SELECT p.numero, p.tipo_detalhe, p.data_instauracao, p.data_conclusao, \
                 p.concluido, COALESCE(u.nome, 'Não informado') as responsavel_nome, \
                 p.solucao_tipo \
-         FROM processos_procedimentos p \
+         FROM v_processos p \
          LEFT JOIN usuarios u ON p.responsavel_id = u.id \
          WHERE coalesce(p.ativo, true) = true \
            AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1) \
@@ -1029,7 +991,7 @@ pub async fn available_years(pool: &PgPool) -> Result<Vec<i32>, sqlx::Error> {
     let rows: Vec<(Option<i32>,)> = sqlx::query_as(
         r#"
         SELECT DISTINCT EXTRACT(YEAR FROM data_instauracao)::integer AS ano
-        FROM processos_procedimentos
+        FROM v_processos
         WHERE coalesce(ativo, true) = true
           AND data_instauracao IS NOT NULL
         ORDER BY ano DESC

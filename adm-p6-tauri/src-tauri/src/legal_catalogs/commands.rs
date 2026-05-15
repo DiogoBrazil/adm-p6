@@ -77,31 +77,31 @@ pub async fn legal_catalogs_save_transgression(
         audit_repository::register_tx(
             &mut tx,
             "transgressoes",
-            &id.to_string(),
+            &id,
             if is_update { "UPDATE" } else { "CREATE" },
             Some(&actor.id),
         )
         .await?;
         tx.commit().await?;
-        Ok(SaveCatalogResult { id: id.to_string() })
+        Ok(SaveCatalogResult { id })
     }.await).await)
 }
 
 #[tauri::command]
 pub async fn legal_catalogs_delete_transgression(
     state: State<'_, AppState>,
-    id: i32,
+    id: String,
 ) -> Result<ApiResponse<bool>, String> {
     Ok(from_result(async {
         let actor = require_admin(&state).await?;
         let pool = state.pool().await?;
-        let refs = repository::referenced_transgression_count(&pool, id).await?;
+        let refs = repository::referenced_transgression_count(&pool, &id).await?;
         if refs > 0 {
             return Err(AppError::Domain("transgressao referenciada nao pode ser excluida".to_string()));
         }
         let mut tx = pool.begin().await?;
-        repository::hard_delete_transgression(&mut tx, id).await?;
-        audit_repository::register_tx(&mut tx, "transgressoes", &id.to_string(), "DELETE", Some(&actor.id)).await?;
+        repository::hard_delete_transgression(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "transgressoes", &id, "DELETE", Some(&actor.id)).await?;
         tx.commit().await?;
         Ok(true)
     }.await).await)
@@ -213,12 +213,12 @@ pub async fn legal_catalogs_list_for_proceeding(state: State<'_, AppState>) -> R
 #[tauri::command]
 pub async fn legal_catalogs_get_transgression(
     state: State<'_, AppState>,
-    id: i32,
+    id: String,
 ) -> Result<ApiResponse<Option<TransgressionItem>>, String> {
     Ok(from_result(async {
         require_session(&state).await?;
         let pool = state.pool().await?;
-        Ok(repository::get_transgression_by_id(&pool, id).await?)
+        Ok(repository::get_transgression_by_id(&pool, &id).await?)
     }.await).await)
 }
 
