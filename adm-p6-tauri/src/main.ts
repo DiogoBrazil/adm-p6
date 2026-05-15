@@ -35,6 +35,8 @@ type CrudField = {
   kind: "text" | "email" | "password" | "number" | "checkbox" | "textarea" | "select" | "date";
   required?: boolean;
   options?: string[];
+  optionsCommand?: string;
+  optionsValueKey?: "id" | "nome";
 };
 
 type CrudConfig = {
@@ -43,6 +45,7 @@ type CrudConfig = {
   deleteCommand?: string;
   idKind: "string" | "number";
   fields: CrudField[];
+  hiddenColumns?: string[];
 };
 
 const routes: Route[] = [
@@ -72,6 +75,13 @@ const routes: Route[] = [
     writeCommands: ["legal_catalogs_save_transgression", "legal_catalogs_delete_transgression"]
   },
   {
+    path: "/catalogos/artigos-rdpm",
+    label: "Artigos RDPM",
+    group: "Catálogos",
+    command: "legal_catalogs_list_artigos_rdpm",
+    writeCommands: ["legal_catalogs_save_artigo_rdpm", "legal_catalogs_delete_artigo_rdpm"]
+  },
+  {
     path: "/catalogos/crimes",
     label: "Crimes e Contravenções",
     group: "Catálogos",
@@ -79,11 +89,25 @@ const routes: Route[] = [
     writeCommands: ["legal_catalogs_save_crime", "legal_catalogs_delete_crime"]
   },
   {
+    path: "/catalogos/dispositivos",
+    label: "Dispositivos Legais",
+    group: "Catálogos",
+    command: "legal_catalogs_list_dispositivos_legais",
+    writeCommands: ["legal_catalogs_save_dispositivo_legal", "legal_catalogs_delete_dispositivo_legal"]
+  },
+  {
     path: "/catalogos/art29",
     label: "Estatuto Art. 29",
     group: "Catálogos",
     command: "legal_catalogs_list_art29",
     writeCommands: ["legal_catalogs_save_art29", "legal_catalogs_delete_art29"]
+  },
+  {
+    path: "/catalogos/art32",
+    label: "Estatuto Art. 32",
+    group: "Catálogos",
+    command: "legal_catalogs_list_art32",
+    writeCommands: ["legal_catalogs_save_art32", "legal_catalogs_delete_art32"]
   },
   {
     path: "/usuarios/lista",
@@ -95,6 +119,20 @@ const routes: Route[] = [
     detailCommand: "users_get"
   },
   { path: "/usuarios/novo", label: "Novo usuário", group: "Usuários", command: "users_form_schema", adminOnly: true },
+  {
+    path: "/catalogos/tipos-usuario",
+    label: "Tipos de Usuário",
+    group: "Usuários",
+    command: "legal_catalogs_list_tipos_usuario",
+    writeCommands: ["legal_catalogs_save_tipo_usuario", "legal_catalogs_delete_tipo_usuario"]
+  },
+  {
+    path: "/catalogos/postos-graduacoes",
+    label: "Postos e Graduações",
+    group: "Usuários",
+    command: "legal_catalogs_list_postos_graduacoes",
+    writeCommands: ["legal_catalogs_save_posto_graduacao", "legal_catalogs_delete_posto_graduacao"]
+  },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
   {
     path: "/estatisticas/encarregados",
@@ -160,8 +198,8 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "users_delete",
     idKind: "string",
     fields: [
-      { name: "tipo_usuario", label: "Tipo de usuário", kind: "select", required: true, options: ["Oficial", "Praça"] },
-      { name: "posto_graduacao", label: "Posto/graduação", kind: "text", required: true },
+      { name: "tipo_usuario", label: "Tipo de usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsValueKey: "nome" },
+      { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCommand: "legal_catalogs_list_postos_graduacoes", optionsValueKey: "nome" },
       { name: "nome", label: "Nome", kind: "text", required: true },
       { name: "matricula", label: "Matrícula", kind: "text", required: true },
       { name: "is_encarregado", label: "Encarregado", kind: "checkbox" },
@@ -175,9 +213,9 @@ const crudConfigs: Record<string, CrudConfig> = {
     saveCommand: "legal_catalogs_save_crime",
     deleteCommand: "legal_catalogs_delete_crime",
     idKind: "string",
+    hiddenColumns: ["dispositivo_legal_id"],
     fields: [
-      { name: "tipo", label: "Tipo", kind: "select", options: ["Crime", "Contravenção"] },
-      { name: "dispositivo_legal", label: "Dispositivo legal", kind: "text" },
+      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", optionsCommand: "legal_catalogs_list_dispositivos_legais" },
       { name: "artigo", label: "Artigo", kind: "text", required: true },
       { name: "descricao_artigo", label: "Descrição", kind: "textarea" },
       { name: "paragrafo", label: "Parágrafo", kind: "text" },
@@ -185,15 +223,33 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "alinea", label: "Alínea", kind: "text" }
     ]
   },
+  "/catalogos/dispositivos": {
+    saveCommand: "legal_catalogs_save_dispositivo_legal",
+    deleteCommand: "legal_catalogs_delete_dispositivo_legal",
+    idKind: "string",
+    fields: [
+      { name: "nome", label: "Nome", kind: "text", required: true }
+    ]
+  },
   "/catalogos/transgressoes": {
     saveCommand: "legal_catalogs_save_transgression",
     deleteCommand: "legal_catalogs_delete_transgression",
-    idKind: "number",
+    idKind: "string",
+    hiddenColumns: ["artigo_id"],
     fields: [
-      { name: "artigo", label: "Artigo", kind: "number" },
-      { name: "gravidade", label: "Gravidade", kind: "select", options: ["Leve", "Média", "Grave"] },
+      { name: "artigo_id", label: "Artigo RDPM", kind: "select", optionsCommand: "legal_catalogs_list_artigos_rdpm" },
       { name: "inciso", label: "Inciso", kind: "text" },
       { name: "texto", label: "Texto", kind: "textarea", required: true }
+    ]
+  },
+  "/catalogos/artigos-rdpm": {
+    saveCommand: "legal_catalogs_save_artigo_rdpm",
+    deleteCommand: "legal_catalogs_delete_artigo_rdpm",
+    idKind: "string",
+    hiddenColumns: ["nome"],
+    fields: [
+      { name: "artigo", label: "Artigo", kind: "text", required: true },
+      { name: "natureza", label: "Natureza", kind: "select", required: true, options: ["Leve", "Média", "Grave"] }
     ]
   },
   "/catalogos/art29": {
@@ -203,6 +259,32 @@ const crudConfigs: Record<string, CrudConfig> = {
     fields: [
       { name: "inciso", label: "Inciso", kind: "text", required: true },
       { name: "texto", label: "Texto", kind: "textarea", required: true }
+    ]
+  },
+  "/catalogos/art32": {
+    saveCommand: "legal_catalogs_save_art32",
+    deleteCommand: "legal_catalogs_delete_art32",
+    idKind: "string",
+    fields: [
+      { name: "inciso", label: "Inciso", kind: "text", required: true },
+      { name: "texto", label: "Texto", kind: "textarea", required: true }
+    ]
+  },
+  "/catalogos/tipos-usuario": {
+    saveCommand: "legal_catalogs_save_tipo_usuario",
+    deleteCommand: "legal_catalogs_delete_tipo_usuario",
+    idKind: "string",
+    fields: [
+      { name: "nome", label: "Nome", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/postos-graduacoes": {
+    saveCommand: "legal_catalogs_save_posto_graduacao",
+    deleteCommand: "legal_catalogs_delete_posto_graduacao",
+    idKind: "string",
+    fields: [
+      { name: "nome", label: "Nome", kind: "text", required: true },
+      { name: "tipo", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsValueKey: "nome" }
     ]
   },
   "/procedimentos/lista": {
@@ -363,7 +445,9 @@ function tableFrom(data: unknown, route: Route): string {
   if (data.length === 0) {
     return `<p class="empty">Nenhum registro encontrado.</p>`;
   }
-  const columns = Object.keys(data[0] as Record<string, unknown>);
+  const config = crudConfigs[route.path];
+  const hiddenCols = new Set(["id", ...(config?.hiddenColumns ?? [])]);
+  const columns = Object.keys(data[0] as Record<string, unknown>).filter((c) => !hiddenCols.has(c));
   const hasCrud = Boolean(crudConfigs[route.path]) && canWrite();
   return `
     <div class="table-wrap">
@@ -407,7 +491,11 @@ function fieldValue(row: Record<string, unknown> | null, field: CrudField) {
   return String(value);
 }
 
-function renderField(field: CrudField, row: Record<string, unknown> | null) {
+function renderField(
+  field: CrudField,
+  row: Record<string, unknown> | null,
+  dynamicOpts?: { value: string; label: string }[]
+) {
   const value = fieldValue(row, field);
   const required = field.required ? "required" : "";
 
@@ -421,13 +509,14 @@ function renderField(field: CrudField, row: Record<string, unknown> | null) {
   }
 
   if (field.kind === "select") {
+    const opts = dynamicOpts
+      ? dynamicOpts.map((o) => `<option value="${escapeHtml(o.value)}" ${value === o.value ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")
+      : (field.options ?? []).map((option) => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
     return `
       <label>${field.label}
         <select name="${field.name}" ${required}>
           <option value=""></option>
-          ${(field.options ?? []).map((option) => `
-            <option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>
-          `).join("")}
+          ${opts}
         </select>
       </label>
     `;
@@ -445,9 +534,21 @@ function renderField(field: CrudField, row: Record<string, unknown> | null) {
   return `<label>${field.label}<input name="${field.name}" type="${field.kind}" value="${escapeHtml(String(value))}" ${required} /></label>`;
 }
 
-function renderCrudForm(route: Route, row: Record<string, unknown> | null = null, error = "") {
+async function renderCrudForm(route: Route, row: Record<string, unknown> | null = null, error = "") {
   const config = crudConfigs[route.path];
   if (!config) return;
+
+  const dynamicOptions: Record<string, { value: string; label: string }[]> = {};
+  await Promise.all(
+    config.fields
+      .filter((f) => f.optionsCommand)
+      .map(async (f) => {
+        const resp = await call<{ id: string; nome: string }[]>(f.optionsCommand!);
+        const useNome = f.optionsValueKey === "nome";
+        dynamicOptions[f.name] = (resp.data ?? []).map((item) => ({ value: useNome ? item.nome : item.id, label: item.nome }));
+      })
+  );
+
   const id = row?.id ?? "";
   shell(`
     <section class="panel">
@@ -460,7 +561,7 @@ function renderCrudForm(route: Route, row: Record<string, unknown> | null = null
       </div>
       <form id="crud-form" class="crud-form">
         <input type="hidden" name="id" value="${escapeHtml(String(id))}" />
-        ${config.fields.map((field) => renderField(field, row)).join("")}
+        ${config.fields.map((field) => renderField(field, row, dynamicOptions[field.name])).join("")}
         ${error ? `<p class="error">${error}</p>` : ""}
         <div class="form-actions">
           <button type="submit">Salvar</button>
@@ -481,7 +582,7 @@ function renderCrudForm(route: Route, row: Record<string, unknown> | null = null
     const command = isEdit && config.updateCommand ? config.updateCommand : config.saveCommand;
     const response = await call(command, { request });
     if (!response.ok) {
-      renderCrudForm(route, row, response.error ?? "Falha ao salvar.");
+      void renderCrudForm(route, row, response.error ?? "Falha ao salvar.");
       return;
     }
     await renderRoute();
@@ -532,13 +633,13 @@ function bindCrudEvents(route: Route) {
   if (!config || !canWrite()) return;
 
   document.querySelector<HTMLButtonElement>("#new-record")?.addEventListener("click", () => {
-    renderCrudForm(route);
+    void renderCrudForm(route);
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-edit-index]").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.editIndex);
-      renderCrudForm(route, currentRows[index] ?? null);
+      void renderCrudForm(route, currentRows[index] ?? null);
     });
   });
 
@@ -573,6 +674,16 @@ async function renderRoute() {
   if (route.path === "/auditoria") return renderAuditWithFilters();
   if (route.path === "/usuarios/lista") return renderUsersList();
   if (route.path === "/stats/procedimentos") return renderProceedingsStats();
+  if (route.path === "/usuarios/novo") {
+    activePath = "/usuarios/lista";
+    if (!canWrite()) {
+      shell(`<section class="panel"><h1>Novo Usuário</h1><p class="error">Seu perfil é somente leitura.</p></section>`);
+      return;
+    }
+    const usersRoute = routes.find((r) => r.path === "/usuarios/lista")!;
+    await renderCrudForm(usersRoute);
+    return;
+  }
 
   // Reset search when navigating away from a searchable route
   if (!route.searchable) searchTerm = "";
@@ -877,7 +988,7 @@ async function renderDetail(route: Route) {
   });
   if (canEdit && config) {
     document.querySelector<HTMLButtonElement>("#edit-detail")?.addEventListener("click", () => {
-      renderCrudForm(route, data as Record<string, unknown>);
+      void renderCrudForm(route, data as Record<string, unknown>);
     });
   }
 
@@ -1429,7 +1540,7 @@ async function renderUsersList() {
   });
   document.querySelector<HTMLButtonElement>("#clear-search")?.addEventListener("click", () => { searchTerm = ""; void renderUsersList(); });
 
-  document.querySelector<HTMLButtonElement>("#new-record")?.addEventListener("click", () => renderCrudForm(usersRoute));
+  document.querySelector<HTMLButtonElement>("#new-record")?.addEventListener("click", () => { void renderCrudForm(usersRoute); });
 
   if (usersRoute.detailCommand) {
     document.querySelectorAll<HTMLTableRowElement>("tbody tr[data-row-index]").forEach((tr) => {
@@ -1446,7 +1557,7 @@ async function renderUsersList() {
   }
 
   document.querySelectorAll<HTMLButtonElement>("[data-edit-index]").forEach((btn) => {
-    btn.addEventListener("click", () => renderCrudForm(usersRoute, currentRows[Number(btn.dataset.editIndex)] ?? null));
+    btn.addEventListener("click", () => { void renderCrudForm(usersRoute, currentRows[Number(btn.dataset.editIndex)] ?? null); });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-delete-index]").forEach((btn) => {
@@ -1559,7 +1670,7 @@ async function renderUserDetail(route: Route) {
 
   document.querySelector<HTMLButtonElement>("#edit-user")?.addEventListener("click", () => {
     const usersRoute = routes.find((r) => r.path === "/usuarios/lista")!;
-    renderCrudForm(usersRoute, user);
+    void renderCrudForm(usersRoute, user);
   });
 
   document.querySelector<HTMLButtonElement>("#reactivate-user")?.addEventListener("click", async () => {

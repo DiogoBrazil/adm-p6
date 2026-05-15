@@ -17,6 +17,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "hex",
+ "regex",
  "serde",
  "serde_json",
  "sha2",

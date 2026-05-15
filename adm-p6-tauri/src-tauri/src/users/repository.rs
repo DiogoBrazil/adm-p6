@@ -7,8 +7,8 @@ use super::domain::{SaveUserRequest, UserListItem, UserListResult, UserProcessIt
 
 const USER_LIST_SELECT: &str = r#"
     SELECT u.id::text AS id, u.nome, u.matricula,
-           pg.codigo AS posto_graduacao,
-           tu.codigo AS tipo_usuario,
+           pg.nome AS posto_graduacao,
+           tu.nome AS tipo_usuario,
            u.email,
            pa.codigo AS perfil,
            u.is_encarregado, u.is_operador, u.ativo
@@ -67,10 +67,61 @@ pub async fn list_paginated(
     Ok(UserListResult { items, total, page, per_page })
 }
 
+async fn check_matricula_unique(
+    tx: &mut Transaction<'_, Postgres>,
+    matricula: &str,
+    exclude_id: Option<&str>,
+) -> Result<(), AppError> {
+    let (count,): (i64,) = sqlx::query_as(
+        r#"
+        SELECT count(*)::bigint FROM usuarios
+        WHERE lower(matricula) = lower($1)
+          AND coalesce(ativo, true) = true
+          AND ($2::uuid IS NULL OR id != $2::uuid)
+        "#,
+    )
+    .bind(matricula)
+    .bind(exclude_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if count > 0 {
+        return Err(AppError::Domain(format!("matricula '{}' ja esta em uso", matricula)));
+    }
+    Ok(())
+}
+
+async fn check_email_unique(
+    tx: &mut Transaction<'_, Postgres>,
+    email: &str,
+    exclude_id: Option<&str>,
+) -> Result<(), AppError> {
+    let (count,): (i64,) = sqlx::query_as(
+        r#"
+        SELECT count(*)::bigint FROM usuarios
+        WHERE lower(email) = lower($1)
+          AND email IS NOT NULL
+          AND coalesce(ativo, true) = true
+          AND ($2::uuid IS NULL OR id != $2::uuid)
+        "#,
+    )
+    .bind(email)
+    .bind(exclude_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if count > 0 {
+        return Err(AppError::Domain(format!("email '{}' ja esta em uso", email)));
+    }
+    Ok(())
+}
+
 pub async fn create(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveUserRequest,
 ) -> Result<String, AppError> {
+    check_matricula_unique(tx, &request.matricula, None).await?;
+    if let Some(email) = request.email.as_deref().filter(|e| !e.trim().is_empty()) {
+        check_email_unique(tx, email, None).await?;
+    }
     let password_hash = match request.senha.as_deref() {
         Some(value) if !value.is_empty() => Some(
             hash(value, DEFAULT_COST)
@@ -90,9 +141,9 @@ pub async fn create(
                upper($3), $4, $5, $6, lower($7), $8, true,
                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM tipos_usuario tu
-        JOIN postos_graduacoes pg ON pg.codigo = $2
+        JOIN postos_graduacoes pg ON pg.nome = $2
         LEFT JOIN perfis_acesso pa ON pa.codigo = $9
-        WHERE tu.codigo = $1
+        WHERE tu.nome = $1
         RETURNING id::text
         "#,
     )
@@ -120,6 +171,11 @@ pub async fn update(
         .as_deref()
         .ok_or_else(|| AppError::Domain("id e obrigatorio para atualizar usuario".to_string()))?;
 
+    check_matricula_unique(tx, &request.matricula, Some(id)).await?;
+    if let Some(email) = request.email.as_deref().filter(|e| !e.trim().is_empty()) {
+        check_email_unique(tx, email, Some(id)).await?;
+    }
+
     let password_hash = match request.senha.as_deref() {
         Some(value) if !value.is_empty() => Some(
             hash(value, DEFAULT_COST)
@@ -131,8 +187,8 @@ pub async fn update(
     sqlx::query(
         r#"
         UPDATE usuarios
-        SET tipo_usuario_id    = (SELECT id FROM tipos_usuario    WHERE codigo = $2),
-            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE codigo = $3),
+        SET tipo_usuario_id    = (SELECT id FROM tipos_usuario    WHERE nome = $2),
+            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome = $3),
             perfil_id          = (SELECT id FROM perfis_acesso    WHERE codigo = $9),
             nome               = upper($4),
             matricula          = $5,

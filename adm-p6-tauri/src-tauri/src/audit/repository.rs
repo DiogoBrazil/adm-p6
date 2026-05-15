@@ -36,7 +36,7 @@ const DETAIL_SELECT: &str = r#"
 "#;
 
 pub async fn get_by_id(pool: &PgPool, id: &str) -> Result<Option<AuditDetailItem>, sqlx::Error> {
-    sqlx::query_as::<_, AuditDetailItem>(&format!("{DETAIL_SELECT} WHERE a.id = $1"))
+    sqlx::query_as::<_, AuditDetailItem>(&format!("{DETAIL_SELECT} WHERE a.id = $1::uuid"))
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -63,14 +63,14 @@ pub async fn list_by_user(
     offset: i64,
 ) -> Result<AuditPageResult, sqlx::Error> {
     let (total,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::bigint FROM auditoria WHERE usuario_id = $1",
+        "SELECT COUNT(*)::bigint FROM auditoria WHERE usuario_id = $1::uuid",
     )
     .bind(usuario_id)
     .fetch_one(pool)
     .await?;
 
     let items = sqlx::query_as::<_, AuditDetailItem>(&format!(
-        "{DETAIL_SELECT} WHERE a.usuario_id = $1 ORDER BY a.timestamp DESC NULLS LAST LIMIT $2 OFFSET $3"
+        "{DETAIL_SELECT} WHERE a.usuario_id = $1::uuid ORDER BY a.timestamp DESC NULLS LAST LIMIT $2 OFFSET $3"
     ))
     .bind(usuario_id)
     .bind(limit)
@@ -138,14 +138,12 @@ pub async fn register_tx(
     operacao: &str,
     usuario_id: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         r#"
-        INSERT INTO auditoria (id, tabela, registro_id, operacao, usuario_id, timestamp)
-        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+        INSERT INTO auditoria (tabela, registro_id, operacao, usuario_id, timestamp)
+        VALUES ($1, $2, $3, $4::uuid, CURRENT_TIMESTAMP)
         "#,
     )
-    .bind(id)
     .bind(tabela)
     .bind(registro_id)
     .bind(operacao)

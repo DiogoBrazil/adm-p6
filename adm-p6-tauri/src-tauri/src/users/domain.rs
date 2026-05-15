@@ -1,5 +1,15 @@
 use chrono::NaiveDate;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+
+fn is_valid_email(email: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
+    });
+    re.is_match(email)
+}
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct UserListItem {
@@ -44,6 +54,17 @@ impl SaveUserRequest {
         }
         if self.matricula.trim().is_empty() {
             return Err("matricula e obrigatoria".to_string());
+        }
+        if self.matricula.len() != 9 {
+            return Err("matricula deve ter exatamente 9 caracteres".to_string());
+        }
+        if !self.matricula.starts_with("1000") && !self.matricula.starts_with("3000") {
+            return Err("matricula deve iniciar com 1000 ou 3000".to_string());
+        }
+        if let Some(email) = self.email.as_deref().filter(|e| !e.trim().is_empty()) {
+            if !is_valid_email(email) {
+                return Err("email invalido".to_string());
+            }
         }
         if self.is_operador {
             if self.email.as_deref().unwrap_or("").trim().is_empty() {
