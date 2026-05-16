@@ -36,7 +36,6 @@ pub struct UserFormSchema {
 #[derive(Debug, Deserialize)]
 pub struct SaveUserRequest {
     pub id: Option<String>,
-    pub tipo_usuario: String,
     pub posto_graduacao: String,
     pub nome: String,
     pub matricula: String,

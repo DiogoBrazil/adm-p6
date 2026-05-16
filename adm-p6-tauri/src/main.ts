@@ -198,7 +198,6 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "users_delete",
     idKind: "string",
     fields: [
-      { name: "tipo_usuario", label: "Tipo de usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsValueKey: "nome" },
       { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCommand: "legal_catalogs_list_postos_graduacoes", optionsValueKey: "nome" },
       { name: "nome", label: "Nome", kind: "text", required: true },
       { name: "matricula", label: "Matrícula", kind: "text", required: true },

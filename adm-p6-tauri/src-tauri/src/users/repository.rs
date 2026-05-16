@@ -138,24 +138,23 @@ pub async fn create(
             email, senha, ativo, created_at, updated_at
         )
         SELECT tu.id, pg.id, pa.id,
-               upper($3), $4, $5, $6, lower($7), $8, true,
+               upper($2), $3, $4, $5, lower($6), $7, true,
                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        FROM tipos_usuario tu
-        JOIN postos_graduacoes pg ON pg.nome = $2
-        LEFT JOIN perfis_acesso pa ON pa.codigo = $9
-        WHERE tu.nome = $1
+        FROM postos_graduacoes pg
+        JOIN tipos_usuario tu ON tu.nome = pg.tipo
+        LEFT JOIN perfis_acesso pa ON pa.codigo = $8
+        WHERE pg.nome = $1
         RETURNING id::text
         "#,
     )
-    .bind(&request.tipo_usuario)
-    .bind(&request.posto_graduacao)
-    .bind(&request.nome)
-    .bind(&request.matricula)
-    .bind(request.is_encarregado)
-    .bind(request.is_operador)
-    .bind(request.email.as_deref())
-    .bind(password_hash.as_deref())
-    .bind(request.perfil.as_deref())
+    .bind(&request.posto_graduacao)  // $1
+    .bind(&request.nome)             // $2
+    .bind(&request.matricula)        // $3
+    .bind(request.is_encarregado)    // $4
+    .bind(request.is_operador)       // $5
+    .bind(request.email.as_deref())  // $6
+    .bind(password_hash.as_deref())  // $7
+    .bind(request.perfil.as_deref()) // $8
     .fetch_one(&mut **tx)
     .await?;
 
@@ -187,29 +186,32 @@ pub async fn update(
     sqlx::query(
         r#"
         UPDATE usuarios
-        SET tipo_usuario_id    = (SELECT id FROM tipos_usuario    WHERE nome = $2),
-            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome = $3),
-            perfil_id          = (SELECT id FROM perfis_acesso    WHERE codigo = $9),
-            nome               = upper($4),
-            matricula          = $5,
-            is_encarregado     = $6,
-            is_operador        = $7,
-            email              = lower($8),
-            senha              = coalesce($10, senha),
+        SET tipo_usuario_id    = (
+                SELECT tu.id FROM postos_graduacoes pg
+                JOIN tipos_usuario tu ON tu.nome = pg.tipo
+                WHERE pg.nome = $2
+            ),
+            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome = $2),
+            perfil_id          = (SELECT id FROM perfis_acesso    WHERE codigo = $8),
+            nome               = upper($3),
+            matricula          = $4,
+            is_encarregado     = $5,
+            is_operador        = $6,
+            email              = lower($7),
+            senha              = coalesce($9, senha),
             updated_at         = CURRENT_TIMESTAMP
         WHERE id = $1::uuid
         "#,
     )
-    .bind(id)
-    .bind(&request.tipo_usuario)
-    .bind(&request.posto_graduacao)
-    .bind(&request.nome)
-    .bind(&request.matricula)
-    .bind(request.is_encarregado)
-    .bind(request.is_operador)
-    .bind(request.email.as_deref())
-    .bind(request.perfil.as_deref())
-    .bind(password_hash.as_deref())
+    .bind(id)                        // $1
+    .bind(&request.posto_graduacao)  // $2
+    .bind(&request.nome)             // $3
+    .bind(&request.matricula)        // $4
+    .bind(request.is_encarregado)    // $5
+    .bind(request.is_operador)       // $6
+    .bind(request.email.as_deref())  // $7
+    .bind(request.perfil.as_deref()) // $8
+    .bind(password_hash.as_deref())  // $9
     .execute(&mut **tx)
     .await?;
 
