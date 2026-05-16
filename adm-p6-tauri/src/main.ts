@@ -36,7 +36,8 @@ type CrudField = {
   required?: boolean;
   options?: string[];
   optionsCommand?: string;
-  optionsValueKey?: "id" | "nome";
+  optionsValueKey?: "id" | "nome" | "tipo";
+  showIf?: { field: string; value: boolean | string };
 };
 
 type CrudConfig = {
@@ -133,6 +134,15 @@ const routes: Route[] = [
     command: "legal_catalogs_list_postos_graduacoes",
     writeCommands: ["legal_catalogs_save_posto_graduacao", "legal_catalogs_delete_posto_graduacao"]
   },
+  { path: "/catalogos/tipos-documentos", label: "Tipos de Documento", group: "Catálogos", command: "legal_catalogs_list_tipos_documentos", writeCommands: ["legal_catalogs_save_tipo_documento", "legal_catalogs_delete_tipo_documento"] },
+  { path: "/catalogos/tipos-penalidade", label: "Tipos de Penalidade", group: "Catálogos", command: "legal_catalogs_list_tipos_penalidade", writeCommands: ["legal_catalogs_save_tipo_penalidade", "legal_catalogs_delete_tipo_penalidade"] },
+  { path: "/catalogos/tipos-prazo", label: "Tipos de Prazo", group: "Catálogos", command: "legal_catalogs_list_tipos_prazo", writeCommands: ["legal_catalogs_save_tipo_prazo", "legal_catalogs_delete_tipo_prazo"] },
+  { path: "/catalogos/status-envolvido", label: "Status Envolvido", group: "Catálogos", command: "legal_catalogs_list_status_envolvido", writeCommands: ["legal_catalogs_save_status_envolvido", "legal_catalogs_delete_status_envolvido"] },
+  { path: "/catalogos/solucoes-tipo", label: "Soluções por Tipo", group: "Catálogos", command: "legal_catalogs_list_solucoes_tipo", writeCommands: ["legal_catalogs_save_solucao_tipo", "legal_catalogs_delete_solucao_tipo"] },
+  { path: "/catalogos/tipo-apuratorios", label: "Tipos Apuratórios", group: "Catálogos", command: "legal_catalogs_list_tipo_apuratorios", writeCommands: ["legal_catalogs_save_tipo_apuratorio", "legal_catalogs_delete_tipo_apuratorio"] },
+  { path: "/catalogos/apuratorios", label: "Apuratórios", group: "Catálogos", command: "legal_catalogs_list_apuratorios", writeCommands: ["legal_catalogs_save_apuratorio", "legal_catalogs_delete_apuratorio"] },
+  { path: "/catalogos/locais-origem", label: "Locais de Origem", group: "Catálogos", command: "legal_catalogs_list_locais_origem", writeCommands: ["legal_catalogs_save_local_origem", "legal_catalogs_delete_local_origem"] },
+  { path: "/catalogos/municipios-distritos", label: "Municípios e Distritos", group: "Catálogos", command: "legal_catalogs_list_municipios_distritos", writeCommands: ["legal_catalogs_save_municipio_distrito", "legal_catalogs_delete_municipio_distrito"] },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
   {
     path: "/estatisticas/encarregados",
@@ -286,6 +296,88 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "tipo", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsValueKey: "nome" }
     ]
   },
+  "/catalogos/tipos-documentos": {
+    saveCommand: "legal_catalogs_save_tipo_documento",
+    deleteCommand: "legal_catalogs_delete_tipo_documento",
+    idKind: "string",
+    fields: [
+      { name: "tipo", label: "Tipo", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/tipos-penalidade": {
+    saveCommand: "legal_catalogs_save_tipo_penalidade",
+    deleteCommand: "legal_catalogs_delete_tipo_penalidade",
+    idKind: "string",
+    fields: [
+      { name: "nome_penalidade", label: "Penalidade", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/tipos-prazo": {
+    saveCommand: "legal_catalogs_save_tipo_prazo",
+    deleteCommand: "legal_catalogs_delete_tipo_prazo",
+    idKind: "string",
+    fields: [
+      { name: "nome_prazo", label: "Nome do Prazo", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/status-envolvido": {
+    saveCommand: "legal_catalogs_save_status_envolvido",
+    deleteCommand: "legal_catalogs_delete_status_envolvido",
+    idKind: "string",
+    fields: [
+      { name: "codigo", label: "Código", kind: "text", required: true },
+      { name: "descricao", label: "Descrição", kind: "text" }
+    ]
+  },
+  "/catalogos/solucoes-tipo": {
+    saveCommand: "legal_catalogs_save_solucao_tipo",
+    deleteCommand: "legal_catalogs_delete_solucao_tipo",
+    idKind: "string",
+    fields: [
+      { name: "codigo", label: "Código", kind: "text", required: true },
+      { name: "descricao", label: "Descrição", kind: "text" }
+    ]
+  },
+  "/catalogos/tipo-apuratorios": {
+    saveCommand: "legal_catalogs_save_tipo_apuratorio",
+    deleteCommand: "legal_catalogs_delete_tipo_apuratorio",
+    idKind: "string",
+    fields: [
+      { name: "tipo", label: "Tipo", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/apuratorios": {
+    saveCommand: "legal_catalogs_save_apuratorio",
+    deleteCommand: "legal_catalogs_delete_apuratorio",
+    idKind: "string",
+    hiddenColumns: ["tipo_apuratorio_id"],
+    fields: [
+      { name: "nome_apuratorio", label: "Nome", kind: "text", required: true },
+      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios" },
+      { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true }
+    ]
+  },
+  "/catalogos/locais-origem": {
+    saveCommand: "legal_catalogs_save_local_origem",
+    deleteCommand: "legal_catalogs_delete_local_origem",
+    idKind: "string",
+    hiddenColumns: ["cidade_id"],
+    fields: [
+      { name: "unidade_pm", label: "Unidade PM", kind: "text", required: true },
+      { name: "cidade_id", label: "Cidade", kind: "select", required: true, optionsCommand: "legal_catalogs_list_municipios_distritos" }
+    ]
+  },
+  "/catalogos/municipios-distritos": {
+    saveCommand: "legal_catalogs_save_municipio_distrito",
+    deleteCommand: "legal_catalogs_delete_municipio_distrito",
+    idKind: "string",
+    hiddenColumns: ["municipio_pai", "tipo", "municipio_pai_nome"],
+    fields: [
+      { name: "nome", label: "Nome", kind: "text", required: true },
+      { name: "is_distrito", label: "Distrito", kind: "checkbox" },
+      { name: "municipio_pai", label: "Município Pai", kind: "select", optionsCommand: "legal_catalogs_list_municipios_distritos", showIf: { field: "is_distrito", value: true } }
+    ]
+  },
   "/procedimentos/lista": {
     saveCommand: "proceedings_create",
     updateCommand: "proceedings_update",
@@ -303,7 +395,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       },
       {
         name: "documento_iniciador", label: "Doc. Iniciador", kind: "select", required: true,
-        options: ["Portaria", "Memorando Disciplinar", "Feito Preliminar"]
+        optionsCommand: "legal_catalogs_list_tipos_documentos", optionsValueKey: "tipo"
       },
       { name: "local_fatos", label: "Local dos Fatos", kind: "text", required: true },
       { name: "local_origem", label: "Local de Origem", kind: "text" },
@@ -490,6 +582,21 @@ function fieldValue(row: Record<string, unknown> | null, field: CrudField) {
   return String(value);
 }
 
+function applyShowIf(form: Element) {
+  form.querySelectorAll<HTMLElement>("[data-show-if-field]").forEach((wrapper) => {
+    const fieldName = wrapper.getAttribute("data-show-if-field")!;
+    const expectedValue = wrapper.getAttribute("data-show-if-value")!;
+    const input = form.querySelector<HTMLInputElement>(`[name="${fieldName}"]`);
+    if (!input) return;
+    const update = () => {
+      const actual = input.type === "checkbox" ? String(input.checked) : input.value;
+      wrapper.style.display = actual === expectedValue ? "" : "none";
+    };
+    input.addEventListener("change", update);
+    update();
+  });
+}
+
 function renderField(
   field: CrudField,
   row: Record<string, unknown> | null,
@@ -498,20 +605,20 @@ function renderField(
   const value = fieldValue(row, field);
   const required = field.required ? "required" : "";
 
+  let inner: string;
+
   if (field.kind === "checkbox") {
-    return `
+    inner = `
       <label class="checkbox">
         <input name="${field.name}" type="checkbox" ${value === true ? "checked" : ""} />
         ${field.label}
       </label>
     `;
-  }
-
-  if (field.kind === "select") {
+  } else if (field.kind === "select") {
     const opts = dynamicOpts
       ? dynamicOpts.map((o) => `<option value="${escapeHtml(o.value)}" ${value === o.value ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")
       : (field.options ?? []).map((option) => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
-    return `
+    inner = `
       <label>${field.label}
         <select name="${field.name}" ${required}>
           <option value=""></option>
@@ -519,18 +626,19 @@ function renderField(
         </select>
       </label>
     `;
-  }
-
-  if (field.kind === "textarea") {
-    return `<label>${field.label}<textarea name="${field.name}" ${required}>${escapeHtml(String(value))}</textarea></label>`;
-  }
-
-  if (field.kind === "date") {
+  } else if (field.kind === "textarea") {
+    inner = `<label>${field.label}<textarea name="${field.name}" ${required}>${escapeHtml(String(value))}</textarea></label>`;
+  } else if (field.kind === "date") {
     const dateVal = String(value).substring(0, 10);
-    return `<label>${field.label}<input name="${field.name}" type="date" value="${escapeHtml(dateVal)}" ${required} /></label>`;
+    inner = `<label>${field.label}<input name="${field.name}" type="date" value="${escapeHtml(dateVal)}" ${required} /></label>`;
+  } else {
+    inner = `<label>${field.label}<input name="${field.name}" type="${field.kind}" value="${escapeHtml(String(value))}" ${required} /></label>`;
   }
 
-  return `<label>${field.label}<input name="${field.name}" type="${field.kind}" value="${escapeHtml(String(value))}" ${required} /></label>`;
+  if (field.showIf) {
+    return `<div data-show-if-field="${escapeHtml(field.showIf.field)}" data-show-if-value="${escapeHtml(String(field.showIf.value))}">${inner}</div>`;
+  }
+  return inner;
 }
 
 async function renderCrudForm(route: Route, row: Record<string, unknown> | null = null, error = "") {
@@ -542,9 +650,14 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
     config.fields
       .filter((f) => f.optionsCommand)
       .map(async (f) => {
-        const resp = await call<{ id: string; nome: string }[]>(f.optionsCommand!);
+        const resp = await call<{ id: string; nome?: string; tipo?: string }[]>(f.optionsCommand!);
         const useNome = f.optionsValueKey === "nome";
-        dynamicOptions[f.name] = (resp.data ?? []).map((item) => ({ value: useNome ? item.nome : item.id, label: item.nome }));
+        const useTipo = f.optionsValueKey === "tipo";
+        dynamicOptions[f.name] = (resp.data ?? []).map((item) => {
+          const labelVal = useTipo ? (item.tipo ?? item.id) : (item.nome ?? item.id);
+          const valueVal = useNome ? (item.nome ?? item.id) : useTipo ? (item.tipo ?? item.id) : item.id;
+          return { value: valueVal, label: labelVal };
+        });
       })
   );
 
@@ -568,6 +681,9 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
       </form>
     </section>
   `);
+
+  const crudForm = document.querySelector<HTMLFormElement>("#crud-form");
+  if (crudForm) applyShowIf(crudForm);
 
   document.querySelector<HTMLButtonElement>("#cancel-form")?.addEventListener("click", () => {
     void renderRoute();

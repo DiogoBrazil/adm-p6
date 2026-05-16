@@ -85,14 +85,6 @@ impl CreateProceedingRequest {
             return Err("Local dos fatos e obrigatorio".to_string());
         }
 
-        const DOCS_VALIDOS: &[&str] = &["Portaria", "Memorando Disciplinar", "Feito Preliminar"];
-        if !DOCS_VALIDOS.contains(&self.documento_iniciador.as_str()) {
-            return Err(format!(
-                "Documento iniciador invalido. Permitidos: {}",
-                DOCS_VALIDOS.join(", ")
-            ));
-        }
-
         if let Some(dias) = self.penalidade_dias {
             if dias > 0 {
                 match self.penalidade_tipo.as_deref() {
@@ -352,13 +344,6 @@ impl UpdateProceedingRequest {
         }
         if self.local_fatos.trim().is_empty() {
             return Err("Local dos fatos e obrigatorio".to_string());
-        }
-        const DOCS_VALIDOS: &[&str] = &["Portaria", "Memorando Disciplinar", "Feito Preliminar"];
-        if !DOCS_VALIDOS.contains(&self.documento_iniciador.as_str()) {
-            return Err(format!(
-                "Documento iniciador invalido. Permitidos: {}",
-                DOCS_VALIDOS.join(", ")
-            ));
         }
         if let Some(dias) = self.penalidade_dias {
             if dias > 0 {

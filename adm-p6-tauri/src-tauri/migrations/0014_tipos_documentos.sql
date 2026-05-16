@@ -1,9 +1,53 @@
--- Migration 0005: View v_processos
--- UNION ALL de todas as 10 tabelas tipo-específicas.
--- Resolve FKs de lookup para seus códigos/nomes.
--- Expõe colunas tipo-específicas como NULL quando não se aplicam.
+-- Migration 0014: Consolidar documentos_iniciadores + tipo_doc_autorizacao_prazo → tipos_documentos
+-- Também corrige lo.codigo → lo.unidade_pm na view v_processos (quebrado desde migration 0013).
 
+-- 1. Remover view que referencia as tabelas antigas
 DROP VIEW IF EXISTS v_processos;
+
+-- 2. Remover FKs das 10 tabelas de processo → documentos_iniciadores
+ALTER TABLE sindicancia_regular                     DROP CONSTRAINT fk_sr_doc_ini;
+ALTER TABLE inquerito_policial_militar              DROP CONSTRAINT fk_ipm_doc_ini;
+ALTER TABLE feito_preliminar                        DROP CONSTRAINT fk_fp_doc_ini;
+ALTER TABLE carta_precatoria                        DROP CONSTRAINT fk_cp_doc_ini;
+ALTER TABLE sindicancia_verbal                      DROP CONSTRAINT fk_sv_doc_ini;
+ALTER TABLE processo_apuratorio_disciplinar_sumario DROP CONSTRAINT fk_pads_doc_ini;
+ALTER TABLE processo_apuratorio_dano_herario        DROP CONSTRAINT fk_pade_doc_ini;
+ALTER TABLE processo_administrativo_disciplinar     DROP CONSTRAINT fk_pad_doc_ini;
+ALTER TABLE conselho_disciplina                     DROP CONSTRAINT fk_cd_doc_ini;
+ALTER TABLE conselho_justificacao                   DROP CONSTRAINT fk_cj_doc_ini;
+
+-- 3. Remover FK prazos_processo → tipo_doc_autorizacao_prazo
+ALTER TABLE prazos_processo DROP CONSTRAINT fk_prazo_aut_tipo;
+
+-- 4. Dropar as duas tabelas redundantes
+DROP TABLE IF EXISTS documentos_iniciadores;
+DROP TABLE IF EXISTS tipo_doc_autorizacao_prazo;
+
+-- 5. Criar nova tabela unificada
+CREATE TABLE tipos_documentos (
+    id         UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
+    tipo       TEXT      NOT NULL UNIQUE,
+    ativo      BOOLEAN   NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. Re-adicionar FKs das 10 tabelas → tipos_documentos
+ALTER TABLE sindicancia_regular                     ADD CONSTRAINT fk_sr_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE inquerito_policial_militar              ADD CONSTRAINT fk_ipm_doc_ini  FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE feito_preliminar                        ADD CONSTRAINT fk_fp_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE carta_precatoria                        ADD CONSTRAINT fk_cp_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE sindicancia_verbal                      ADD CONSTRAINT fk_sv_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE processo_apuratorio_disciplinar_sumario ADD CONSTRAINT fk_pads_doc_ini FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE processo_apuratorio_dano_herario        ADD CONSTRAINT fk_pade_doc_ini FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE processo_administrativo_disciplinar     ADD CONSTRAINT fk_pad_doc_ini  FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE conselho_disciplina                     ADD CONSTRAINT fk_cd_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+ALTER TABLE conselho_justificacao                   ADD CONSTRAINT fk_cj_doc_ini   FOREIGN KEY (documento_iniciador_id) REFERENCES tipos_documentos(id);
+
+-- 7. Re-adicionar FK prazos_processo → tipos_documentos
+ALTER TABLE prazos_processo ADD CONSTRAINT fk_prazo_aut_tipo FOREIGN KEY (autorizado_tipo_id) REFERENCES tipos_documentos(id);
+
+-- 8. Recriar view v_processos com tipos_documentos e lo.unidade_pm
 CREATE VIEW v_processos AS
 
 -- 1. sindicancia_regular (SR)
@@ -11,8 +55,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -55,7 +99,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM sindicancia_regular t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -68,8 +112,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -112,7 +156,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM inquerito_policial_militar t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -125,8 +169,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -169,7 +213,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM feito_preliminar t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -182,8 +226,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -226,7 +270,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM carta_precatoria t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -239,8 +283,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -283,7 +327,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM sindicancia_verbal t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -296,8 +340,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -340,7 +384,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM processo_apuratorio_disciplinar_sumario t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -354,8 +398,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -398,7 +442,7 @@ SELECT
     NULL::uuid    AS escrivao_processo_id
 FROM processo_apuratorio_dano_herario t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -412,8 +456,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -456,7 +500,7 @@ SELECT
     t.escrivao_processo_id
 FROM processo_administrativo_disciplinar t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -470,8 +514,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -514,7 +558,7 @@ SELECT
     t.escrivao_processo_id
 FROM conselho_disciplina t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id
@@ -528,8 +572,8 @@ SELECT
     t.id,
     tdp.codigo                               AS tipo_detalhe,
     t.tipo_geral,
-    di.codigo                                AS documento_iniciador,
-    lo.codigo                                AS local_origem,
+    di.tipo                                  AS documento_iniciador,
+    lo.unidade_pm                            AS local_origem,
     md.nome                                  AS local_fatos,
     st.codigo                                AS solucao_tipo,
     nt.codigo                                AS natureza_processo,
@@ -572,7 +616,7 @@ SELECT
     t.escrivao_processo_id
 FROM conselho_justificacao t
 JOIN tipos_detalhe_processo tdp ON tdp.id = t.tipo_detalhe_id
-JOIN documentos_iniciadores di  ON di.id  = t.documento_iniciador_id
+JOIN tipos_documentos di        ON di.id  = t.documento_iniciador_id
 LEFT JOIN locais_origem lo      ON lo.id  = t.local_origem_id
 LEFT JOIN municipios_distritos md ON md.id = t.local_fatos_id
 LEFT JOIN solucoes_tipo st      ON st.id  = t.solucao_tipo_id

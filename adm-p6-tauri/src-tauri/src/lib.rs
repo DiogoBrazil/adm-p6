@@ -19,6 +19,14 @@ pub fn run() {
     dotenvy::dotenv().ok();
     let state = AppState::from_env();
 
+    tauri::async_runtime::block_on(async {
+        let pool = state.pool().await.expect("Falha ao conectar ao banco de dados");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Falha ao aplicar migrations do banco de dados");
+    });
+
     tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
@@ -72,6 +80,32 @@ pub fn run() {
             legal_catalogs::commands::legal_catalogs_get_dispositivo_legal,
             legal_catalogs::commands::legal_catalogs_save_dispositivo_legal,
             legal_catalogs::commands::legal_catalogs_delete_dispositivo_legal,
+            legal_catalogs::commands::legal_catalogs_save_local_origem,
+            legal_catalogs::commands::legal_catalogs_delete_local_origem,
+            legal_catalogs::commands::legal_catalogs_list_municipios_distritos,
+            legal_catalogs::commands::legal_catalogs_save_municipio_distrito,
+            legal_catalogs::commands::legal_catalogs_delete_municipio_distrito,
+            legal_catalogs::commands::legal_catalogs_list_tipos_documentos,
+            legal_catalogs::commands::legal_catalogs_save_tipo_documento,
+            legal_catalogs::commands::legal_catalogs_delete_tipo_documento,
+            legal_catalogs::commands::legal_catalogs_list_tipos_penalidade,
+            legal_catalogs::commands::legal_catalogs_save_tipo_penalidade,
+            legal_catalogs::commands::legal_catalogs_delete_tipo_penalidade,
+            legal_catalogs::commands::legal_catalogs_list_tipos_prazo,
+            legal_catalogs::commands::legal_catalogs_save_tipo_prazo,
+            legal_catalogs::commands::legal_catalogs_delete_tipo_prazo,
+            legal_catalogs::commands::legal_catalogs_list_status_envolvido,
+            legal_catalogs::commands::legal_catalogs_save_status_envolvido,
+            legal_catalogs::commands::legal_catalogs_delete_status_envolvido,
+            legal_catalogs::commands::legal_catalogs_list_solucoes_tipo,
+            legal_catalogs::commands::legal_catalogs_save_solucao_tipo,
+            legal_catalogs::commands::legal_catalogs_delete_solucao_tipo,
+            legal_catalogs::commands::legal_catalogs_list_tipo_apuratorios,
+            legal_catalogs::commands::legal_catalogs_save_tipo_apuratorio,
+            legal_catalogs::commands::legal_catalogs_delete_tipo_apuratorio,
+            legal_catalogs::commands::legal_catalogs_list_apuratorios,
+            legal_catalogs::commands::legal_catalogs_save_apuratorio,
+            legal_catalogs::commands::legal_catalogs_delete_apuratorio,
             proceedings::commands::proceedings_list,
             proceedings::commands::proceedings_form_schema,
             proceedings::commands::proceedings_create,

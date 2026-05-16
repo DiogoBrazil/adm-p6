@@ -5,11 +5,17 @@ use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::legal_catalogs::domain::{
-    Art29Item, Art32Item, ArtigoRdpmItem, CrimeItem, DispositivoLegalItem, LocalOrigemItem,
-    MunicipalityItem, NaturezaItem, PostoGraduacaoItem, ProceedingCatalogs, SaveArt29Request,
+    ApuratorioItem, Art29Item, Art32Item, ArtigoRdpmItem, CrimeItem, DispositivoLegalItem,
+    LocalOrigemItem, MunicipalityItem, MunicipioCRUDItem,
+    NaturezaItem, PostoGraduacaoItem, ProceedingCatalogs, SaveApuratorioRequest, SaveArt29Request,
     SaveArt32Request, SaveArtigoRdpmRequest, SaveCatalogResult, SaveCrimeRequest,
-    SaveDispositivoLegalRequest, SavePostoGraduacaoRequest, SaveTransgressionRequest,
-    SaveTipoUsuarioRequest, TipoUsuarioItem, TransgressionItem,
+    SaveDispositivoLegalRequest, SaveLocalOrigemRequest,
+    SaveMunicipioDistritoRequest, SavePostoGraduacaoRequest, SaveSolucaoTipoRequest,
+    SaveStatusEnvolvidoRequest, SaveTipoApuratorioRequest, SaveTipoDocumentoRequest,
+    SaveTipoPenalidadeRequest, SaveTipoPrazoRequest,
+    SaveTipoUsuarioRequest, SaveTransgressionRequest, SolucaoTipoItem, StatusEnvolvidoItem,
+    TipoApuratorioItem, TipoDocumentoItem, TipoPenalidadeItem, TipoPrazoItem,
+    TipoUsuarioItem, TransgressionItem,
 };
 use crate::legal_catalogs::repository;
 use crate::response::{from_result, ApiResponse};
@@ -559,6 +565,388 @@ pub async fn legal_catalogs_delete_posto_graduacao(
         let mut tx = pool.begin().await?;
         repository::soft_delete_posto_graduacao(&mut tx, &id).await?;
         audit_repository::register_tx(&mut tx, "postos_graduacoes", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── LocalOrigem ───────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_save_local_origem(
+    state: State<'_, AppState>,
+    request: SaveLocalOrigemRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_local_origem(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "locais_origem", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_local_origem(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_local_origem(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "locais_origem", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── MunicipiosDistritos ───────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_municipios_distritos(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<MunicipioCRUDItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_municipios_distritos_crud(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_municipio_distrito(
+    state: State<'_, AppState>,
+    request: SaveMunicipioDistritoRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_municipio_distrito(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "municipios_distritos", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_municipio_distrito(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_municipio_distrito(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "municipios_distritos", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── Catálogos simples ─────────────────────────────────────────────────────────
+
+macro_rules! simple_catalog_commands {
+    (
+        list: $list_fn:ident, $list_repo:ident, $list_item:ident;
+        save: $save_fn:ident, $save_repo:ident, $save_req:ident, $table:literal;
+        delete: $delete_fn:ident, $delete_repo:ident;
+    ) => {
+        #[tauri::command]
+        pub async fn $list_fn(state: State<'_, AppState>) -> Result<ApiResponse<Vec<$list_item>>, String> {
+            Ok(from_result(async {
+                require_session(&state).await?;
+                let pool = state.pool().await?;
+                Ok(repository::$list_repo(&pool).await?)
+            }.await).await)
+        }
+
+        #[tauri::command]
+        pub async fn $save_fn(
+            state: State<'_, AppState>,
+            request: $save_req,
+        ) -> Result<ApiResponse<SaveCatalogResult>, String> {
+            Ok(from_result(async {
+                let actor = require_admin(&state).await?;
+                request.validate().map_err(AppError::Domain)?;
+                let pool = state.pool().await?;
+                let mut tx = pool.begin().await?;
+                let is_update = request.id.is_some();
+                let id = repository::$save_repo(&mut tx, &request).await?;
+                audit_repository::register_tx(&mut tx, $table, &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+                tx.commit().await?;
+                Ok(SaveCatalogResult { id })
+            }.await).await)
+        }
+
+        #[tauri::command]
+        pub async fn $delete_fn(
+            state: State<'_, AppState>,
+            id: String,
+        ) -> Result<ApiResponse<bool>, String> {
+            Ok(from_result(async {
+                let actor = require_admin(&state).await?;
+                let pool = state.pool().await?;
+                let mut tx = pool.begin().await?;
+                repository::$delete_repo(&mut tx, &id).await?;
+                audit_repository::register_tx(&mut tx, $table, &id, "DELETE", Some(&actor.id)).await?;
+                tx.commit().await?;
+                Ok(true)
+            }.await).await)
+        }
+    };
+}
+
+simple_catalog_commands!(
+    list: legal_catalogs_list_status_envolvido, list_status_envolvido, StatusEnvolvidoItem;
+    save: legal_catalogs_save_status_envolvido, save_status_envolvido, SaveStatusEnvolvidoRequest, "status_envolvido";
+    delete: legal_catalogs_delete_status_envolvido, soft_delete_status_envolvido;
+);
+simple_catalog_commands!(
+    list: legal_catalogs_list_solucoes_tipo, list_solucoes_tipo, SolucaoTipoItem;
+    save: legal_catalogs_save_solucao_tipo, save_solucao_tipo, SaveSolucaoTipoRequest, "solucoes_tipo";
+    delete: legal_catalogs_delete_solucao_tipo, soft_delete_solucao_tipo;
+);
+
+// ── TipoPenalidade ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_tipos_penalidade(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<TipoPenalidadeItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_tipos_penalidade(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_tipo_penalidade(
+    state: State<'_, AppState>,
+    request: SaveTipoPenalidadeRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_tipo_penalidade(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "tipos_penalidade", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_tipo_penalidade(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_tipo_penalidade(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "tipos_penalidade", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── TipoPrazo ─────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_tipos_prazo(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<TipoPrazoItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_tipos_prazo(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_tipo_prazo(
+    state: State<'_, AppState>,
+    request: SaveTipoPrazoRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_tipo_prazo(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "tipos_prazo", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_tipo_prazo(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_tipo_prazo(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "tipos_prazo", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── TipoApuratorio ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_tipo_apuratorios(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<TipoApuratorioItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_tipo_apuratorios(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_tipo_apuratorio(
+    state: State<'_, AppState>,
+    request: SaveTipoApuratorioRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_tipo_apuratorio(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "tipo_apuratorios", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_tipo_apuratorio(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_tipo_apuratorio(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "tipo_apuratorios", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── Apuratorio ────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_apuratorios(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<ApuratorioItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_apuratorios(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_apuratorio(
+    state: State<'_, AppState>,
+    request: SaveApuratorioRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_apuratorio(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "apuratorios", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_apuratorio(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_apuratorio(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "apuratorios", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
+
+// ── TiposDocumentos ───────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_tipos_documentos(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<TipoDocumentoItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_tipos_documentos(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_tipo_documento(
+    state: State<'_, AppState>,
+    request: SaveTipoDocumentoRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_tipo_documento(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "tipos_documentos", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_tipo_documento(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_tipo_documento(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "tipos_documentos", &id, "DELETE", Some(&actor.id)).await?;
         tx.commit().await?;
         Ok(true)
     }.await).await)

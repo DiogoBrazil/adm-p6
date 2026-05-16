@@ -132,11 +132,200 @@ pub struct SaveCatalogResult {
     pub id: String,
 }
 
+// ── LocalOrigem (schema reestruturado: unidade_pm + cidade FK) ──────────────
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct LocalOrigemItem {
     pub id: String,
-    pub nome: String,
+    pub unidade_pm: String,
+    pub cidade_id: String,
+    pub cidade_nome: Option<String>,
     pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveLocalOrigemRequest {
+    pub id: Option<String>,
+    pub unidade_pm: String,
+    pub cidade_id: String,
+}
+
+impl SaveLocalOrigemRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.unidade_pm.trim().is_empty() {
+            return Err("unidade_pm e obrigatoria".to_string());
+        }
+        if self.cidade_id.trim().is_empty() {
+            return Err("cidade e obrigatoria".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── MunicipioDistrito ────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MunicipioCRUDItem {
+    pub id: String,
+    pub nome: String,
+    pub tipo: String,
+    pub is_distrito: bool,
+    pub municipio_pai: Option<String>,
+    pub municipio_pai_nome: Option<String>,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveMunicipioDistritoRequest {
+    pub id: Option<String>,
+    pub nome: String,
+    pub is_distrito: bool,
+    pub municipio_pai: Option<String>,
+}
+
+impl SaveMunicipioDistritoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome.trim().is_empty() {
+            return Err("nome e obrigatorio".to_string());
+        }
+        if self.is_distrito && self.municipio_pai.as_deref().unwrap_or("").trim().is_empty() {
+            return Err("municipio pai e obrigatorio para distritos".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── Catálogos simples (codigo + descricao) ───────────────────────────────────
+macro_rules! simple_catalog {
+    ($item:ident, $req:ident) => {
+        #[derive(Debug, Serialize, sqlx::FromRow)]
+        pub struct $item {
+            pub id: String,
+            pub codigo: String,
+            pub descricao: Option<String>,
+            pub ativo: Option<bool>,
+        }
+
+        #[derive(Debug, Deserialize)]
+        pub struct $req {
+            pub id: Option<String>,
+            pub codigo: String,
+            pub descricao: Option<String>,
+        }
+
+        impl $req {
+            pub fn validate(&self) -> Result<(), String> {
+                if self.codigo.trim().is_empty() {
+                    return Err("codigo e obrigatorio".to_string());
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+simple_catalog!(StatusEnvolvidoItem, SaveStatusEnvolvidoRequest);
+simple_catalog!(SolucaoTipoItem, SaveSolucaoTipoRequest);
+
+// ── TipoPenalidade ────────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TipoPenalidadeItem {
+    pub id: String,
+    pub nome_penalidade: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveTipoPenalidadeRequest {
+    pub id: Option<String>,
+    pub nome_penalidade: String,
+}
+
+impl SaveTipoPenalidadeRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_penalidade.trim().is_empty() {
+            return Err("nome_penalidade e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── TipoPrazo ─────────────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TipoPrazoItem {
+    pub id: String,
+    pub nome_prazo: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveTipoPrazoRequest {
+    pub id: Option<String>,
+    pub nome_prazo: String,
+}
+
+impl SaveTipoPrazoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_prazo.trim().is_empty() {
+            return Err("nome_prazo e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── TipoApuratorio ────────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TipoApuratorioItem {
+    pub id: String,
+    pub tipo: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveTipoApuratorioRequest {
+    pub id: Option<String>,
+    pub tipo: String,
+}
+
+impl SaveTipoApuratorioRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.tipo.trim().is_empty() {
+            return Err("tipo e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── Apuratorio ────────────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ApuratorioItem {
+    pub id: String,
+    pub nome_apuratorio: String,
+    pub tipo_apuratorio_id: String,
+    pub tipo_apuratorio: Option<String>,
+    pub prazo_base_dias: i32,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveApuratorioRequest {
+    pub id: Option<String>,
+    pub nome_apuratorio: String,
+    pub tipo_apuratorio_id: String,
+    pub prazo_base_dias: i32,
+}
+
+impl SaveApuratorioRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_apuratorio.trim().is_empty() {
+            return Err("nome_apuratorio e obrigatorio".to_string());
+        }
+        if self.tipo_apuratorio_id.trim().is_empty() {
+            return Err("tipo_apuratorio e obrigatorio".to_string());
+        }
+        if self.prazo_base_dias <= 0 {
+            return Err("prazo_base_dias deve ser positivo".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -252,4 +441,26 @@ pub struct MunicipalityItem {
     pub tipo: Option<String>,
     pub municipio_pai: Option<String>,
     pub nome_exibicao: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TipoDocumentoItem {
+    pub id: String,
+    pub tipo: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveTipoDocumentoRequest {
+    pub id: Option<String>,
+    pub tipo: String,
+}
+
+impl SaveTipoDocumentoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.tipo.trim().is_empty() {
+            return Err("tipo e obrigatorio".to_string());
+        }
+        Ok(())
+    }
 }

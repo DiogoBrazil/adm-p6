@@ -24,17 +24,17 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
     sqlx::query_as::<_, DeadlineItem>(
         r#"
         SELECT pr.id::text AS id, pr.processo_id::text AS processo_id,
-               tp.codigo AS tipo_prazo,
+               tp.nome_prazo AS tipo_prazo,
                pr.data_inicio, pr.data_vencimento, pr.dias_adicionados,
                pr.motivo, pr.autorizado_por,
-               tda.codigo AS autorizado_tipo,
+               tda.tipo AS autorizado_tipo,
                pr.ativo, pr.numero_portaria, pr.data_portaria, pr.ordem_prorrogacao
         FROM prazos_processo pr
         JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
-        LEFT JOIN tipo_doc_autorizacao_prazo tda ON tda.id = pr.autorizado_tipo_id
+        LEFT JOIN tipos_documentos tda ON tda.id = pr.autorizado_tipo_id
         WHERE pr.processo_id = $1::uuid
         ORDER BY
-            CASE tp.codigo WHEN 'inicial' THEN 0 ELSE 1 END,
+            CASE tp.nome_prazo WHEN 'inicial' THEN 0 ELSE 1 END,
             COALESCE(pr.ordem_prorrogacao, 0)
         "#,
     )
@@ -107,7 +107,7 @@ pub async fn add_extension(
     let new_end = new_start + chrono::Duration::days((request.dias_prorrogacao - 1).max(0) as i64);
 
     let max_ordem: (Option<i32>,) = sqlx::query_as(
-        "SELECT MAX(ordem_prorrogacao) FROM prazos_processo WHERE processo_id = $1::uuid AND tipo_prazo_id = (SELECT id FROM tipos_prazo WHERE codigo = 'prorrogacao')",
+        "SELECT MAX(ordem_prorrogacao) FROM prazos_processo WHERE processo_id = $1::uuid AND tipo_prazo_id = (SELECT id FROM tipos_prazo WHERE nome_prazo = 'prorrogacao')",
     )
     .bind(&request.processo_id)
     .fetch_one(&mut **tx)
@@ -123,9 +123,9 @@ pub async fn add_extension(
         )
         VALUES (
             $1::uuid,
-            (SELECT id FROM tipos_prazo WHERE codigo = 'prorrogacao'),
+            (SELECT id FROM tipos_prazo WHERE nome_prazo = 'prorrogacao'),
             $2, $3, $4, $5, $6,
-            (SELECT id FROM tipo_doc_autorizacao_prazo WHERE codigo = $7),
+            (SELECT id FROM tipos_documentos WHERE tipo = $7),
             true, $8, $9, $10, CURRENT_TIMESTAMP
         )
         RETURNING id::text
@@ -184,7 +184,7 @@ pub async fn report(
                u.nome    AS responsavel_nome,
                pr.data_vencimento,
                (pr.data_vencimento - CURRENT_DATE)::integer AS dias_restantes,
-               tp.codigo AS tipo_prazo
+               tp.nome_prazo AS tipo_prazo
         FROM prazos_processo pr
         JOIN v_processos p ON p.id = pr.processo_id
         JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id

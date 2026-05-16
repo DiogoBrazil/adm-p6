@@ -1,5 +1,5 @@
 -- Migration 0006: Seed completo dos postos e graduações da PMRO
--- Dados extraídos do banco legado adm_p6_db.postos_graduacoes (13 registros).
+-- Dados extraídos do banco legado adm_p6_db_normalized.postos_graduacoes (13 registros).
 -- Adiciona constraint UNIQUE em codigo (ausente na 0001) e insere todos os postos.
 
 ALTER TABLE postos_graduacoes
