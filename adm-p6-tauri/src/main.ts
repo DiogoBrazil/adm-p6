@@ -37,6 +37,7 @@ type CrudField = {
   options?: string[];
   optionsCommand?: string;
   optionsValueKey?: "id" | "nome" | "tipo";
+  optionsLabelKey?: string;
   showIf?: { field: string; value: boolean | string };
 };
 
@@ -361,7 +362,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     hiddenColumns: ["tipo_apuratorio_id"],
     fields: [
       { name: "nome_apuratorio", label: "Nome", kind: "text", required: true },
-      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios" },
+      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios", optionsLabelKey: "tipo" },
       { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true }
     ]
   },
@@ -658,11 +659,13 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
     config.fields
       .filter((f) => f.optionsCommand)
       .map(async (f) => {
-        const resp = await call<{ id: string; nome?: string; tipo?: string }[]>(f.optionsCommand!);
+        const resp = await call<Record<string, string>[]>(f.optionsCommand!);
         const useNome = f.optionsValueKey === "nome";
         const useTipo = f.optionsValueKey === "tipo";
         dynamicOptions[f.name] = (resp.data ?? []).map((item) => {
-          const labelVal = useTipo ? (item.tipo ?? item.id) : (item.nome ?? item.id);
+          const labelVal = f.optionsLabelKey
+            ? (item[f.optionsLabelKey] ?? item.id)
+            : useTipo ? (item.tipo ?? item.id) : (item.nome ?? item.id);
           const valueVal = useNome ? (item.nome ?? item.id) : useTipo ? (item.tipo ?? item.id) : item.id;
           return { value: valueVal, label: labelVal };
         });
