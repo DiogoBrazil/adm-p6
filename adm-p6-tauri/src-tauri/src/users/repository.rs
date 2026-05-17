@@ -137,11 +137,10 @@ pub async fn create(
             nome, matricula, is_encarregado, is_operador,
             email, senha, ativo, created_at, updated_at
         )
-        SELECT tu.id, pg.id, pa.id,
+        SELECT pg.tipo_usuario_id, pg.id, pa.id,
                upper($2), $3, $4, $5, lower($6), $7, true,
                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM postos_graduacoes pg
-        JOIN tipos_usuario tu ON tu.nome = pg.tipo
         LEFT JOIN perfis_acesso pa ON pa.codigo = $8
         WHERE pg.nome = $1
         RETURNING id::text
@@ -187,8 +186,7 @@ pub async fn update(
         r#"
         UPDATE usuarios
         SET tipo_usuario_id    = (
-                SELECT tu.id FROM postos_graduacoes pg
-                JOIN tipos_usuario tu ON tu.nome = pg.tipo
+                SELECT pg.tipo_usuario_id FROM postos_graduacoes pg
                 WHERE pg.nome = $2
             ),
             posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome = $2),

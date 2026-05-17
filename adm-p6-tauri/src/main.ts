@@ -139,6 +139,7 @@ const routes: Route[] = [
   { path: "/catalogos/tipos-prazo", label: "Tipos de Prazo", group: "Catálogos", command: "legal_catalogs_list_tipos_prazo", writeCommands: ["legal_catalogs_save_tipo_prazo", "legal_catalogs_delete_tipo_prazo"] },
   { path: "/catalogos/status-envolvido", label: "Status Envolvido", group: "Catálogos", command: "legal_catalogs_list_status_envolvido", writeCommands: ["legal_catalogs_save_status_envolvido", "legal_catalogs_delete_status_envolvido"] },
   { path: "/catalogos/solucoes-tipo", label: "Soluções por Tipo", group: "Catálogos", command: "legal_catalogs_list_solucoes_tipo", writeCommands: ["legal_catalogs_save_solucao_tipo", "legal_catalogs_delete_solucao_tipo"] },
+  { path: "/catalogos/natureza-transgressao", label: "Natureza da Transgressão", group: "Catálogos", command: "legal_catalogs_list_natureza_transgressao", writeCommands: ["legal_catalogs_save_natureza_transgressao", "legal_catalogs_delete_natureza_transgressao"] },
   { path: "/catalogos/tipo-apuratorios", label: "Tipos Apuratórios", group: "Catálogos", command: "legal_catalogs_list_tipo_apuratorios", writeCommands: ["legal_catalogs_save_tipo_apuratorio", "legal_catalogs_delete_tipo_apuratorio"] },
   { path: "/catalogos/apuratorios", label: "Apuratórios", group: "Catálogos", command: "legal_catalogs_list_apuratorios", writeCommands: ["legal_catalogs_save_apuratorio", "legal_catalogs_delete_apuratorio"] },
   { path: "/catalogos/locais-origem", label: "Locais de Origem", group: "Catálogos", command: "legal_catalogs_list_locais_origem", writeCommands: ["legal_catalogs_save_local_origem", "legal_catalogs_delete_local_origem"] },
@@ -255,10 +256,10 @@ const crudConfigs: Record<string, CrudConfig> = {
     saveCommand: "legal_catalogs_save_artigo_rdpm",
     deleteCommand: "legal_catalogs_delete_artigo_rdpm",
     idKind: "string",
-    hiddenColumns: ["nome"],
+    hiddenColumns: ["nome", "natureza_id"],
     fields: [
       { name: "artigo", label: "Artigo", kind: "text", required: true },
-      { name: "natureza", label: "Natureza", kind: "select", required: true, options: ["Leve", "Média", "Grave"] }
+      { name: "natureza_id", label: "Natureza", kind: "select", required: true, optionsCommand: "legal_catalogs_list_natureza_transgressao", optionsLabelKey: "nome_natureza" }
     ]
   },
   "/catalogos/art29": {
@@ -291,9 +292,10 @@ const crudConfigs: Record<string, CrudConfig> = {
     saveCommand: "legal_catalogs_save_posto_graduacao",
     deleteCommand: "legal_catalogs_delete_posto_graduacao",
     idKind: "string",
+    hiddenColumns: ["tipo_usuario_id"],
     fields: [
       { name: "nome", label: "Nome", kind: "text", required: true },
-      { name: "tipo", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsValueKey: "nome" }
+      { name: "tipo_usuario_id", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario" }
     ]
   },
   "/catalogos/tipos-documentos": {
@@ -325,8 +327,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_status_envolvido",
     idKind: "string",
     fields: [
-      { name: "codigo", label: "Código", kind: "text", required: true },
-      { name: "descricao", label: "Descrição", kind: "text" }
+      { name: "nome_status", label: "Status", kind: "text", required: true }
     ]
   },
   "/catalogos/solucoes-tipo": {
@@ -334,8 +335,15 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_solucao_tipo",
     idKind: "string",
     fields: [
-      { name: "codigo", label: "Código", kind: "text", required: true },
-      { name: "descricao", label: "Descrição", kind: "text" }
+      { name: "nome_solucao", label: "Solução", kind: "text", required: true }
+    ]
+  },
+  "/catalogos/natureza-transgressao": {
+    saveCommand: "legal_catalogs_save_natureza_transgressao",
+    deleteCommand: "legal_catalogs_delete_natureza_transgressao",
+    idKind: "string",
+    fields: [
+      { name: "nome_natureza", label: "Nome da Natureza", kind: "text", required: true }
     ]
   },
   "/catalogos/tipo-apuratorios": {

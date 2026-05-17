@@ -7,12 +7,12 @@ use crate::error::AppError;
 use crate::legal_catalogs::domain::{
     ApuratorioItem, Art29Item, Art32Item, ArtigoRdpmItem, CrimeItem, DispositivoLegalItem,
     LocalOrigemItem, MunicipalityItem, MunicipioCRUDItem,
-    NaturezaItem, PostoGraduacaoItem, ProceedingCatalogs, SaveApuratorioRequest, SaveArt29Request,
-    SaveArt32Request, SaveArtigoRdpmRequest, SaveCatalogResult, SaveCrimeRequest,
-    SaveDispositivoLegalRequest, SaveLocalOrigemRequest,
-    SaveMunicipioDistritoRequest, SavePostoGraduacaoRequest, SaveSolucaoTipoRequest,
-    SaveStatusEnvolvidoRequest, SaveTipoApuratorioRequest, SaveTipoDocumentoRequest,
-    SaveTipoPenalidadeRequest, SaveTipoPrazoRequest,
+    NaturezaItem, NaturezaTransgressaoItem, PostoGraduacaoItem, ProceedingCatalogs,
+    SaveApuratorioRequest, SaveArt29Request, SaveArt32Request, SaveArtigoRdpmRequest,
+    SaveCatalogResult, SaveCrimeRequest, SaveDispositivoLegalRequest, SaveLocalOrigemRequest,
+    SaveMunicipioDistritoRequest, SaveNaturezaTransgressaoRequest, SavePostoGraduacaoRequest,
+    SaveSolucaoTipoRequest, SaveStatusEnvolvidoRequest, SaveTipoApuratorioRequest,
+    SaveTipoDocumentoRequest, SaveTipoPenalidadeRequest, SaveTipoPrazoRequest,
     SaveTipoUsuarioRequest, SaveTransgressionRequest, SolucaoTipoItem, StatusEnvolvidoItem,
     TipoApuratorioItem, TipoDocumentoItem, TipoPenalidadeItem, TipoPrazoItem,
     TipoUsuarioItem, TransgressionItem,
@@ -716,6 +716,53 @@ simple_catalog_commands!(
     save: legal_catalogs_save_solucao_tipo, save_solucao_tipo, SaveSolucaoTipoRequest, "solucoes_tipo";
     delete: legal_catalogs_delete_solucao_tipo, soft_delete_solucao_tipo;
 );
+
+// ── NaturezaTransgressao ──────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn legal_catalogs_list_natureza_transgressao(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<NaturezaTransgressaoItem>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::list_natureza_transgressao(&pool).await?)
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_save_natureza_transgressao(
+    state: State<'_, AppState>,
+    request: SaveNaturezaTransgressaoRequest,
+) -> Result<ApiResponse<SaveCatalogResult>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        request.validate().map_err(AppError::Domain)?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        let is_update = request.id.is_some();
+        let id = repository::save_natureza_transgressao(&mut tx, &request).await?;
+        audit_repository::register_tx(&mut tx, "natureza_transgressao", &id, if is_update { "UPDATE" } else { "CREATE" }, Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(SaveCatalogResult { id })
+    }.await).await)
+}
+
+#[tauri::command]
+pub async fn legal_catalogs_delete_natureza_transgressao(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(async {
+        let actor = require_admin(&state).await?;
+        let pool = state.pool().await?;
+        let mut tx = pool.begin().await?;
+        repository::soft_delete_natureza_transgressao(&mut tx, &id).await?;
+        audit_repository::register_tx(&mut tx, "natureza_transgressao", &id, "DELETE", Some(&actor.id)).await?;
+        tx.commit().await?;
+        Ok(true)
+    }.await).await)
+}
 
 // ── TipoPenalidade ────────────────────────────────────────────────────────────
 

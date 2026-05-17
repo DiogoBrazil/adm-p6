@@ -193,37 +193,51 @@ impl SaveMunicipioDistritoRequest {
     }
 }
 
-// ── Catálogos simples (codigo + descricao) ───────────────────────────────────
-macro_rules! simple_catalog {
-    ($item:ident, $req:ident) => {
-        #[derive(Debug, Serialize, sqlx::FromRow)]
-        pub struct $item {
-            pub id: String,
-            pub codigo: String,
-            pub descricao: Option<String>,
-            pub ativo: Option<bool>,
-        }
-
-        #[derive(Debug, Deserialize)]
-        pub struct $req {
-            pub id: Option<String>,
-            pub codigo: String,
-            pub descricao: Option<String>,
-        }
-
-        impl $req {
-            pub fn validate(&self) -> Result<(), String> {
-                if self.codigo.trim().is_empty() {
-                    return Err("codigo e obrigatorio".to_string());
-                }
-                Ok(())
-            }
-        }
-    };
+// ── StatusEnvolvido ───────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct StatusEnvolvidoItem {
+    pub id: String,
+    pub nome_status: String,
+    pub ativo: Option<bool>,
 }
 
-simple_catalog!(StatusEnvolvidoItem, SaveStatusEnvolvidoRequest);
-simple_catalog!(SolucaoTipoItem, SaveSolucaoTipoRequest);
+#[derive(Debug, Deserialize)]
+pub struct SaveStatusEnvolvidoRequest {
+    pub id: Option<String>,
+    pub nome_status: String,
+}
+
+impl SaveStatusEnvolvidoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_status.trim().is_empty() {
+            return Err("nome_status e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── SolucaoTipo ───────────────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SolucaoTipoItem {
+    pub id: String,
+    pub nome_solucao: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveSolucaoTipoRequest {
+    pub id: Option<String>,
+    pub nome_solucao: String,
+}
+
+impl SaveSolucaoTipoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_solucao.trim().is_empty() {
+            return Err("nome_solucao e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
 
 // ── TipoPenalidade ────────────────────────────────────────────────────────────
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -332,7 +346,8 @@ impl SaveApuratorioRequest {
 pub struct PostoGraduacaoItem {
     pub id: String,
     pub nome: String,
-    pub tipo: String,
+    pub tipo_usuario_id: Option<String>,
+    pub tipo_usuario: Option<String>,
     pub ativo: Option<bool>,
 }
 
@@ -340,7 +355,7 @@ pub struct PostoGraduacaoItem {
 pub struct SavePostoGraduacaoRequest {
     pub id: Option<String>,
     pub nome: String,
-    pub tipo: String,
+    pub tipo_usuario_id: String,
 }
 
 impl SavePostoGraduacaoRequest {
@@ -348,8 +363,31 @@ impl SavePostoGraduacaoRequest {
         if self.nome.trim().is_empty() {
             return Err("nome e obrigatorio".to_string());
         }
-        if self.tipo.trim().is_empty() {
-            return Err("tipo e obrigatorio".to_string());
+        if self.tipo_usuario_id.trim().is_empty() {
+            return Err("tipo_usuario e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+// ── NaturezaTransgressao ─────────────────────────────────────────────────────
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct NaturezaTransgressaoItem {
+    pub id: String,
+    pub nome_natureza: String,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveNaturezaTransgressaoRequest {
+    pub id: Option<String>,
+    pub nome_natureza: String,
+}
+
+impl SaveNaturezaTransgressaoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_natureza.trim().is_empty() {
+            return Err("nome_natureza e obrigatorio".to_string());
         }
         Ok(())
     }
@@ -411,7 +449,8 @@ pub struct ArtigoRdpmItem {
     pub id: String,
     pub nome: String,
     pub artigo: String,
-    pub natureza: String,
+    pub natureza_id: String,
+    pub natureza: Option<String>,
     pub ativo: Option<bool>,
 }
 
@@ -419,7 +458,7 @@ pub struct ArtigoRdpmItem {
 pub struct SaveArtigoRdpmRequest {
     pub id: Option<String>,
     pub artigo: String,
-    pub natureza: String,
+    pub natureza_id: String,
 }
 
 impl SaveArtigoRdpmRequest {
@@ -427,8 +466,8 @@ impl SaveArtigoRdpmRequest {
         if self.artigo.trim().is_empty() {
             return Err("artigo e obrigatorio".to_string());
         }
-        if !["Leve", "Média", "Grave"].contains(&self.natureza.as_str()) {
-            return Err("natureza deve ser Leve, Media ou Grave".to_string());
+        if self.natureza_id.trim().is_empty() {
+            return Err("natureza e obrigatoria".to_string());
         }
         Ok(())
     }
