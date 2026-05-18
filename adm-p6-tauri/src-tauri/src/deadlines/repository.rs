@@ -27,7 +27,7 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
                tp.nome_prazo AS tipo_prazo,
                pr.data_inicio, pr.data_vencimento, pr.dias_adicionados,
                pr.motivo, pr.autorizado_por,
-               tda.tipo AS autorizado_tipo,
+               tda.nome_tipo_documento AS autorizado_tipo,
                pr.ativo, pr.numero_portaria, pr.data_portaria, pr.ordem_prorrogacao
         FROM prazos_processo pr
         JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
@@ -125,7 +125,7 @@ pub async fn add_extension(
             $1::uuid,
             (SELECT id FROM tipos_prazo WHERE nome_prazo = 'prorrogacao'),
             $2, $3, $4, $5, $6,
-            (SELECT id FROM tipos_documentos WHERE tipo = $7),
+            (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $7),
             true, $8, $9, $10, CURRENT_TIMESTAMP
         )
         RETURNING id::text

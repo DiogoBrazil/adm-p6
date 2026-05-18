@@ -32,7 +32,7 @@ where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     sqlx::query_scalar::<_, String>(
-        r#"SELECT tdp.codigo
+        r#"SELECT tdp.nome_apuratorio
            FROM processos_procedimentos pp
            JOIN apuratorios tdp ON tdp.id = pp.tipo_detalhe_id
            WHERE pp.id = $1::uuid"#,
@@ -206,9 +206,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -238,9 +238,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -270,9 +270,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -303,9 +303,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -337,9 +337,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -372,9 +372,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -408,9 +408,9 @@ async fn insert_type_specific(
                 ) VALUES (
                     $1::uuid, $2, $3,
                     (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE tipo = $5),
-                    (SELECT id FROM locais_origem WHERE unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome = $7),
+                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
+                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
+                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
                     $8, $9::uuid, $10, $11, $12, $13,
                     (SELECT id FROM solucoes_tipo WHERE codigo = $14),
                     (SELECT id FROM natureza_transgressao WHERE codigo = $15),
@@ -685,9 +685,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -715,9 +715,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -747,9 +747,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -777,9 +777,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -808,9 +808,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -840,9 +840,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,
@@ -872,9 +872,9 @@ pub async fn update(
             sqlx::query(&format!(r#"
                 UPDATE {table} SET
                     numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE tipo = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome = $6),
+                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
+                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
+                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
                     processo_sei = $7, responsavel_id = $8::uuid,
                     data_instauracao = $9, data_recebimento = $10,
                     numero_rgf = $11, resumo_fatos = $12,

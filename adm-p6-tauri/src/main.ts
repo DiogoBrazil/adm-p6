@@ -36,7 +36,7 @@ type CrudField = {
   required?: boolean;
   options?: string[];
   optionsCommand?: string;
-  optionsValueKey?: "id" | "nome" | "tipo";
+  optionsValueKey?: string;
   optionsLabelKey?: string;
   showIf?: { field: string; value: boolean | string };
 };
@@ -210,7 +210,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "users_delete",
     idKind: "string",
     fields: [
-      { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCommand: "legal_catalogs_list_postos_graduacoes", optionsValueKey: "nome" },
+      { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCommand: "legal_catalogs_list_postos_graduacoes", optionsValueKey: "nome_posto_graduacao" },
       { name: "nome", label: "Nome", kind: "text", required: true },
       { name: "matricula", label: "Matrícula", kind: "text", required: true },
       { name: "is_encarregado", label: "Encarregado", kind: "checkbox" },
@@ -226,7 +226,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     idKind: "string",
     hiddenColumns: ["dispositivo_legal_id"],
     fields: [
-      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", optionsCommand: "legal_catalogs_list_dispositivos_legais" },
+      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", optionsCommand: "legal_catalogs_list_dispositivos_legais", optionsLabelKey: "nome_dispositivo_legal" },
       { name: "artigo", label: "Artigo", kind: "text", required: true },
       { name: "descricao_artigo", label: "Descrição", kind: "textarea" },
       { name: "paragrafo", label: "Parágrafo", kind: "text" },
@@ -239,7 +239,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_dispositivo_legal",
     idKind: "string",
     fields: [
-      { name: "nome", label: "Nome", kind: "text", required: true }
+      { name: "nome_dispositivo_legal", label: "Nome", kind: "text", required: true }
     ]
   },
   "/catalogos/transgressoes": {
@@ -248,7 +248,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     idKind: "string",
     hiddenColumns: ["artigo_id"],
     fields: [
-      { name: "artigo_id", label: "Artigo RDPM", kind: "select", optionsCommand: "legal_catalogs_list_artigos_rdpm" },
+      { name: "artigo_id", label: "Artigo RDPM", kind: "select", optionsCommand: "legal_catalogs_list_artigos_rdpm", optionsLabelKey: "nome" },
       { name: "inciso", label: "Inciso", kind: "text" },
       { name: "texto", label: "Texto", kind: "textarea", required: true }
     ]
@@ -286,7 +286,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_tipo_usuario",
     idKind: "string",
     fields: [
-      { name: "nome", label: "Nome", kind: "text", required: true }
+      { name: "nome_tipo_usuario", label: "Nome", kind: "text", required: true }
     ]
   },
   "/catalogos/postos-graduacoes": {
@@ -295,8 +295,8 @@ const crudConfigs: Record<string, CrudConfig> = {
     idKind: "string",
     hiddenColumns: ["tipo_usuario_id"],
     fields: [
-      { name: "nome", label: "Nome", kind: "text", required: true },
-      { name: "tipo_usuario_id", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario" }
+      { name: "nome_posto_graduacao", label: "Nome", kind: "text", required: true },
+      { name: "tipo_usuario_id", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsLabelKey: "nome_tipo_usuario" }
     ]
   },
   "/catalogos/tipos-documentos": {
@@ -304,7 +304,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_tipo_documento",
     idKind: "string",
     fields: [
-      { name: "tipo", label: "Tipo", kind: "text", required: true }
+      { name: "nome_tipo_documento", label: "Tipo", kind: "text", required: true }
     ]
   },
   "/catalogos/tipos-penalidade": {
@@ -352,7 +352,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "legal_catalogs_delete_tipo_apuratorio",
     idKind: "string",
     fields: [
-      { name: "tipo", label: "Tipo", kind: "text", required: true }
+      { name: "nome_tipo_apuratorio", label: "Tipo", kind: "text", required: true }
     ]
   },
   "/catalogos/apuratorios": {
@@ -362,7 +362,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     hiddenColumns: ["tipo_apuratorio_id"],
     fields: [
       { name: "nome_apuratorio", label: "Nome", kind: "text", required: true },
-      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios", optionsLabelKey: "tipo" },
+      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios", optionsLabelKey: "nome_tipo_apuratorio" },
       { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true }
     ]
   },
@@ -372,8 +372,8 @@ const crudConfigs: Record<string, CrudConfig> = {
     idKind: "string",
     hiddenColumns: ["cidade_id"],
     fields: [
-      { name: "unidade_pm", label: "Unidade PM", kind: "text", required: true },
-      { name: "cidade_id", label: "Cidade", kind: "select", required: true, optionsCommand: "legal_catalogs_list_municipios_distritos" }
+      { name: "nome_unidade_pm", label: "Unidade PM", kind: "text", required: true },
+      { name: "cidade_id", label: "Cidade", kind: "select", required: true, optionsCommand: "legal_catalogs_list_municipios_distritos", optionsLabelKey: "nome_municipio_distrito" }
     ]
   },
   "/catalogos/municipios-distritos": {
@@ -382,9 +382,9 @@ const crudConfigs: Record<string, CrudConfig> = {
     idKind: "string",
     hiddenColumns: ["municipio_pai", "tipo", "municipio_pai_nome"],
     fields: [
-      { name: "nome", label: "Nome", kind: "text", required: true },
+      { name: "nome_municipio_distrito", label: "Nome", kind: "text", required: true },
       { name: "is_distrito", label: "Distrito", kind: "checkbox" },
-      { name: "municipio_pai", label: "Município Pai", kind: "select", optionsCommand: "legal_catalogs_list_municipios_distritos", showIf: { field: "is_distrito", value: true } }
+      { name: "municipio_pai", label: "Município Pai", kind: "select", optionsCommand: "legal_catalogs_list_municipios_distritos", optionsLabelKey: "nome_municipio_distrito", showIf: { field: "is_distrito", value: true } }
     ]
   },
   "/procedimentos/lista": {
@@ -404,7 +404,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       },
       {
         name: "documento_iniciador", label: "Doc. Iniciador", kind: "select", required: true,
-        optionsCommand: "legal_catalogs_list_tipos_documentos", optionsValueKey: "tipo"
+        optionsCommand: "legal_catalogs_list_tipos_documentos", optionsValueKey: "nome_tipo_documento"
       },
       { name: "local_fatos", label: "Local dos Fatos", kind: "text", required: true },
       { name: "local_origem", label: "Local de Origem", kind: "text" },
@@ -660,13 +660,9 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
       .filter((f) => f.optionsCommand)
       .map(async (f) => {
         const resp = await call<Record<string, string>[]>(f.optionsCommand!);
-        const useNome = f.optionsValueKey === "nome";
-        const useTipo = f.optionsValueKey === "tipo";
         dynamicOptions[f.name] = (resp.data ?? []).map((item) => {
-          const labelVal = f.optionsLabelKey
-            ? (item[f.optionsLabelKey] ?? item.id)
-            : useTipo ? (item.tipo ?? item.id) : (item.nome ?? item.id);
-          const valueVal = useNome ? (item.nome ?? item.id) : useTipo ? (item.tipo ?? item.id) : item.id;
+          const valueVal = f.optionsValueKey ? (item[f.optionsValueKey] ?? item.id) : item.id;
+          const labelVal = f.optionsLabelKey ? (item[f.optionsLabelKey] ?? item.id) : valueVal;
           return { value: valueVal, label: labelVal };
         });
       })

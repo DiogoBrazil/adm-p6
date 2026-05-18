@@ -7,10 +7,10 @@ use super::domain::{SaveUserRequest, UserListItem, UserListResult, UserProcessIt
 
 const USER_LIST_SELECT: &str = r#"
     SELECT u.id::text AS id, u.nome, u.matricula,
-           pg.nome AS posto_graduacao,
-           tu.nome AS tipo_usuario,
+           pg.nome_posto_graduacao AS posto_graduacao,
+           tu.nome_tipo_usuario AS tipo_usuario,
            u.email,
-           pa.codigo AS perfil,
+           pa.nome_perfil AS perfil,
            u.is_encarregado, u.is_operador, u.ativo
     FROM usuarios u
     JOIN postos_graduacoes pg ON pg.id = u.posto_graduacao_id
@@ -141,8 +141,8 @@ pub async fn create(
                upper($2), $3, $4, $5, lower($6), $7, true,
                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM postos_graduacoes pg
-        LEFT JOIN perfis_acesso pa ON pa.codigo = $8
-        WHERE pg.nome = $1
+        LEFT JOIN perfis_acesso pa ON pa.nome_perfil = $8
+        WHERE pg.nome_posto_graduacao = $1
         RETURNING id::text
         "#,
     )
@@ -187,10 +187,10 @@ pub async fn update(
         UPDATE usuarios
         SET tipo_usuario_id    = (
                 SELECT pg.tipo_usuario_id FROM postos_graduacoes pg
-                WHERE pg.nome = $2
+                WHERE pg.nome_posto_graduacao = $2
             ),
-            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome = $2),
-            perfil_id          = (SELECT id FROM perfis_acesso    WHERE codigo = $8),
+            posto_graduacao_id = (SELECT id FROM postos_graduacoes WHERE nome_posto_graduacao = $2),
+            perfil_id          = (SELECT id FROM perfis_acesso    WHERE nome_perfil = $8),
             nome               = upper($3),
             matricula          = $4,
             is_encarregado     = $5,

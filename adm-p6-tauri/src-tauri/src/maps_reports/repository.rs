@@ -160,11 +160,10 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
         .unwrap_or_default();
 
     let crimes: Vec<CrimeMapRow> = sqlx::query_as(
-        "SELECT ti.codigo AS tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, \
+        "SELECT NULL::text AS tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, \
                 c.paragrafo, c.inciso, c.alinea \
          FROM pm_envolvido_crimes pec \
          JOIN crimes_contravencoes c ON c.id = pec.crime_id \
-         LEFT JOIN tipos_infracao_penal ti ON ti.id = c.tipo_id \
          WHERE pec.pm_indicios_id = $1::uuid AND coalesce(c.ativo, true) = true",
     )
     .bind(&indicios.id)
@@ -172,10 +171,11 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
     .await?;
 
     let rdpm: Vec<RdpmMapRow> = sqlx::query_as(
-        "SELECT t.inciso, t.texto, nt.codigo AS gravidade \
+        "SELECT t.inciso, t.texto, nt.nome_natureza AS gravidade \
          FROM pm_envolvido_rdpm per \
          JOIN transgressoes t ON t.id = per.transgressao_id \
-         JOIN natureza_transgressao nt ON nt.id = t.gravidade_id \
+         LEFT JOIN artigo_rdpm_natureza_transgressao art ON art.id = t.artigo_id \
+         LEFT JOIN natureza_transgressao nt ON nt.id = art.natureza_id \
          WHERE per.pm_indicios_id = $1::uuid AND coalesce(t.ativo, true) = true",
     )
     .bind(&indicios.id)
@@ -254,13 +254,13 @@ async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, 
 
 async fn pms_for_procedimento(pool: &PgPool, processo_id: &str) -> Result<Vec<Value>, sqlx::Error> {
     let rows: Vec<PmMapRow> = sqlx::query_as(
-        "SELECT u.nome, pg.codigo AS posto_graduacao, u.matricula, \
-                se.codigo AS tipo_envolvimento, pme.id::text AS pm_envolvido_id \
+        "SELECT u.nome, pg.nome_posto_graduacao AS posto_graduacao, u.matricula, \
+                se.nome_status AS tipo_envolvimento, pme.id::text AS pm_envolvido_id \
          FROM procedimento_pms_envolvidos pme \
          JOIN usuarios u ON pme.pm_id = u.id \
          JOIN postos_graduacoes pg ON u.posto_graduacao_id = pg.id \
          LEFT JOIN status_envolvido se ON pme.status_pm_id = se.id \
-         WHERE pme.processo_id = $1::uuid \
+         WHERE pme.procedimento_id = $1::uuid \
          ORDER BY pme.ordem",
     )
     .bind(processo_id)

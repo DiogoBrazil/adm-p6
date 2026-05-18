@@ -6,7 +6,7 @@ pub async fn find_operator_by_email(pool: &PgPool, email: &str) -> Result<Option
     sqlx::query_as::<_, UserAuthRow>(
         r#"
         SELECT u.id::text AS id, u.nome, u.email, u.senha,
-               pa.codigo AS perfil, u.is_operador, u.ativo
+               pa.nome_perfil AS perfil, u.is_operador, u.ativo
         FROM usuarios u
         LEFT JOIN perfis_acesso pa ON u.perfil_id = pa.id
         WHERE lower(u.email) = lower($1)

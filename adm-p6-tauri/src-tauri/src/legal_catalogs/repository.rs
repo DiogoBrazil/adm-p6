@@ -21,14 +21,14 @@ pub async fn list_crimes(pool: &PgPool, limit: i64) -> Result<Vec<CrimeItem>, sq
     sqlx::query_as::<_, CrimeItem>(
         r#"
         SELECT c.id::text AS id,
-               dl.nome AS dispositivo_legal,
+               dl.nome_dispositivo_legal AS dispositivo_legal,
                c.dispositivo_legal_id::text AS dispositivo_legal_id,
                c.artigo, c.descricao_artigo,
                c.paragrafo, c.inciso, c.alinea, c.ativo
         FROM crimes_contravencoes c
         LEFT JOIN dispositivos_legais dl ON dl.id = c.dispositivo_legal_id
         WHERE coalesce(c.ativo, true) = true
-        ORDER BY dl.nome, c.artigo
+        ORDER BY dl.nome_dispositivo_legal, c.artigo
         LIMIT $1
         "#,
     )
@@ -229,7 +229,7 @@ pub async fn get_crime_by_id(pool: &PgPool, id: &str) -> Result<Option<CrimeItem
     sqlx::query_as::<_, CrimeItem>(
         r#"
         SELECT c.id::text AS id,
-               dl.nome AS dispositivo_legal,
+               dl.nome_dispositivo_legal AS dispositivo_legal,
                c.dispositivo_legal_id::text AS dispositivo_legal_id,
                c.artigo, c.descricao_artigo,
                c.paragrafo, c.inciso, c.alinea, c.ativo
@@ -271,15 +271,15 @@ pub async fn search_municipalities(
     let pattern = if termo.is_empty() { None } else { Some(format!("%{termo}%")) };
     sqlx::query_as::<_, MunicipalityItem>(
         r#"
-        SELECT id::text AS id, nome, tipo, municipio_pai,
+        SELECT id::text AS id, nome_municipio_distrito, tipo, municipio_pai,
                CASE WHEN tipo = 'Distrito' AND municipio_pai IS NOT NULL
-                    THEN nome || ' (' || municipio_pai || ')'
-                    ELSE nome
+                    THEN nome_municipio_distrito || ' (' || municipio_pai || ')'
+                    ELSE nome_municipio_distrito
                END AS nome_exibicao
         FROM municipios_distritos
         WHERE coalesce(ativo, true) = true
-          AND ($1::text IS NULL OR nome ILIKE $1 OR municipio_pai ILIKE $1)
-        ORDER BY nome
+          AND ($1::text IS NULL OR nome_municipio_distrito ILIKE $1 OR municipio_pai ILIKE $1)
+        ORDER BY nome_municipio_distrito
         LIMIT 50
         "#,
     )
@@ -408,12 +408,12 @@ pub async fn get_art32_by_id(pool: &PgPool, id: &str) -> Result<Option<Art32Item
 
 pub async fn list_locais_origem(pool: &PgPool) -> Result<Vec<LocalOrigemItem>, sqlx::Error> {
     sqlx::query_as::<_, LocalOrigemItem>(
-        r#"SELECT l.id::text AS id, l.unidade_pm, l.cidade_id::text AS cidade_id,
-                  md.nome AS cidade_nome, l.ativo
+        r#"SELECT l.id::text AS id, l.nome_unidade_pm, l.cidade_id::text AS cidade_id,
+                  md.nome_municipio_distrito AS cidade_nome, l.ativo
            FROM locais_origem l
            LEFT JOIN municipios_distritos md ON md.id = l.cidade_id
            WHERE coalesce(l.ativo, true) = true
-           ORDER BY l.unidade_pm"#,
+           ORDER BY l.nome_unidade_pm"#,
     )
     .fetch_all(pool)
     .await
@@ -425,19 +425,19 @@ pub async fn save_local_origem(
 ) -> Result<String, AppError> {
     if let Some(id) = r.id.as_deref() {
         sqlx::query(
-            "UPDATE locais_origem SET unidade_pm = $2, cidade_id = $3::uuid, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE locais_origem SET nome_unidade_pm = $2, cidade_id = $3::uuid, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&r.unidade_pm)
+        .bind(&r.nome_unidade_pm)
         .bind(&r.cidade_id)
         .execute(&mut **tx)
         .await?;
         Ok(id.to_string())
     } else {
         let id: String = sqlx::query_scalar(
-            "INSERT INTO locais_origem (unidade_pm, cidade_id, ativo) VALUES ($1, $2::uuid, true) RETURNING id::text",
+            "INSERT INTO locais_origem (nome_unidade_pm, cidade_id, ativo) VALUES ($1, $2::uuid, true) RETURNING id::text",
         )
-        .bind(&r.unidade_pm)
+        .bind(&r.nome_unidade_pm)
         .bind(&r.cidade_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -460,11 +460,11 @@ pub async fn soft_delete_local_origem(
 
 pub async fn list_postos_graduacoes(pool: &PgPool) -> Result<Vec<PostoGraduacaoItem>, sqlx::Error> {
     sqlx::query_as::<_, PostoGraduacaoItem>(
-        r#"SELECT p.id::text AS id, p.nome, p.tipo_usuario_id::text AS tipo_usuario_id,
-                  tu.nome AS tipo_usuario, p.ativo
+        r#"SELECT p.id::text AS id, p.nome_posto_graduacao, p.tipo_usuario_id::text AS tipo_usuario_id,
+                  tu.nome_tipo_usuario AS tipo_usuario, p.ativo
            FROM postos_graduacoes p
            LEFT JOIN tipos_usuario tu ON tu.id = p.tipo_usuario_id
-           WHERE coalesce(p.ativo, true) = true ORDER BY p.nome"#,
+           WHERE coalesce(p.ativo, true) = true ORDER BY p.nome_posto_graduacao"#,
     )
     .fetch_all(pool)
     .await
@@ -472,8 +472,8 @@ pub async fn list_postos_graduacoes(pool: &PgPool) -> Result<Vec<PostoGraduacaoI
 
 pub async fn get_posto_graduacao_by_id(pool: &PgPool, id: &str) -> Result<Option<PostoGraduacaoItem>, sqlx::Error> {
     sqlx::query_as::<_, PostoGraduacaoItem>(
-        r#"SELECT p.id::text AS id, p.nome, p.tipo_usuario_id::text AS tipo_usuario_id,
-                  tu.nome AS tipo_usuario, p.ativo
+        r#"SELECT p.id::text AS id, p.nome_posto_graduacao, p.tipo_usuario_id::text AS tipo_usuario_id,
+                  tu.nome_tipo_usuario AS tipo_usuario, p.ativo
            FROM postos_graduacoes p
            LEFT JOIN tipos_usuario tu ON tu.id = p.tipo_usuario_id
            WHERE p.id = $1::uuid"#,
@@ -490,34 +490,34 @@ pub async fn save_posto_graduacao(
     let (count,): (i64,) = sqlx::query_as(
         r#"
         SELECT count(*)::bigint FROM postos_graduacoes
-        WHERE lower(nome) = lower($1)
+        WHERE lower(nome_posto_graduacao) = lower($1)
           AND coalesce(ativo, true) = true
           AND ($2::uuid IS NULL OR id != $2::uuid)
         "#,
     )
-    .bind(&request.nome)
+    .bind(&request.nome_posto_graduacao)
     .bind(request.id.as_deref())
     .fetch_one(&mut **tx)
     .await?;
     if count > 0 {
-        return Err(AppError::Domain(format!("ja existe posto/graduacao com nome '{}'", request.nome)));
+        return Err(AppError::Domain(format!("ja existe posto/graduacao com nome '{}'", request.nome_posto_graduacao)));
     }
 
     if let Some(id) = request.id.as_deref() {
         sqlx::query(
-            "UPDATE postos_graduacoes SET nome = $2, tipo_usuario_id = $3::uuid, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE postos_graduacoes SET nome_posto_graduacao = $2, tipo_usuario_id = $3::uuid, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&request.nome)
+        .bind(&request.nome_posto_graduacao)
         .bind(&request.tipo_usuario_id)
         .execute(&mut **tx)
         .await?;
         Ok(id.to_string())
     } else {
         let new_id: String = sqlx::query_scalar(
-            "INSERT INTO postos_graduacoes (nome, tipo_usuario_id, ativo, created_at, updated_at) VALUES ($1, $2::uuid, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id::text",
+            "INSERT INTO postos_graduacoes (nome_posto_graduacao, tipo_usuario_id, ativo, created_at, updated_at) VALUES ($1, $2::uuid, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id::text",
         )
-        .bind(&request.nome)
+        .bind(&request.nome_posto_graduacao)
         .bind(&request.tipo_usuario_id)
         .fetch_one(&mut **tx)
         .await?;
@@ -535,7 +535,7 @@ pub async fn soft_delete_posto_graduacao(tx: &mut Transaction<'_, Postgres>, id:
 
 pub async fn list_tipos_usuario(pool: &PgPool) -> Result<Vec<TipoUsuarioItem>, sqlx::Error> {
     sqlx::query_as::<_, TipoUsuarioItem>(
-        "SELECT id::text AS id, nome, ativo FROM tipos_usuario WHERE coalesce(ativo, true) = true ORDER BY nome",
+        "SELECT id::text AS id, nome_tipo_usuario, ativo FROM tipos_usuario WHERE coalesce(ativo, true) = true ORDER BY nome_tipo_usuario",
     )
     .fetch_all(pool)
     .await
@@ -543,7 +543,7 @@ pub async fn list_tipos_usuario(pool: &PgPool) -> Result<Vec<TipoUsuarioItem>, s
 
 pub async fn get_tipo_usuario_by_id(pool: &PgPool, id: &str) -> Result<Option<TipoUsuarioItem>, sqlx::Error> {
     sqlx::query_as::<_, TipoUsuarioItem>(
-        "SELECT id::text AS id, nome, ativo FROM tipos_usuario WHERE id = $1::uuid",
+        "SELECT id::text AS id, nome_tipo_usuario, ativo FROM tipos_usuario WHERE id = $1::uuid",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -557,31 +557,31 @@ pub async fn save_tipo_usuario(
     let (count,): (i64,) = sqlx::query_as(
         r#"
         SELECT count(*)::bigint FROM tipos_usuario
-        WHERE lower(nome) = lower($1)
+        WHERE lower(nome_tipo_usuario) = lower($1)
           AND coalesce(ativo, true) = true
           AND ($2::uuid IS NULL OR id != $2::uuid)
         "#,
     )
-    .bind(&request.nome)
+    .bind(&request.nome_tipo_usuario)
     .bind(request.id.as_deref())
     .fetch_one(&mut **tx)
     .await?;
     if count > 0 {
-        return Err(AppError::Domain(format!("ja existe tipo de usuario com nome '{}'", request.nome)));
+        return Err(AppError::Domain(format!("ja existe tipo de usuario com nome '{}'", request.nome_tipo_usuario)));
     }
 
     if let Some(id) = request.id.as_deref() {
-        sqlx::query("UPDATE tipos_usuario SET nome = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid")
+        sqlx::query("UPDATE tipos_usuario SET nome_tipo_usuario = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid")
             .bind(id)
-            .bind(&request.nome)
+            .bind(&request.nome_tipo_usuario)
             .execute(&mut **tx)
             .await?;
         Ok(id.to_string())
     } else {
         let new_id: String = sqlx::query_scalar(
-            "INSERT INTO tipos_usuario (nome, ativo, created_at, updated_at) VALUES ($1, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id::text",
+            "INSERT INTO tipos_usuario (nome_tipo_usuario, ativo, created_at, updated_at) VALUES ($1, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id::text",
         )
-        .bind(&request.nome)
+        .bind(&request.nome_tipo_usuario)
         .fetch_one(&mut **tx)
         .await?;
         Ok(new_id)
@@ -606,7 +606,7 @@ pub async fn list_naturezas(pool: &PgPool) -> Result<Vec<NaturezaItem>, sqlx::Er
 
 pub async fn list_dispositivos_legais(pool: &PgPool) -> Result<Vec<DispositivoLegalItem>, sqlx::Error> {
     sqlx::query_as::<_, DispositivoLegalItem>(
-        "SELECT id::text AS id, nome, ativo FROM dispositivos_legais WHERE coalesce(ativo, true) = true ORDER BY nome",
+        "SELECT id::text AS id, nome_dispositivo_legal, ativo FROM dispositivos_legais WHERE coalesce(ativo, true) = true ORDER BY nome_dispositivo_legal",
     )
     .fetch_all(pool)
     .await
@@ -614,7 +614,7 @@ pub async fn list_dispositivos_legais(pool: &PgPool) -> Result<Vec<DispositivoLe
 
 pub async fn get_dispositivo_legal_by_id(pool: &PgPool, id: &str) -> Result<Option<DispositivoLegalItem>, sqlx::Error> {
     sqlx::query_as::<_, DispositivoLegalItem>(
-        "SELECT id::text AS id, nome, ativo FROM dispositivos_legais WHERE id = $1::uuid",
+        "SELECT id::text AS id, nome_dispositivo_legal, ativo FROM dispositivos_legais WHERE id = $1::uuid",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -628,33 +628,33 @@ pub async fn save_dispositivo_legal(
     let (count,): (i64,) = sqlx::query_as(
         r#"
         SELECT count(*)::bigint FROM dispositivos_legais
-        WHERE lower(nome) = lower($1)
+        WHERE lower(nome_dispositivo_legal) = lower($1)
           AND coalesce(ativo, true) = true
           AND ($2::uuid IS NULL OR id != $2::uuid)
         "#,
     )
-    .bind(&request.nome)
+    .bind(&request.nome_dispositivo_legal)
     .bind(request.id.as_deref())
     .fetch_one(&mut **tx)
     .await?;
     if count > 0 {
-        return Err(AppError::Domain(format!("ja existe dispositivo legal com nome '{}'", request.nome)));
+        return Err(AppError::Domain(format!("ja existe dispositivo legal com nome '{}'", request.nome_dispositivo_legal)));
     }
 
     if let Some(id) = request.id.as_deref() {
         sqlx::query(
-            "UPDATE dispositivos_legais SET nome = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE dispositivos_legais SET nome_dispositivo_legal = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&request.nome)
+        .bind(&request.nome_dispositivo_legal)
         .execute(&mut **tx)
         .await?;
         Ok(id.to_string())
     } else {
         let new_id: String = sqlx::query_scalar(
-            "INSERT INTO dispositivos_legais (nome) VALUES ($1) RETURNING id::text",
+            "INSERT INTO dispositivos_legais (nome_dispositivo_legal) VALUES ($1) RETURNING id::text",
         )
-        .bind(&request.nome)
+        .bind(&request.nome_dispositivo_legal)
         .fetch_one(&mut **tx)
         .await?;
         Ok(new_id)
@@ -755,15 +755,15 @@ pub async fn soft_delete_artigo_rdpm(tx: &mut Transaction<'_, Postgres>, id: &st
 
 pub async fn list_municipios_distritos_crud(pool: &PgPool) -> Result<Vec<MunicipioCRUDItem>, sqlx::Error> {
     sqlx::query_as::<_, MunicipioCRUDItem>(
-        r#"SELECT m.id::text AS id, m.nome, m.tipo,
+        r#"SELECT m.id::text AS id, m.nome_municipio_distrito, m.tipo,
                   (m.tipo = 'Distrito') AS is_distrito,
                   m.municipio_pai,
-                  mp.nome AS municipio_pai_nome,
+                  mp.nome_municipio_distrito AS municipio_pai_nome,
                   m.ativo
            FROM municipios_distritos m
            LEFT JOIN municipios_distritos mp ON mp.id::text = m.municipio_pai
            WHERE coalesce(m.ativo, true) = true
-           ORDER BY m.nome"#,
+           ORDER BY m.nome_municipio_distrito"#,
     )
     .fetch_all(pool)
     .await
@@ -777,10 +777,10 @@ pub async fn save_municipio_distrito(
     let pai: Option<&str> = if r.is_distrito { r.municipio_pai.as_deref() } else { None };
     if let Some(id) = r.id.as_deref() {
         sqlx::query(
-            "UPDATE municipios_distritos SET nome = $2, tipo = $3, municipio_pai = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE municipios_distritos SET nome_municipio_distrito = $2, tipo = $3, municipio_pai = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&r.nome)
+        .bind(&r.nome_municipio_distrito)
         .bind(tipo)
         .bind(pai)
         .execute(&mut **tx)
@@ -788,9 +788,9 @@ pub async fn save_municipio_distrito(
         Ok(id.to_string())
     } else {
         let id: String = sqlx::query_scalar(
-            "INSERT INTO municipios_distritos (nome, tipo, municipio_pai, ativo, created_at) VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP) RETURNING id::text",
+            "INSERT INTO municipios_distritos (nome_municipio_distrito, tipo, municipio_pai, ativo, created_at) VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP) RETURNING id::text",
         )
-        .bind(&r.nome)
+        .bind(&r.nome_municipio_distrito)
         .bind(tipo)
         .bind(pai)
         .fetch_one(&mut **tx)
@@ -1053,7 +1053,7 @@ pub async fn soft_delete_tipo_prazo(
 
 pub async fn list_tipo_apuratorios(pool: &PgPool) -> Result<Vec<TipoApuratorioItem>, sqlx::Error> {
     sqlx::query_as::<_, TipoApuratorioItem>(
-        "SELECT id::text AS id, tipo, ativo FROM tipo_apuratorios WHERE coalesce(ativo, true) = true ORDER BY tipo",
+        "SELECT id::text AS id, nome_tipo_apuratorio, ativo FROM tipo_apuratorios WHERE coalesce(ativo, true) = true ORDER BY nome_tipo_apuratorio",
     )
     .fetch_all(pool)
     .await
@@ -1065,18 +1065,18 @@ pub async fn save_tipo_apuratorio(
 ) -> Result<String, AppError> {
     if let Some(id) = r.id.as_deref() {
         sqlx::query(
-            "UPDATE tipo_apuratorios SET tipo = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE tipo_apuratorios SET nome_tipo_apuratorio = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&r.tipo)
+        .bind(&r.nome_tipo_apuratorio)
         .execute(&mut **tx)
         .await?;
         Ok(id.to_string())
     } else {
         let id: String = sqlx::query_scalar(
-            "INSERT INTO tipo_apuratorios (tipo, ativo) VALUES ($1, true) RETURNING id::text",
+            "INSERT INTO tipo_apuratorios (nome_tipo_apuratorio, ativo) VALUES ($1, true) RETURNING id::text",
         )
-        .bind(&r.tipo)
+        .bind(&r.nome_tipo_apuratorio)
         .fetch_one(&mut **tx)
         .await?;
         Ok(id)
@@ -1099,7 +1099,7 @@ pub async fn soft_delete_tipo_apuratorio(
 pub async fn list_apuratorios(pool: &PgPool) -> Result<Vec<ApuratorioItem>, sqlx::Error> {
     sqlx::query_as::<_, ApuratorioItem>(
         r#"SELECT a.id::text AS id, a.nome_apuratorio, a.tipo_apuratorio_id::text AS tipo_apuratorio_id,
-                  ta.tipo AS tipo_apuratorio, a.prazo_base_dias, a.ativo
+                  ta.nome_tipo_apuratorio AS tipo_apuratorio, a.prazo_base_dias, a.ativo
            FROM apuratorios a
            JOIN tipo_apuratorios ta ON ta.id = a.tipo_apuratorio_id
            WHERE coalesce(a.ativo, true) = true ORDER BY a.nome_apuratorio"#,
@@ -1151,7 +1151,7 @@ pub async fn soft_delete_apuratorio(
 
 pub async fn list_tipos_documentos(pool: &PgPool) -> Result<Vec<TipoDocumentoItem>, sqlx::Error> {
     sqlx::query_as::<_, TipoDocumentoItem>(
-        "SELECT id::text AS id, tipo, ativo FROM tipos_documentos WHERE coalesce(ativo, true) = true ORDER BY tipo",
+        "SELECT id::text AS id, nome_tipo_documento, ativo FROM tipos_documentos WHERE coalesce(ativo, true) = true ORDER BY nome_tipo_documento",
     )
     .fetch_all(pool)
     .await
@@ -1163,18 +1163,18 @@ pub async fn save_tipo_documento(
 ) -> Result<String, AppError> {
     if let Some(id) = r.id.as_deref() {
         sqlx::query(
-            "UPDATE tipos_documentos SET tipo = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
+            "UPDATE tipos_documentos SET nome_tipo_documento = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
         )
         .bind(id)
-        .bind(&r.tipo)
+        .bind(&r.nome_tipo_documento)
         .execute(&mut **tx)
         .await?;
         Ok(id.to_string())
     } else {
         let id: String = sqlx::query_scalar(
-            "INSERT INTO tipos_documentos (tipo, ativo) VALUES ($1, true) RETURNING id::text",
+            "INSERT INTO tipos_documentos (nome_tipo_documento, ativo) VALUES ($1, true) RETURNING id::text",
         )
-        .bind(&r.tipo)
+        .bind(&r.nome_tipo_documento)
         .fetch_one(&mut **tx)
         .await?;
         Ok(id)
