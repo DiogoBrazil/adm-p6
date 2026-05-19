@@ -1,8 +1,0 @@
-2026-05-12T22:51:48Z orchestrator start reversa-migrate resume
-2026-05-12T22:51:48Z designer architecture approved by user
-2026-05-12T22:51:48Z screen_translator phase=mode source=html-eel target=tauri screens=26 recommendation=modernized
-2026-05-12T22:51:48Z screen_translator mode approved by user option=2 modernized
-2026-05-12T22:51:48Z screen_translator phase=generation artifacts=target_screens,screen_deviation_log,tokens-derived,golden_manifest deviations_pending=0
-2026-05-12T22:51:48Z inspector artifacts=parity_specs,parity_tests count=12
-2026-05-12T22:51:48Z orchestrator handoff generated path=_reversa_sdd/migration/handoff.md
-2026-05-12T22:51:48Z orchestrator complete completed_agents=6 pending_decisions=0
