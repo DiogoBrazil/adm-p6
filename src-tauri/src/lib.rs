@@ -153,6 +153,7 @@ pub fn run() {
             evidence::commands::evidence_search_crimes,
             evidence::commands::evidence_search_rdpm,
             evidence::commands::evidence_search_art29,
+            evidence::commands::evidence_search_art32,
             maps_reports::commands::dashboard_summary,
             maps_reports::commands::reports_process_types,
             maps_reports::commands::reports_generate_monthly_map,

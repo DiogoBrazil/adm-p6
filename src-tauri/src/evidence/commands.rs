@@ -6,7 +6,7 @@ use crate::audit::repository as audit_repository;
 use crate::auth::guards::require_session;
 use crate::evidence::domain::{EvidenceData, PmWithEvidence, SaveEvidenceRequest};
 use crate::evidence::repository;
-use crate::legal_catalogs::domain::{Art29Item, CrimeItem, TransgressionItem};
+use crate::legal_catalogs::domain::{Art29Item, Art32Item, CrimeItem, TransgressionItem};
 use crate::response::{from_result, ApiResponse};
 
 #[derive(Debug, Serialize)]
@@ -23,7 +23,12 @@ pub async fn evidence_search_catalogs(
     Ok(from_result(async {
         require_session(&state).await?;
         Ok(EvidenceSearchContract {
-            sources: vec!["crimes_contravencoes", "transgressoes", "infracoes_estatuto_art29"],
+            sources: vec![
+                "crimes_contravencoes",
+                "transgressoes",
+                "infracoes_estatuto_art29",
+                "infracoes_estatuto_art32",
+            ],
             categories_jsonb: "pm_envolvido_indicios.categorias_indicios",
             save_semantics: "salvar indicios deve substituir vinculos existentes em transacao sqlx",
         })
@@ -125,12 +130,12 @@ pub async fn evidence_search_crimes(
 pub async fn evidence_search_rdpm(
     state: State<'_, AppState>,
     termo: String,
-    gravidade: Option<String>,
+    natureza: Option<String>,
 ) -> Result<ApiResponse<Vec<TransgressionItem>>, String> {
     Ok(from_result(async {
         require_session(&state).await?;
         let pool = state.pool().await?;
-        Ok(repository::search_rdpm(&pool, &termo, gravidade.as_deref()).await?)
+        Ok(repository::search_rdpm(&pool, &termo, natureza.as_deref()).await?)
     }.await)
     .await)
 }
@@ -144,6 +149,19 @@ pub async fn evidence_search_art29(
         require_session(&state).await?;
         let pool = state.pool().await?;
         Ok(repository::search_art29(&pool, &termo).await?)
+    }.await)
+    .await)
+}
+
+#[tauri::command]
+pub async fn evidence_search_art32(
+    state: State<'_, AppState>,
+    termo: String,
+) -> Result<ApiResponse<Vec<Art32Item>>, String> {
+    Ok(from_result(async {
+        require_session(&state).await?;
+        let pool = state.pool().await?;
+        Ok(repository::search_art32(&pool, &termo).await?)
     }.await)
     .await)
 }

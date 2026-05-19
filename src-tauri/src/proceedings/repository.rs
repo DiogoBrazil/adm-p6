@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use sqlx::{PgPool, Postgres, Transaction};
+use uuid::Uuid;
 
 use crate::error::AppError;
 
@@ -32,10 +33,10 @@ where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     sqlx::query_scalar::<_, String>(
-        r#"SELECT tdp.nome_apuratorio
-           FROM processos_procedimentos pp
-           JOIN apuratorios tdp ON tdp.id = pp.tipo_detalhe_id
-           WHERE pp.id = $1::uuid"#,
+        r#"SELECT a.nome_apuratorio
+           FROM historico_processo_procedimentos hpp
+           JOIN apuratorios a ON a.id = hpp.apuratorio_id
+           WHERE hpp.processo_procedimento_id = $1::uuid"#,
     )
     .bind(id)
     .fetch_optional(executor)
@@ -154,20 +155,24 @@ pub async fn create(
     let penalidade_tipo = if punido { request.penalidade_tipo.as_deref() } else { None };
     let penalidade_dias = if punido { request.penalidade_dias } else { None };
 
-    // Step 1: Insert routing table entry
-    let proc_id: String = sqlx::query_scalar(
-        r#"INSERT INTO processos_procedimentos (tipo_detalhe_id)
-           SELECT id FROM apuratorios WHERE nome_apuratorio = $1
-           RETURNING id::text"#,
-    )
-    .bind(&request.tipo_detalhe)
-    .fetch_one(&mut **tx)
-    .await?;
+    // Step 1: id canônico do processo/procedimento (gerado pela app; vira a PK própria
+    // da tabela específica e o processo_procedimento_id do registro histórico).
+    let proc_id = Uuid::new_v4().to_string();
 
-    // Step 2: Insert into type-specific table
+    // Step 2: Insert into type-specific table (id próprio, independente)
     insert_type_specific(tx, &proc_id, request, &nome_vitima, penalidade_tipo, penalidade_dias).await?;
 
-    // Step 3: Insert PMs envolvidos
+    // Step 3: Registrar no histórico (alvo das FKs de processo/procedimento)
+    sqlx::query(
+        r#"INSERT INTO historico_processo_procedimentos (processo_procedimento_id, apuratorio_id)
+           SELECT $1::uuid, id FROM apuratorios WHERE nome_apuratorio = $2"#,
+    )
+    .bind(&proc_id)
+    .bind(&request.tipo_detalhe)
+    .execute(&mut **tx)
+    .await?;
+
+    // Step 4: Insert PMs envolvidos
     if let Some(pms) = &request.pms_envolvidos {
         for pm_id in pms {
             sqlx::query(
@@ -474,7 +479,6 @@ struct ProceedingRow {
     unidade_deprecada: Option<String>,
     deprecante: Option<String>,
     indicios_categorias: Option<String>,
-    andamentos: Option<String>,
     historico_encarregados: Option<String>,
     pdf_nome: Option<String>,
     pdf_tamanho: Option<i64>,
@@ -525,7 +529,6 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
             p.escrivao_processo_id::text AS escrivao_processo_id,
             p.unidade_deprecada, p.deprecante,
             p.indicios_categorias::text AS indicios_categorias,
-            p.andamentos::text AS andamentos,
             p.historico_encarregados::text AS historico_encarregados,
             p.pdf_nome, p.pdf_tamanho,
             u_resp.nome             AS responsavel_nome,
@@ -586,9 +589,22 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
     .fetch_optional(pool)
     .await?;
 
-    let andamentos: Vec<serde_json::Value> = crate::movements::domain::normalize_andamentos(
-        row.andamentos.as_deref().and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default(),
-    );
+    let andamentos: Vec<serde_json::Value> = sqlx::query_as::<_, (String, String, NaiveDate)>(
+        r#"SELECT id::text, descricao_andamento, created_at::date
+           FROM andamentos_processo_procedimentos
+           WHERE processo_procedimento_id = $1::uuid AND coalesce(ativo, true) = true
+           ORDER BY created_at DESC"#,
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(aid, texto, data)| serde_json::json!({
+        "id": aid,
+        "texto": texto,
+        "data": data.format("%Y-%m-%d").to_string(),
+    }))
+    .collect();
 
     let historico_encarregados: Vec<serde_json::Value> = row
         .historico_encarregados

@@ -65,12 +65,6 @@ struct PmMapRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct IndiciosRow {
-    id: String,
-    categorias_indicios: Option<Value>,
-}
-
-#[derive(sqlx::FromRow)]
 struct CrimeMapRow {
     tipo: Option<String>,
     dispositivo_legal: Option<String>,
@@ -140,55 +134,70 @@ fn last_movement(andamentos_text: &Option<String>) -> Option<Value> {
 // ── Per-PM indícios ──────────────────────────────────────────────────────────
 
 async fn indicios_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<Value, sqlx::Error> {
-    let row: Option<IndiciosRow> = sqlx::query_as(
-        "SELECT id::text AS id, categorias_indicios \
-         FROM pm_envolvido_indicios \
-         WHERE pm_envolvido_id = $1::uuid AND coalesce(ativo, true) = true \
-         LIMIT 1",
+    // Par canônico (processo_procedimento_id, envolvido_id) do vínculo PM<->procedimento.
+    let resolved: Option<(String, String)> = sqlx::query_as(
+        "SELECT procedimento_id::text, pm_id::text FROM procedimento_pms_envolvidos WHERE id = $1::uuid",
     )
     .bind(pm_envolvido_id)
     .fetch_optional(pool)
     .await?;
 
-    let Some(indicios) = row else {
+    let Some((proc_id, envolvido_id)) = resolved else {
         return Ok(json!({"categorias": [], "crimes": [], "transgressoes": [], "art29": []}));
     };
 
-    let categorias: Vec<String> = indicios
-        .categorias_indicios
-        .and_then(|v| serde_json::from_value(v).ok())
-        .unwrap_or_default();
+    let categorias: Vec<String> = sqlx::query_as::<_, (Option<Value>,)>(
+        "SELECT categorias_indicios FROM pm_envolvido_indicios \
+         WHERE pm_envolvido_id = $1::uuid AND coalesce(ativo, true) = true LIMIT 1",
+    )
+    .bind(pm_envolvido_id)
+    .fetch_optional(pool)
+    .await?
+    .and_then(|(v,)| v)
+    .and_then(|v| serde_json::from_value(v).ok())
+    .unwrap_or_default();
 
     let crimes: Vec<CrimeMapRow> = sqlx::query_as(
-        "SELECT NULL::text AS tipo, c.dispositivo_legal, c.artigo, c.descricao_artigo, \
-                c.paragrafo, c.inciso, c.alinea \
-         FROM pm_envolvido_crimes pec \
-         JOIN crimes_contravencoes c ON c.id = pec.crime_id \
-         WHERE pec.pm_indicios_id = $1::uuid AND coalesce(c.ativo, true) = true",
+        "SELECT 'militar'::text AS tipo, dl.nome_dispositivo_legal AS dispositivo_legal, \
+                c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea \
+         FROM pm_envolvido_crimes_militares ev \
+         JOIN crimes_contravencoes c ON c.id = ev.crime_id \
+         LEFT JOIN dispositivos_legais dl ON dl.id = c.dispositivo_legal_id \
+         WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid AND coalesce(c.ativo, true) = true \
+         UNION ALL \
+         SELECT 'comum'::text AS tipo, dl.nome_dispositivo_legal AS dispositivo_legal, \
+                c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea \
+         FROM pm_envolvido_crimes_comuns ev \
+         JOIN crimes_contravencoes c ON c.id = ev.crime_id \
+         LEFT JOIN dispositivos_legais dl ON dl.id = c.dispositivo_legal_id \
+         WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid AND coalesce(c.ativo, true) = true",
     )
-    .bind(&indicios.id)
+    .bind(&proc_id)
+    .bind(&envolvido_id)
     .fetch_all(pool)
     .await?;
 
     let rdpm: Vec<RdpmMapRow> = sqlx::query_as(
         "SELECT t.inciso, t.texto, nt.nome_natureza AS gravidade \
-         FROM pm_envolvido_rdpm per \
-         JOIN transgressoes t ON t.id = per.transgressao_id \
+         FROM pm_envolvido_rdpm ev \
+         JOIN transgressoes t ON t.id = ev.transgressao_id \
          LEFT JOIN artigo_rdpm_natureza_transgressao art ON art.id = t.artigo_id \
          LEFT JOIN natureza_transgressao nt ON nt.id = art.natureza_id \
-         WHERE per.pm_indicios_id = $1::uuid AND coalesce(t.ativo, true) = true",
+         WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid AND coalesce(t.ativo, true) = true",
     )
-    .bind(&indicios.id)
+    .bind(&proc_id)
+    .bind(&envolvido_id)
     .fetch_all(pool)
     .await?;
 
     let art29: Vec<Art29MapRow> = sqlx::query_as(
         "SELECT a.inciso, a.texto \
-         FROM pm_envolvido_art29 pea \
-         JOIN infracoes_estatuto_art29 a ON a.id = pea.art29_id \
-         WHERE pea.pm_indicios_id = $1::uuid AND coalesce(a.ativo, true) = true",
+         FROM pm_envolvido_art29 ev \
+         JOIN infracoes_estatuto_art29 a ON a.id = ev.infracao_art29_id \
+         WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid AND coalesce(a.ativo, true) = true",
     )
-    .bind(&indicios.id)
+    .bind(&proc_id)
+    .bind(&envolvido_id)
     .fetch_all(pool)
     .await?;
 

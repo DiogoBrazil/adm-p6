@@ -176,18 +176,13 @@ const routes: Route[] = [
   { path: "/stats/procedimentos", label: "Estatísticas de Procedimentos", group: "Relatórios", printable: true }
 ];
 
-const TIPOS_ANDAMENTO = [
-  "Despacho", "Distribuição", "Juntada", "Remessa", "Retorno",
-  "Decisão", "Notificação", "Citação", "Prorrogação", "Conclusão", "Outros",
-] as const;
-
 function formatBytes(bytes: number): string {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-type Movement = { id: string; tipo: string | null; texto: string; data: string; usuario: string };
+type Movement = { id: string; texto: string; data: string };
 type ProceedingData = Record<string, unknown> & {
   id?: string; numero?: string; tipo_detalhe?: string; concluido?: boolean | null;
   pdf_nome?: string | null; pdf_tamanho?: number | null; andamentos?: Movement[];
@@ -971,9 +966,7 @@ async function renderDetail(route: Route) {
           ${movements.map((m) => `
             <li class="andamento-item">
               <div class="andamento-meta">
-                ${m.tipo ? `<strong class="andamento-tipo">${escapeHtml(m.tipo)}</strong>` : ""}
                 <span>${escapeHtml(m.data)}</span>
-                <span>${escapeHtml(m.usuario)}</span>
                 ${canWrite() ? `<button class="danger small" data-remove-andamento="${escapeHtml(m.id)}">Remover</button>` : ""}
               </div>
               <p class="andamento-texto">${escapeHtml(m.texto)}</p>
@@ -983,10 +976,6 @@ async function renderDetail(route: Route) {
       ` : `<p class="empty">Nenhum andamento registrado.</p>`}
       ${canWrite() ? `
         <form id="add-movement-form" class="add-movement-form">
-          <select name="tipo">
-            <option value="">Tipo (opcional)</option>
-            ${TIPOS_ANDAMENTO.map((t) => `<option>${escapeHtml(t)}</option>`).join("")}
-          </select>
           <textarea name="texto" placeholder="Descreva o andamento..." required></textarea>
           <button type="submit">Adicionar Andamento</button>
         </form>
@@ -1017,7 +1006,7 @@ async function renderDetail(route: Route) {
   ` : "";
 
   // Indícios section
-  type PmEvidence = { pm_envolvido_id: string; nome?: string | null; posto_graduacao?: string | null; indicios?: { categorias: string[]; crimes: unknown[]; rdpm: unknown[]; art29: unknown[] } };
+  type PmEvidence = { pm_envolvido_id: string; nome?: string | null; posto_graduacao?: string | null; indicios?: { categorias: string[]; crimes_militares: unknown[]; crimes_comuns: unknown[]; rdpm: unknown[]; art29: unknown[]; art32: unknown[] } };
   const evidenceList: PmEvidence[] = Array.isArray(evidenceResp.data) ? evidenceResp.data as PmEvidence[] : [];
 
   const indiciosHtml = isProceeding ? `
@@ -1026,9 +1015,9 @@ async function renderDetail(route: Route) {
       ${evidenceList.length === 0 ? `<p class="empty">Nenhum PM envolvido com indícios registrados.</p>` : `
         <ul class="andamentos-list">
           ${evidenceList.map((pm) => {
-            const ind = pm.indicios ?? { categorias: [], crimes: [], rdpm: [], art29: [] };
+            const ind = pm.indicios ?? { categorias: [], crimes_militares: [], crimes_comuns: [], rdpm: [], art29: [], art32: [] };
             const cats = ind.categorias.length > 0 ? ind.categorias.join(", ") : "sem categorias";
-            const total = ind.crimes.length + ind.rdpm.length + ind.art29.length;
+            const total = ind.crimes_militares.length + ind.crimes_comuns.length + ind.rdpm.length + ind.art29.length + ind.art32.length;
             return `
               <li class="andamento-item">
                 <div class="andamento-meta">
@@ -1129,9 +1118,8 @@ async function renderDetail(route: Route) {
   document.querySelector<HTMLFormElement>("#add-movement-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
-    const tipo = (form.get("tipo") as string).trim() || null;
     const texto = (form.get("texto") as string).trim();
-    const resp = await call("movements_add", { request: { processo_id: detailId, tipo, texto } });
+    const resp = await call("movements_add", { request: { processo_id: detailId, texto } });
     if (!resp.ok) { alert(resp.error ?? "Falha ao adicionar andamento."); return; }
     void renderDetail(route);
   });
@@ -1222,26 +1210,52 @@ async function renderEvidencePanel(route: Route) {
 
   shell(`<section class="panel"><p>Carregando indícios...</p></section>`);
 
+  type EvidItem = Record<string, unknown>;
+  type Infr = {
+    infracao_id: string; infracao_inciso?: string; infracao_texto?: string;
+    analogia_id: string; analogia_inciso?: string; analogia_texto?: string; analogia_artigo?: string;
+  };
+  type Ev = {
+    pm_envolvido_id: string; categorias: string[];
+    crimes_militares: EvidItem[]; crimes_comuns: EvidItem[];
+    rdpm: EvidItem[]; art29: Infr[]; art32: Infr[];
+  };
+
   const [evResp, catsResp] = await Promise.all([
-    call<{ pm_envolvido_id: string; categorias: string[]; crimes: unknown[]; rdpm: unknown[]; art29: unknown[] }>(
-      "evidence_load_for_pm", { pm_envolvido_id: evidencePmId }
-    ),
+    call<Ev>("evidence_load_for_pm", { pm_envolvido_id: evidencePmId }),
     call<string[]>("evidence_categories"),
   ]);
 
-  const ev = evResp.data ?? { pm_envolvido_id: evidencePmId, categorias: [], crimes: [], rdpm: [], art29: [] };
+  const ev: Ev = evResp.data ?? {
+    pm_envolvido_id: evidencePmId, categorias: [],
+    crimes_militares: [], crimes_comuns: [], rdpm: [], art29: [], art32: [],
+  };
   const allCats: string[] = catsResp.data ?? ["crimes_cpm", "transgressoes_rdpm", "transgressoes_art29", "sem_indicios"];
 
-  type EvidItem = Record<string, unknown>;
-  const selectedCrimes: EvidItem[] = Array.isArray(ev.crimes) ? (ev.crimes as EvidItem[]) : [];
-  const selectedRdpm: EvidItem[] = Array.isArray(ev.rdpm) ? (ev.rdpm as EvidItem[]) : [];
-  const selectedArt29: EvidItem[] = Array.isArray(ev.art29) ? (ev.art29 as EvidItem[]) : [];
+  const arr = (v: unknown): EvidItem[] => (Array.isArray(v) ? (v as EvidItem[]) : []);
+  const itemLabel = (it: EvidItem) => escapeHtml(String(it.artigo ?? it.inciso ?? it.id ?? ""));
+  const itemSub = (it: EvidItem) => escapeHtml(String(it.descricao_artigo ?? it.texto ?? ""));
+  const analogiaLabel = (a: Pick<Infr, "analogia_artigo" | "analogia_inciso">) =>
+    a.analogia_inciso || a.analogia_artigo ? `Art. ${a.analogia_artigo ?? "?"}, Inc. ${a.analogia_inciso ?? ""}` : "";
 
-  const itemRow = (item: EvidItem, removeAttr: string) => `
+  const simpleRow = (it: EvidItem) => `
     <div class="evidence-item">
-      <span>${escapeHtml(String(item.artigo ?? item.inciso ?? item.id ?? ""))}</span>
-      <small>${escapeHtml(String(item.descricao_artigo ?? item.texto ?? ""))}</small>
-      <button class="danger small" ${removeAttr}="true" data-item-id="${escapeHtml(String(item.id ?? ""))}">×</button>
+      <span>${itemLabel(it)}</span>
+      <small>${itemSub(it)}</small>
+      <button class="danger small" data-item-id="${escapeHtml(String(it.id ?? ""))}">×</button>
+    </div>`;
+
+  const artRow = (infracaoId: string, infrLabel: string, infrText: string, analogiaId: string, analogiaText: string) => `
+    <div class="evidence-item art-item" data-infracao="${escapeHtml(infracaoId)}">
+      <div class="art-infr"><strong>${escapeHtml(infrLabel)}</strong> <small>${escapeHtml(infrText)}</small></div>
+      <div class="art-analogia">
+        <span>Analogia RDPM:</span>
+        <span class="analogia-current">${analogiaId ? escapeHtml(analogiaText) : "(selecione)"}</span>
+        <input class="analogia-input" type="search" placeholder="buscar transgressão RDPM..." />
+        <button class="outline small analogia-search-btn" type="button">Buscar</button>
+        <div class="analogia-results evidence-results"></div>
+      </div>
+      <button class="danger small art-remove" type="button">×</button>
     </div>`;
 
   shell(`
@@ -1266,18 +1280,28 @@ async function renderEvidencePanel(route: Route) {
       </div>
 
       <div class="detail-section">
-        <h2>Crimes / Contravenções (${selectedCrimes.length})</h2>
-        <div id="crimes-list">${selectedCrimes.map((c) => itemRow(c, "data-remove-crime")).join("") || `<p class="empty">Nenhum</p>`}</div>
+        <h2>Crimes Militares (${arr(ev.crimes_militares).length})</h2>
+        <div id="crimes-mil-list">${arr(ev.crimes_militares).map(simpleRow).join("") || `<p class="empty">Nenhum</p>`}</div>
         <div class="evidence-search">
-          <input id="search-crimes-input" type="search" placeholder="Buscar crime..." />
-          <button id="btn-search-crimes">Buscar</button>
+          <input id="search-crimes-mil-input" type="search" placeholder="Buscar crime militar..." />
+          <button id="btn-search-crimes-mil">Buscar</button>
         </div>
-        <div id="crimes-results" class="evidence-results"></div>
+        <div id="crimes-mil-results" class="evidence-results"></div>
       </div>
 
       <div class="detail-section">
-        <h2>Transgressões RDPM (${selectedRdpm.length})</h2>
-        <div id="rdpm-list">${selectedRdpm.map((r) => itemRow(r, "data-remove-rdpm")).join("") || `<p class="empty">Nenhuma</p>`}</div>
+        <h2>Crimes Comuns (${arr(ev.crimes_comuns).length})</h2>
+        <div id="crimes-com-list">${arr(ev.crimes_comuns).map(simpleRow).join("") || `<p class="empty">Nenhum</p>`}</div>
+        <div class="evidence-search">
+          <input id="search-crimes-com-input" type="search" placeholder="Buscar crime comum..." />
+          <button id="btn-search-crimes-com">Buscar</button>
+        </div>
+        <div id="crimes-com-results" class="evidence-results"></div>
+      </div>
+
+      <div class="detail-section">
+        <h2>Transgressões RDPM (${arr(ev.rdpm).length})</h2>
+        <div id="rdpm-list">${arr(ev.rdpm).map(simpleRow).join("") || `<p class="empty">Nenhuma</p>`}</div>
         <div class="evidence-search">
           <input id="search-rdpm-input" type="search" placeholder="Buscar transgressão..." />
           <button id="btn-search-rdpm">Buscar</button>
@@ -1286,85 +1310,166 @@ async function renderEvidencePanel(route: Route) {
       </div>
 
       <div class="detail-section">
-        <h2>Art. 29 — Estatuto (${selectedArt29.length})</h2>
-        <div id="art29-list">${selectedArt29.map((a) => itemRow(a, "data-remove-art29")).join("") || `<p class="empty">Nenhum</p>`}</div>
+        <h2>Art. 29 — Estatuto (${arr(ev.art29).length})</h2>
+        <p class="hint">Cada infração exige uma transgressão RDPM por analogia.</p>
+        <div id="art29-list">${ev.art29.map((a) => artRow(a.infracao_id, `Inc. ${a.infracao_inciso ?? ""}`, a.infracao_texto ?? "", a.analogia_id, analogiaLabel(a))).join("") || `<p class="empty">Nenhum</p>`}</div>
         <div class="evidence-search">
           <input id="search-art29-input" type="search" placeholder="Buscar art. 29..." />
           <button id="btn-search-art29">Buscar</button>
         </div>
         <div id="art29-results" class="evidence-results"></div>
       </div>
+
+      <div class="detail-section">
+        <h2>Art. 32 — Estatuto (${arr(ev.art32).length})</h2>
+        <p class="hint">Cada infração exige uma transgressão RDPM por analogia.</p>
+        <div id="art32-list">${ev.art32.map((a) => artRow(a.infracao_id, `Inc. ${a.infracao_inciso ?? ""}`, a.infracao_texto ?? "", a.analogia_id, analogiaLabel(a))).join("") || `<p class="empty">Nenhum</p>`}</div>
+        <div class="evidence-search">
+          <input id="search-art32-input" type="search" placeholder="Buscar art. 32..." />
+          <button id="btn-search-art32">Buscar</button>
+        </div>
+        <div id="art32-results" class="evidence-results"></div>
+      </div>
     </section>
   `);
 
-  // Back
   document.querySelector<HTMLButtonElement>("#back-to-detail")?.addEventListener("click", () => {
     evidencePmId = null;
     void renderDetail(route);
   });
 
-  // Build selected id sets (mutable as user adds/removes)
-  const selectedCrimeIds = new Set(selectedCrimes.map((c) => String(c.id)));
-  const selectedRdpmIds = new Set(selectedRdpm.map((r) => String(r.id)));
-  const selectedArt29Ids = new Set(selectedArt29.map((a) => String(a.id)));
+  // ── Simple id-set sections (crimes militares/comuns, rdpm) ──
+  const selCrimesMil = new Set(arr(ev.crimes_militares).map((c) => String(c.id)));
+  const selCrimesCom = new Set(arr(ev.crimes_comuns).map((c) => String(c.id)));
+  const selRdpm = new Set(arr(ev.rdpm).map((r) => String(r.id)));
 
-  // Remove buttons
-  document.querySelectorAll<HTMLButtonElement>("[data-remove-crime]").forEach((btn) => {
-    btn.addEventListener("click", () => { selectedCrimeIds.delete(btn.dataset.itemId!); btn.closest(".evidence-item")?.remove(); });
-  });
-  document.querySelectorAll<HTMLButtonElement>("[data-remove-rdpm]").forEach((btn) => {
-    btn.addEventListener("click", () => { selectedRdpmIds.delete(btn.dataset.itemId!); btn.closest(".evidence-item")?.remove(); });
-  });
-  document.querySelectorAll<HTMLButtonElement>("[data-remove-art29]").forEach((btn) => {
-    btn.addEventListener("click", () => { selectedArt29Ids.delete(btn.dataset.itemId!); btn.closest(".evidence-item")?.remove(); });
-  });
-
-  function makeAddBtn(label: string, id: string, container: string, idSet: Set<string>) {
-    return `<button class="outline small" data-add-to="${container}" data-add-id="${escapeHtml(id)}">${label}</button>`;
+  function bindSimpleRemoves(listId: string, idSet: Set<string>) {
+    document.querySelectorAll<HTMLButtonElement>(`#${listId} [data-item-id]`).forEach((btn) => {
+      btn.addEventListener("click", () => { idSet.delete(btn.dataset.itemId!); btn.closest(".evidence-item")?.remove(); });
+    });
   }
+  bindSimpleRemoves("crimes-mil-list", selCrimesMil);
+  bindSimpleRemoves("crimes-com-list", selCrimesCom);
+  bindSimpleRemoves("rdpm-list", selRdpm);
 
-  async function doSearch(command: string, inputId: string, resultsId: string, container: string, idSet: Set<string>, extraArgs: Record<string, unknown> = {}) {
+  async function doSimpleSearch(command: string, inputId: string, resultsId: string, listId: string, idSet: Set<string>) {
     const termo = (document.querySelector<HTMLInputElement>(`#${inputId}`)?.value ?? "").trim();
-    const resp = await call<EvidItem[]>(command, { termo, ...extraArgs });
+    const resp = await call<EvidItem[]>(command, { termo });
     const items = resp.data ?? [];
     const el = document.querySelector(`#${resultsId}`)!;
     if (!items.length) { el.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
     el.innerHTML = items.map((item) => `
       <div class="evidence-result-item">
-        <div><strong>${escapeHtml(String(item.artigo ?? item.inciso ?? ""))}</strong> — <small>${escapeHtml(String(item.descricao_artigo ?? item.texto ?? "").substring(0, 80))}</small></div>
-        ${idSet.has(String(item.id)) ? `<span class="badge badge--ok">✓ Adicionado</span>` : makeAddBtn("Adicionar", String(item.id), container, idSet)}
+        <div><strong>${itemLabel(item)}</strong> — <small>${escapeHtml(String(item.descricao_artigo ?? item.texto ?? "").substring(0, 80))}</small></div>
+        ${idSet.has(String(item.id)) ? `<span class="badge badge--ok">✓ Adicionado</span>` : `<button class="outline small" data-add-id="${escapeHtml(String(item.id))}">Adicionar</button>`}
       </div>`).join("");
-    el.querySelectorAll<HTMLButtonElement>("[data-add-to]").forEach((btn) => {
+    el.querySelectorAll<HTMLButtonElement>("[data-add-id]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const addId = btn.dataset.addId!;
-        const target = btn.dataset.addTo!;
         const item = items.find((i) => String(i.id) === addId);
-        if (!item) return;
+        if (!item || idSet.has(addId)) return;
         idSet.add(addId);
-        const list = document.querySelector(`#${target}-list`)!;
+        const list = document.querySelector(`#${listId}`)!;
+        list.querySelector(".empty")?.remove();
         const div = document.createElement("div");
         div.className = "evidence-item";
-        div.innerHTML = `<span>${escapeHtml(String(item.artigo ?? item.inciso ?? ""))}</span><small>${escapeHtml(String(item.descricao_artigo ?? item.texto ?? ""))}</small><button class="danger small">×</button>`;
+        div.innerHTML = `<span>${itemLabel(item)}</span><small>${itemSub(item)}</small><button class="danger small">×</button>`;
         div.querySelector("button")!.addEventListener("click", () => { idSet.delete(addId); div.remove(); });
         list.appendChild(div);
-        btn.replaceWith(`<span class="badge badge--ok">✓ Adicionado</span>`);
+        btn.outerHTML = `<span class="badge badge--ok">✓ Adicionado</span>`;
       });
     });
   }
 
-  document.querySelector("#btn-search-crimes")?.addEventListener("click", () => doSearch("evidence_search_crimes", "search-crimes-input", "crimes-results", "crimes", selectedCrimeIds));
-  document.querySelector("#btn-search-rdpm")?.addEventListener("click", () => doSearch("evidence_search_rdpm", "search-rdpm-input", "rdpm-results", "rdpm", selectedRdpmIds));
-  document.querySelector("#btn-search-art29")?.addEventListener("click", () => doSearch("evidence_search_art29", "search-art29-input", "art29-results", "art29", selectedArt29Ids));
+  document.querySelector("#btn-search-crimes-mil")?.addEventListener("click", () => doSimpleSearch("evidence_search_crimes", "search-crimes-mil-input", "crimes-mil-results", "crimes-mil-list", selCrimesMil));
+  document.querySelector("#btn-search-crimes-com")?.addEventListener("click", () => doSimpleSearch("evidence_search_crimes", "search-crimes-com-input", "crimes-com-results", "crimes-com-list", selCrimesCom));
+  document.querySelector("#btn-search-rdpm")?.addEventListener("click", () => doSimpleSearch("evidence_search_rdpm", "search-rdpm-input", "rdpm-results", "rdpm-list", selRdpm));
+
+  // ── Art. 29 / Art. 32 sections (infração + analogia RDPM obrigatória) ──
+  const art29 = new Map<string, string>(); // infracao_id -> analogia_id
+  const art32 = new Map<string, string>();
+  ev.art29.forEach((a) => art29.set(a.infracao_id, a.analogia_id));
+  ev.art32.forEach((a) => art32.set(a.infracao_id, a.analogia_id));
+
+  function wireArtItem(row: HTMLElement, map: Map<string, string>) {
+    const infracaoId = row.dataset.infracao!;
+    row.querySelector<HTMLButtonElement>(".art-remove")!.addEventListener("click", () => { map.delete(infracaoId); row.remove(); });
+    const input = row.querySelector<HTMLInputElement>(".analogia-input")!;
+    const results = row.querySelector<HTMLElement>(".analogia-results")!;
+    const current = row.querySelector<HTMLElement>(".analogia-current")!;
+    row.querySelector<HTMLButtonElement>(".analogia-search-btn")!.addEventListener("click", async () => {
+      const termo = input.value.trim();
+      const resp = await call<EvidItem[]>("evidence_search_rdpm", { termo });
+      const items = resp.data ?? [];
+      if (!items.length) { results.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
+      results.innerHTML = items.map((t) => `
+        <div class="evidence-result-item">
+          <div><strong>Art. ${escapeHtml(String(t.artigo ?? "?"))}, Inc. ${escapeHtml(String(t.inciso ?? ""))}</strong> — <small>${escapeHtml(String(t.texto ?? "").substring(0, 70))}</small></div>
+          <button class="outline small" data-pick="${escapeHtml(String(t.id))}" data-label="Art. ${escapeHtml(String(t.artigo ?? "?"))}, Inc. ${escapeHtml(String(t.inciso ?? ""))}">Usar</button>
+        </div>`).join("");
+      results.querySelectorAll<HTMLButtonElement>("[data-pick]").forEach((b) => {
+        b.addEventListener("click", () => {
+          map.set(infracaoId, b.dataset.pick!);
+          current.textContent = b.dataset.label!;
+          results.innerHTML = "";
+          input.value = "";
+        });
+      });
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>("#art29-list .art-item").forEach((row) => wireArtItem(row, art29));
+  document.querySelectorAll<HTMLElement>("#art32-list .art-item").forEach((row) => wireArtItem(row, art32));
+
+  async function doArtSearch(command: string, inputId: string, resultsId: string, listId: string, map: Map<string, string>) {
+    const termo = (document.querySelector<HTMLInputElement>(`#${inputId}`)?.value ?? "").trim();
+    const resp = await call<EvidItem[]>(command, { termo });
+    const items = resp.data ?? [];
+    const el = document.querySelector(`#${resultsId}`)!;
+    if (!items.length) { el.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
+    el.innerHTML = items.map((item) => `
+      <div class="evidence-result-item">
+        <div><strong>Inc. ${escapeHtml(String(item.inciso ?? ""))}</strong> — <small>${escapeHtml(String(item.texto ?? "").substring(0, 80))}</small></div>
+        ${map.has(String(item.id)) ? `<span class="badge badge--ok">✓ Adicionado</span>` : `<button class="outline small" data-add-id="${escapeHtml(String(item.id))}">Adicionar</button>`}
+      </div>`).join("");
+    el.querySelectorAll<HTMLButtonElement>("[data-add-id]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const addId = btn.dataset.addId!;
+        const item = items.find((i) => String(i.id) === addId);
+        if (!item || map.has(addId)) return;
+        map.set(addId, "");
+        const list = document.querySelector(`#${listId}`)!;
+        list.querySelector(".empty")?.remove();
+        const wrap = document.createElement("div");
+        wrap.innerHTML = artRow(addId, `Inc. ${String(item.inciso ?? "")}`, String(item.texto ?? ""), "", "");
+        const row = wrap.firstElementChild as HTMLElement;
+        list.appendChild(row);
+        wireArtItem(row, map);
+        btn.outerHTML = `<span class="badge badge--ok">✓ Adicionado</span>`;
+      });
+    });
+  }
+
+  document.querySelector("#btn-search-art29")?.addEventListener("click", () => doArtSearch("evidence_search_art29", "search-art29-input", "art29-results", "art29-list", art29));
+  document.querySelector("#btn-search-art32")?.addEventListener("click", () => doArtSearch("evidence_search_art32", "search-art32-input", "art32-results", "art32-list", art32));
 
   document.querySelector<HTMLButtonElement>("#save-evidence")?.addEventListener("click", async () => {
     const cats = [...document.querySelectorAll<HTMLInputElement>("input[name='cat']:checked")].map((el) => el.value);
+    const art29Sel = [...art29.entries()];
+    const art32Sel = [...art32.entries()];
+    if (art29Sel.some(([, an]) => !an) || art32Sel.some(([, an]) => !an)) {
+      alert("Cada infração do Art. 29 / Art. 32 precisa de uma transgressão RDPM por analogia.");
+      return;
+    }
     const resp = await call("evidence_save_for_pm", {
       request: {
         pm_envolvido_id: evidencePmId,
         categorias: cats,
-        crimes: [...selectedCrimeIds],
-        rdpm: [...selectedRdpmIds].map(Number),
-        art29: [...selectedArt29Ids],
+        crimes_militares: [...selCrimesMil],
+        crimes_comuns: [...selCrimesCom],
+        rdpm: [...selRdpm],
+        art29: art29Sel.map(([infracao_id, analogia_id]) => ({ infracao_id, analogia_id })),
+        art32: art32Sel.map(([infracao_id, analogia_id]) => ({ infracao_id, analogia_id })),
       }
     });
     if (!resp.ok) { alert(resp.error ?? "Falha ao salvar."); return; }

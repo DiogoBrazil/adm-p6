@@ -91,7 +91,7 @@ pub async fn proceedings_create(
             repository::insert_initial_deadline(&mut tx, &id, data_inicio, dias).await?;
         }
 
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &id, "CREATE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &id, "CREATE", Some(&actor.id)).await?;
 
         tx.commit().await?;
         Ok(CreateProceedingResult { id })
@@ -135,7 +135,7 @@ pub async fn proceedings_update(
         let mut tx = pool.begin().await?;
         let id = request.id.clone();
         repository::update(&mut tx, &request).await?;
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &id, "UPDATE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &id, "UPDATE", Some(&actor.id)).await?;
         tx.commit().await?;
         Ok(true)
     }.await).await)
@@ -151,7 +151,7 @@ pub async fn proceedings_delete(
         let pool = state.pool().await?;
         let mut tx = pool.begin().await?;
         repository::delete(&mut tx, &id).await?;
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &id, "DELETE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &id, "DELETE", Some(&actor.id)).await?;
         tx.commit().await?;
         Ok(true)
     }.await).await)
@@ -167,7 +167,7 @@ pub async fn proceedings_reopen(
         let pool = state.pool().await?;
         let mut tx = pool.begin().await?;
         repository::reopen(&mut tx, &id).await?;
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &id, "UPDATE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &id, "UPDATE", Some(&actor.id)).await?;
         tx.commit().await?;
         Ok(true)
     }.await).await)
@@ -186,7 +186,7 @@ pub async fn proceedings_upload_pdf(
         let mut tx = pool.begin().await?;
 
         repository::save_pdf(&mut tx, &request.processo_id, &request.nome_arquivo, &request.content_type, &bytes).await?;
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &request.processo_id, "UPDATE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &request.processo_id, "UPDATE", Some(&actor.id)).await?;
 
         tx.commit().await?;
         Ok(true)
@@ -217,7 +217,7 @@ pub async fn proceedings_substitute_responsible(
         let mut tx = pool.begin().await?;
         repository::substitute_responsible(&mut tx, &request).await?;
         audit_repository::register_tx(
-            &mut tx, "processos_procedimentos", &request.id, "UPDATE", Some(&actor.id),
+            &mut tx, "historico_processo_procedimentos", &request.id, "UPDATE", Some(&actor.id),
         ).await?;
         tx.commit().await?;
         Ok(true)
@@ -342,7 +342,7 @@ pub async fn proceedings_remove_pdf(
         let mut tx = pool.begin().await?;
 
         repository::remove_pdf(&mut tx, &processo_id).await?;
-        audit_repository::register_tx(&mut tx, "processos_procedimentos", &processo_id, "UPDATE", Some(&actor.id)).await?;
+        audit_repository::register_tx(&mut tx, "historico_processo_procedimentos", &processo_id, "UPDATE", Some(&actor.id)).await?;
 
         tx.commit().await?;
         Ok(true)
