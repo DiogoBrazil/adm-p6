@@ -145,6 +145,7 @@ const routes: Route[] = [
   { path: "/catalogos/apuratorios", label: "Apuratórios", group: "Catálogos", command: "legal_catalogs_list_apuratorios", writeCommands: ["legal_catalogs_save_apuratorio", "legal_catalogs_delete_apuratorio"] },
   { path: "/catalogos/locais-origem", label: "Locais de Origem", group: "Catálogos", command: "legal_catalogs_list_locais_origem", writeCommands: ["legal_catalogs_save_local_origem", "legal_catalogs_delete_local_origem"] },
   { path: "/catalogos/municipios-distritos", label: "Municípios e Distritos", group: "Catálogos", command: "legal_catalogs_list_municipios_distritos", writeCommands: ["legal_catalogs_save_municipio_distrito", "legal_catalogs_delete_municipio_distrito"] },
+  { path: "/catalogos/subdivisao-textos-normativos", label: "Subdivisões Normativas", group: "Catálogos", command: "legal_catalogs_list_subdivisao_textos_normativos", writeCommands: ["legal_catalogs_save_subdivisao_texto_normativo", "legal_catalogs_delete_subdivisao_texto_normativo"] },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
   {
     path: "/estatisticas/encarregados",
@@ -359,11 +360,12 @@ const crudConfigs: Record<string, CrudConfig> = {
     saveCommand: "legal_catalogs_save_apuratorio",
     deleteCommand: "legal_catalogs_delete_apuratorio",
     idKind: "string",
-    hiddenColumns: ["tipo_apuratorio_id"],
+    hiddenColumns: ["tipo_apuratorio_id", "documento_iniciador_id"],
     fields: [
       { name: "nome_apuratorio", label: "Nome", kind: "text", required: true },
       { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios", optionsLabelKey: "nome_tipo_apuratorio" },
-      { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true }
+      { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true },
+      { name: "documento_iniciador_id", label: "Documento Iniciador", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_documentos", optionsLabelKey: "nome_tipo_documento" }
     ]
   },
   "/catalogos/locais-origem": {
@@ -385,6 +387,16 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "nome_municipio_distrito", label: "Nome", kind: "text", required: true },
       { name: "is_distrito", label: "Distrito", kind: "checkbox" },
       { name: "municipio_pai", label: "Município Pai", kind: "select", optionsCommand: "legal_catalogs_list_municipios_distritos", optionsLabelKey: "nome_municipio_distrito", showIf: { field: "is_distrito", value: true } }
+    ]
+  },
+  "/catalogos/subdivisao-textos-normativos": {
+    saveCommand: "legal_catalogs_save_subdivisao_texto_normativo",
+    deleteCommand: "legal_catalogs_delete_subdivisao_texto_normativo",
+    idKind: "string",
+    hiddenColumns: ["dispositivo_legal_id"],
+    fields: [
+      { name: "nome_subdivisao", label: "Subdivisão", kind: "text", required: true },
+      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", required: true, optionsCommand: "legal_catalogs_list_dispositivos_legais", optionsLabelKey: "nome_dispositivo_legal" }
     ]
   },
   "/procedimentos/lista": {

@@ -316,6 +316,8 @@ pub struct ApuratorioItem {
     pub tipo_apuratorio_id: String,
     pub tipo_apuratorio: Option<String>,
     pub prazo_base_dias: i32,
+    pub documento_iniciador_id: String,
+    pub documento_iniciador: Option<String>,
     pub ativo: Option<bool>,
 }
 
@@ -325,6 +327,7 @@ pub struct SaveApuratorioRequest {
     pub nome_apuratorio: String,
     pub tipo_apuratorio_id: String,
     pub prazo_base_dias: i32,
+    pub documento_iniciador_id: String,
 }
 
 impl SaveApuratorioRequest {
@@ -337,6 +340,9 @@ impl SaveApuratorioRequest {
         }
         if self.prazo_base_dias <= 0 {
             return Err("prazo_base_dias deve ser positivo".to_string());
+        }
+        if self.documento_iniciador_id.trim().is_empty() {
+            return Err("documento_iniciador_id e obrigatorio".to_string());
         }
         Ok(())
     }
@@ -499,6 +505,34 @@ impl SaveTipoDocumentoRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.nome_tipo_documento.trim().is_empty() {
             return Err("nome_tipo_documento e obrigatorio".to_string());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SubdivisaoTextoNormativoItem {
+    pub id: String,
+    pub nome_subdivisao: String,
+    pub dispositivo_legal_id: String,
+    pub dispositivo_legal: Option<String>,
+    pub ativo: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SaveSubdivisaoTextoNormativoRequest {
+    pub id: Option<String>,
+    pub nome_subdivisao: String,
+    pub dispositivo_legal_id: String,
+}
+
+impl SaveSubdivisaoTextoNormativoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.nome_subdivisao.trim().is_empty() {
+            return Err("nome_subdivisao e obrigatorio".to_string());
+        }
+        if self.dispositivo_legal_id.trim().is_empty() {
+            return Err("dispositivo_legal_id e obrigatorio".to_string());
         }
         Ok(())
     }
