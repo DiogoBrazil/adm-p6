@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: adm-p6-postgres
+    restart: unless-stopped
+    ports:
+      - "5438:5432"
+    environment:
+      POSTGRES_DB: adm_p6_db
+      POSTGRES_USER: adm_p6_user
+      POSTGRES_PASSWORD: adm_p6_password
+    volumes:
+      - adm_p6_pgdata:/var/lib/postgresql/data
+
+volumes:
+  adm_p6_pgdata:
