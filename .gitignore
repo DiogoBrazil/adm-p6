@@ -1,3 +1,4 @@
 .env
 src-tauri/target
 node_modules
+.claude/settings.json
