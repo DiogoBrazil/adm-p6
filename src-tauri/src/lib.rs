@@ -1,16 +1,16 @@
 mod app_state;
-mod audit;
-mod auth;
-mod db;
-mod deadlines;
-mod error;
-mod evidence;
-mod legal_catalogs;
-mod maps_reports;
-mod movements;
-mod proceedings;
-mod response;
-mod users;
+pub mod audit;
+pub mod auth;
+pub mod db;
+pub mod deadlines;
+pub mod error;
+pub mod evidence;
+pub mod legal_catalogs;
+pub mod maps_reports;
+pub mod movements;
+pub mod proceedings;
+pub mod response;
+pub mod users;
 
 use app_state::AppState;
 
@@ -20,7 +20,10 @@ pub fn run() {
     let state = AppState::from_env();
 
     tauri::async_runtime::block_on(async {
-        let pool = state.pool().await.expect("Falha ao conectar ao banco de dados");
+        let pool = state
+            .pool()
+            .await
+            .expect("Falha ao conectar ao banco de dados");
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
@@ -34,143 +37,61 @@ pub fn run() {
             auth::commands::auth_logout,
             auth::commands::auth_current_user,
             users::commands::users_list,
-            users::commands::users_form_schema,
+            users::commands::users_get,
             users::commands::users_save,
             users::commands::users_delete,
             users::commands::users_reactivate,
             users::commands::users_list_encarregados,
-            users::commands::users_get,
             users::commands::users_statistics,
-            users::commands::users_proceedings_responsible,
-            users::commands::users_proceedings_escrivao,
+            users::commands::users_proceedings_designated,
             users::commands::users_proceedings_involved,
-            legal_catalogs::commands::legal_catalogs_list_crimes,
-            legal_catalogs::commands::legal_catalogs_get_crime,
-            legal_catalogs::commands::legal_catalogs_search_municipalities,
-            legal_catalogs::commands::legal_catalogs_list_transgressions,
-            legal_catalogs::commands::legal_catalogs_list_art29,
-            legal_catalogs::commands::legal_catalogs_list_art32,
-            legal_catalogs::commands::legal_catalogs_get_art32,
-            legal_catalogs::commands::legal_catalogs_save_art32,
-            legal_catalogs::commands::legal_catalogs_delete_art32,
-            legal_catalogs::commands::legal_catalogs_list_for_proceeding,
-            legal_catalogs::commands::legal_catalogs_save_crime,
-            legal_catalogs::commands::legal_catalogs_delete_crime,
-            legal_catalogs::commands::legal_catalogs_save_transgression,
-            legal_catalogs::commands::legal_catalogs_delete_transgression,
-            legal_catalogs::commands::legal_catalogs_save_art29,
-            legal_catalogs::commands::legal_catalogs_delete_art29,
-            legal_catalogs::commands::legal_catalogs_get_transgression,
-            legal_catalogs::commands::legal_catalogs_get_art29,
-            legal_catalogs::commands::legal_catalogs_list_locais_origem,
-            legal_catalogs::commands::legal_catalogs_list_postos_graduacoes,
-            legal_catalogs::commands::legal_catalogs_list_naturezas,
-            legal_catalogs::commands::legal_catalogs_list_tipos_usuario,
-            legal_catalogs::commands::legal_catalogs_get_tipo_usuario,
-            legal_catalogs::commands::legal_catalogs_save_tipo_usuario,
-            legal_catalogs::commands::legal_catalogs_delete_tipo_usuario,
-            legal_catalogs::commands::legal_catalogs_get_posto_graduacao,
-            legal_catalogs::commands::legal_catalogs_save_posto_graduacao,
-            legal_catalogs::commands::legal_catalogs_delete_posto_graduacao,
-            legal_catalogs::commands::legal_catalogs_list_artigos_rdpm,
-            legal_catalogs::commands::legal_catalogs_get_artigo_rdpm,
-            legal_catalogs::commands::legal_catalogs_save_artigo_rdpm,
-            legal_catalogs::commands::legal_catalogs_delete_artigo_rdpm,
-            legal_catalogs::commands::legal_catalogs_list_dispositivos_legais,
-            legal_catalogs::commands::legal_catalogs_get_dispositivo_legal,
-            legal_catalogs::commands::legal_catalogs_save_dispositivo_legal,
-            legal_catalogs::commands::legal_catalogs_delete_dispositivo_legal,
-            legal_catalogs::commands::legal_catalogs_save_local_origem,
-            legal_catalogs::commands::legal_catalogs_delete_local_origem,
-            legal_catalogs::commands::legal_catalogs_list_municipios_distritos,
-            legal_catalogs::commands::legal_catalogs_save_municipio_distrito,
-            legal_catalogs::commands::legal_catalogs_delete_municipio_distrito,
-            legal_catalogs::commands::legal_catalogs_list_tipos_documentos,
-            legal_catalogs::commands::legal_catalogs_save_tipo_documento,
-            legal_catalogs::commands::legal_catalogs_delete_tipo_documento,
-            legal_catalogs::commands::legal_catalogs_list_tipos_penalidade,
-            legal_catalogs::commands::legal_catalogs_save_tipo_penalidade,
-            legal_catalogs::commands::legal_catalogs_delete_tipo_penalidade,
-            legal_catalogs::commands::legal_catalogs_list_tipos_prazo,
-            legal_catalogs::commands::legal_catalogs_save_tipo_prazo,
-            legal_catalogs::commands::legal_catalogs_delete_tipo_prazo,
-            legal_catalogs::commands::legal_catalogs_list_status_envolvido,
-            legal_catalogs::commands::legal_catalogs_save_status_envolvido,
-            legal_catalogs::commands::legal_catalogs_delete_status_envolvido,
-            legal_catalogs::commands::legal_catalogs_list_solucoes_tipo,
-            legal_catalogs::commands::legal_catalogs_save_solucao_tipo,
-            legal_catalogs::commands::legal_catalogs_delete_solucao_tipo,
-            legal_catalogs::commands::legal_catalogs_list_natureza_transgressao,
-            legal_catalogs::commands::legal_catalogs_save_natureza_transgressao,
-            legal_catalogs::commands::legal_catalogs_delete_natureza_transgressao,
-            legal_catalogs::commands::legal_catalogs_list_tipo_apuratorios,
-            legal_catalogs::commands::legal_catalogs_save_tipo_apuratorio,
-            legal_catalogs::commands::legal_catalogs_delete_tipo_apuratorio,
-            legal_catalogs::commands::legal_catalogs_list_apuratorios,
-            legal_catalogs::commands::legal_catalogs_save_apuratorio,
-            legal_catalogs::commands::legal_catalogs_delete_apuratorio,
-            legal_catalogs::commands::legal_catalogs_list_subdivisao_textos_normativos,
-            legal_catalogs::commands::legal_catalogs_save_subdivisao_texto_normativo,
-            legal_catalogs::commands::legal_catalogs_delete_subdivisao_texto_normativo,
+            users::commands::users_form_schema,
+            // Catálogos: sete comandos genéricos no lugar dos 68 específicos.
+            // O que existe é dado (legal_catalogs::domain::CATALOGOS), não código.
+            legal_catalogs::commands::legal_catalogs_definitions,
+            legal_catalogs::commands::legal_catalogs_list,
+            legal_catalogs::commands::legal_catalogs_get,
+            legal_catalogs::commands::legal_catalogs_search,
+            legal_catalogs::commands::legal_catalogs_save,
+            legal_catalogs::commands::legal_catalogs_deactivate,
+            legal_catalogs::commands::legal_catalogs_reactivate,
+            legal_catalogs::commands::legal_catalogs_delete,
             proceedings::commands::proceedings_list,
-            proceedings::commands::proceedings_form_schema,
-            proceedings::commands::proceedings_create,
             proceedings::commands::proceedings_get,
-            proceedings::commands::proceedings_update,
+            proceedings::commands::proceedings_save,
             proceedings::commands::proceedings_delete,
             proceedings::commands::proceedings_reopen,
-            proceedings::commands::proceedings_upload_pdf,
-            proceedings::commands::proceedings_get_pdf,
-            proceedings::commands::proceedings_remove_pdf,
-            proceedings::commands::proceedings_pads_solutions,
-            proceedings::commands::proceedings_ipm_evidence,
-            proceedings::commands::proceedings_common_crimes,
-            proceedings::commands::proceedings_sr_evidence,
-            proceedings::commands::proceedings_top10_transgressions,
-            proceedings::commands::proceedings_driver_ranking,
-            proceedings::commands::proceedings_nature_stats,
-            proceedings::commands::proceedings_military_crimes,
-            proceedings::commands::proceedings_in_progress_stats,
-            proceedings::commands::proceedings_substitute_responsible,
-            deadlines::commands::deadlines_overdue,
-            deadlines::commands::deadlines_report,
+            proceedings::commands::proceedings_substitute_designation,
+            proceedings::commands::proceedings_list_attachments,
+            proceedings::commands::proceedings_upload_attachment,
+            proceedings::commands::proceedings_get_attachment,
+            proceedings::commands::proceedings_remove_attachment,
+            proceedings::commands::dashboard_summary,
             deadlines::commands::deadlines_dashboard,
             deadlines::commands::deadlines_list,
-            deadlines::commands::deadlines_add_extension,
-            deadlines::commands::deadlines_upcoming,
-            deadlines::commands::deadlines_close,
             deadlines::commands::deadlines_calculate,
-            movements::commands::movements_types,
+            deadlines::commands::deadlines_report,
+            deadlines::commands::deadlines_add_extension,
             movements::commands::movements_list,
             movements::commands::movements_add,
             movements::commands::movements_remove,
-            evidence::commands::evidence_search_catalogs,
-            evidence::commands::evidence_save_for_pm,
             evidence::commands::evidence_load_for_pm,
-            evidence::commands::evidence_list_for_proceeding,
+            evidence::commands::evidence_save_for_pm,
             evidence::commands::evidence_remove_for_pm,
-            evidence::commands::evidence_categories,
-            evidence::commands::evidence_search_crimes,
-            evidence::commands::evidence_search_rdpm,
-            evidence::commands::evidence_search_art29,
-            evidence::commands::evidence_search_art32,
-            maps_reports::commands::dashboard_summary,
-            maps_reports::commands::reports_process_types,
-            maps_reports::commands::reports_generate_monthly_map,
-            maps_reports::commands::reports_generate_complete_map,
+            evidence::commands::evidence_list_for_proceeding,
+            evidence::commands::evidence_search_infracoes_penais,
+            evidence::commands::evidence_search_transgressoes,
+            evidence::commands::evidence_search_infracoes_estatuto,
+            maps_reports::commands::reports_map_rows,
             maps_reports::commands::reports_save_map,
+            maps_reports::commands::reports_saved_maps,
             maps_reports::commands::reports_get_saved_map,
             maps_reports::commands::reports_delete_saved_map,
-            maps_reports::commands::reports_saved_maps,
-            maps_reports::commands::reports_annual_statistics,
             maps_reports::commands::reports_by_responsible,
-            maps_reports::commands::reports_by_type,
-            maps_reports::commands::reports_overdue_deadlines,
-            maps_reports::commands::reports_export_csv,
-            maps_reports::commands::reports_responsible_statistics,
-            maps_reports::commands::reports_process_statistics,
-            maps_reports::commands::reports_monthly_map_schema,
+            maps_reports::commands::reports_by_nature,
+            maps_reports::commands::reports_driver_ranking,
             maps_reports::commands::reports_available_years,
+            maps_reports::commands::reports_export_csv,
             audit::commands::audit_list,
             audit::commands::audit_get,
             audit::commands::audit_by_record,

@@ -14,9 +14,10 @@ impl AppState {
         let database_url = {
             let host = std::env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
             let port = std::env::var("DB_PORT").unwrap_or_else(|_| "5438".to_string());
-            let name = std::env::var("DB_NAME").unwrap_or_else(|_| "adm_p6_db_normalized".to_string());
+            let name = std::env::var("DB_NAME").unwrap_or_else(|_| "adm_p6_db".to_string());
             let user = std::env::var("DB_USER").unwrap_or_else(|_| "adm_p6_user".to_string());
-            let password = std::env::var("DB_PASSWORD").unwrap_or_else(|_| "adm_p6_password".to_string());
+            let password =
+                std::env::var("DB_PASSWORD").unwrap_or_else(|_| "adm_p6_password".to_string());
             format!("postgres://{user}:{password}@{host}:{port}/{name}")
         };
 

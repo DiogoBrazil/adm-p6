@@ -1,17 +1,20 @@
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct AuditDetailItem {
     pub id: String,
-    pub tabela: Option<String>,
-    pub registro_id: Option<String>,
-    pub operacao: Option<String>,
+    pub entidade: String,
+    pub registro_id: String,
+    pub operacao: String,
     pub usuario_id: Option<String>,
     pub usuario_nome: Option<String>,
     pub usuario_posto: Option<String>,
-    pub timestamp: Option<NaiveDateTime>,
+    /// Diff da operação, quando registrado. Preenchido nas alterações de
+    /// configuração, que mudam o comportamento futuro do sistema.
+    pub alteracoes: Option<Value>,
+    pub ocorrido_em: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -22,7 +25,7 @@ pub struct AuditOperationStat {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct AuditTableStat {
-    pub tabela: String,
+    pub entidade: String,
     pub total: i64,
 }
 
@@ -30,7 +33,7 @@ pub struct AuditTableStat {
 pub struct AuditStatistics {
     pub total: i64,
     pub por_operacao: Vec<AuditOperationStat>,
-    pub por_tabela: Vec<AuditTableStat>,
+    pub por_entidade: Vec<AuditTableStat>,
 }
 
 #[derive(Debug, Serialize)]

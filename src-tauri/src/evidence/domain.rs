@@ -1,70 +1,124 @@
 use serde::{Deserialize, Serialize};
 
-use crate::legal_catalogs::domain::{CrimeItem, TransgressionItem};
-
-#[derive(Debug, Serialize)]
-pub struct PmWithEvidence {
-    pub pm_envolvido_id: String,
-    pub pm_id: String,
-    pub nome: Option<String>,
-    pub posto_graduacao: Option<String>,
-    pub matricula: Option<String>,
-    pub status_pm: Option<String>,
-    pub indicios: EvidenceData,
+/// Categoria de indício vinculada ao envolvido. `indica_ausencia` vem do catálogo
+/// e é o que permite validar a exclusividade de "Não houve indícios" sem que o
+/// código precise conhecer o nome da opção.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct CategoriaIndicioItem {
+    pub id: String,
+    pub nome: String,
+    pub indica_ausencia: bool,
 }
 
-/// Seleção de infração (art. 29 / art. 32) com a analogia obrigatória ao RDPM.
+/// Artigo penal com o rótulo já montado a partir do dado — dispositivo legal,
+/// artigo, parágrafo, inciso e alínea. Substitui os `format!` que traziam o nome
+/// da lei escrito no código.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct InfracaoPenalItem {
+    pub id: String,
+    pub dispositivo_legal: String,
+    pub especie: String,
+    pub artigo: String,
+    pub descricao: String,
+    pub rotulo: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TransgressaoItem {
+    pub id: String,
+    pub artigo: String,
+    pub natureza: String,
+    pub inciso: String,
+    pub texto: String,
+    pub rotulo: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct InfracaoEstatutoItem {
+    pub id: String,
+    pub dispositivo_legal: String,
+    pub artigo: String,
+    pub inciso: String,
+    pub texto: String,
+    pub rotulo: String,
+}
+
+/// Enquadramento penal do envolvido. A esfera (militar/comum) é do VÍNCULO: pelo
+/// art. 9º do CPM a mesma conduta pode ser crime militar ou comum conforme as
+/// circunstâncias do fato, então não pode morar no catálogo do artigo.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct InfracaoPenalVinculo {
+    pub infracao_penal_id: String,
+    pub esfera_penal_id: String,
+    pub esfera_penal: String,
+    pub dispositivo_legal: String,
+    pub especie: String,
+    pub artigo: String,
+    pub descricao: String,
+    pub rotulo: String,
+}
+
+/// Infração estatutária com a transgressão do RDPM usada por analogia —
+/// obrigatória, garantida por NOT NULL no banco.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct InfracaoEstatutoVinculo {
+    pub infracao_estatuto_id: String,
+    pub rotulo: String,
+    pub analogia_transgressao_id: String,
+    pub analogia_rotulo: String,
+}
+
 #[derive(Debug, Deserialize)]
-pub struct ArtSelection {
-    pub infracao_id: String,
-    pub analogia_id: String,
+pub struct SelecaoInfracaoPenal {
+    pub infracao_penal_id: String,
+    pub esfera_penal_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SelecaoInfracaoEstatuto {
+    pub infracao_estatuto_id: String,
+    pub analogia_transgressao_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SaveEvidenceRequest {
-    pub pm_envolvido_id: String,
-    pub categorias: Vec<String>,
-    pub crimes_militares: Vec<String>,
-    pub crimes_comuns: Vec<String>,
-    pub rdpm: Vec<String>,
-    pub art29: Vec<ArtSelection>,
-    pub art32: Vec<ArtSelection>,
-}
-
-/// Infração (art. 29 / art. 32) com a transgressão usada por analogia, achatada para o frontend.
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct InfractionEvidence {
-    pub id: String,
-    pub infracao_id: String,
-    pub infracao_inciso: Option<String>,
-    pub infracao_texto: Option<String>,
-    pub analogia_id: String,
-    pub analogia_inciso: Option<String>,
-    pub analogia_texto: Option<String>,
-    pub analogia_artigo: Option<String>,
+    pub envolvido_id: String,
+    pub categorias_ids: Vec<String>,
+    pub infracoes_penais: Vec<SelecaoInfracaoPenal>,
+    pub transgressoes_ids: Vec<String>,
+    pub infracoes_estatuto: Vec<SelecaoInfracaoEstatuto>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct EvidenceData {
-    pub pm_envolvido_id: String,
-    pub categorias: Vec<String>,
-    pub crimes_militares: Vec<CrimeItem>,
-    pub crimes_comuns: Vec<CrimeItem>,
-    pub rdpm: Vec<TransgressionItem>,
-    pub art29: Vec<InfractionEvidence>,
-    pub art32: Vec<InfractionEvidence>,
+    pub envolvido_id: String,
+    pub categorias: Vec<CategoriaIndicioItem>,
+    pub infracoes_penais: Vec<InfracaoPenalVinculo>,
+    pub transgressoes: Vec<TransgressaoItem>,
+    pub infracoes_estatuto: Vec<InfracaoEstatutoVinculo>,
 }
 
 impl EvidenceData {
-    pub fn empty(pm_envolvido_id: &str) -> Self {
-        EvidenceData {
-            pm_envolvido_id: pm_envolvido_id.to_string(),
+    pub fn empty(envolvido_id: &str) -> Self {
+        Self {
+            envolvido_id: envolvido_id.to_string(),
             categorias: vec![],
-            crimes_militares: vec![],
-            crimes_comuns: vec![],
-            rdpm: vec![],
-            art29: vec![],
-            art32: vec![],
+            infracoes_penais: vec![],
+            transgressoes: vec![],
+            infracoes_estatuto: vec![],
         }
     }
+}
+
+/// Envolvido do processo com o respectivo enquadramento, para o painel de indícios.
+#[derive(Debug, Serialize)]
+pub struct EnvolvidoComIndicios {
+    pub envolvido_id: String,
+    pub policial_militar_id: String,
+    pub nome: String,
+    pub matricula: String,
+    pub posto_graduacao: String,
+    pub status_envolvido: String,
+    pub ordem: i32,
+    pub indicios: EvidenceData,
 }

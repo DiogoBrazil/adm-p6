@@ -5,24 +5,29 @@ use std::sync::OnceLock;
 
 fn is_valid_email(email: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| {
-        Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
-    });
+    let re =
+        RE.get_or_init(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap());
     re.is_match(email)
 }
 
+/// Um policial militar cadastrado. `conta_*` só vem preenchido para os poucos
+/// militares que também operam o sistema — no banco legado eram 7 de 236.
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct UserListItem {
     pub id: String,
     pub nome: String,
     pub matricula: String,
+    pub posto_graduacao_id: String,
     pub posto_graduacao: String,
-    pub tipo_usuario: String,
-    pub email: Option<String>,
-    pub perfil: Option<String>,
-    pub is_encarregado: Option<bool>,
-    pub is_operador: Option<bool>,
-    pub ativo: Option<bool>,
+    pub circulo_hierarquico: String,
+    pub ordem_hierarquica: i32,
+    pub is_encarregado: bool,
+    pub ativo: bool,
+    pub conta_id: Option<String>,
+    pub conta_email: Option<String>,
+    pub conta_perfil_id: Option<String>,
+    pub conta_perfil: Option<String>,
+    pub conta_ativa: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -33,17 +38,27 @@ pub struct UserFormSchema {
     pub validations: Vec<&'static str>,
 }
 
+/// Dados de acesso. Ausente = o militar não opera o sistema; presente = a conta é
+/// criada ou atualizada junto, na mesma transação.
+#[derive(Debug, Deserialize)]
+pub struct SaveAccountRequest {
+    pub email: String,
+    pub perfil_id: String,
+    /// Obrigatória ao criar a conta; ausente numa edição mantém a senha atual.
+    pub senha: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SaveUserRequest {
+    /// Identidade do policial militar. Ausente = cadastro novo.
     pub id: Option<String>,
-    pub posto_graduacao: String,
     pub nome: String,
     pub matricula: String,
+    /// Catálogo resolvido por id, nunca por nome — renomear um posto não pode
+    /// quebrar o cadastro.
+    pub posto_graduacao_id: String,
     pub is_encarregado: bool,
-    pub is_operador: bool,
-    pub email: Option<String>,
-    pub perfil: Option<String>,
-    pub senha: Option<String>,
+    pub conta: Option<SaveAccountRequest>,
 }
 
 impl SaveUserRequest {
@@ -51,29 +66,30 @@ impl SaveUserRequest {
         if self.nome.trim().is_empty() {
             return Err("nome e obrigatorio".to_string());
         }
-        if self.matricula.trim().is_empty() {
-            return Err("matricula e obrigatoria".to_string());
-        }
-        if self.matricula.len() != 9 {
+        // Formato administrativo da matrícula na PMRO. Fica na camada de domínio,
+        // e não como CHECK, para não impedir a importação de registros históricos
+        // que eventualmente não o sigam.
+        let matricula = self.matricula.trim();
+        if matricula.len() != 9 {
             return Err("matricula deve ter exatamente 9 caracteres".to_string());
         }
-        if !self.matricula.starts_with("1000") && !self.matricula.starts_with("3000") {
+        if !matricula.starts_with("1000") && !matricula.starts_with("3000") {
             return Err("matricula deve iniciar com 1000 ou 3000".to_string());
         }
-        if let Some(email) = self.email.as_deref().filter(|e| !e.trim().is_empty()) {
-            if !is_valid_email(email) {
+        if self.posto_graduacao_id.trim().is_empty() {
+            return Err("posto/graduacao e obrigatorio".to_string());
+        }
+        if let Some(conta) = &self.conta {
+            if !is_valid_email(conta.email.trim()) {
                 return Err("email invalido".to_string());
             }
-        }
-        if self.is_operador {
-            if self.email.as_deref().unwrap_or("").trim().is_empty() {
-                return Err("email e obrigatorio para operador".to_string());
+            if conta.perfil_id.trim().is_empty() {
+                return Err("perfil e obrigatorio para quem opera o sistema".to_string());
             }
-            if self.perfil.as_deref().unwrap_or("").trim().is_empty() {
-                return Err("perfil e obrigatorio para operador".to_string());
-            }
-            if self.id.is_none() && self.senha.as_deref().unwrap_or("").len() < 4 {
-                return Err("senha minima de 4 caracteres para operador".to_string());
+            if let Some(senha) = conta.senha.as_deref() {
+                if !senha.is_empty() && senha.len() < 4 {
+                    return Err("senha minima de 4 caracteres".to_string());
+                }
             }
         }
         Ok(())
@@ -83,6 +99,7 @@ impl SaveUserRequest {
 #[derive(Debug, Serialize)]
 pub struct SaveUserResult {
     pub id: String,
+    pub conta_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,32 +110,40 @@ pub struct UserListResult {
     pub per_page: i64,
 }
 
+/// Contagem rotulada. Substitui os 14 contadores fixos da versão anterior
+/// (`encarregado_sindicancia`, `encarregado_pads`, ...), que só funcionavam
+/// enquanto os apuratórios fossem exatamente aqueles dez.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ContagemRotulada {
+    pub id: String,
+    pub rotulo: String,
+    pub total: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserStatistics {
-    pub encarregado_sindicancia: i64,
-    pub encarregado_pads: i64,
-    pub encarregado_ipm: i64,
-    pub encarregado_feito_preliminar: i64,
-    pub encarregado_cp: i64,
-    pub encarregado_pad: i64,
-    pub encarregado_pade: i64,
-    pub encarregado_cd: i64,
-    pub encarregado_cj: i64,
-    pub escrivao: i64,
-    pub envolvido_sindicado: i64,
-    pub envolvido_acusado: i64,
-    pub envolvido_indiciado: i64,
-    pub envolvido_investigado: i64,
+    /// Quantas designações o militar teve em cada papel (encarregado, escrivão…).
+    pub designacoes_por_papel: Vec<ContagemRotulada>,
+    /// Quantas designações em cada espécie de apuratório.
+    pub designacoes_por_apuratorio: Vec<ContagemRotulada>,
+    /// Em quantos processos figurou com cada status de envolvido.
+    pub envolvimentos_por_status: Vec<ContagemRotulada>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct UserProcessItem {
     pub id: String,
-    pub tipo_geral: Option<String>,
-    pub tipo_detalhe: Option<String>,
-    pub numero: Option<String>,
+    pub apuratorio_id: String,
+    pub apuratorio_sigla: String,
+    pub apuratorio_nome: String,
+    pub tipo_apuratorio: String,
+    pub numero_documento: String,
+    pub numero_controle: String,
     pub resumo_fatos: Option<String>,
-    pub data_instauracao: Option<NaiveDate>,
+    pub data_instauracao: NaiveDate,
     pub data_conclusao: Option<NaiveDate>,
-    pub concluido: Option<bool>,
+    /// Papel exercido, quando a listagem é de designações.
+    pub papel: Option<String>,
+    /// Status no processo, quando a listagem é de envolvimentos.
+    pub status_envolvido: Option<String>,
 }

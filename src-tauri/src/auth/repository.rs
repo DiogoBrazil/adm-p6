@@ -1,30 +1,45 @@
-use sqlx::PgPool;
+use sqlx::PgExecutor;
 
 use super::domain::UserAuthRow;
 
-pub async fn find_operator_by_email(pool: &PgPool, email: &str) -> Result<Option<UserAuthRow>, sqlx::Error> {
+/// Toda linha de `usuarios` é uma conta de acesso — o antigo `is_operador` deixou
+/// de existir quando policial militar e conta viraram entidades separadas.
+pub async fn find_account_by_email<'e, E: PgExecutor<'e>>(
+    executor: E,
+    email: &str,
+) -> Result<Option<UserAuthRow>, sqlx::Error> {
     sqlx::query_as::<_, UserAuthRow>(
         r#"
-        SELECT u.id::text AS id, u.nome, u.email, u.senha,
-               pa.nome_perfil AS perfil, u.is_operador, u.ativo
+        SELECT u.id::text                                AS id,
+               COALESCE(u.nome_exibicao, pm.nome)        AS nome,
+               u.email                                   AS email,
+               u.senha_hash                              AS senha_hash,
+               pa.nome                                   AS perfil,
+               pa.pode_administrar                       AS pode_administrar,
+               u.policial_militar_id::text               AS policial_militar_id
         FROM usuarios u
-        LEFT JOIN perfis_acesso pa ON u.perfil_id = pa.id
+        JOIN perfis_acesso pa ON pa.id = u.perfil_id
+        LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
         WHERE lower(u.email) = lower($1)
-          AND coalesce(u.is_operador, false) = true
-          AND coalesce(u.ativo, true) = true
+          AND u.ativo
+          AND pa.ativo
         LIMIT 1
         "#,
     )
     .bind(email)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
 }
 
-pub async fn update_password_hash(pool: &PgPool, user_id: &str, password_hash: &str) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE usuarios SET senha = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2")
+pub async fn update_password_hash<'e, E: PgExecutor<'e>>(
+    executor: E,
+    user_id: &str,
+    password_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE usuarios SET senha_hash = $1, updated_at = now() WHERE id = $2::uuid")
         .bind(password_hash)
         .bind(user_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
     Ok(())
 }

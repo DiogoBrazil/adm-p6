@@ -1,0 +1,320 @@
+-- =============================================================================
+-- Testes negativos de integridade do schema.
+--
+-- Cada caso tenta gravar um estado que o domínio considera impossível. O banco
+-- DEVE recusar. Um caso marcado FALHOU significa que a regra passou a depender do
+-- código da aplicação em vez do PostgreSQL.
+--
+-- Roda contra um banco DESCARTÁVEL e deixa resíduo de propósito (sem transação
+-- externa, para que as constraint triggers DEFERRABLE possam ser verificadas caso
+-- a caso). Quem cria e destrói o banco é o teste de integração:
+--
+--     cargo test --test schema_integrity
+--
+-- O resultado fica em pg_temp.resultado_integridade; a última consulta do arquivo
+-- imprime tudo, o que também torna o script utilizável direto no psql.
+-- =============================================================================
+
+CREATE FUNCTION pg_temp.deve_rejeitar(descricao text, sql text) RETURNS text
+LANGUAGE plpgsql AS $fn$
+BEGIN
+    SET CONSTRAINTS ALL IMMEDIATE;
+    EXECUTE sql;
+    RETURN format('FALHOU  %s  -> o banco ACEITOU', rpad(descricao, 58));
+EXCEPTION WHEN others THEN
+    RETURN format('ok      %s  -> %s', rpad(descricao, 58), split_part(replace(SQLERRM, E'\n', ' '), '  ', 1));
+END;
+$fn$;
+
+CREATE FUNCTION pg_temp.deve_aceitar(descricao text, sql text) RETURNS text
+LANGUAGE plpgsql AS $fn$
+BEGIN
+    SET CONSTRAINTS ALL IMMEDIATE;
+    EXECUTE sql;
+    RETURN format('ok      %s  -> aceito, como deve ser', rpad(descricao, 58));
+EXCEPTION WHEN others THEN
+    RETURN format('FALHOU  %s  -> RECUSOU: %s', rpad(descricao, 58), replace(SQLERRM, E'\n', ' '));
+END;
+$fn$;
+
+-- ---------------------------------------------------------------- fixtures ---
+INSERT INTO circulos_hierarquicos (id, nome) VALUES
+    ('11111111-0000-0000-0000-000000000001', 'Praças');
+INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica) VALUES
+    ('11111111-0000-0000-0000-000000000002', 'SD PM', 'Soldado PM', '11111111-0000-0000-0000-000000000001', -1);
+INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id) VALUES
+    ('22222222-0000-0000-0000-000000000001', '100000001', 'PM UM',   '11111111-0000-0000-0000-000000000002'),
+    ('22222222-0000-0000-0000-000000000002', '100000002', 'PM DOIS', '11111111-0000-0000-0000-000000000002'),
+    ('22222222-0000-0000-0000-000000000003', '100000003', 'PM TRES', '11111111-0000-0000-0000-000000000002');
+
+INSERT INTO municipios_distritos (id, nome, tipo) VALUES
+    ('33333333-0000-0000-0000-000000000001', 'Cidade Teste', 'municipio');
+INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
+    ('33333333-0000-0000-0000-000000000002', 'Unidade Teste', '33333333-0000-0000-0000-000000000001');
+
+INSERT INTO tipos_apuratorio (id, nome) VALUES
+    ('44444444-0000-0000-0000-000000000001', 'procedimento');
+-- Apuratório A: 1 envolvido no máximo (como os "processos" hoje)
+INSERT INTO apuratorios (id, sigla, nome, tipo_apuratorio_id, prazo_base_dias, max_envolvidos) VALUES
+    ('44444444-0000-0000-0000-000000000002', 'AP-A', 'Apuratorio A', '44444444-0000-0000-0000-000000000001', 30, 1),
+    ('44444444-0000-0000-0000-000000000003', 'AP-B', 'Apuratorio B', '44444444-0000-0000-0000-000000000001', 30, NULL);
+INSERT INTO tipos_documento (id, nome) VALUES
+    ('55555555-0000-0000-0000-000000000001', 'Portaria'),
+    ('55555555-0000-0000-0000-000000000002', 'Memorando');
+-- Portaria só está habilitada para AP-A. Memorando não está habilitado para ninguém.
+INSERT INTO apuratorio_documentos_iniciadores (apuratorio_id, tipo_documento_id, padrao) VALUES
+    ('44444444-0000-0000-0000-000000000002', '55555555-0000-0000-0000-000000000001', true),
+    ('44444444-0000-0000-0000-000000000003', '55555555-0000-0000-0000-000000000001', true);
+
+INSERT INTO papeis_processo (id, nome) VALUES
+    ('66666666-0000-0000-0000-000000000001', 'Encarregado'),
+    ('66666666-0000-0000-0000-000000000002', 'Escrivao');
+-- AP-A usa só Encarregado (1 ocupante). Escrivão NÃO é previsto para AP-A.
+INSERT INTO apuratorio_papeis (apuratorio_id, papel_id, obrigatorio, max_ocupantes, e_responsavel) VALUES
+    ('44444444-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', true, 1, true);
+
+INSERT INTO status_envolvido (id, nome) VALUES
+    ('77777777-0000-0000-0000-000000000001', 'Sindicado');
+INSERT INTO tipos_solucao_decidida (id, nome, permite_penalidade) VALUES
+    ('77777777-0000-0000-0000-000000000002', 'Punido', true);
+INSERT INTO tipos_penalidade (id, nome, usa_quantidade_dias) VALUES
+    ('77777777-0000-0000-0000-000000000003', 'Prisao', true);
+
+INSERT INTO naturezas_transgressao (id, nome) VALUES
+    ('88888888-0000-0000-0000-000000000001', 'Leve');
+INSERT INTO artigos_rdpm (id, artigo, natureza_transgressao_id) VALUES
+    ('88888888-0000-0000-0000-000000000002', '15', '88888888-0000-0000-0000-000000000001');
+INSERT INTO transgressoes (id, artigo_rdpm_id, inciso, texto) VALUES
+    ('88888888-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000002', 'I', 'texto');
+INSERT INTO dispositivos_legais (id, nome) VALUES
+    ('99999999-0000-0000-0000-000000000001', 'Codigo Penal Militar');
+INSERT INTO especies_infracao_penal (id, nome) VALUES
+    ('99999999-0000-0000-0000-000000000002', 'Crime');
+INSERT INTO esferas_penais (id, nome) VALUES
+    ('99999999-0000-0000-0000-000000000003', 'Militar');
+INSERT INTO infracoes_penais (id, dispositivo_legal_id, especie_id, artigo, descricao) VALUES
+    ('99999999-0000-0000-0000-000000000004', '99999999-0000-0000-0000-000000000001',
+     '99999999-0000-0000-0000-000000000002', '157', 'roubo');
+INSERT INTO categorias_indicio (id, nome, indica_ausencia) VALUES
+    ('99999999-0000-0000-0000-000000000005', 'Nao houve indicios', true);
+
+-- Processo base (AP-A + Portaria, par cadastrado)
+INSERT INTO processos_procedimentos
+    (id, apuratorio_id, documento_iniciador_id, numero_documento, unidade_origem_id,
+     municipio_fato_id, data_instauracao)
+VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000001', '44444444-0000-0000-0000-000000000002',
+     '55555555-0000-0000-0000-000000000001', '1', '33333333-0000-0000-0000-000000000002',
+     '33333333-0000-0000-0000-000000000001', DATE '2026-01-10');
+
+INSERT INTO processo_envolvidos (id, processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
+VALUES ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001',
+        '22222222-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 1, true);
+
+INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 0, DATE '2026-01-10', 30);
+
+INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000001', '44444444-0000-0000-0000-000000000002',
+        '22222222-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', DATE '2026-01-10');
+
+-- ------------------------------------------------------------------ casos ---
+CREATE TEMP TABLE resultado_integridade (ordem serial, linha text);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('envolvido com policial inexistente', $$
+  INSERT INTO processo_envolvidos (processo_id, policial_militar_id, status_envolvido_id, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','00000000-dead-0000-0000-000000000000',
+          '77777777-0000-0000-0000-000000000001', 9)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('enquadramento para envolvido inexistente', $$
+  INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+  VALUES ('00000000-dead-0000-0000-000000000000','88888888-0000-0000-0000-000000000003')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('processo com apuratorio inexistente', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('00000000-dead-0000-0000-000000000000','55555555-0000-0000-0000-000000000001','X',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('par apuratorio x documento NAO cadastrado', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000002','X',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('mesmo PM duas vezes no mesmo processo', $$
+  INSERT INTO processo_envolvidos (processo_id, policial_militar_id, status_envolvido_id, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000001',
+          '77777777-0000-0000-0000-000000000001', 2)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('envolvido acima de max_envolvidos (=1)', $$
+  INSERT INTO processo_envolvidos (processo_id, policial_militar_id, status_envolvido_id, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000003',
+          '77777777-0000-0000-0000-000000000001', 2)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('dois condutores no mesmo processo', $$
+  INSERT INTO processo_envolvidos (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','22222222-0000-0000-0000-000000000002',
+          '77777777-0000-0000-0000-000000000001', 3, true)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('penalidade sem solucao decidida', $$
+  UPDATE processo_envolvidos SET penalidade_tipo_id='77777777-0000-0000-0000-000000000003'
+   WHERE id='bbbbbbbb-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('matricula duplicada (caixa diferente)', $$
+  INSERT INTO policiais_militares (matricula, nome, posto_graduacao_id)
+  VALUES ('100000001','OUTRO','11111111-0000-0000-0000-000000000002')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('email duplicado com caixa diferente', $$
+  INSERT INTO usuarios (nome_exibicao, email, senha_hash, perfil_id)
+  SELECT 'X','ADMIN@SISTEMA.COM','h', id FROM perfis_acesso LIMIT 1$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('conta sem PM e sem nome_exibicao', $$
+  INSERT INTO usuarios (email, senha_hash, perfil_id)
+  SELECT 'x@y.z','h', id FROM perfis_acesso LIMIT 1$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('duas contas para o mesmo policial', $$
+  INSERT INTO usuarios (policial_militar_id, email, senha_hash, perfil_id)
+  SELECT '22222222-0000-0000-0000-000000000001','a@b.c','h', id FROM perfis_acesso LIMIT 1;
+  INSERT INTO usuarios (policial_militar_id, email, senha_hash, perfil_id)
+  SELECT '22222222-0000-0000-0000-000000000001','d@e.f','h', id FROM perfis_acesso LIMIT 1$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('duas extensoes CP para o mesmo processo', $$
+  INSERT INTO carta_precatoria_detalhes (processo_id, deprecante, unidade_deprecada_id)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','X','33333333-0000-0000-0000-000000000002');
+  INSERT INTO carta_precatoria_detalhes (processo_id, deprecante, unidade_deprecada_id)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','Y','33333333-0000-0000-0000-000000000002')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('prazos com periodo sobreposto', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 1, DATE '2026-02-01', 30, 'motivo')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('prorrogacao sem motivo', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 1, DATE '2026-02-10', 30)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('gravar data_vencimento manualmente (coluna gerada)', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, data_vencimento, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 5, DATE '2027-01-01', 30, DATE '2027-12-31','m')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('designacoes sobrepostas do mesmo papel/pessoa', $$
+  INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000002',
+          '22222222-0000-0000-0000-000000000002','66666666-0000-0000-0000-000000000001', DATE '2026-03-01')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('designacao acima de max_ocupantes (=1)', $$
+  INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000002',
+          '22222222-0000-0000-0000-000000000003','66666666-0000-0000-0000-000000000001', DATE '2026-03-01')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('designacao com papel nao previsto p/ o apuratorio', $$
+  INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000002',
+          '22222222-0000-0000-0000-000000000003','66666666-0000-0000-0000-000000000002', DATE '2026-03-01')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('designacao com apuratorio divergente do processo', $$
+  INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000003',
+          '22222222-0000-0000-0000-000000000003','66666666-0000-0000-0000-000000000001', DATE '2026-03-01')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('dois documentos padrao no mesmo apuratorio', $$
+  INSERT INTO apuratorio_documentos_iniciadores (apuratorio_id, tipo_documento_id, padrao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000002', true)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('dois papeis responsaveis no mesmo apuratorio', $$
+  INSERT INTO apuratorio_papeis (apuratorio_id, papel_id, e_responsavel)
+  VALUES ('44444444-0000-0000-0000-000000000002','66666666-0000-0000-0000-000000000002', true)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('numero_documento duplicado no mesmo escopo', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-05-05')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('numero_controle efetivo duplicado (NULL = numero_documento)', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    numero_controle, unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','99',
+          '1','33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-05-05')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('data_conclusao anterior a instauracao', $$
+  UPDATE processos_procedimentos SET data_conclusao = DATE '2025-01-01'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('DELETE de catalogo em uso (status_envolvido)', $$
+  DELETE FROM status_envolvido WHERE id='77777777-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('DELETE de transgressao usada como analogia', $$
+  INSERT INTO infracoes_estatuto (id, dispositivo_legal_id, artigo, inciso, texto)
+  VALUES ('cccccccc-0000-0000-0000-000000000001','99999999-0000-0000-0000-000000000001','29','I','t');
+  INSERT INTO envolvido_infracoes_estatuto (envolvido_id, infracao_estatuto_id, analogia_transgressao_id)
+  VALUES ('bbbbbbbb-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-000000000001',
+          '88888888-0000-0000-0000-000000000003');
+  DELETE FROM transgressoes WHERE id='88888888-0000-0000-0000-000000000003'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('infracao estatutaria sem analogia RDPM', $$
+  INSERT INTO infracoes_estatuto (id, dispositivo_legal_id, artigo, inciso, texto)
+  VALUES ('cccccccc-0000-0000-0000-000000000002','99999999-0000-0000-0000-000000000001','32','I','t');
+  INSERT INTO envolvido_infracoes_estatuto (envolvido_id, infracao_estatuto_id)
+  VALUES ('bbbbbbbb-0000-0000-0000-000000000001','cccccccc-0000-0000-0000-000000000002')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('infracao penal sem esfera', $$
+  INSERT INTO envolvido_infracoes_penais (envolvido_id, infracao_penal_id)
+  VALUES ('bbbbbbbb-0000-0000-0000-000000000001','99999999-0000-0000-0000-000000000004')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('DELETE de processo com filhas', $$
+  DELETE FROM processos_procedimentos WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('municipio como pai de si mesmo', $$
+  UPDATE municipios_distritos SET municipio_pai_id = id
+   WHERE id='33333333-0000-0000-0000-000000000001'$$);
+
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo numero em ano diferente', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2025-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo numero em apuratorio diferente', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000003','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('prorrogacao imediatamente apos o vencimento', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 1, DATE '2026-02-10', 30, 'prorrogado')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('substituicao de encarregado na data da troca', $$
+  UPDATE processo_designacoes SET data_fim = DATE '2026-03-01'
+   WHERE processo_id='aaaaaaaa-0000-0000-0000-000000000001'
+     AND policial_militar_id='22222222-0000-0000-0000-000000000002';
+  INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000002',
+          '22222222-0000-0000-0000-000000000003','66666666-0000-0000-0000-000000000001',
+          DATE '2026-03-01','ferias')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('catalogo desativado continua referenciado', $$
+  UPDATE status_envolvido SET ativo=false WHERE id='77777777-0000-0000-0000-000000000001'$$);
+
+
+-- data_inicio 2026-01-10 + 30 dias = 2026-02-09. Regra unica, no schema.
+INSERT INTO resultado_integridade (linha)
+SELECT CASE WHEN data_vencimento = DATE '2026-02-09'
+            THEN 'ok      vencimento = data_inicio + dias                        -> ' || data_vencimento
+            ELSE 'FALHOU  vencimento calculado errado                            -> ' || data_vencimento
+       END
+FROM processo_prazos
+WHERE processo_id='aaaaaaaa-0000-0000-0000-000000000001' AND ordem=0;
+
+-- Prorrogacao comeca no dia seguinte ao vencimento anterior: 2026-02-10 + 30 = 2026-03-12.
+INSERT INTO resultado_integridade (linha)
+SELECT CASE WHEN data_vencimento = DATE '2026-03-12'
+            THEN 'ok      prorrogacao encadeada sem lacuna nem sobreposicao      -> ' || data_vencimento
+            ELSE 'FALHOU  prorrogacao calculada errado                           -> ' || data_vencimento
+       END
+FROM processo_prazos
+WHERE processo_id='aaaaaaaa-0000-0000-0000-000000000001' AND ordem=1;
+
+SELECT linha FROM resultado_integridade ORDER BY ordem;

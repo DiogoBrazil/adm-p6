@@ -1,72 +1,25 @@
 use tauri::State;
 
 use crate::app_state::AppState;
+use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::maps_reports::domain::{
-    AnnualStatistics, CompleteMapResult, CsvExportRequest, CsvExportResult, DashboardSummary,
-    GenerateCompleteMapRequest, GenerateMapRequest, MonthlyMapResult, PrazoVencidoItem,
-    ReportContract, ResponsavelRelatorio, SaveMapRequest, SaveMapResult, SavedMapFull,
-    SavedMapListItem, TipoProcessoItem, TipoRelatorio,
+    ContagemRotulada, CsvExport, DriverRankingItem, MapPeriodRequest, MapRow, ReportFilter,
+    SaveMapRequest, SavedMapFull, SavedMapListItem,
 };
 use crate::maps_reports::repository;
 use crate::response::{from_result, ApiResponse};
 
 #[tauri::command]
-pub async fn dashboard_summary(
+pub async fn reports_map_rows(
     state: State<'_, AppState>,
-) -> Result<ApiResponse<DashboardSummary>, String> {
+    request: MapPeriodRequest,
+) -> Result<ApiResponse<Vec<MapRow>>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::dashboard_summary(&pool).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_process_types(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<Vec<TipoProcessoItem>>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::process_types(&pool).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_generate_monthly_map(
-    state: State<'_, AppState>,
-    request: GenerateMapRequest,
-) -> Result<ApiResponse<MonthlyMapResult>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::generate_monthly_map(&pool, &request).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_generate_complete_map(
-    state: State<'_, AppState>,
-    request: GenerateCompleteMapRequest,
-) -> Result<ApiResponse<CompleteMapResult>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::generate_complete_map(&pool, &request).await?)
+            Ok(repository::map_rows(&pool, &request).await?)
         }
         .await,
     )
@@ -77,12 +30,32 @@ pub async fn reports_generate_complete_map(
 pub async fn reports_save_map(
     state: State<'_, AppState>,
     request: SaveMapRequest,
-) -> Result<ApiResponse<SaveMapResult>, String> {
+) -> Result<ApiResponse<String>, String> {
     Ok(from_result(
         async {
-            let actor = require_session(&state).await?;
+            let actor = require_admin(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::save_map(&pool, &request, &actor.id, &actor.nome).await?)
+            let mut tx = pool.begin().await?;
+            let id = repository::save_map(&mut tx, &request, &actor.id).await?;
+            audit_repository::register_tx(&mut tx, "mapas_salvos", &id, "CREATE", Some(&actor.id))
+                .await?;
+            tx.commit().await?;
+            Ok(id)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_saved_maps(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<SavedMapListItem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::list_saved_maps(&pool).await?)
         }
         .await,
     )
@@ -112,40 +85,14 @@ pub async fn reports_delete_saved_map(
 ) -> Result<ApiResponse<bool>, String> {
     Ok(from_result(
         async {
-            require_admin(&state).await?;
+            let actor = require_admin(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::delete_saved_map(&pool, &id).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_saved_maps(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<Vec<SavedMapListItem>>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::saved_maps(&pool, 100).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_annual_statistics(
-    state: State<'_, AppState>,
-    ano: i32,
-) -> Result<ApiResponse<AnnualStatistics>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::annual_statistics(&pool, ano).await?)
+            let mut tx = pool.begin().await?;
+            repository::delete_saved_map(&mut tx, &id).await?;
+            audit_repository::register_tx(&mut tx, "mapas_salvos", &id, "DELETE", Some(&actor.id))
+                .await?;
+            tx.commit().await?;
+            Ok(true)
         }
         .await,
     )
@@ -155,13 +102,13 @@ pub async fn reports_annual_statistics(
 #[tauri::command]
 pub async fn reports_by_responsible(
     state: State<'_, AppState>,
-    ano: Option<i32>,
-) -> Result<ApiResponse<Vec<ResponsavelRelatorio>>, String> {
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<ContagemRotulada>>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::by_responsible(&pool, ano).await?)
+            Ok(repository::by_responsible(&pool, &filter.unwrap_or_default()).await?)
         }
         .await,
     )
@@ -169,15 +116,15 @@ pub async fn reports_by_responsible(
 }
 
 #[tauri::command]
-pub async fn reports_by_type(
+pub async fn reports_by_nature(
     state: State<'_, AppState>,
-    ano: Option<i32>,
-) -> Result<ApiResponse<Vec<TipoRelatorio>>, String> {
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<ContagemRotulada>>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::by_type(&pool, ano).await?)
+            Ok(repository::by_nature(&pool, &filter.unwrap_or_default()).await?)
         }
         .await,
     )
@@ -185,75 +132,15 @@ pub async fn reports_by_type(
 }
 
 #[tauri::command]
-pub async fn reports_overdue_deadlines(
+pub async fn reports_driver_ranking(
     state: State<'_, AppState>,
-    days_past: Option<i32>,
-) -> Result<ApiResponse<Vec<PrazoVencidoItem>>, String> {
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<DriverRankingItem>>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::overdue_deadlines(&pool, days_past.unwrap_or(0)).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_export_csv(
-    state: State<'_, AppState>,
-    request: CsvExportRequest,
-) -> Result<ApiResponse<CsvExportResult>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::export_csv(&pool, &request).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_responsible_statistics(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<ReportContract>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            Ok(ReportContract {
-                name: "Estatísticas de Encarregados",
-                parity: "agregacoes devem bater com o legado em Parallel Run",
-                commands: vec![
-                    "reports.get_responsible_statistics",
-                    "reports.get_latest_proceedings_by_responsible",
-                ],
-            })
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_process_statistics(
-    state: State<'_, AppState>,
-) -> Result<ApiResponse<ReportContract>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            Ok(ReportContract {
-                name: "Estatísticas de Processos",
-                parity: "rankings, contagens e graficos devem preservar agregacoes",
-                commands: vec![
-                    "reports.get_pads_solution_statistics",
-                    "reports.get_ipm_evidence_statistics",
-                    "reports.get_sr_evidence_statistics",
-                    "reports.get_top_transgressions",
-                ],
-            })
+            Ok(repository::driver_ranking(&pool, &filter.unwrap_or_default()).await?)
         }
         .await,
     )
@@ -276,21 +163,15 @@ pub async fn reports_available_years(
 }
 
 #[tauri::command]
-pub async fn reports_monthly_map_schema(
+pub async fn reports_export_csv(
     state: State<'_, AppState>,
-) -> Result<ApiResponse<ReportContract>, String> {
+    request: MapPeriodRequest,
+) -> Result<ApiResponse<CsvExport>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
-            Ok(ReportContract {
-                name: "Mapa Mensal",
-                parity: "mapa mensal PDF e dados JSON sao prioridade confirmada",
-                commands: vec![
-                    "reports.generate_monthly_map",
-                    "reports.generate_complete_monthly_map",
-                    "reports.save_monthly_map",
-                ],
-            })
+            let pool = state.pool().await?;
+            Ok(repository::export_csv(&pool, &request).await?)
         }
         .await,
     )

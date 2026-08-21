@@ -1,156 +1,99 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct DashboardSummary {
-    pub total_processos: i64,
-    pub em_andamento: i64,
-    pub concluidos: i64,
-    pub prazos_vencidos: i64,
-}
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct SavedMapListItem {
     pub id: String,
-    pub titulo: Option<String>,
-    pub tipo_processo: Option<String>,
-    pub periodo_descricao: Option<String>,
-    pub total_processos: Option<i32>,
-    pub total_concluidos: Option<i32>,
-    pub total_andamento: Option<i32>,
-    pub usuario_nome: Option<String>,
-    pub data_geracao: Option<NaiveDateTime>,
-    pub nome_arquivo: Option<String>,
+    pub titulo: String,
+    pub apuratorio_id: Option<String>,
+    pub apuratorio_sigla: Option<String>,
+    pub periodo_inicio: NaiveDate,
+    pub periodo_fim: NaiveDate,
+    pub total_processos: i32,
+    pub total_concluidos: i32,
+    pub total_andamento: i32,
+    pub gerado_por: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct SavedMapFull {
-    pub id: String,
-    pub titulo: Option<String>,
-    pub tipo_processo: Option<String>,
-    pub periodo_descricao: Option<String>,
-    pub total_processos: Option<i32>,
-    pub total_concluidos: Option<i32>,
-    pub total_andamento: Option<i32>,
-    pub usuario_nome: Option<String>,
-    pub data_geracao: Option<NaiveDateTime>,
-    pub nome_arquivo: Option<String>,
-    pub dados_mapa: Option<Value>,
+    #[sqlx(flatten)]
+    pub cabecalho: SavedMapListItem,
+    /// Snapshot imutável do mapa como foi emitido. É o único JSONB de domínio do
+    /// schema, e é justificado: recalcular hoje daria outro resultado — preservar
+    /// exatamente o que foi publicado é a razão de o mapa ser salvo.
+    pub dados_mapa: Value,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GenerateMapRequest {
-    pub mes: i32,
-    pub ano: i32,
-    pub tipo_processo: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GenerateCompleteMapRequest {
-    pub mes: i32,
-    pub ano: i32,
+pub struct MapPeriodRequest {
+    pub periodo_inicio: NaiveDate,
+    pub periodo_fim: NaiveDate,
+    /// Espécies a incluir. Vazio = todas. Substitui o `tipo_processo` textual com
+    /// o sentinela "TODOS" que existia antes.
+    pub apuratorio_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SaveMapRequest {
+    pub titulo: String,
+    pub apuratorio_id: Option<String>,
+    pub periodo_inicio: NaiveDate,
+    pub periodo_fim: NaiveDate,
+    pub total_processos: i32,
+    pub total_concluidos: i32,
+    pub total_andamento: i32,
     pub dados_mapa: Value,
 }
 
-#[derive(Debug, Serialize)]
-pub struct MonthlyMapResult {
-    pub dados: Vec<Value>,
-    pub meta: Value,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CompleteMapResult {
-    pub dados: HashMap<String, Value>,
-    pub meta: Value,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SaveMapResult {
-    pub mapa_id: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReportContract {
-    pub name: &'static str,
-    pub parity: &'static str,
-    pub commands: Vec<&'static str>,
+/// Linha do mapa mensal: um processo com o que a Seção precisa ver na folha.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MapRow {
+    pub processo_id: String,
+    pub apuratorio_sigla: String,
+    pub rotulo: String,
+    pub unidade_origem: String,
+    pub natureza_fato: Option<String>,
+    pub data_instauracao: NaiveDate,
+    pub data_conclusao: Option<NaiveDate>,
+    pub responsavel_nome: Option<String>,
+    pub envolvidos: Option<String>,
+    pub prazo_vencimento: Option<NaiveDate>,
+    pub ultimo_andamento: Option<String>,
+    pub ultimo_andamento_em: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoProcessoItem {
-    pub codigo: String,
-    pub total: i64,
-}
-
-// ── Relatórios ───────────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoStatusCount {
-    pub tipo_detalhe: Option<String>,
-    pub total: i64,
-    pub concluidos: i64,
-    pub em_andamento: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AnnualStatistics {
-    pub ano: i32,
-    pub total_processos: i64,
-    pub total_procedimentos: i64,
-    pub total_geral: i64,
-    pub processos_por_tipo: Vec<TipoStatusCount>,
-    pub procedimentos_por_tipo: Vec<TipoStatusCount>,
-    pub ipm_sindicancia_indicios_crime: i64,
-    pub ipm_sindicancia_indicios_transgressao: i64,
-    pub pad_pads_punidos: i64,
-    pub pad_pads_absolvidos_arquivados: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct ResponsavelRelatorio {
-    pub responsavel_id: Option<String>,
-    pub responsavel_nome: String,
-    pub responsavel_posto: String,
-    pub responsavel_matricula: String,
-    pub total: i64,
-    pub concluidos: i64,
-    pub em_andamento: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoRelatorio {
-    pub tipo_detalhe: Option<String>,
-    pub categoria: String,
-    pub total: i64,
-    pub concluidos: i64,
-    pub em_andamento: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct PrazoVencidoItem {
+pub struct ContagemRotulada {
     pub id: String,
-    pub numero: Option<String>,
-    pub tipo_detalhe: Option<String>,
-    pub responsavel_nome: String,
-    pub data_vencimento: NaiveDate,
-    pub dias_atraso: i32,
-    pub prazo_tipo: Option<String>,
+    pub rotulo: String,
+    pub total: i64,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct CsvExportRequest {
-    pub tipo_relatorio: String,
+/// Ranking de PMs condutores em processos cuja natureza exige condutor.
+/// Antes era um `Ok(vec![])`: a coluna `motorista_id` do legado não tinha
+/// destino no schema, e havia 15 registros reais.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DriverRankingItem {
+    pub policial_militar_id: String,
+    pub nome: String,
+    pub matricula: String,
+    pub posto_graduacao: String,
+    pub total: i64,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ReportFilter {
+    pub apuratorio_ids: Option<Vec<String>>,
     pub ano: Option<i32>,
+    pub limit: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct CsvExportResult {
-    pub csv_base64: String,
-    pub filename: String,
+pub struct CsvExport {
+    pub nome_arquivo: String,
+    /// CSV em base64, pronto para o frontend oferecer como download.
+    pub conteudo: String,
 }

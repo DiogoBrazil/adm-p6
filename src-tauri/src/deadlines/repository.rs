@@ -1,213 +1,199 @@
 use chrono::NaiveDate;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 
+use crate::deadlines::domain::{
+    AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem, DeadlineSummary,
+};
 use crate::error::AppError;
 
-use super::domain::{AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem, DeadlineSummary, OverdueDeadlineItem, UpcomingDeadlineItem};
-
-pub async fn dashboard(pool: &PgPool) -> Result<DeadlineSummary, sqlx::Error> {
-    sqlx::query_as::<_, DeadlineSummary>(
-        r#"
-        SELECT
-          count(*)::bigint AS total,
-          count(*) FILTER (WHERE data_vencimento < CURRENT_DATE)::bigint AS vencidos,
-          count(*) FILTER (WHERE data_vencimento >= CURRENT_DATE AND data_vencimento <= CURRENT_DATE + INTERVAL '7 days')::bigint AS proximos_7_dias
-        FROM prazos_processo
-        WHERE coalesce(ativo, true) = true
-        "#,
+/// Prazo vigente de um processo: o de maior `ordem`. Não há coluna `ativo` —
+/// a vigência é derivada, e o EXCLUDE do schema garante que os períodos nunca
+/// se sobrepõem.
+const VIGENTE: &str = r#"
+    p.id IN (
+        SELECT DISTINCT ON (processo_id) id FROM processo_prazos
+         ORDER BY processo_id, ordem DESC
     )
-    .fetch_one(pool)
+"#;
+
+/// Dias de prazo de uma combinação apuratório × documento iniciador.
+/// O override que antes era `if documento_iniciador == "Feito Preliminar" { 15 }`
+/// virou dado: `apuratorio_documentos_iniciadores.prazo_base_dias`.
+pub async fn dias_base<'e, E: PgExecutor<'e>>(
+    executor: E,
+    apuratorio_id: &str,
+    documento_iniciador_id: &str,
+) -> Result<(i32, bool), sqlx::Error> {
+    let (dias, do_documento): (i32, bool) = sqlx::query_as(
+        "SELECT COALESCE(adi.prazo_base_dias, a.prazo_base_dias),
+                adi.prazo_base_dias IS NOT NULL
+           FROM apuratorios a
+           JOIN apuratorio_documentos_iniciadores adi
+             ON adi.apuratorio_id = a.id AND adi.tipo_documento_id = $2::uuid
+          WHERE a.id = $1::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(documento_iniciador_id)
+    .fetch_one(executor)
+    .await?;
+    Ok((dias, do_documento))
+}
+
+/// Cria o prazo inicial (ordem 0). O vencimento é calculado pelo banco, na coluna
+/// gerada `data_inicio + dias` — não há aritmética de prazo em Rust.
+pub async fn create_initial(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    data_inicio: NaiveDate,
+    dias: i32,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        "INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+         VALUES ($1::uuid, 0, $2, $3)
+      RETURNING id::text",
+    )
+    .bind(processo_id)
+    .bind(data_inicio)
+    .bind(dias)
+    .fetch_one(&mut **tx)
     .await
 }
 
 pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>, sqlx::Error> {
-    sqlx::query_as::<_, DeadlineItem>(
-        r#"
-        SELECT pr.id::text AS id, pr.processo_id::text AS processo_id,
-               tp.nome_prazo AS tipo_prazo,
-               pr.data_inicio, pr.data_vencimento, pr.dias_adicionados,
-               pr.motivo, pr.autorizado_por,
-               tda.nome_tipo_documento AS autorizado_tipo,
-               pr.ativo, pr.numero_portaria, pr.data_portaria, pr.ordem_prorrogacao
-        FROM prazos_processo pr
-        JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
-        LEFT JOIN tipos_documentos tda ON tda.id = pr.autorizado_tipo_id
-        WHERE pr.processo_id = $1::uuid
-        ORDER BY
-            CASE tp.nome_prazo WHEN 'inicial' THEN 0 ELSE 1 END,
-            COALESCE(pr.ordem_prorrogacao, 0)
-        "#,
-    )
+    sqlx::query_as::<_, DeadlineItem>(&format!(
+        "SELECT p.id::text                      AS id,
+                p.processo_id::text             AS processo_id,
+                p.ordem                         AS ordem,
+                p.data_inicio                   AS data_inicio,
+                p.dias                          AS dias,
+                p.data_vencimento               AS data_vencimento,
+                p.motivo                        AS motivo,
+                p.documento_autorizador_id::text AS documento_autorizador_id,
+                td.nome                         AS documento_autorizador,
+                p.numero_documento              AS numero_documento,
+                p.data_documento                AS data_documento,
+                p.autoridade_id::text           AS autoridade_id,
+                pm.nome                         AS autoridade,
+                {VIGENTE}                       AS vigente
+           FROM processo_prazos p
+           LEFT JOIN tipos_documento td     ON td.id = p.documento_autorizador_id
+           LEFT JOIN policiais_militares pm ON pm.id = p.autoridade_id
+          WHERE p.processo_id = $1::uuid
+          ORDER BY p.ordem"
+    ))
     .bind(processo_id)
     .fetch_all(pool)
     .await
 }
 
-pub async fn upcoming(
-    pool: &PgPool,
-    days_ahead: i32,
-) -> Result<Vec<UpcomingDeadlineItem>, sqlx::Error> {
-    sqlx::query_as::<_, UpcomingDeadlineItem>(
-        r#"
-        SELECT pr.processo_id::text AS processo_id,
-               p.numero AS numero_processo,
-               p.tipo_detalhe,
-               pr.data_vencimento,
-               (pr.data_vencimento - CURRENT_DATE)::integer AS dias_restantes
-        FROM prazos_processo pr
-        JOIN v_processos p ON p.id = pr.processo_id
-        WHERE coalesce(pr.ativo, true) = true
-          AND coalesce(p.ativo, true) = true
-          AND coalesce(p.concluido, false) = false
-          AND pr.data_vencimento >= CURRENT_DATE
-          AND pr.data_vencimento <= CURRENT_DATE + ($1 * INTERVAL '1 day')
-        ORDER BY pr.data_vencimento
-        "#,
-    )
-    .bind(days_ahead)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn close_active(
-    tx: &mut Transaction<'_, Postgres>,
-    processo_id: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE processo_id = $1::uuid AND coalesce(ativo, true) = true",
-    )
-    .bind(processo_id)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
-}
-
+/// Concede uma prorrogação: ela começa no dia seguinte ao vencimento vigente e
+/// recebe a próxima `ordem`. O EXCLUDE do schema recusa qualquer sobreposição,
+/// então não é possível prorrogar duas vezes a partir do mesmo ponto.
 pub async fn add_extension(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddExtensionRequest,
 ) -> Result<String, AppError> {
-    let current = sqlx::query_as::<_, (String, NaiveDate)>(
-        "SELECT id::text AS id, data_vencimento FROM prazos_processo WHERE processo_id = $1::uuid AND coalesce(ativo, true) = true ORDER BY created_at DESC NULLS LAST LIMIT 1",
+    let atual: Option<(i32, NaiveDate)> = sqlx::query_as(
+        "SELECT ordem, data_vencimento FROM processo_prazos
+          WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1",
     )
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
-    .await?
-    .ok_or_else(|| AppError::Domain("Nenhum prazo ativo encontrado para este processo".to_string()))?;
-
-    let (current_id, current_venc) = current;
-
-    sqlx::query(
-        "UPDATE prazos_processo SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
-    )
-    .bind(&current_id)
-    .execute(&mut **tx)
     .await?;
 
-    let new_start = current_venc + chrono::Duration::days(1);
-    let new_end = new_start + chrono::Duration::days((request.dias_prorrogacao - 1).max(0) as i64);
+    let (ordem_atual, vencimento_atual) = atual.ok_or_else(|| {
+        AppError::Domain("o processo ainda nao tem prazo inicial para prorrogar".to_string())
+    })?;
 
-    let max_ordem: (Option<i32>,) = sqlx::query_as(
-        "SELECT MAX(ordem_prorrogacao) FROM prazos_processo WHERE processo_id = $1::uuid AND tipo_prazo_id = (SELECT id FROM tipos_prazo WHERE nome_prazo = 'prorrogacao')",
+    sqlx::query_scalar(
+        "INSERT INTO processo_prazos
+             (processo_id, ordem, data_inicio, dias, motivo,
+              documento_autorizador_id, numero_documento, data_documento, autoridade_id)
+         VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7, $8, $9::uuid)
+      RETURNING id::text",
     )
     .bind(&request.processo_id)
+    .bind(ordem_atual + 1)
+    .bind(vencimento_atual + chrono::Duration::days(1))
+    .bind(request.dias)
+    .bind(request.motivo.trim())
+    .bind(request.documento_autorizador_id.as_deref())
+    .bind(request.numero_documento.as_deref())
+    .bind(request.data_documento)
+    .bind(request.autoridade_id.as_deref())
     .fetch_one(&mut **tx)
-    .await?;
-    let next_ordem = max_ordem.0.unwrap_or(0) + 1;
-
-    let new_id: String = sqlx::query_scalar(
-        r#"
-        INSERT INTO prazos_processo (
-            processo_id, tipo_prazo_id, data_inicio, data_vencimento, dias_adicionados,
-            motivo, autorizado_por, autorizado_tipo_id, ativo,
-            numero_portaria, data_portaria, ordem_prorrogacao, created_at
-        )
-        VALUES (
-            $1::uuid,
-            (SELECT id FROM tipos_prazo WHERE nome_prazo = 'prorrogacao'),
-            $2, $3, $4, $5, $6,
-            (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $7),
-            true, $8, $9, $10, CURRENT_TIMESTAMP
-        )
-        RETURNING id::text
-        "#,
-    )
-    .bind(&request.processo_id)
-    .bind(new_start)
-    .bind(new_end)
-    .bind(request.dias_prorrogacao)
-    .bind(&request.motivo)
-    .bind(&request.autorizado_por)
-    .bind(&request.autorizado_tipo)
-    .bind(request.numero_portaria.as_deref())
-    .bind(request.data_portaria)
-    .bind(next_ordem)
-    .fetch_one(&mut **tx)
-    .await?;
-
-    Ok(new_id)
+    .await
+    .map_err(AppError::from)
 }
 
-pub async fn overdue(pool: &PgPool) -> Result<Vec<OverdueDeadlineItem>, sqlx::Error> {
-    sqlx::query_as::<_, OverdueDeadlineItem>(
-        r#"
-        SELECT pr.processo_id::text AS processo_id,
-               p.numero AS numero_processo,
-               p.tipo_detalhe,
-               u.nome  AS responsavel_nome,
-               pr.data_vencimento,
-               (CURRENT_DATE - pr.data_vencimento)::integer AS dias_atraso
-        FROM prazos_processo pr
-        JOIN v_processos p ON p.id = pr.processo_id
-        LEFT JOIN usuarios u ON u.id = p.responsavel_id
-        WHERE coalesce(pr.ativo, true) = true
-          AND coalesce(p.ativo, true) = true
-          AND coalesce(p.concluido, false) = false
-          AND pr.data_vencimento < CURRENT_DATE
-        ORDER BY pr.data_vencimento
-        "#,
-    )
-    .fetch_all(pool)
+/// Panorama dos prazos vigentes dos processos em andamento.
+pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummary, sqlx::Error> {
+    sqlx::query_as::<_, DeadlineSummary>(&format!(
+        "SELECT count(*)                                                        AS total,
+                count(*) FILTER (WHERE p.data_vencimento < CURRENT_DATE)        AS vencidos,
+                count(*) FILTER (WHERE p.data_vencimento >= CURRENT_DATE
+                                   AND p.data_vencimento <= CURRENT_DATE + $1)  AS proximos
+           FROM processo_prazos p
+           JOIN processos_procedimentos pr ON pr.id = p.processo_id
+          WHERE {VIGENTE} AND pr.ativo AND pr.data_conclusao IS NULL"
+    ))
+    .bind(dias_janela)
+    .fetch_one(pool)
     .await
 }
 
+/// Relatório de prazos. O escopo de apuratórios vem por parâmetro — antes era um
+/// `IN ('IPM','SR','SV')` escrito no SQL.
 pub async fn report(
     pool: &PgPool,
     filter: &DeadlineReportFilter,
 ) -> Result<Vec<DeadlineReportItem>, sqlx::Error> {
-    let limit = filter.limit.unwrap_or(200).min(500);
-    let ano = filter.ano.map(|a| a as i64);
-    sqlx::query_as::<_, DeadlineReportItem>(
+    sqlx::query_as::<_, DeadlineReportItem>(&format!(
         r#"
-        SELECT pr.processo_id::text AS processo_id,
-               p.numero  AS numero_processo,
-               p.tipo_detalhe,
-               u.nome    AS responsavel_nome,
-               pr.data_vencimento,
-               (pr.data_vencimento - CURRENT_DATE)::integer AS dias_restantes,
-               tp.nome_prazo AS tipo_prazo
-        FROM prazos_processo pr
-        JOIN v_processos p ON p.id = pr.processo_id
-        JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
-        LEFT JOIN usuarios u ON u.id = p.responsavel_id
-        WHERE coalesce(pr.ativo, true) = true
-          AND coalesce(p.ativo, true) = true
-          AND ($1::text IS NULL OR p.tipo_detalhe = $1)
-          AND ($2::text IS NULL OR p.responsavel_id = $2::uuid)
-          AND (
-               $3::boolean IS NULL
-               OR ($3 = true  AND pr.data_vencimento <  CURRENT_DATE)
-               OR ($3 = false AND pr.data_vencimento >= CURRENT_DATE)
-              )
-          AND ($4::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $4)
-        ORDER BY pr.data_vencimento
-        LIMIT $5
-        "#,
-    )
-    .bind(filter.tipo_detalhe.as_deref())
+        SELECT pr.id::text                                        AS processo_id,
+               a.sigla                                            AS apuratorio_sigla,
+               COALESCE(pr.numero_controle, pr.numero_documento)  AS numero_controle,
+               un.nome                                            AS unidade_origem,
+               resp.nome                                          AS responsavel_nome,
+               p.data_vencimento                                  AS data_vencimento,
+               (p.data_vencimento - CURRENT_DATE)::int             AS dias_restantes,
+               p.ordem                                            AS ordem
+          FROM processo_prazos p
+          JOIN processos_procedimentos pr ON pr.id = p.processo_id
+          JOIN apuratorios a              ON a.id = pr.apuratorio_id
+          JOIN unidades_pm un             ON un.id = pr.unidade_origem_id
+          -- Responsável = quem ocupa, neste apuratório, o papel marcado como
+          -- responsável na configuração. Não há nome de papel no SQL.
+          LEFT JOIN LATERAL (
+              SELECT pm.nome
+                FROM processo_designacoes d
+                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                         AND ap.papel_id = d.papel_id
+                JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+               WHERE d.processo_id = pr.id AND d.data_fim IS NULL AND ap.e_responsavel
+               LIMIT 1
+          ) resp ON true
+         WHERE {VIGENTE}
+           AND pr.ativo
+           AND pr.data_conclusao IS NULL
+           AND ($1::uuid[] IS NULL OR pr.apuratorio_id = ANY($1::uuid[]))
+           AND ($2::uuid IS NULL OR EXISTS (
+                   SELECT 1 FROM processo_designacoes d
+                    WHERE d.processo_id = pr.id AND d.data_fim IS NULL
+                      AND d.policial_militar_id = $2::uuid))
+           AND (NOT $3 OR p.data_vencimento < CURRENT_DATE)
+           AND ($4::int IS NULL OR p.data_vencimento <= CURRENT_DATE + $4)
+           AND ($5::int IS NULL OR EXTRACT(YEAR FROM pr.data_instauracao)::int = $5)
+         ORDER BY p.data_vencimento
+         LIMIT $6
+        "#
+    ))
+    .bind(filter.apuratorio_ids.as_deref())
     .bind(filter.responsavel_id.as_deref())
-    .bind(filter.apenas_vencidos)
-    .bind(ano)
-    .bind(limit)
+    .bind(filter.apenas_vencidos.unwrap_or(false))
+    .bind(filter.dias_ate_vencer)
+    .bind(filter.ano)
+    .bind(filter.limit.unwrap_or(200).clamp(1, 500))
     .fetch_all(pool)
     .await
 }

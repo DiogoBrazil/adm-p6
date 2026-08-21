@@ -1,398 +1,280 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+/// Único código técnico do sistema. Identifica que um apuratório usa a tabela de
+/// extensão `carta_precatoria_detalhes`. Vive em `apuratorios.codigo_extensao`,
+/// separado de `sigla` e `nome`, que o administrador renomeia à vontade.
+pub const EXTENSAO_CARTA_PRECATORIA: &str = "carta_precatoria";
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct ProceedingListItem {
     pub id: String,
-    pub numero: String,
-    pub tipo_geral: String,
-    pub tipo_detalhe: String,
+    pub apuratorio_id: String,
+    pub apuratorio_sigla: String,
+    pub apuratorio_nome: String,
+    pub tipo_apuratorio: String,
     pub documento_iniciador: String,
-    pub local_origem: Option<String>,
-    pub data_instauracao: Option<NaiveDate>,
-    pub concluido: Option<bool>,
-    pub ativo: Option<bool>,
-    pub responsavel_nome: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProceedingFormSchema {
-    pub title: &'static str,
-    pub admin_only: bool,
-    pub allowed_tipo_detalhe: Vec<&'static str>,
-    pub forbidden_tipo_detalhe: Vec<&'static str>,
-    pub sections: Vec<&'static str>,
-    pub validations: Vec<&'static str>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateProceedingRequest {
-    pub numero: String,
-    pub tipo_geral: String,
-    pub tipo_detalhe: String,
-    pub documento_iniciador: String,
-    pub processo_sei: Option<String>,
-    pub responsavel_id: Option<String>,
-    pub local_origem: Option<String>,
-    pub local_fatos: String,
-    pub data_instauracao: Option<NaiveDate>,
+    pub numero_documento: String,
+    /// Número de controle efetivo: o informado ou, quando ausente, o do documento.
+    pub numero_controle: String,
+    /// Rótulo montado a partir do dado, no formato usado pela Seção:
+    /// `SIGLA nº CONTROLE/UNIDADE/ANO`.
+    pub rotulo: String,
+    pub unidade_origem: String,
+    pub municipio_fato: String,
+    pub natureza_fato: Option<String>,
+    pub data_instauracao: NaiveDate,
     pub data_recebimento: Option<NaiveDate>,
-    pub escrivao_id: Option<String>,
-    pub nome_vitima: Option<String>,
-    pub natureza_processo: Option<String>,
-    pub resumo_fatos: Option<String>,
-    pub numero_portaria: Option<String>,
-    pub numero_memorando: Option<String>,
-    pub numero_feito: Option<String>,
-    pub numero_rgf: Option<String>,
-    pub concluido: Option<bool>,
     pub data_conclusao: Option<NaiveDate>,
-    pub solucao_final: Option<String>,
-    pub data_remessa_encarregado: Option<NaiveDate>,
-    pub data_remessa_comissao: Option<NaiveDate>,
-    pub data_julgamento: Option<NaiveDate>,
-    pub solucao_tipo: Option<String>,
+    /// Derivado de `data_conclusao IS NOT NULL` — não existe coluna booleana.
+    pub concluido: bool,
+    pub resumo_fatos: Option<String>,
+    /// Quem ocupa, neste apuratório, o papel configurado como responsável.
+    pub responsavel_nome: Option<String>,
+    pub responsavel_papel: Option<String>,
+    pub total_envolvidos: i64,
+    pub prazo_vencimento: Option<NaiveDate>,
+    pub prazo_dias_restantes: Option<i32>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct EnvolvidoItem {
+    pub id: String,
+    pub policial_militar_id: String,
+    pub nome: String,
+    pub matricula: String,
+    pub posto_graduacao: String,
+    pub status_envolvido_id: String,
+    pub status_envolvido: String,
+    pub ordem: i32,
+    pub e_condutor: bool,
+    pub solucao_sugerida_id: Option<String>,
+    pub solucao_sugerida: Option<String>,
+    pub solucao_decidida_id: Option<String>,
+    pub solucao_decidida: Option<String>,
+    pub penalidade_tipo_id: Option<String>,
     pub penalidade_tipo: Option<String>,
     pub penalidade_dias: Option<i32>,
-    pub presidente_id: Option<String>,
-    pub interrogante_id: Option<String>,
-    pub escrivao_processo_id: Option<String>,
-    pub unidade_deprecada: Option<String>,
-    pub deprecante: Option<String>,
-    pub pms_envolvidos: Option<Vec<String>>,
 }
 
-impl CreateProceedingRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.tipo_detalhe == "IPPM" {
-            return Err("Tipo IPPM nao e permitido neste sistema".to_string());
-        }
-
-        let today = chrono::Local::now().date_naive();
-        if let Some(d) = self.data_instauracao {
-            if d > today {
-                return Err("Data de instauracao nao pode ser futura".to_string());
-            }
-        }
-        if let Some(d) = self.data_conclusao {
-            if d > today {
-                return Err("Data de conclusao nao pode ser futura".to_string());
-            }
-        }
-
-        if self.local_fatos.trim().is_empty() {
-            return Err("Local dos fatos e obrigatorio".to_string());
-        }
-
-        if let Some(dias) = self.penalidade_dias {
-            if dias > 0 {
-                match self.penalidade_tipo.as_deref() {
-                    Some("Prisao") | Some("Detencao") => {}
-                    _ => {
-                        return Err(
-                            "penalidade_dias somente permitido para Prisao ou Detencao"
-                                .to_string(),
-                        )
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn deadline_days(&self) -> i32 {
-        if self.documento_iniciador == "Feito Preliminar" {
-            return 15;
-        }
-        match self.tipo_detalhe.as_str() {
-            "SV" => 15,
-            "IPM" => 40,
-            _ => 30,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateProceedingResult {
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DesignacaoItem {
     pub id: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PmEnvolvido {
-    pub id: String,
-    pub pm_id: String,
-    pub nome: Option<String>,
-    pub posto_graduacao: Option<String>,
-    pub matricula: Option<String>,
-    pub status_pm: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ActiveDeadline {
-    pub id: String,
-    pub tipo_prazo: String,
+    pub papel_id: String,
+    pub papel: String,
+    pub e_responsavel: bool,
+    pub policial_militar_id: String,
+    pub nome: String,
+    pub posto_graduacao: String,
     pub data_inicio: NaiveDate,
-    pub data_vencimento: NaiveDate,
-    pub dias_adicionados: Option<i32>,
+    /// Exclusiva: é o dia em que o sucessor assume. Nula = designação vigente.
+    pub data_fim: Option<NaiveDate>,
+    pub documento_autorizador: Option<String>,
+    pub numero_documento: Option<String>,
+    pub motivo: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct PessoaItem {
+    pub id: String,
+    pub papel_pessoa_id: String,
+    pub papel_pessoa: String,
+    pub nome: String,
+    pub ordem: i32,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct AnexoItem {
+    pub id: String,
+    pub nome_arquivo: String,
+    pub mime_type: String,
+    pub tamanho_bytes: i64,
+    pub enviado_por: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct CartaPrecatoriaDetalhes {
+    pub deprecante: String,
+    pub unidade_deprecada_id: String,
+    pub unidade_deprecada: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ProceedingDetail {
-    pub id: String,
-    pub numero: String,
-    pub tipo_geral: String,
-    pub tipo_detalhe: String,
-    pub documento_iniciador: String,
+    #[serde(flatten)]
+    pub cabecalho: ProceedingListItem,
     pub processo_sei: Option<String>,
-    pub responsavel_id: Option<String>,
-    pub local_origem: Option<String>,
-    pub local_fatos: Option<String>,
-    pub data_instauracao: Option<NaiveDate>,
-    pub data_recebimento: Option<NaiveDate>,
-    pub escrivao_id: Option<String>,
-    pub nome_vitima: Option<String>,
-    pub natureza_processo: Option<String>,
-    pub resumo_fatos: Option<String>,
-    pub numero_portaria: Option<String>,
-    pub numero_memorando: Option<String>,
-    pub numero_feito: Option<String>,
     pub numero_rgf: Option<String>,
-    pub concluido: Option<bool>,
-    pub data_conclusao: Option<NaiveDate>,
-    pub solucao_final: Option<String>,
     pub data_remessa_encarregado: Option<NaiveDate>,
     pub data_remessa_comissao: Option<NaiveDate>,
     pub data_julgamento: Option<NaiveDate>,
-    pub solucao_tipo: Option<String>,
-    pub penalidade_tipo: Option<String>,
+    pub envolvidos: Vec<EnvolvidoItem>,
+    pub designacoes: Vec<DesignacaoItem>,
+    pub pessoas: Vec<PessoaItem>,
+    pub anexos: Vec<AnexoItem>,
+    pub carta_precatoria: Option<CartaPrecatoriaDetalhes>,
+}
+
+// ── Escrita ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct EnvolvidoRequest {
+    pub policial_militar_id: String,
+    pub status_envolvido_id: String,
+    pub ordem: i32,
+    #[serde(default)]
+    pub e_condutor: bool,
+    pub solucao_sugerida_id: Option<String>,
+    pub solucao_decidida_id: Option<String>,
+    pub penalidade_tipo_id: Option<String>,
     pub penalidade_dias: Option<i32>,
-    pub presidente_id: Option<String>,
-    pub interrogante_id: Option<String>,
-    pub escrivao_processo_id: Option<String>,
-    pub unidade_deprecada: Option<String>,
-    pub deprecante: Option<String>,
-    pub indicios_categorias: Option<Value>,
-    // joined user names
-    pub responsavel_nome: Option<String>,
-    pub responsavel_posto: Option<String>,
-    pub responsavel_matricula: Option<String>,
-    pub escrivao_nome: Option<String>,
-    pub presidente_nome: Option<String>,
-    pub interrogante_nome: Option<String>,
-    pub escrivao_processo_nome: Option<String>,
-    // PDF metadata
-    pub pdf_nome: Option<String>,
-    pub pdf_tamanho: Option<i64>,
-    // aggregated
-    pub pms_envolvidos: Vec<PmEnvolvido>,
-    pub prazo_ativo: Option<ActiveDeadline>,
-    pub andamentos: Vec<Value>,
-    pub historico_encarregados: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SubstituteResponsibleRequest {
-    pub id: String,
-    pub novo_responsavel_id: String,
-    pub justificativa: String,
+pub struct DesignacaoRequest {
+    pub policial_militar_id: String,
+    pub papel_id: String,
+    pub data_inicio: NaiveDate,
+    pub documento_autorizador_id: Option<String>,
+    pub numero_documento: Option<String>,
+    pub motivo: Option<String>,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct PadsSolutionCount {
-    pub solucao_tipo: Option<String>,
-    pub quantidade: i64,
+#[derive(Debug, Deserialize)]
+pub struct PessoaRequest {
+    pub papel_pessoa_id: String,
+    pub nome: String,
+    pub ordem: i32,
 }
 
-#[derive(Debug, Serialize)]
-pub struct IpmEvidenceStats {
-    pub crimes_cpm: i64,
-    pub transgressoes_rdpm: i64,
-    pub transgressoes_art29: i64,
-    pub sem_indicios: i64,
+#[derive(Debug, Deserialize)]
+pub struct CartaPrecatoriaRequest {
+    pub deprecante: String,
+    pub unidade_deprecada_id: String,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct CommonCrimeItem {
-    pub artigo: String,
-    pub descricao: Option<String>,
-    pub classificacao: String,
-    pub quantidade: i64,
+#[derive(Debug, Deserialize)]
+pub struct SaveProceedingRequest {
+    pub id: Option<String>,
+    pub apuratorio_id: String,
+    pub documento_iniciador_id: String,
+    pub numero_documento: String,
+    /// Ausente = igual ao número do documento. É assim que o índice único trata.
+    pub numero_controle: Option<String>,
+    pub processo_sei: Option<String>,
+    pub numero_rgf: Option<String>,
+    pub unidade_origem_id: String,
+    pub municipio_fato_id: String,
+    pub natureza_fato_id: Option<String>,
+    pub data_instauracao: NaiveDate,
+    pub data_recebimento: Option<NaiveDate>,
+    pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_remessa_comissao: Option<NaiveDate>,
+    pub data_julgamento: Option<NaiveDate>,
+    pub data_conclusao: Option<NaiveDate>,
+    pub resumo_fatos: Option<String>,
+    #[serde(default)]
+    pub envolvidos: Vec<EnvolvidoRequest>,
+    #[serde(default)]
+    pub designacoes: Vec<DesignacaoRequest>,
+    #[serde(default)]
+    pub pessoas: Vec<PessoaRequest>,
+    pub carta_precatoria: Option<CartaPrecatoriaRequest>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct SrEvidenceStats {
-    pub crimes_comuns: i64,
-    pub transgressoes: i64,
-    pub sem_indicios: i64,
-}
+impl SaveProceedingRequest {
+    /// Validações que não dependem do banco. As que dependem de configuração
+    /// (natureza obrigatória, condutor exigido, solução que permite penalidade,
+    /// penalidade que usa dias) ficam no repositório, que lê os atributos
+    /// semânticos dos catálogos.
+    pub fn validate(&self) -> Result<(), String> {
+        let hoje = Utc::now().date_naive();
+        if self.numero_documento.trim().is_empty() {
+            return Err("numero do documento e obrigatorio".to_string());
+        }
+        if self.data_instauracao > hoje {
+            return Err("data de instauracao nao pode ser futura".to_string());
+        }
+        if self.data_conclusao.is_some_and(|d| d > hoje) {
+            return Err("data de conclusao nao pode ser futura".to_string());
+        }
+        if self.data_recebimento.is_some_and(|d| d > hoje) {
+            return Err("data de recebimento nao pode ser futura".to_string());
+        }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TopTransgressionItem {
-    pub transgressao_id: String,
-    pub artigo_label: String,
-    pub descricao_curta: String,
-    pub quantidade: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct DriverRankingItem {
-    pub posto_graduacao: Option<String>,
-    pub matricula: Option<String>,
-    pub nome: Option<String>,
-    pub total_sinistros: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct NatureStatItem {
-    pub natureza: String,
-    pub quantidade: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct MilitaryCrimeItem {
-    pub artigo: String,
-    pub descricao: Option<String>,
-    pub quantidade: i64,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoCount {
-    pub tipo: Option<String>,
-    pub quantidade: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct InProgressStats {
-    pub por_tipo: Vec<TipoCount>,
-    pub concluidos: i64,
-    pub total: i64,
+        let mut ordens: Vec<i32> = self.envolvidos.iter().map(|e| e.ordem).collect();
+        ordens.sort_unstable();
+        ordens.dedup();
+        if ordens.len() != self.envolvidos.len() {
+            return Err("a ordem dos envolvidos nao pode se repetir".to_string());
+        }
+        if self.envolvidos.iter().filter(|e| e.e_condutor).count() > 1 {
+            return Err("so pode haver um condutor por processo".to_string());
+        }
+        for pessoa in &self.pessoas {
+            if pessoa.nome.trim().is_empty() {
+                return Err("nome de pessoa nao pode ficar em branco".to_string());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct ProceedingListFilter {
-    pub tipo_geral: Option<String>,
-    pub tipo_detalhe: Option<String>,
-    pub concluido: Option<bool>,
+pub struct ProceedingFilter {
+    pub busca: Option<String>,
+    /// Espécies a incluir. Vazio = todas. Substitui os `IN (...)` de sigla.
+    pub apuratorio_ids: Option<Vec<String>>,
+    pub tipo_apuratorio_id: Option<String>,
+    pub unidade_origem_id: Option<String>,
+    pub natureza_fato_id: Option<String>,
     pub responsavel_id: Option<String>,
     pub ano: Option<i32>,
-    pub search: Option<String>,
-    pub offset: Option<i64>,
-    pub limit: Option<i64>,
+    pub concluido: Option<bool>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ProceedingListResult {
     pub items: Vec<ProceedingListItem>,
     pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateProceedingRequest {
-    pub id: String,
-    pub numero: String,
-    pub tipo_geral: String,
-    pub tipo_detalhe: String,
-    pub documento_iniciador: String,
-    pub processo_sei: Option<String>,
-    pub responsavel_id: Option<String>,
-    pub local_origem: Option<String>,
-    pub local_fatos: String,
-    pub data_instauracao: Option<NaiveDate>,
-    pub data_recebimento: Option<NaiveDate>,
-    pub escrivao_id: Option<String>,
-    pub nome_vitima: Option<String>,
-    pub natureza_processo: Option<String>,
-    pub resumo_fatos: Option<String>,
-    pub numero_portaria: Option<String>,
-    pub numero_memorando: Option<String>,
-    pub numero_feito: Option<String>,
-    pub numero_rgf: Option<String>,
-    pub concluido: Option<bool>,
-    pub data_conclusao: Option<NaiveDate>,
-    pub solucao_final: Option<String>,
-    pub data_remessa_encarregado: Option<NaiveDate>,
-    pub data_remessa_comissao: Option<NaiveDate>,
-    pub data_julgamento: Option<NaiveDate>,
-    pub solucao_tipo: Option<String>,
-    pub penalidade_tipo: Option<String>,
-    pub penalidade_dias: Option<i32>,
-    pub presidente_id: Option<String>,
-    pub interrogante_id: Option<String>,
-    pub escrivao_processo_id: Option<String>,
-    pub unidade_deprecada: Option<String>,
-    pub deprecante: Option<String>,
-    pub pms_envolvidos: Option<Vec<String>>,
-}
-
-impl UpdateProceedingRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.tipo_detalhe == "IPPM" {
-            return Err("Tipo IPPM nao e permitido neste sistema".to_string());
-        }
-        let today = chrono::Local::now().date_naive();
-        if let Some(d) = self.data_instauracao {
-            if d > today {
-                return Err("Data de instauracao nao pode ser futura".to_string());
-            }
-        }
-        if let Some(d) = self.data_conclusao {
-            if d > today {
-                return Err("Data de conclusao nao pode ser futura".to_string());
-            }
-        }
-        if self.local_fatos.trim().is_empty() {
-            return Err("Local dos fatos e obrigatorio".to_string());
-        }
-        if let Some(dias) = self.penalidade_dias {
-            if dias > 0 {
-                match self.penalidade_tipo.as_deref() {
-                    Some("Prisao") | Some("Detencao") => {}
-                    _ => {
-                        return Err(
-                            "penalidade_dias somente permitido para Prisao ou Detencao"
-                                .to_string(),
-                        )
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UploadPdfRequest {
+pub struct UploadAttachmentRequest {
     pub processo_id: String,
     pub nome_arquivo: String,
-    pub conteudo_base64: String,
-    pub content_type: String,
-}
-
-impl UploadPdfRequest {
-    const MAX_PDF_BYTES: usize = 100 * 1024 * 1024;
-
-    pub fn decode_and_validate(&self) -> Result<Vec<u8>, String> {
-        use base64::Engine as _;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&self.conteudo_base64)
-            .map_err(|_| "Base64 invalido".to_string())?;
-        if bytes.len() > Self::MAX_PDF_BYTES {
-            return Err(format!(
-                "PDF excede o limite de 100 MB ({} MB recebidos)",
-                bytes.len() / 1024 / 1024
-            ));
-        }
-        Ok(bytes)
-    }
+    pub mime_type: String,
+    /// Conteúdo em base64.
+    pub conteudo: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct PdfMetadata {
-    pub nome: Option<String>,
-    pub content_type: Option<String>,
-    pub tamanho: Option<i64>,
-    pub upload_em: Option<String>,
-    pub conteudo: Option<String>,
+pub struct AttachmentContent {
+    pub nome_arquivo: String,
+    pub mime_type: String,
+    pub conteudo: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ContagemRotulada {
+    pub id: String,
+    pub rotulo: String,
+    pub total: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DashboardSummary {
+    pub total: i64,
+    pub em_andamento: i64,
+    pub concluidos: i64,
+    pub prazos_vencidos: i64,
+    pub por_apuratorio: Vec<ContagemRotulada>,
+    pub por_natureza: Vec<ContagemRotulada>,
+    pub por_unidade: Vec<ContagemRotulada>,
+    pub por_ano: Vec<ContagemRotulada>,
 }
