@@ -1,5 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
+import { escapeHtml, cellDisplay } from "./dom";
+import {
+  carregarDefinicoes,
+  chaveDaRota,
+  esquecerDefinicoes,
+  renderCatalogo,
+  rotasDeCatalogo,
+  type ContextoTela,
+} from "./telas/catalogos";
+
+// NOTA DE MIGRAÇÃO
+//
+// Este arquivo ainda usa o `call()` local, que recebe o nome do comando como
+// `string` e por isso não valida nada. As telas migradas usam o cliente tipado
+// de `./api`, onde comando, argumentos e resposta são checados em compilação.
+// Cada tela migrada move suas chamadas para lá; quando não sobrar nenhuma
+// chamada legada aqui, o `call()` local sai junto.
 
 type ApiResponse<T> = {
   ok: boolean;
@@ -36,6 +53,8 @@ type CrudField = {
   required?: boolean;
   options?: string[];
   optionsCommand?: string;
+  /** Catálogo do registro genérico. Substitui os `legal_catalogs_list_<x>`. */
+  optionsCatalogo?: string;
   optionsValueKey?: string;
   optionsLabelKey?: string;
   showIf?: { field: string; value: boolean | string };
@@ -50,7 +69,7 @@ type CrudConfig = {
   hiddenColumns?: string[];
 };
 
-const routes: Route[] = [
+let routes: Route[] = [
   { path: "/dashboard", label: "Dashboard", group: "Geral", command: "dashboard_summary", printable: true },
   {
     path: "/procedimentos/lista",
@@ -70,48 +89,6 @@ const routes: Route[] = [
     printable: true
   },
   {
-    path: "/catalogos/transgressoes",
-    label: "Transgressões",
-    group: "Catálogos",
-    command: "legal_catalogs_list_transgressions",
-    writeCommands: ["legal_catalogs_save_transgression", "legal_catalogs_delete_transgression"]
-  },
-  {
-    path: "/catalogos/artigos-rdpm",
-    label: "Artigos RDPM",
-    group: "Catálogos",
-    command: "legal_catalogs_list_artigos_rdpm",
-    writeCommands: ["legal_catalogs_save_artigo_rdpm", "legal_catalogs_delete_artigo_rdpm"]
-  },
-  {
-    path: "/catalogos/crimes",
-    label: "Crimes e Contravenções",
-    group: "Catálogos",
-    command: "legal_catalogs_list_crimes",
-    writeCommands: ["legal_catalogs_save_crime", "legal_catalogs_delete_crime"]
-  },
-  {
-    path: "/catalogos/dispositivos",
-    label: "Dispositivos Legais",
-    group: "Catálogos",
-    command: "legal_catalogs_list_dispositivos_legais",
-    writeCommands: ["legal_catalogs_save_dispositivo_legal", "legal_catalogs_delete_dispositivo_legal"]
-  },
-  {
-    path: "/catalogos/art29",
-    label: "Estatuto Art. 29",
-    group: "Catálogos",
-    command: "legal_catalogs_list_art29",
-    writeCommands: ["legal_catalogs_save_art29", "legal_catalogs_delete_art29"]
-  },
-  {
-    path: "/catalogos/art32",
-    label: "Estatuto Art. 32",
-    group: "Catálogos",
-    command: "legal_catalogs_list_art32",
-    writeCommands: ["legal_catalogs_save_art32", "legal_catalogs_delete_art32"]
-  },
-  {
     path: "/usuarios/lista",
     label: "Usuários",
     group: "Usuários",
@@ -121,31 +98,6 @@ const routes: Route[] = [
     detailCommand: "users_get"
   },
   { path: "/usuarios/novo", label: "Novo usuário", group: "Usuários", command: "users_form_schema", adminOnly: true },
-  {
-    path: "/catalogos/tipos-usuario",
-    label: "Tipos de Usuário",
-    group: "Usuários",
-    command: "legal_catalogs_list_tipos_usuario",
-    writeCommands: ["legal_catalogs_save_tipo_usuario", "legal_catalogs_delete_tipo_usuario"]
-  },
-  {
-    path: "/catalogos/postos-graduacoes",
-    label: "Postos e Graduações",
-    group: "Usuários",
-    command: "legal_catalogs_list_postos_graduacoes",
-    writeCommands: ["legal_catalogs_save_posto_graduacao", "legal_catalogs_delete_posto_graduacao"]
-  },
-  { path: "/catalogos/tipos-documentos", label: "Tipos de Documento", group: "Catálogos", command: "legal_catalogs_list_tipos_documentos", writeCommands: ["legal_catalogs_save_tipo_documento", "legal_catalogs_delete_tipo_documento"] },
-  { path: "/catalogos/tipos-penalidade", label: "Tipos de Penalidade", group: "Catálogos", command: "legal_catalogs_list_tipos_penalidade", writeCommands: ["legal_catalogs_save_tipo_penalidade", "legal_catalogs_delete_tipo_penalidade"] },
-  { path: "/catalogos/tipos-prazo", label: "Tipos de Prazo", group: "Catálogos", command: "legal_catalogs_list_tipos_prazo", writeCommands: ["legal_catalogs_save_tipo_prazo", "legal_catalogs_delete_tipo_prazo"] },
-  { path: "/catalogos/status-envolvido", label: "Status Envolvido", group: "Catálogos", command: "legal_catalogs_list_status_envolvido", writeCommands: ["legal_catalogs_save_status_envolvido", "legal_catalogs_delete_status_envolvido"] },
-  { path: "/catalogos/solucoes-tipo", label: "Soluções por Tipo", group: "Catálogos", command: "legal_catalogs_list_solucoes_tipo", writeCommands: ["legal_catalogs_save_solucao_tipo", "legal_catalogs_delete_solucao_tipo"] },
-  { path: "/catalogos/natureza-transgressao", label: "Natureza da Transgressão", group: "Catálogos", command: "legal_catalogs_list_natureza_transgressao", writeCommands: ["legal_catalogs_save_natureza_transgressao", "legal_catalogs_delete_natureza_transgressao"] },
-  { path: "/catalogos/tipo-apuratorios", label: "Tipos Apuratórios", group: "Catálogos", command: "legal_catalogs_list_tipo_apuratorios", writeCommands: ["legal_catalogs_save_tipo_apuratorio", "legal_catalogs_delete_tipo_apuratorio"] },
-  { path: "/catalogos/apuratorios", label: "Apuratórios", group: "Catálogos", command: "legal_catalogs_list_apuratorios", writeCommands: ["legal_catalogs_save_apuratorio", "legal_catalogs_delete_apuratorio"] },
-  { path: "/catalogos/locais-origem", label: "Locais de Origem", group: "Catálogos", command: "legal_catalogs_list_locais_origem", writeCommands: ["legal_catalogs_save_local_origem", "legal_catalogs_delete_local_origem"] },
-  { path: "/catalogos/municipios-distritos", label: "Municípios e Distritos", group: "Catálogos", command: "legal_catalogs_list_municipios_distritos", writeCommands: ["legal_catalogs_save_municipio_distrito", "legal_catalogs_delete_municipio_distrito"] },
-  { path: "/catalogos/subdivisao-textos-normativos", label: "Subdivisões Normativas", group: "Catálogos", command: "legal_catalogs_list_subdivisao_textos_normativos", writeCommands: ["legal_catalogs_save_subdivisao_texto_normativo", "legal_catalogs_delete_subdivisao_texto_normativo"] },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
   {
     path: "/estatisticas/encarregados",
@@ -214,7 +166,7 @@ const crudConfigs: Record<string, CrudConfig> = {
     deleteCommand: "users_delete",
     idKind: "string",
     fields: [
-      { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCommand: "legal_catalogs_list_postos_graduacoes", optionsValueKey: "nome_posto_graduacao" },
+      { name: "posto_graduacao", label: "Posto/Graduação", kind: "select", required: true, optionsCatalogo: "postos_graduacoes", optionsLabelKey: "nome" },
       { name: "nome", label: "Nome", kind: "text", required: true },
       { name: "matricula", label: "Matrícula", kind: "text", required: true },
       { name: "is_encarregado", label: "Encarregado", kind: "checkbox" },
@@ -222,184 +174,6 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "email", label: "Email", kind: "email" },
       { name: "perfil", label: "Perfil", kind: "select", options: ["admin", "comum"] },
       { name: "senha", label: "Senha", kind: "password" }
-    ]
-  },
-  "/catalogos/crimes": {
-    saveCommand: "legal_catalogs_save_crime",
-    deleteCommand: "legal_catalogs_delete_crime",
-    idKind: "string",
-    hiddenColumns: ["dispositivo_legal_id"],
-    fields: [
-      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", optionsCommand: "legal_catalogs_list_dispositivos_legais", optionsLabelKey: "nome_dispositivo_legal" },
-      { name: "artigo", label: "Artigo", kind: "text", required: true },
-      { name: "descricao_artigo", label: "Descrição", kind: "textarea" },
-      { name: "paragrafo", label: "Parágrafo", kind: "text" },
-      { name: "inciso", label: "Inciso", kind: "text" },
-      { name: "alinea", label: "Alínea", kind: "text" }
-    ]
-  },
-  "/catalogos/dispositivos": {
-    saveCommand: "legal_catalogs_save_dispositivo_legal",
-    deleteCommand: "legal_catalogs_delete_dispositivo_legal",
-    idKind: "string",
-    fields: [
-      { name: "nome_dispositivo_legal", label: "Nome", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/transgressoes": {
-    saveCommand: "legal_catalogs_save_transgression",
-    deleteCommand: "legal_catalogs_delete_transgression",
-    idKind: "string",
-    hiddenColumns: ["artigo_id"],
-    fields: [
-      { name: "artigo_id", label: "Artigo RDPM", kind: "select", optionsCommand: "legal_catalogs_list_artigos_rdpm", optionsLabelKey: "nome" },
-      { name: "inciso", label: "Inciso", kind: "text" },
-      { name: "texto", label: "Texto", kind: "textarea", required: true }
-    ]
-  },
-  "/catalogos/artigos-rdpm": {
-    saveCommand: "legal_catalogs_save_artigo_rdpm",
-    deleteCommand: "legal_catalogs_delete_artigo_rdpm",
-    idKind: "string",
-    hiddenColumns: ["nome", "natureza_id"],
-    fields: [
-      { name: "artigo", label: "Artigo", kind: "text", required: true },
-      { name: "natureza_id", label: "Natureza", kind: "select", required: true, optionsCommand: "legal_catalogs_list_natureza_transgressao", optionsLabelKey: "nome_natureza" }
-    ]
-  },
-  "/catalogos/art29": {
-    saveCommand: "legal_catalogs_save_art29",
-    deleteCommand: "legal_catalogs_delete_art29",
-    idKind: "string",
-    fields: [
-      { name: "inciso", label: "Inciso", kind: "text", required: true },
-      { name: "texto", label: "Texto", kind: "textarea", required: true }
-    ]
-  },
-  "/catalogos/art32": {
-    saveCommand: "legal_catalogs_save_art32",
-    deleteCommand: "legal_catalogs_delete_art32",
-    idKind: "string",
-    fields: [
-      { name: "inciso", label: "Inciso", kind: "text", required: true },
-      { name: "texto", label: "Texto", kind: "textarea", required: true }
-    ]
-  },
-  "/catalogos/tipos-usuario": {
-    saveCommand: "legal_catalogs_save_tipo_usuario",
-    deleteCommand: "legal_catalogs_delete_tipo_usuario",
-    idKind: "string",
-    fields: [
-      { name: "nome_tipo_usuario", label: "Nome", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/postos-graduacoes": {
-    saveCommand: "legal_catalogs_save_posto_graduacao",
-    deleteCommand: "legal_catalogs_delete_posto_graduacao",
-    idKind: "string",
-    hiddenColumns: ["tipo_usuario_id"],
-    fields: [
-      { name: "nome_posto_graduacao", label: "Nome", kind: "text", required: true },
-      { name: "tipo_usuario_id", label: "Tipo de Usuário", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_usuario", optionsLabelKey: "nome_tipo_usuario" }
-    ]
-  },
-  "/catalogos/tipos-documentos": {
-    saveCommand: "legal_catalogs_save_tipo_documento",
-    deleteCommand: "legal_catalogs_delete_tipo_documento",
-    idKind: "string",
-    fields: [
-      { name: "nome_tipo_documento", label: "Tipo", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/tipos-penalidade": {
-    saveCommand: "legal_catalogs_save_tipo_penalidade",
-    deleteCommand: "legal_catalogs_delete_tipo_penalidade",
-    idKind: "string",
-    fields: [
-      { name: "nome_penalidade", label: "Penalidade", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/tipos-prazo": {
-    saveCommand: "legal_catalogs_save_tipo_prazo",
-    deleteCommand: "legal_catalogs_delete_tipo_prazo",
-    idKind: "string",
-    fields: [
-      { name: "nome_prazo", label: "Nome do Prazo", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/status-envolvido": {
-    saveCommand: "legal_catalogs_save_status_envolvido",
-    deleteCommand: "legal_catalogs_delete_status_envolvido",
-    idKind: "string",
-    fields: [
-      { name: "nome_status", label: "Status", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/solucoes-tipo": {
-    saveCommand: "legal_catalogs_save_solucao_tipo",
-    deleteCommand: "legal_catalogs_delete_solucao_tipo",
-    idKind: "string",
-    fields: [
-      { name: "nome_solucao", label: "Solução", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/natureza-transgressao": {
-    saveCommand: "legal_catalogs_save_natureza_transgressao",
-    deleteCommand: "legal_catalogs_delete_natureza_transgressao",
-    idKind: "string",
-    fields: [
-      { name: "nome_natureza", label: "Nome da Natureza", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/tipo-apuratorios": {
-    saveCommand: "legal_catalogs_save_tipo_apuratorio",
-    deleteCommand: "legal_catalogs_delete_tipo_apuratorio",
-    idKind: "string",
-    fields: [
-      { name: "nome_tipo_apuratorio", label: "Tipo", kind: "text", required: true }
-    ]
-  },
-  "/catalogos/apuratorios": {
-    saveCommand: "legal_catalogs_save_apuratorio",
-    deleteCommand: "legal_catalogs_delete_apuratorio",
-    idKind: "string",
-    hiddenColumns: ["tipo_apuratorio_id", "documento_iniciador_id"],
-    fields: [
-      { name: "nome_apuratorio", label: "Nome", kind: "text", required: true },
-      { name: "tipo_apuratorio_id", label: "Tipo", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipo_apuratorios", optionsLabelKey: "nome_tipo_apuratorio" },
-      { name: "prazo_base_dias", label: "Prazo Base (dias)", kind: "number", required: true },
-      { name: "documento_iniciador_id", label: "Documento Iniciador", kind: "select", required: true, optionsCommand: "legal_catalogs_list_tipos_documentos", optionsLabelKey: "nome_tipo_documento" }
-    ]
-  },
-  "/catalogos/locais-origem": {
-    saveCommand: "legal_catalogs_save_local_origem",
-    deleteCommand: "legal_catalogs_delete_local_origem",
-    idKind: "string",
-    hiddenColumns: ["cidade_id"],
-    fields: [
-      { name: "nome_unidade_pm", label: "Unidade PM", kind: "text", required: true },
-      { name: "cidade_id", label: "Cidade", kind: "select", required: true, optionsCommand: "legal_catalogs_list_municipios_distritos", optionsLabelKey: "nome_municipio_distrito" }
-    ]
-  },
-  "/catalogos/municipios-distritos": {
-    saveCommand: "legal_catalogs_save_municipio_distrito",
-    deleteCommand: "legal_catalogs_delete_municipio_distrito",
-    idKind: "string",
-    hiddenColumns: ["municipio_pai", "tipo", "municipio_pai_nome"],
-    fields: [
-      { name: "nome_municipio_distrito", label: "Nome", kind: "text", required: true },
-      { name: "is_distrito", label: "Distrito", kind: "checkbox" },
-      { name: "municipio_pai", label: "Município Pai", kind: "select", optionsCommand: "legal_catalogs_list_municipios_distritos", optionsLabelKey: "nome_municipio_distrito", showIf: { field: "is_distrito", value: true } }
-    ]
-  },
-  "/catalogos/subdivisao-textos-normativos": {
-    saveCommand: "legal_catalogs_save_subdivisao_texto_normativo",
-    deleteCommand: "legal_catalogs_delete_subdivisao_texto_normativo",
-    idKind: "string",
-    hiddenColumns: ["dispositivo_legal_id"],
-    fields: [
-      { name: "nome_subdivisao", label: "Subdivisão", kind: "text", required: true },
-      { name: "dispositivo_legal_id", label: "Dispositivo Legal", kind: "select", required: true, optionsCommand: "legal_catalogs_list_dispositivos_legais", optionsLabelKey: "nome_dispositivo_legal" }
     ]
   },
   "/procedimentos/lista": {
@@ -419,7 +193,7 @@ const crudConfigs: Record<string, CrudConfig> = {
       },
       {
         name: "documento_iniciador", label: "Doc. Iniciador", kind: "select", required: true,
-        optionsCommand: "legal_catalogs_list_tipos_documentos", optionsValueKey: "nome_tipo_documento"
+        optionsCatalogo: "tipos_documento", optionsLabelKey: "nome"
       },
       { name: "local_fatos", label: "Local dos Fatos", kind: "text", required: true },
       { name: "local_origem", label: "Local de Origem", kind: "text" },
@@ -465,7 +239,28 @@ async function call<T>(command: string, args: Record<string, unknown> = {}): Pro
 async function loadSession() {
   const response = await call<SessionUser>("auth_current_user");
   session = response.ok ? response.data : null;
+  if (session) await montarRotasDeCatalogo();
 }
+
+/**
+ * As telas de catálogo não são declaradas: vêm de
+ * `legal_catalogs_definitions`. Acrescentar um catálogo no Rust faz a tela
+ * aparecer sozinha — era isto que os 21 `crudConfigs` escritos à mão custavam.
+ */
+async function montarRotasDeCatalogo() {
+  const definicoes = await carregarDefinicoes();
+  const estaticas = routes.filter((r) => chaveDaRota(r.path) === null);
+  routes = [
+    ...estaticas,
+    ...rotasDeCatalogo(definicoes).map((r) => ({ ...r, adminOnly: false })),
+  ];
+}
+
+/** O que as telas em `./telas` precisam do shell, sem importar este arquivo. */
+const contexto: ContextoTela = {
+  shell: (html: string) => shell(html),
+  podeEscrever: () => canWrite(),
+};
 
 function groupedRoutes() {
   return routes.reduce<Record<string, Route[]>>((acc, route) => {
@@ -520,6 +315,7 @@ function shell(content: string) {
   document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", async () => {
     await call("auth_logout");
     session = null;
+    esquecerDefinicoes();
     renderLogin();
   });
 }
@@ -549,6 +345,7 @@ function renderLogin(error = "") {
       return;
     }
     session = response.data;
+    await montarRotasDeCatalogo();
     activePath = "/dashboard";
     await renderRoute();
   });
@@ -673,9 +470,11 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
   const dynamicOptions: Record<string, { value: string; label: string }[]> = {};
   await Promise.all(
     config.fields
-      .filter((f) => f.optionsCommand)
+      .filter((f) => f.optionsCommand || f.optionsCatalogo)
       .map(async (f) => {
-        const resp = await call<Record<string, string>[]>(f.optionsCommand!);
+        const resp = f.optionsCatalogo
+          ? await call<Record<string, string>[]>("legal_catalogs_list", { catalogo: f.optionsCatalogo })
+          : await call<Record<string, string>[]>(f.optionsCommand!);
         dynamicOptions[f.name] = (resp.data ?? []).map((item) => {
           const valueVal = (f.optionsValueKey ? item[f.optionsValueKey] : item.id) ?? item.id ?? "";
           const labelVal = (f.optionsLabelKey ? item[f.optionsLabelKey] : valueVal) ?? valueVal;
@@ -804,6 +603,9 @@ async function renderRoute() {
     return;
   }
 
+  const chaveCatalogo = chaveDaRota(activePath);
+  if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
+
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
   if (route.path === "/estatisticas/anuais") return renderAnnualStats();
@@ -877,21 +679,6 @@ async function renderRoute() {
   `);
   bindCrudEvents(route);
   bindExportEvents(route);
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  }[char] ?? char));
-}
-
-function cellDisplay(val: unknown): string {
-  if (typeof val === "boolean") return val ? "sim" : "não";
-  return String(val ?? "");
 }
 
 function renderDashboard(data: Record<string, unknown>) {

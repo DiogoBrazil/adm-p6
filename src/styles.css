@@ -556,6 +556,48 @@ button.outline:hover {
   }
 }
 
+/* ── Tela de catálogos ─────────────────────────────────────────────────────
+   Gerada de `legal_catalogs_definitions`: os campos e o texto de ajuda saem
+   dos metadados do backend, então o CSS precisa cobrir qualquer combinação. */
+
+.filtros {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.filtros input[type="search"] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  flex: 1 1 260px;
+  padding: 8px 12px;
+}
+
+.campo {
+  display: grid;
+  gap: 4px;
+}
+
+/* Explica o efeito de um atributo semântico ("Em branco = sem limite").
+   É o que impede que a configuração vire adivinhação. */
+.campo-efeito {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Item desativado continua listado: some dos cadastros novos e permanece
+   visível nos registros históricos que já o usam. */
+tr.inativo {
+  color: #94a3b8;
+}
+
+tr.inativo td:first-child {
+  font-style: italic;
+}
+
 @media print {
   .sidebar,
   .topbar,
