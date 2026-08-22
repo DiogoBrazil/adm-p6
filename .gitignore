@@ -5,3 +5,6 @@ node_modules
 # Dump do banco em producao: 44 MB com dados pessoais de 236 militares.
 # Fonte somente-leitura para gerar seeds e para a importacao; nunca versionar.
 adm-p6.sql
+
+# Build do Vite: artefato, regenerado por `npm run build`.
+dist
