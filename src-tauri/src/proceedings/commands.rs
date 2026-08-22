@@ -1,5 +1,3 @@
-use chrono::NaiveDate;
-use serde::Deserialize;
 use tauri::State;
 
 use crate::app_state::AppState;
@@ -8,7 +6,8 @@ use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, DashboardSummary, ProceedingDetail, ProceedingFilter,
-    ProceedingListResult, SaveProceedingRequest, UploadAttachmentRequest,
+    ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    UploadAttachmentRequest,
 };
 use crate::proceedings::repository;
 use crate::response::{from_result, ApiResponse};
@@ -129,19 +128,6 @@ pub async fn proceedings_reopen(
         .await,
     )
     .await)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SubstituirDesignacaoRequest {
-    pub processo_id: String,
-    pub papel_id: String,
-    pub sucessor_id: String,
-    /// Dia em que o sucessor assume. É também o fim (exclusivo) da designação
-    /// anterior, então não há sobreposição nem lacuna.
-    pub data_troca: NaiveDate,
-    pub motivo: Option<String>,
-    pub documento_autorizador_id: Option<String>,
-    pub numero_documento: Option<String>,
 }
 
 /// Substitui quem exerce um papel. O histórico é consequência: a designação

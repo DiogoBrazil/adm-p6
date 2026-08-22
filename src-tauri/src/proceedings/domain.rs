@@ -155,6 +155,19 @@ pub struct CartaPrecatoriaRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct SubstituirDesignacaoRequest {
+    pub processo_id: String,
+    pub papel_id: String,
+    pub sucessor_id: String,
+    /// Dia em que o sucessor assume. É também o fim (exclusivo) da designação
+    /// anterior, então não há sobreposição nem lacuna.
+    pub data_troca: NaiveDate,
+    pub motivo: Option<String>,
+    pub documento_autorizador_id: Option<String>,
+    pub numero_documento: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SaveProceedingRequest {
     pub id: Option<String>,
     pub apuratorio_id: String,
