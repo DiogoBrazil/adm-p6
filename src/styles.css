@@ -598,6 +598,64 @@ tr.inativo td:first-child {
   font-style: italic;
 }
 
+/* ── Configuração de apuratórios ───────────────────────────────────────── */
+
+.seletor-apuratorio select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  margin-left: 8px;
+  padding: 8px 12px;
+}
+
+.secao-ajuda {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+
+/* Estado em que o apuratório não aceita processo nenhum, ou aceita mas sem
+   responsável. É consequência de configuração faltando, não de erro. */
+.aviso {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  color: #92400e;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
+
+.linha-form {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 12px 0 28px;
+  padding: 14px;
+}
+
+.linha-form label {
+  display: grid;
+  font-size: 13px;
+  gap: 4px;
+}
+
+.linha-form label.checkbox {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.linha-form input,
+.linha-form select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
 @media print {
   .sidebar,
   .topbar,

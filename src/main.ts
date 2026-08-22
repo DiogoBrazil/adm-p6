@@ -9,6 +9,7 @@ import {
   rotasDeCatalogo,
   type ContextoTela,
 } from "./telas/catalogos";
+import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
 
 // NOTA DE MIGRAÇÃO
 //
@@ -605,6 +606,7 @@ async function renderRoute() {
 
   const chaveCatalogo = chaveDaRota(activePath);
   if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
+  if (activePath === ROTA_CONFIG_APURATORIO) return renderConfiguracaoApuratorio(contexto);
 
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
