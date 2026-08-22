@@ -10,6 +10,7 @@ import {
   type ContextoTela,
 } from "./telas/catalogos";
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
+import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 
 // NOTA DE MIGRAÇÃO
 //
@@ -73,15 +74,10 @@ type CrudConfig = {
 let routes: Route[] = [
   { path: "/dashboard", label: "Dashboard", group: "Geral", command: "dashboard_summary", printable: true },
   {
-    path: "/procedimentos/lista",
+    path: ROTA_PROCESSOS,
     label: "Procedimentos",
     group: "Procedimentos",
-    command: "proceedings_list",
-    csvExport: { tipoRelatorio: "processos" },
-    printable: true,
-    searchable: true,
-    detailCommand: "proceedings_get",
-    itemsKey: "items"
+    printable: true
   },
   {
     path: "/prazos",
@@ -177,52 +173,6 @@ const crudConfigs: Record<string, CrudConfig> = {
       { name: "senha", label: "Senha", kind: "password" }
     ]
   },
-  "/procedimentos/lista": {
-    saveCommand: "proceedings_create",
-    updateCommand: "proceedings_update",
-    deleteCommand: "proceedings_delete",
-    idKind: "string",
-    fields: [
-      { name: "numero", label: "Número", kind: "text", required: true },
-      {
-        name: "tipo_geral", label: "Tipo Geral", kind: "select", required: true,
-        options: ["Processo", "Procedimento"]
-      },
-      {
-        name: "tipo_detalhe", label: "Tipo", kind: "select", required: true,
-        options: ["PAD", "PADE", "CD", "CJ", "SR", "SV", "IPM", "FP", "CP", "PADS"]
-      },
-      {
-        name: "documento_iniciador", label: "Doc. Iniciador", kind: "select", required: true,
-        optionsCatalogo: "tipos_documento", optionsLabelKey: "nome"
-      },
-      { name: "local_fatos", label: "Local dos Fatos", kind: "text", required: true },
-      { name: "local_origem", label: "Local de Origem", kind: "text" },
-      { name: "data_instauracao", label: "Data de Instauração", kind: "date" },
-      { name: "data_recebimento", label: "Data de Recebimento", kind: "date" },
-      { name: "numero_portaria", label: "N° da Portaria", kind: "text" },
-      { name: "numero_memorando", label: "N° do Memorando", kind: "text" },
-      { name: "numero_feito", label: "N° do Feito", kind: "text" },
-      { name: "numero_rgf", label: "N° RGF", kind: "text" },
-      { name: "numero_controle", label: "N° de Controle", kind: "text" },
-      { name: "processo_sei", label: "Processo SEI", kind: "text" },
-      { name: "nome_vitima", label: "Nome da Vítima", kind: "text" },
-      { name: "natureza_processo", label: "Natureza", kind: "text" },
-      { name: "resumo_fatos", label: "Resumo dos Fatos", kind: "textarea" },
-      { name: "concluido", label: "Concluído", kind: "checkbox" },
-      { name: "data_conclusao", label: "Data de Conclusão", kind: "date" },
-      {
-        name: "solucao_tipo", label: "Tipo de Solução", kind: "select",
-        options: ["Punido", "Absolvido", "Arquivado", "Homologado", "Avocado"]
-      },
-      { name: "solucao_final", label: "Solução Final", kind: "textarea" },
-      {
-        name: "penalidade_tipo", label: "Penalidade", kind: "select",
-        options: ["Prisao", "Detencao", "Advertencia", "Reprimenda"]
-      },
-      { name: "penalidade_dias", label: "Dias de Penalidade", kind: "number" }
-    ]
-  }
 };
 
 function canWrite() {
@@ -607,6 +557,7 @@ async function renderRoute() {
   const chaveCatalogo = chaveDaRota(activePath);
   if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
   if (activePath === ROTA_CONFIG_APURATORIO) return renderConfiguracaoApuratorio(contexto);
+  if (activePath === ROTA_PROCESSOS) return renderListaProcessos(contexto);
 
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 

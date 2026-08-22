@@ -465,6 +465,7 @@ export interface ProceedingListItem {
   apuratorio_sigla: string;
   apuratorio_nome: string;
   tipo_apuratorio: string;
+  documento_iniciador_id: string;
   documento_iniciador: string;
   numero_documento: string;
   /** Número de controle efetivo: o informado ou, quando ausente, o do documento. */
@@ -472,8 +473,15 @@ export interface ProceedingListItem {
   /** Rótulo montado a partir do dado, no formato usado pela Seção: */
   /** `SIGLA nº CONTROLE/UNIDADE/ANO`. */
   rotulo: string;
+  /** Os ids acompanham os rótulos porque o formulário de edição precisa */
+  /** repopular os selects. Resolver por nome falharia justamente no caso que */
+  /** o modelo protege: um catálogo desativado não aparece na lista de opções, */
+  /** e o processo antigo perderia o vínculo em silêncio. */
+  unidade_origem_id: string;
   unidade_origem: string;
+  municipio_fato_id: string;
   municipio_fato: string;
+  natureza_fato_id: string | null;
   natureza_fato: string | null;
   data_instauracao: string;
   data_recebimento: string | null;

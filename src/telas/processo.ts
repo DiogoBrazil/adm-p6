@@ -1,0 +1,909 @@
+// Cadastro de processo/procedimento.
+//
+// O formulário anterior declarava 22 campos planos, com nomes que não existem
+// mais (`tipo_geral`, `tipo_detalhe`, `numero_portaria`, `nome_vitima`…), e não
+// tinha nada dos papéis, envolvidos, vítimas ou campos por espécie. O novo
+// `SaveProceedingRequest` recebe cabeçalho, `envolvidos[]`, `designacoes[]`,
+// `pessoas[]` e `carta_precatoria` numa única chamada, gravados em uma
+// transação.
+//
+// CAMPOS CONDICIONAIS SÃO DIRIGIDOS POR DADO, NUNCA POR SIGLA
+//
+//   natureza obrigatória      <- apuratorios.exige_natureza_fato
+//   campo de condutor         <- naturezas_fato.exige_condutor
+//   deprecante/deprecada      <- apuratorios.codigo_extensao == 'carta_precatoria'
+//   papéis oferecidos         <- apuratorio_papeis do apuratório escolhido
+//   penalidade habilitada     <- tipos_solucao_decidida.permite_penalidade
+//   dias de penalidade        <- tipos_penalidade.usa_quantidade_dias
+//
+// Nenhuma dessas regras aparece como literal aqui. Trocar o nome de um
+// apuratório, de uma natureza ou de uma solução não muda nada nesta tela.
+
+import {
+  call,
+  type ApuratorioConfig,
+  type CartaPrecatoriaRequest,
+  type DesignacaoRequest,
+  type EnvolvidoRequest,
+  type PessoaRequest,
+  type SaveProceedingRequest,
+  type UserListItem,
+} from "../api";
+import { escapeHtml, option } from "../dom";
+import type { ContextoTela } from "./catalogos";
+
+export const ROTA_LISTA = "/procedimentos/lista";
+
+const EXTENSAO_CARTA_PRECATORIA = "carta_precatoria";
+
+type Opcao = { id: string; rotulo: string; extra?: Record<string, unknown> };
+
+/** Catálogos que o formulário inteiro consulta. Carregados uma vez por abertura. */
+type Catalogos = {
+  apuratorios: Opcao[];
+  unidades: Opcao[];
+  municipios: Opcao[];
+  naturezas: Opcao[];
+  status: Opcao[];
+  solucoesSugeridas: Opcao[];
+  solucoesDecididas: Opcao[];
+  penalidades: Opcao[];
+  papeisPessoa: Opcao[];
+  militares: UserListItem[];
+};
+
+async function catalogo(chave: string, campos: string[]): Promise<Opcao[]> {
+  const r = await call("legal_catalogs_list", { catalogo: chave });
+  return (r.data ?? []).map((linha) => ({
+    id: String(linha.id),
+    rotulo:
+      campos
+        .map((c) => String(linha[c] ?? "").trim())
+        .filter(Boolean)
+        .join(" — ") || String(linha.id),
+    extra: linha,
+  }));
+}
+
+async function carregarCatalogos(): Promise<Catalogos> {
+  const [
+    apuratorios,
+    unidades,
+    municipios,
+    naturezas,
+    status,
+    solucoesSugeridas,
+    solucoesDecididas,
+    penalidades,
+    papeisPessoa,
+    militares,
+  ] = await Promise.all([
+    catalogo("apuratorios", ["sigla", "nome"]),
+    catalogo("unidades_pm", ["nome"]),
+    catalogo("municipios_distritos", ["nome"]),
+    catalogo("naturezas_fato", ["nome"]),
+    catalogo("status_envolvido", ["nome"]),
+    catalogo("tipos_solucao_sugerida", ["nome"]),
+    catalogo("tipos_solucao_decidida", ["nome"]),
+    catalogo("tipos_penalidade", ["nome"]),
+    catalogo("papeis_pessoa", ["nome"]),
+    call("users_list", { perPage: 500 }).then((r) => r.data?.items ?? []),
+  ]);
+  return {
+    apuratorios,
+    unidades,
+    municipios,
+    naturezas,
+    status,
+    solucoesSugeridas,
+    solucoesDecididas,
+    penalidades,
+    papeisPessoa,
+    militares: militares.filter((m) => m.ativo),
+  };
+}
+
+// ── rascunho ────────────────────────────────────────────────────────────────
+
+type Rascunho = SaveProceedingRequest & {
+  envolvidos: EnvolvidoRequest[];
+  designacoes: DesignacaoRequest[];
+  pessoas: PessoaRequest[];
+};
+
+function rascunhoVazio(): Rascunho {
+  return {
+    id: null,
+    apuratorio_id: "",
+    documento_iniciador_id: "",
+    numero_documento: "",
+    numero_controle: null,
+    processo_sei: null,
+    numero_rgf: null,
+    unidade_origem_id: "",
+    municipio_fato_id: "",
+    natureza_fato_id: null,
+    data_instauracao: new Date().toISOString().slice(0, 10),
+    data_recebimento: null,
+    data_remessa_encarregado: null,
+    data_remessa_comissao: null,
+    data_julgamento: null,
+    data_conclusao: null,
+    resumo_fatos: null,
+    envolvidos: [],
+    designacoes: [],
+    pessoas: [],
+    carta_precatoria: null,
+  };
+}
+
+/** Lê o formulário para o rascunho antes de qualquer re-render estrutural. */
+function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
+  const dados = new FormData(form);
+  const texto = (campo: string) => String(dados.get(campo) ?? "").trim() || null;
+
+  rascunho.apuratorio_id = String(dados.get("apuratorio_id") ?? "");
+  rascunho.documento_iniciador_id = String(dados.get("documento_iniciador_id") ?? "");
+  rascunho.numero_documento = String(dados.get("numero_documento") ?? "").trim();
+  rascunho.numero_controle = texto("numero_controle");
+  rascunho.processo_sei = texto("processo_sei");
+  rascunho.numero_rgf = texto("numero_rgf");
+  rascunho.unidade_origem_id = String(dados.get("unidade_origem_id") ?? "");
+  rascunho.municipio_fato_id = String(dados.get("municipio_fato_id") ?? "");
+  rascunho.natureza_fato_id = texto("natureza_fato_id");
+  rascunho.data_instauracao = String(dados.get("data_instauracao") ?? "");
+  rascunho.data_recebimento = texto("data_recebimento");
+  rascunho.data_remessa_encarregado = texto("data_remessa_encarregado");
+  rascunho.data_remessa_comissao = texto("data_remessa_comissao");
+  rascunho.data_julgamento = texto("data_julgamento");
+  rascunho.data_conclusao = texto("data_conclusao");
+  rascunho.resumo_fatos = texto("resumo_fatos");
+
+  const deprecante = texto("cp_deprecante");
+  const deprecada = String(dados.get("cp_unidade_deprecada_id") ?? "");
+  rascunho.carta_precatoria =
+    deprecante || deprecada
+      ? ({ deprecante: deprecante ?? "", unidade_deprecada_id: deprecada } as CartaPrecatoriaRequest)
+      : null;
+
+  rascunho.envolvidos = rascunho.envolvidos.map((_, i) => ({
+    policial_militar_id: String(dados.get(`env_${i}_pm`) ?? ""),
+    status_envolvido_id: String(dados.get(`env_${i}_status`) ?? ""),
+    ordem: i + 1,
+    e_condutor: dados.get(`env_${i}_condutor`) === "on",
+    solucao_sugerida_id: String(dados.get(`env_${i}_sug`) ?? "") || null,
+    solucao_decidida_id: String(dados.get(`env_${i}_dec`) ?? "") || null,
+    penalidade_tipo_id: String(dados.get(`env_${i}_pena`) ?? "") || null,
+    penalidade_dias: Number(dados.get(`env_${i}_dias`) ?? 0) || null,
+  }));
+
+  rascunho.designacoes = rascunho.designacoes.map((d, i) => ({
+    policial_militar_id: String(dados.get(`des_${i}_pm`) ?? ""),
+    papel_id: String(dados.get(`des_${i}_papel`) ?? ""),
+    data_inicio: String(dados.get(`des_${i}_inicio`) ?? d.data_inicio),
+    documento_autorizador_id: null,
+    numero_documento: null,
+    motivo: null,
+  }));
+
+  rascunho.pessoas = rascunho.pessoas.map((_, i) => ({
+    papel_pessoa_id: String(dados.get(`pes_${i}_papel`) ?? ""),
+    nome: String(dados.get(`pes_${i}_nome`) ?? "").trim(),
+    ordem: i + 1,
+  }));
+}
+
+// ── render ──────────────────────────────────────────────────────────────────
+
+function nomeMilitar(m: UserListItem): string {
+  return `${m.posto_graduacao} ${m.nome} (${m.matricula})`;
+}
+
+function selectMilitares(nome: string, militares: UserListItem[], atual: string): string {
+  return `<select name="${nome}" required>
+    <option value=""></option>
+    ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === atual)).join("")}
+  </select>`;
+}
+
+function selectOpcoes(nome: string, opcoes: Opcao[], atual: string, obrigatorio = false): string {
+  return `<select name="${nome}"${obrigatorio ? " required" : ""}>
+    <option value=""></option>
+    ${opcoes.map((o) => option(o.id, o.rotulo, o.id === atual)).join("")}
+  </select>`;
+}
+
+export async function renderFormularioProcesso(
+  ctx: ContextoTela,
+  id: string | null,
+  erro = "",
+  rascunhoAtual?: Rascunho,
+): Promise<void> {
+  const cats = await carregarCatalogos();
+  let rascunho = rascunhoAtual;
+
+  if (!rascunho) {
+    rascunho = rascunhoVazio();
+    if (id) {
+      const r = await call("proceedings_get", { id });
+      const d = r.data;
+      if (!d) {
+        ctx.shell(`<section class="panel"><p class="error">Processo não encontrado.</p></section>`);
+        return;
+      }
+      rascunho = {
+        id: d.id,
+        apuratorio_id: d.apuratorio_id,
+        documento_iniciador_id: d.documento_iniciador_id,
+        numero_documento: d.numero_documento,
+        numero_controle: d.numero_controle,
+        processo_sei: d.processo_sei,
+        numero_rgf: d.numero_rgf,
+        unidade_origem_id: d.unidade_origem_id,
+        municipio_fato_id: d.municipio_fato_id,
+        natureza_fato_id: d.natureza_fato_id,
+        data_instauracao: d.data_instauracao,
+        data_recebimento: d.data_recebimento,
+        data_remessa_encarregado: d.data_remessa_encarregado,
+        data_remessa_comissao: d.data_remessa_comissao,
+        data_julgamento: d.data_julgamento,
+        data_conclusao: d.data_conclusao,
+        resumo_fatos: d.resumo_fatos,
+        envolvidos: d.envolvidos.map((e, i) => ({
+          policial_militar_id: e.policial_militar_id,
+          status_envolvido_id: e.status_envolvido_id,
+          ordem: i + 1,
+          e_condutor: e.e_condutor,
+          solucao_sugerida_id: e.solucao_sugerida_id,
+          solucao_decidida_id: e.solucao_decidida_id,
+          penalidade_tipo_id: e.penalidade_tipo_id,
+          penalidade_dias: e.penalidade_dias,
+        })),
+        // Designações são histórico e o backend nunca as apaga; reenviar as
+        // vigentes é inofensivo (ele ignora as que já existem).
+        designacoes: d.designacoes
+          .filter((x) => x.data_fim === null)
+          .map((x) => ({
+            policial_militar_id: x.policial_militar_id,
+            papel_id: x.papel_id,
+            data_inicio: x.data_inicio,
+            documento_autorizador_id: null,
+            numero_documento: null,
+            motivo: null,
+          })),
+        pessoas: d.pessoas.map((p, i) => ({
+          papel_pessoa_id: p.papel_pessoa_id,
+          nome: p.nome,
+          ordem: i + 1,
+        })),
+        carta_precatoria: d.carta_precatoria
+          ? {
+              deprecante: d.carta_precatoria.deprecante,
+              unidade_deprecada_id: d.carta_precatoria.unidade_deprecada_id,
+            }
+          : null,
+      };
+    }
+  }
+
+  if (!rascunho.apuratorio_id && cats.apuratorios[0]) {
+    rascunho.apuratorio_id = cats.apuratorios[0].id;
+  }
+
+  // Configuração do apuratório escolhido: é ela que decide o que aparece.
+  const apuratorio = cats.apuratorios.find((a) => a.id === rascunho.apuratorio_id);
+  const exigeNatureza = apuratorio?.extra?.exige_natureza_fato === true;
+  const ehCartaPrecatoria = apuratorio?.extra?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
+  const maxEnvolvidos = (apuratorio?.extra?.max_envolvidos as number | null) ?? null;
+
+  let config: ApuratorioConfig | null = null;
+  if (rascunho.apuratorio_id) {
+    const r = await call("apuratorio_config_get", { apuratorioId: rascunho.apuratorio_id });
+    config = r.data ?? null;
+  }
+  const documentos = (config?.documentos ?? []).filter((d) => d.ativo);
+  const papeis = (config?.papeis ?? []).filter((p) => p.ativo);
+
+  if (!rascunho.documento_iniciador_id) {
+    rascunho.documento_iniciador_id =
+      documentos.find((d) => d.padrao)?.tipo_documento_id ??
+      documentos[0]?.tipo_documento_id ??
+      "";
+  }
+
+  const natureza = cats.naturezas.find((n) => n.id === rascunho.natureza_fato_id);
+  const exigeCondutor = natureza?.extra?.exige_condutor === true;
+
+  const permitePenalidade = (solucaoId: string | null | undefined) =>
+    cats.solucoesDecididas.find((s) => s.id === solucaoId)?.extra?.permite_penalidade === true;
+  const usaDias = (penalidadeId: string | null | undefined) =>
+    cats.penalidades.find((p) => p.id === penalidadeId)?.extra?.usa_quantidade_dias === true;
+
+  const r = rascunho;
+  const podeAdicionarEnvolvido = maxEnvolvidos === null || r.envolvidos.length < maxEnvolvidos;
+
+  ctx.shell(`
+    <section class="panel">
+      <div class="page-head">
+        <div>
+          <h1>${id ? "Editar" : "Novo"} processo</h1>
+          <p>${escapeHtml(apuratorio?.rotulo ?? "")}</p>
+        </div>
+        <button class="secondary" id="cancelar">Cancelar</button>
+      </div>
+
+      ${documentos.length === 0 ? `<p class="aviso">Este apuratório não tem documento iniciador habilitado. Configure em <strong>Catálogos → Configuração de apuratórios</strong>.</p>` : ""}
+
+      <form id="form-processo" class="crud-form">
+        <fieldset>
+          <legend>Identificação</legend>
+          <div class="campo"><label>Apuratório ${selectOpcoes("apuratorio_id", cats.apuratorios, r.apuratorio_id, true)}</label></div>
+          <div class="campo"><label>Documento iniciador
+            <select name="documento_iniciador_id" required>
+              <option value=""></option>
+              ${documentos.map((d) => option(d.tipo_documento_id, `${d.tipo_documento} (${d.prazo_efetivo_dias} dias)`, d.tipo_documento_id === r.documento_iniciador_id)).join("")}
+            </select></label></div>
+          <div class="campo"><label>Nº do documento<input name="numero_documento" value="${escapeHtml(r.numero_documento)}" required /></label></div>
+          <div class="campo"><label>Nº de controle<input name="numero_controle" value="${escapeHtml(r.numero_controle ?? "")}" />
+            <small class="campo-efeito">Em branco = igual ao número do documento.</small></label></div>
+          <div class="campo"><label>Processo SEI<input name="processo_sei" value="${escapeHtml(r.processo_sei ?? "")}" /></label></div>
+          <div class="campo"><label>Nº RGF<input name="numero_rgf" value="${escapeHtml(r.numero_rgf ?? "")}" /></label></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Localização</legend>
+          <div class="campo"><label>Unidade de origem ${selectOpcoes("unidade_origem_id", cats.unidades, r.unidade_origem_id, true)}</label></div>
+          <div class="campo"><label>Município do fato ${selectOpcoes("municipio_fato_id", cats.municipios, r.municipio_fato_id, true)}</label></div>
+          <div class="campo"><label>Natureza do fato ${selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza)}
+            ${exigeNatureza ? `<small class="campo-efeito">Obrigatória para este apuratório.</small>` : ""}</label></div>
+        </fieldset>
+
+        ${
+          ehCartaPrecatoria
+            ? `<fieldset>
+                 <legend>Carta precatória</legend>
+                 <div class="campo"><label>Deprecante<input name="cp_deprecante" value="${escapeHtml(r.carta_precatoria?.deprecante ?? "")}" required /></label></div>
+                 <div class="campo"><label>Unidade deprecada ${selectOpcoes("cp_unidade_deprecada_id", cats.unidades, r.carta_precatoria?.unidade_deprecada_id ?? "", true)}</label></div>
+               </fieldset>`
+            : ""
+        }
+
+        <fieldset>
+          <legend>Datas</legend>
+          <div class="campo"><label>Instauração<input name="data_instauracao" type="date" value="${escapeHtml(r.data_instauracao)}" required /></label></div>
+          <div class="campo"><label>Recebimento<input name="data_recebimento" type="date" value="${escapeHtml(r.data_recebimento ?? "")}" />
+            <small class="campo-efeito">Dispara o prazo inicial: sem ela, nenhum prazo nasce.</small></label></div>
+          <div class="campo"><label>Remessa ao encarregado<input name="data_remessa_encarregado" type="date" value="${escapeHtml(r.data_remessa_encarregado ?? "")}" /></label></div>
+          <div class="campo"><label>Remessa à comissão<input name="data_remessa_comissao" type="date" value="${escapeHtml(r.data_remessa_comissao ?? "")}" /></label></div>
+          <div class="campo"><label>Julgamento<input name="data_julgamento" type="date" value="${escapeHtml(r.data_julgamento ?? "")}" /></label></div>
+          <div class="campo"><label>Conclusão<input name="data_conclusao" type="date" value="${escapeHtml(r.data_conclusao ?? "")}" />
+            <small class="campo-efeito">Preenchida = processo concluído.</small></label></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Designações</legend>
+          ${papeis.length === 0 ? `<p class="empty">Nenhum papel habilitado para este apuratório.</p>` : ""}
+          ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Papéis obrigatórios: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O processo não salva sem eles.</p>` : ""}
+          ${r.designacoes
+            .map(
+              (d, i) => `
+            <div class="linha-colecao">
+              <label>Papel<select name="des_${i}_papel" required>
+                <option value=""></option>
+                ${papeis.map((p) => option(p.papel_id, p.papel + (p.obrigatorio ? " *" : ""), p.papel_id === d.papel_id)).join("")}
+              </select></label>
+              <label>Militar${selectMilitares(`des_${i}_pm`, cats.militares, d.policial_militar_id)}</label>
+              <label>Início<input name="des_${i}_inicio" type="date" value="${escapeHtml(d.data_inicio)}" required /></label>
+              <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
+            </div>`,
+            )
+            .join("")}
+          <button type="button" class="secondary small" id="add-des">Adicionar designação</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Envolvidos</legend>
+          ${maxEnvolvidos !== null ? `<p class="secao-ajuda">Este apuratório aceita no máximo ${maxEnvolvidos} envolvido(s).</p>` : ""}
+          ${exigeCondutor ? `<p class="aviso">Esta natureza exige indicar o PM condutor entre os envolvidos.</p>` : ""}
+          ${r.envolvidos
+            .map(
+              (e, i) => `
+            <div class="linha-colecao">
+              <label>Militar${selectMilitares(`env_${i}_pm`, cats.militares, e.policial_militar_id)}</label>
+              <label>Situação${selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true)}</label>
+              ${exigeCondutor ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor ? " checked" : ""} /> Condutor</label>` : ""}
+              <label>Solução sugerida${selectOpcoes(`env_${i}_sug`, cats.solucoesSugeridas, e.solucao_sugerida_id ?? "")}</label>
+              <label>Solução decidida${selectOpcoes(`env_${i}_dec`, cats.solucoesDecididas, e.solucao_decidida_id ?? "")}</label>
+              ${
+                permitePenalidade(e.solucao_decidida_id)
+                  ? `<label>Penalidade${selectOpcoes(`env_${i}_pena`, cats.penalidades, e.penalidade_tipo_id ?? "")}</label>
+                     ${usaDias(e.penalidade_tipo_id) ? `<label>Dias<input name="env_${i}_dias" type="number" min="1" value="${e.penalidade_dias ?? ""}" /></label>` : ""}`
+                  : ""
+              }
+              <button type="button" class="danger small" data-remover-env="${i}">Remover</button>
+            </div>`,
+            )
+            .join("")}
+          ${podeAdicionarEnvolvido ? `<button type="button" class="secondary small" id="add-env">Adicionar envolvido</button>` : ""}
+        </fieldset>
+
+        <fieldset>
+          <legend>Pessoas (vítimas, inquiridos)</legend>
+          ${r.pessoas
+            .map(
+              (p, i) => `
+            <div class="linha-colecao">
+              <label>Papel${selectOpcoes(`pes_${i}_papel`, cats.papeisPessoa, p.papel_pessoa_id, true)}</label>
+              <label>Nome<input name="pes_${i}_nome" value="${escapeHtml(p.nome)}" required /></label>
+              <button type="button" class="danger small" data-remover-pes="${i}">Remover</button>
+            </div>`,
+            )
+            .join("")}
+          <button type="button" class="secondary small" id="add-pes">Adicionar pessoa</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Fatos</legend>
+          <div class="campo"><label>Resumo<textarea name="resumo_fatos" rows="4">${escapeHtml(r.resumo_fatos ?? "")}</textarea></label></div>
+        </fieldset>
+
+        ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
+        <div class="form-actions"><button type="submit">Salvar</button></div>
+      </form>
+    </section>
+  `);
+
+  const form = document.querySelector<HTMLFormElement>("#form-processo")!;
+  const rerender = (mutar: () => void) => {
+    absorverFormulario(r, form);
+    mutar();
+    void renderFormularioProcesso(ctx, id, "", r);
+  };
+
+  document.querySelector<HTMLButtonElement>("#cancelar")?.addEventListener("click", () => {
+    void renderListaProcessos(ctx);
+  });
+
+  // Trocar apuratório, natureza ou solução muda o que o formulário mostra —
+  // por isso re-renderiza em vez de esconder campo com CSS.
+  for (const seletor of ['[name="apuratorio_id"]', '[name="natureza_fato_id"]']) {
+    form.querySelector<HTMLSelectElement>(seletor)?.addEventListener("change", () => rerender(() => {}));
+  }
+  form.querySelectorAll<HTMLSelectElement>('[name$="_dec"], [name$="_pena"]').forEach((s) =>
+    s.addEventListener("change", () => rerender(() => {})),
+  );
+
+  document.querySelector("#add-des")?.addEventListener("click", () =>
+    rerender(() =>
+      r.designacoes.push({
+        policial_militar_id: "",
+        papel_id: "",
+        data_inicio: r.data_instauracao,
+        documento_autorizador_id: null,
+        numero_documento: null,
+        motivo: null,
+      }),
+    ),
+  );
+  document.querySelector("#add-env")?.addEventListener("click", () =>
+    rerender(() =>
+      r.envolvidos.push({
+        policial_militar_id: "",
+        status_envolvido_id: "",
+        ordem: r.envolvidos.length + 1,
+        e_condutor: false,
+        solucao_sugerida_id: null,
+        solucao_decidida_id: null,
+        penalidade_tipo_id: null,
+        penalidade_dias: null,
+      }),
+    ),
+  );
+  document.querySelector("#add-pes")?.addEventListener("click", () =>
+    rerender(() => r.pessoas.push({ papel_pessoa_id: "", nome: "", ordem: r.pessoas.length + 1 })),
+  );
+
+  const remover = <T,>(lista: T[], indice: number) => lista.splice(indice, 1);
+  form.querySelectorAll<HTMLButtonElement>("[data-remover-des]").forEach((b) =>
+    b.addEventListener("click", () => rerender(() => remover(r.designacoes, Number(b.dataset.removerDes)))),
+  );
+  form.querySelectorAll<HTMLButtonElement>("[data-remover-env]").forEach((b) =>
+    b.addEventListener("click", () => rerender(() => remover(r.envolvidos, Number(b.dataset.removerEnv)))),
+  );
+  form.querySelectorAll<HTMLButtonElement>("[data-remover-pes]").forEach((b) =>
+    b.addEventListener("click", () => rerender(() => remover(r.pessoas, Number(b.dataset.removerPes)))),
+  );
+
+  form.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    absorverFormulario(r, form);
+    const resposta = await call("proceedings_save", { request: r });
+    if (!resposta.ok) {
+      void renderFormularioProcesso(ctx, id, resposta.error ?? "Falha ao salvar.", r);
+      return;
+    }
+    void renderListaProcessos(ctx);
+  });
+}
+
+// ── listagem ────────────────────────────────────────────────────────────────
+
+const filtro = { busca: "", concluido: null as boolean | null, ano: null as number | null };
+
+export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
+  const resposta = await call("proceedings_list", {
+    filter: {
+      busca: filtro.busca || null,
+      concluido: filtro.concluido,
+      ano: filtro.ano,
+      per_page: 100,
+    },
+  });
+  if (!resposta.ok || !resposta.data) {
+    ctx.shell(`<section class="panel"><p class="error">${escapeHtml(resposta.error ?? "Falha ao listar.")}</p></section>`);
+    return;
+  }
+
+  const { items, total } = resposta.data;
+  const podeEscrever = ctx.podeEscrever();
+
+  ctx.shell(`
+    <section class="panel">
+      <div class="page-head">
+        <div><h1>Processos e procedimentos</h1><p>${total} registro(s)</p></div>
+        ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
+      </div>
+      <div class="filtros">
+        <input id="busca" type="search" placeholder="Número, resumo…" value="${escapeHtml(filtro.busca)}" />
+        <label>Situação <select id="concluido">
+          <option value="">todas</option>
+          <option value="false"${filtro.concluido === false ? " selected" : ""}>em andamento</option>
+          <option value="true"${filtro.concluido === true ? " selected" : ""}>concluídos</option>
+        </select></label>
+      </div>
+      ${
+        items.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>Rótulo</th><th>Apuratório</th><th>Unidade</th><th>Natureza</th>
+                <th>Instauração</th><th>Responsável</th><th>Envolvidos</th>
+                <th>Vencimento</th><th>Situação</th>
+              </tr></thead>
+              <tbody>
+                ${items
+                  .map(
+                    (p) => `
+                  <tr data-processo="${escapeHtml(p.id)}">
+                    <td>${escapeHtml(p.rotulo)}</td>
+                    <td>${escapeHtml(p.apuratorio_sigla)}</td>
+                    <td>${escapeHtml(p.unidade_origem)}</td>
+                    <td>${escapeHtml(p.natureza_fato ?? "")}</td>
+                    <td>${escapeHtml(p.data_instauracao)}</td>
+                    <td>${escapeHtml(p.responsavel_nome ?? "—")}</td>
+                    <td>${p.total_envolvidos}</td>
+                    <td>${escapeHtml(p.prazo_vencimento ?? "")}${
+                      p.prazo_dias_restantes !== null && p.prazo_dias_restantes < 0
+                        ? ` <strong class="vencido">(vencido)</strong>`
+                        : ""
+                    }</td>
+                    <td>${p.concluido ? "concluído" : "em andamento"}</td>
+                  </tr>`,
+                  )
+                  .join("")}
+              </tbody></table></div>`
+          : `<p class="empty">Nenhum processo encontrado.</p>`
+      }
+    </section>
+  `);
+
+  const recarregar = () => void renderListaProcessos(ctx);
+  const busca = document.querySelector<HTMLInputElement>("#busca");
+  busca?.addEventListener("change", () => {
+    filtro.busca = busca.value.trim();
+    recarregar();
+  });
+  document.querySelector<HTMLSelectElement>("#concluido")?.addEventListener("change", (e) => {
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    filtro.concluido = v === "" ? null : v === "true";
+    recarregar();
+  });
+
+  document.querySelector<HTMLButtonElement>("#novo")?.addEventListener("click", () => {
+    void renderFormularioProcesso(ctx, null);
+  });
+
+  document.querySelectorAll<HTMLTableRowElement>("[data-processo]").forEach((tr) => {
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => void renderDetalheProcesso(ctx, tr.dataset.processo!));
+  });
+}
+
+// ── detalhe ─────────────────────────────────────────────────────────────────
+//
+// Reúne o que antes estava espalhado: cabeçalho, envolvidos, designações com
+// histórico, prazos e prorrogações, andamentos e anexos. Três diferenças em
+// relação à versão anterior:
+//
+//   - anexos são N por processo, não um PDF inline por tabela de espécie;
+//   - o histórico de designações é tabela com período, não um jsonb;
+//   - cada andamento tem autor e tipo, que o modelo antigo havia perdido.
+
+async function baixarAnexo(anexoId: string): Promise<void> {
+  const r = await call("proceedings_get_attachment", { anexoId });
+  if (!r.ok || !r.data) {
+    alert(r.error ?? "Falha ao obter o anexo.");
+    return;
+  }
+  const bytes = Uint8Array.from(atob(r.data.conteudo), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: r.data.mime_type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = r.data.nome_arquivo;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
+  const [detalheResp, prazos, andamentos, tiposAndamento] = await Promise.all([
+    call("proceedings_get", { id }),
+    call("deadlines_list", { processoId: id }).then((r) => r.data ?? []),
+    call("movements_list", { processoId: id }).then((r) => r.data ?? []),
+    catalogo("tipos_andamento", ["nome"]),
+  ]);
+
+  const d = detalheResp.data;
+  if (!detalheResp.ok || !d) {
+    ctx.shell(`<section class="panel"><p class="error">${escapeHtml(detalheResp.error ?? "Processo não encontrado.")}</p></section>`);
+    return;
+  }
+
+  const podeEscrever = ctx.podeEscrever();
+  const linha = (rotulo: string, valor: unknown) =>
+    valor === null || valor === undefined || valor === ""
+      ? ""
+      : `<tr><th>${escapeHtml(rotulo)}</th><td>${escapeHtml(String(valor))}</td></tr>`;
+
+  ctx.shell(`
+    <section class="panel">
+      <div class="page-head">
+        <div>
+          <h1>${escapeHtml(d.rotulo)}</h1>
+          <p>${escapeHtml(d.apuratorio_nome)} — ${d.concluido ? "concluído" : "em andamento"}</p>
+        </div>
+        <div class="actions">
+          <button class="secondary" id="voltar">Voltar</button>
+          ${podeEscrever ? `<button id="editar">Editar</button>` : ""}
+          ${podeEscrever && d.concluido ? `<button class="secondary" id="reabrir">Reabrir</button>` : ""}
+        </div>
+      </div>
+
+      <table class="ficha">
+        ${linha("Documento iniciador", d.documento_iniciador)}
+        ${linha("Nº do documento", d.numero_documento)}
+        ${linha("Nº de controle", d.numero_controle)}
+        ${linha("Processo SEI", d.processo_sei)}
+        ${linha("Nº RGF", d.numero_rgf)}
+        ${linha("Unidade de origem", d.unidade_origem)}
+        ${linha("Município do fato", d.municipio_fato)}
+        ${linha("Natureza do fato", d.natureza_fato)}
+        ${linha("Instauração", d.data_instauracao)}
+        ${linha("Recebimento", d.data_recebimento)}
+        ${linha("Remessa ao encarregado", d.data_remessa_encarregado)}
+        ${linha("Remessa à comissão", d.data_remessa_comissao)}
+        ${linha("Julgamento", d.data_julgamento)}
+        ${linha("Conclusão", d.data_conclusao)}
+        ${linha("Responsável", d.responsavel_nome ? `${d.responsavel_nome} (${d.responsavel_papel})` : null)}
+        ${d.carta_precatoria ? linha("Deprecante", d.carta_precatoria.deprecante) : ""}
+        ${d.carta_precatoria ? linha("Unidade deprecada", d.carta_precatoria.unidade_deprecada) : ""}
+        ${linha("Resumo dos fatos", d.resumo_fatos)}
+      </table>
+
+      <h2>Envolvidos</h2>
+      ${
+        d.envolvidos.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
+                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th></tr></thead>
+              <tbody>${d.envolvidos
+                .map(
+                  (e) => `<tr>
+                    <td>${e.ordem}</td>
+                    <td>${escapeHtml(`${e.posto_graduacao} ${e.nome}`)}</td>
+                    <td>${escapeHtml(e.status_envolvido)}</td>
+                    <td>${e.e_condutor ? "sim" : ""}</td>
+                    <td>${escapeHtml(e.solucao_sugerida ?? "")}</td>
+                    <td>${escapeHtml(e.solucao_decidida ?? "")}</td>
+                    <td>${escapeHtml(e.penalidade_tipo ?? "")}${e.penalidade_dias ? ` — ${e.penalidade_dias} dias` : ""}</td>
+                  </tr>`,
+                )
+                .join("")}</tbody></table></div>`
+          : `<p class="empty">Nenhum envolvido.</p>`
+      }
+
+      <h2>Designações</h2>
+      ${
+        d.designacoes.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Motivo</th></tr></thead>
+              <tbody>${d.designacoes
+                .map(
+                  (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>
+                    <td>${escapeHtml(x.papel)}${x.e_responsavel ? " (responsável)" : ""}</td>
+                    <td>${escapeHtml(`${x.posto_graduacao} ${x.nome}`)}</td>
+                    <td>${escapeHtml(x.data_inicio)}</td>
+                    <td>${escapeHtml(x.data_fim ?? "vigente")}</td>
+                    <td>${escapeHtml(x.motivo ?? "")}</td>
+                  </tr>`,
+                )
+                .join("")}</tbody></table></div>
+             <p class="secao-ajuda">O fim é exclusivo: é o dia em que o sucessor assume, sem sobreposição nem lacuna.</p>`
+          : `<p class="empty">Nenhuma designação.</p>`
+      }
+
+      <h2>Prazos</h2>
+      ${
+        prazos.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Ordem</th><th>Início</th><th>Dias</th><th>Vencimento</th><th>Motivo</th></tr></thead>
+              <tbody>${prazos
+                .map(
+                  (p) => `<tr${p.vigente ? ' class="vigente"' : ""}>
+                    <td>${p.ordem === 0 ? "inicial" : `${p.ordem}ª prorrogação`}</td>
+                    <td>${escapeHtml(p.data_inicio)}</td>
+                    <td>${p.dias}</td>
+                    <td>${escapeHtml(p.data_vencimento)}</td>
+                    <td>${escapeHtml(p.motivo ?? "")}</td>
+                  </tr>`,
+                )
+                .join("")}</tbody></table></div>`
+          : `<p class="empty">Sem prazo. O prazo inicial nasce da data de recebimento.</p>`
+      }
+      ${
+        podeEscrever && prazos.length
+          ? `<form id="form-prorrogacao" class="linha-form">
+               <label>Prorrogar (dias)<input name="dias" type="number" min="1" required /></label>
+               <label>Motivo<input name="motivo" required /></label>
+               <button type="submit">Prorrogar</button>
+             </form>
+             <p class="secao-ajuda">A prorrogação começa no dia seguinte ao vencimento atual.</p>`
+          : ""
+      }
+
+      <h2>Andamentos</h2>
+      ${
+        andamentos.length
+          ? `<ul class="andamentos">${andamentos
+              .map(
+                (a) => `<li>
+                  <div class="andamento-head">
+                    <span>${escapeHtml(a.ocorrido_em.slice(0, 10))}</span>
+                    ${a.tipo_andamento ? `<strong>${escapeHtml(a.tipo_andamento)}</strong>` : ""}
+                    ${a.registrado_por ? `<small>${escapeHtml(a.registrado_por)}</small>` : ""}
+                    ${podeEscrever ? `<button class="danger small" data-remover-andamento="${escapeHtml(a.id)}">Remover</button>` : ""}
+                  </div>
+                  <p class="andamento-texto">${escapeHtml(a.descricao)}</p>
+                </li>`,
+              )
+              .join("")}</ul>`
+          : `<p class="empty">Nenhum andamento.</p>`
+      }
+      ${
+        podeEscrever
+          ? `<form id="form-andamento" class="linha-form">
+               <label>Tipo<select name="tipo_andamento_id">
+                 <option value=""></option>
+                 ${tiposAndamento.map((t) => option(t.id, t.rotulo, false)).join("")}
+               </select></label>
+               <label>Descrição<input name="descricao" required /></label>
+               <button type="submit">Registrar</button>
+             </form>`
+          : ""
+      }
+
+      <h2>Anexos</h2>
+      ${
+        d.anexos.length
+          ? `<div class="table-wrap"><table>
+              <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Enviado por</th><th>Ações</th></tr></thead>
+              <tbody>${d.anexos
+                .map(
+                  (a) => `<tr>
+                    <td>${escapeHtml(a.nome_arquivo)}</td>
+                    <td>${(a.tamanho_bytes / 1024).toFixed(1)} KB</td>
+                    <td>${escapeHtml(a.enviado_por ?? "")}</td>
+                    <td class="row-actions">
+                      <button class="secondary small" data-baixar="${escapeHtml(a.id)}">Baixar</button>
+                      ${podeEscrever ? `<button class="danger small" data-remover-anexo="${escapeHtml(a.id)}">Remover</button>` : ""}
+                    </td>
+                  </tr>`,
+                )
+                .join("")}</tbody></table></div>`
+          : `<p class="empty">Nenhum anexo.</p>`
+      }
+      ${podeEscrever ? `<div class="linha-form"><label>Anexar arquivo<input type="file" id="anexo" /></label></div>` : ""}
+    </section>
+  `);
+
+  const recarregar = () => void renderDetalheProcesso(ctx, id);
+  const reportar = (ok: boolean, erro: string | null) => {
+    if (!ok) alert(erro ?? "Falha na operação.");
+    recarregar();
+  };
+
+  document.querySelector("#voltar")?.addEventListener("click", () => void renderListaProcessos(ctx));
+  document.querySelector("#editar")?.addEventListener("click", () => void renderFormularioProcesso(ctx, id));
+  document.querySelector("#reabrir")?.addEventListener("click", async () => {
+    if (!confirm("Reabrir este processo?")) return;
+    const r = await call("proceedings_reopen", { id });
+    reportar(r.ok, r.error);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-baixar]").forEach((b) =>
+    b.addEventListener("click", () => void baixarAnexo(b.dataset.baixar!)),
+  );
+
+  if (!podeEscrever) return;
+
+  document.querySelector<HTMLFormElement>("#form-prorrogacao")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const r = await call("deadlines_add_extension", {
+      request: {
+        processo_id: id,
+        dias: Number(form.get("dias")),
+        motivo: String(form.get("motivo") ?? ""),
+      },
+    });
+    reportar(r.ok, r.error);
+  });
+
+  document.querySelector<HTMLFormElement>("#form-andamento")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const r = await call("movements_add", {
+      request: {
+        processo_id: id,
+        descricao: String(form.get("descricao") ?? ""),
+        tipo_andamento_id: String(form.get("tipo_andamento_id") ?? "") || null,
+      },
+    });
+    reportar(r.ok, r.error);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-remover-andamento]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Remover este andamento?")) return;
+      const r = await call("movements_remove", {
+        processoId: id,
+        andamentoId: b.dataset.removerAndamento!,
+      });
+      reportar(r.ok, r.error);
+    }),
+  );
+
+  document.querySelectorAll<HTMLButtonElement>("[data-remover-anexo]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Remover este anexo?")) return;
+      const r = await call("proceedings_remove_attachment", { anexoId: b.dataset.removerAnexo! });
+      reportar(r.ok, r.error);
+    }),
+  );
+
+  document.querySelector<HTMLInputElement>("#anexo")?.addEventListener("change", async (evento) => {
+    const arquivo = (evento.currentTarget as HTMLInputElement).files?.[0];
+    if (!arquivo) return;
+    const buffer = await arquivo.arrayBuffer();
+    let binario = "";
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i += 1) binario += String.fromCharCode(bytes[i]!);
+    const r = await call("proceedings_upload_attachment", {
+      request: {
+        processo_id: id,
+        nome_arquivo: arquivo.name,
+        mime_type: arquivo.type || "application/octet-stream",
+        conteudo: btoa(binario),
+      },
+    });
+    reportar(r.ok, r.error);
+  });
+}

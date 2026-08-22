@@ -13,6 +13,7 @@ pub struct ProceedingListItem {
     pub apuratorio_sigla: String,
     pub apuratorio_nome: String,
     pub tipo_apuratorio: String,
+    pub documento_iniciador_id: String,
     pub documento_iniciador: String,
     pub numero_documento: String,
     /// Número de controle efetivo: o informado ou, quando ausente, o do documento.
@@ -20,8 +21,15 @@ pub struct ProceedingListItem {
     /// Rótulo montado a partir do dado, no formato usado pela Seção:
     /// `SIGLA nº CONTROLE/UNIDADE/ANO`.
     pub rotulo: String,
+    /// Os ids acompanham os rótulos porque o formulário de edição precisa
+    /// repopular os selects. Resolver por nome falharia justamente no caso que
+    /// o modelo protege: um catálogo desativado não aparece na lista de opções,
+    /// e o processo antigo perderia o vínculo em silêncio.
+    pub unidade_origem_id: String,
     pub unidade_origem: String,
+    pub municipio_fato_id: String,
     pub municipio_fato: String,
+    pub natureza_fato_id: Option<String>,
     pub natureza_fato: Option<String>,
     pub data_instauracao: NaiveDate,
     pub data_recebimento: Option<NaiveDate>,

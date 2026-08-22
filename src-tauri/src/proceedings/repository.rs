@@ -48,14 +48,18 @@ const COLUNAS_LISTA: &str = r#"
     a.sigla                                          AS apuratorio_sigla,
     a.nome                                           AS apuratorio_nome,
     ta.nome                                          AS tipo_apuratorio,
+    td.id::text                                      AS documento_iniciador_id,
     td.nome                                          AS documento_iniciador,
     p.numero_documento                               AS numero_documento,
     COALESCE(p.numero_controle, p.numero_documento)  AS numero_controle,
     a.sigla || ' nº ' || COALESCE(p.numero_controle, p.numero_documento)
         || '/' || un.nome || '/'
         || EXTRACT(YEAR FROM p.data_instauracao)::int::text  AS rotulo,
+    un.id::text                                      AS unidade_origem_id,
     un.nome                                          AS unidade_origem,
+    mun.id::text                                     AS municipio_fato_id,
     mun.nome                                         AS municipio_fato,
+    nf.id::text                                      AS natureza_fato_id,
     nf.nome                                          AS natureza_fato,
     p.data_instauracao                               AS data_instauracao,
     p.data_recebimento                               AS data_recebimento,
