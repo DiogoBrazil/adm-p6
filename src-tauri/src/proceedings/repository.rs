@@ -479,6 +479,31 @@ pub async fn save(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
+    // Trocar o apuratório de um processo que já tem designações é impossível:
+    // `processo_designacoes` amarra `(processo_id, apuratorio_id)` por FK
+    // composta e as designações NUNCA são apagadas — são registro histórico de
+    // quem respondeu pelo apuratório e quando. Sem esta verificação o usuário
+    // recebia a violação de FK crua do PostgreSQL na tela.
+    if let Some(id) = request.id.as_deref() {
+        let conflito: Option<String> = sqlx::query_scalar(
+            "SELECT a.sigla
+               FROM processos_procedimentos p
+               JOIN apuratorios a ON a.id = p.apuratorio_id
+              WHERE p.id = $1::uuid
+                AND p.apuratorio_id <> $2::uuid
+                AND EXISTS (SELECT 1 FROM processo_designacoes d WHERE d.processo_id = p.id)",
+        )
+        .bind(id)
+        .bind(&request.apuratorio_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some(sigla) = conflito {
+            return Err(AppError::Domain(format!(
+                "este processo ja tem designacoes registradas como {sigla}; nao e possivel trocar a especie do apuratorio"
+            )));
+        }
+    }
+
     let id: String = match request.id.as_deref() {
         Some(id) => sqlx::query_scalar(
             "UPDATE processos_procedimentos SET

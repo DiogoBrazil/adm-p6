@@ -135,33 +135,58 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     .await?;
     assert_eq!(admins, 1, "esperado exatamente um administrador tecnico");
 
-    // Nenhum catálogo de negócio pode vir semeado.
+    // A fronteira da decisão de seed: o que é LEI vem semeado pela 0003 (não
+    // varia por instalação); o que é OPERACIONAL nasce vazio e é cadastrado
+    // pelo administrador da unidade. Este teste é o que trava essa fronteira —
+    // semear um catálogo operacional aqui é uma decisão, não um descuido.
+    for (tabela, esperado) in [
+        ("circulos_hierarquicos", 2),
+        ("postos_graduacoes", 13),
+        ("municipios_distritos", 112),
+        ("dispositivos_legais", 7),
+        ("especies_infracao_penal", 2),
+        ("esferas_penais", 2),
+        ("naturezas_transgressao", 3),
+        ("artigos_rdpm", 3),
+        ("transgressoes", 95),
+        // 26 e 20, não 27 e 23: a 0003 descarta explicitamente 1 duplicata de
+        // chave única (art. 42 da LCP) e 3 linhas de teste já inativas do
+        // legado (inciso "LX" do art. 29).
+        ("infracoes_penais", 26),
+        ("infracoes_estatuto", 20),
+    ] {
+        let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {tabela}"))
+            .fetch_one(&mut conn)
+            .await?;
+        assert_eq!(
+            n, esperado,
+            "catalogo legal {tabela} com contagem inesperada"
+        );
+    }
+
     for vazio in [
         "apuratorios",
+        "tipos_apuratorio",
+        "apuratorio_documentos_iniciadores",
+        "apuratorio_papeis",
         "tipos_documento",
         "policiais_militares",
-        "postos_graduacoes",
-        "circulos_hierarquicos",
         "naturezas_fato",
-        "naturezas_transgressao",
         "tipos_penalidade",
         "tipos_solucao_decidida",
         "tipos_solucao_sugerida",
         "status_envolvido",
         "categorias_indicio",
-        "municipios_distritos",
         "unidades_pm",
-        "transgressoes",
-        "infracoes_penais",
-        "infracoes_estatuto",
-        "dispositivos_legais",
         "papeis_processo",
+        "papeis_pessoa",
         "tipos_andamento",
+        "subdivisao_textos_normativos",
     ] {
         let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {vazio}"))
             .fetch_one(&mut conn)
             .await?;
-        assert_eq!(n, 0, "catalogo de negocio {vazio} nao deveria vir semeado");
+        assert_eq!(n, 0, "catalogo operacional {vazio} nao deveria vir semeado");
     }
 
     Ok(())

@@ -11,10 +11,12 @@ mod util;
 
 async fn catalogos_minimos(pool: &PgPool) -> (String, String) {
     pool.execute(
+        // Nomes com "Teste": a migration 0003 semeia os catálogos legais
+        // (círculos, postos) e os índices únicos são case-insensitive.
         "INSERT INTO circulos_hierarquicos (id, nome) VALUES
-            ('10000000-0000-0000-0000-000000000001', 'Pracas');
+            ('10000000-0000-0000-0000-000000000001', 'Circulo Teste');
          INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica)
-         VALUES ('10000000-0000-0000-0000-000000000002', 'SD PM', 'Soldado PM',
+         VALUES ('10000000-0000-0000-0000-000000000002', 'TST PM', 'Soldado Teste PM',
                  '10000000-0000-0000-0000-000000000001', -1);
          INSERT INTO perfis_acesso (id, nome, pode_administrar) VALUES
             ('10000000-0000-0000-0000-000000000003', 'Comum', false);",
@@ -82,8 +84,8 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
             .unwrap();
         assert_eq!(item.nome, "MARIA SOUZA");
         assert_eq!(item.conta_email.as_deref(), Some("maria.souza@pm.ro"));
-        assert_eq!(item.posto_graduacao, "Soldado PM");
-        assert_eq!(item.circulo_hierarquico, "Pracas");
+        assert_eq!(item.posto_graduacao, "Soldado Teste PM");
+        assert_eq!(item.circulo_hierarquico, "Circulo Teste");
         assert_eq!(item.ordem_hierarquica, -1);
 
         // 3. Editar sem enviar senha mantém o hash existente.

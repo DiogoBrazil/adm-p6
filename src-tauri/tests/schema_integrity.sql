@@ -38,10 +38,13 @@ END;
 $fn$;
 
 -- ---------------------------------------------------------------- fixtures ---
+-- Os nomes carregam "Teste" de proposito: a migration 0003 semeia os catalogos
+-- LEGAIS (postos, RDPM, dispositivos, especies, esferas...) e as fixtures nao
+-- podem colidir com eles nos indices unicos case-insensitive.
 INSERT INTO circulos_hierarquicos (id, nome) VALUES
-    ('11111111-0000-0000-0000-000000000001', 'Praças');
+    ('11111111-0000-0000-0000-000000000001', 'Circulo Teste');
 INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica) VALUES
-    ('11111111-0000-0000-0000-000000000002', 'SD PM', 'Soldado PM', '11111111-0000-0000-0000-000000000001', -1);
+    ('11111111-0000-0000-0000-000000000002', 'TST PM', 'Soldado Teste PM', '11111111-0000-0000-0000-000000000001', -1);
 INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id) VALUES
     ('22222222-0000-0000-0000-000000000001', '100000001', 'PM UM',   '11111111-0000-0000-0000-000000000002'),
     ('22222222-0000-0000-0000-000000000002', '100000002', 'PM DOIS', '11111111-0000-0000-0000-000000000002'),
@@ -81,17 +84,17 @@ INSERT INTO tipos_penalidade (id, nome, usa_quantidade_dias) VALUES
     ('77777777-0000-0000-0000-000000000003', 'Prisao', true);
 
 INSERT INTO naturezas_transgressao (id, nome) VALUES
-    ('88888888-0000-0000-0000-000000000001', 'Leve');
+    ('88888888-0000-0000-0000-000000000001', 'Natureza Teste');
 INSERT INTO artigos_rdpm (id, artigo, natureza_transgressao_id) VALUES
     ('88888888-0000-0000-0000-000000000002', '15', '88888888-0000-0000-0000-000000000001');
 INSERT INTO transgressoes (id, artigo_rdpm_id, inciso, texto) VALUES
     ('88888888-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000002', 'I', 'texto');
 INSERT INTO dispositivos_legais (id, nome) VALUES
-    ('99999999-0000-0000-0000-000000000001', 'Codigo Penal Militar');
+    ('99999999-0000-0000-0000-000000000001', 'Dispositivo Teste');
 INSERT INTO especies_infracao_penal (id, nome) VALUES
-    ('99999999-0000-0000-0000-000000000002', 'Crime');
+    ('99999999-0000-0000-0000-000000000002', 'Especie Teste');
 INSERT INTO esferas_penais (id, nome) VALUES
-    ('99999999-0000-0000-0000-000000000003', 'Militar');
+    ('99999999-0000-0000-0000-000000000003', 'Esfera Teste');
 INSERT INTO infracoes_penais (id, dispositivo_legal_id, especie_id, artigo, descricao) VALUES
     ('99999999-0000-0000-0000-000000000004', '99999999-0000-0000-0000-000000000001',
      '99999999-0000-0000-0000-000000000002', '157', 'roubo');

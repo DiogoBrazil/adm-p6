@@ -4,6 +4,8 @@
 //! Precisa de `DATABASE_URL` (o `.env.example` traz a URL que o
 //! `docker-compose.yml` deste repositório sobe). Sem ela, o teste é ignorado.
 
+pub mod fixtures;
+
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 
 fn urls(sufixo: &str) -> Option<(String, String, String)> {

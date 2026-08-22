@@ -347,8 +347,12 @@ CREATE INDEX ix_apdoc_documento ON apuratorio_documentos_iniciadores (tipo_docum
 -- "escrivão só em IPM", "presidente/interrogante/escrivão do processo só em
 -- PAD/CD/CJ", "PAD/CD/CJ não têm encarregado".
 --
---   obrigatorio   : o papel precisa estar designado (validado na aplicação; um
---                   processo pode ser salvo antes de designar todos)
+--   obrigatorio   : o papel precisa estar designado para o processo ser salvo.
+--                   Validado na aplicação (proceedings::validar_contra_configuracao),
+--                   não no banco: a designação chega na mesma transação do
+--                   processo, e um CHECK não enxerga outra tabela. Para permitir
+--                   que o papel fique vago, desmarque `obrigatorio` neste
+--                   apuratório — quem decide é a configuração, não o código.
 --   max_ocupantes : quantas pessoas simultâneas nesse papel (constraint trigger)
 --   e_responsavel : ESTE é o papel que responde pelo apuratório. Varia por
 --                   apuratório: Encarregado nos procedimentos, Presidente em

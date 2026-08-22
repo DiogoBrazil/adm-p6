@@ -1,4 +1,5 @@
 mod app_state;
+pub mod apuratorio_config;
 pub mod audit;
 pub mod auth;
 pub mod db;
@@ -56,6 +57,14 @@ pub fn run() {
             legal_catalogs::commands::legal_catalogs_deactivate,
             legal_catalogs::commands::legal_catalogs_reactivate,
             legal_catalogs::commands::legal_catalogs_delete,
+            // Configuração do apuratório: as duas tabelas de associação que a
+            // FK composta de `processos_procedimentos` exige. Não cabem no CRUD
+            // genérico de catálogos (PK composta, sem `id` e sem `nome`).
+            apuratorio_config::commands::apuratorio_config_get,
+            apuratorio_config::commands::apuratorio_config_save_documento,
+            apuratorio_config::commands::apuratorio_config_save_papel,
+            apuratorio_config::commands::apuratorio_config_deactivate_documento,
+            apuratorio_config::commands::apuratorio_config_deactivate_papel,
             proceedings::commands::proceedings_list,
             proceedings::commands::proceedings_get,
             proceedings::commands::proceedings_save,

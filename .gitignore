@@ -2,3 +2,6 @@
 src-tauri/target
 node_modules
 .claude/settings.json
+# Dump do banco em producao: 44 MB com dados pessoais de 236 militares.
+# Fonte somente-leitura para gerar seeds e para a importacao; nunca versionar.
+adm-p6.sql
