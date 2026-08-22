@@ -31,6 +31,7 @@ import {
 } from "../api";
 import { escapeHtml, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
+import { renderIndicios } from "./indicios";
 
 export const ROTA_LISTA = "/procedimentos/lista";
 
@@ -703,7 +704,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         d.envolvidos.length
           ? `<div class="table-wrap"><table>
               <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
-                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th></tr></thead>
+                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Indícios</th></tr></thead>
               <tbody>${d.envolvidos
                 .map(
                   (e) => `<tr>
@@ -714,6 +715,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${escapeHtml(e.solucao_sugerida ?? "")}</td>
                     <td>${escapeHtml(e.solucao_decidida ?? "")}</td>
                     <td>${escapeHtml(e.penalidade_tipo ?? "")}${e.penalidade_dias ? ` — ${e.penalidade_dias} dias` : ""}</td>
+                    <td><button class="secondary small" data-indicios="${escapeHtml(e.id)}">Indícios</button></td>
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>`
@@ -840,6 +842,14 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
   document.querySelectorAll<HTMLButtonElement>("[data-baixar]").forEach((b) =>
     b.addEventListener("click", () => void baixarAnexo(b.dataset.baixar!)),
+  );
+
+  // O enquadramento é por envolvido, não pelo processo: cada PM tem as suas
+  // categorias, infrações penais, transgressões e infrações do Estatuto.
+  document.querySelectorAll<HTMLButtonElement>("[data-indicios]").forEach((b) =>
+    b.addEventListener("click", () =>
+      void renderIndicios(ctx, b.dataset.indicios!, () => void renderDetalheProcesso(ctx, id)),
+    ),
   );
 
   if (!podeEscrever) return;

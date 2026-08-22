@@ -758,6 +758,54 @@ tr.vigente {
   margin: 6px 0 0;
 }
 
+/* ── Indícios ──────────────────────────────────────────────────────────── */
+
+.lista-vinculos {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.vinculo {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.vinculo > span:first-child {
+  flex: 1 1 320px;
+}
+
+/* A analogia com o RDPM é obrigatória para toda infração estatutária. */
+.analogia {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.resultados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* Prazo já vencido: destaque, não só cor de texto. */
+tr.atrasado {
+  background: #fef2f2;
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 @media print {
   .sidebar,
   .topbar,

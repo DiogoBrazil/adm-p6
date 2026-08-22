@@ -11,6 +11,7 @@ import {
 } from "./telas/catalogos";
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
+import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 
 // NOTA DE MIGRAÇÃO
 //
@@ -151,7 +152,6 @@ let currentRows: Record<string, unknown>[] = [];
 let searchTerm = "";
 let detailId: string | null = null;
 let selectedYear: number = new Date().getFullYear();
-let evidencePmId: string | null = null;
 let auditFilters: { tabela: string; operacao: string; usuario_id: string } =
   { tabela: "", operacao: "", usuario_id: "" };
 
@@ -562,7 +562,7 @@ async function renderRoute() {
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
   if (route.path === "/estatisticas/anuais") return renderAnnualStats();
-  if (route.path === "/prazos") return renderPrazosGlobal();
+  if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
   if (route.path === "/mapas/mensal") return renderMonthlyMap();
   if (route.path === "/auditoria") return renderAuditWithFilters();
   if (route.path === "/usuarios/lista") return renderUsersList();
@@ -655,13 +655,11 @@ async function renderDetail(route: Route) {
   if (!detailId || !route.detailCommand) return;
 
   // Evidence sub-panel takes over when a PM is selected
-  if (evidencePmId && route.path === "/procedimentos/lista") {
-    return renderEvidencePanel(route);
-  }
-
   shell(`<section class="panel"><p>Carregando detalhes...</p></section>`);
 
-  const isProceeding = route.path === "/procedimentos/lista";
+  // O detalhe de processo tem tela própria (telas/processo.ts). Aqui
+  // sobraram auditoria e mapas salvos, que são só ficha de leitura.
+  const isProceeding = false as boolean;
   const [response, evidenceResp, deadlinesResp] = await Promise.all([
     call<ProceedingData>(route.detailCommand, { id: detailId }),
     isProceeding ? call<unknown[]>("evidence_list_for_proceeding", { procedimento_id: detailId }) : Promise.resolve({ ok: true, data: [], error: null }),
@@ -864,403 +862,12 @@ async function renderDetail(route: Route) {
     });
   }
 
-  document.querySelector<HTMLFormElement>("#add-movement-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget as HTMLFormElement);
-    const texto = (form.get("texto") as string).trim();
-    const resp = await call("movements_add", { request: { processo_id: detailId, texto } });
-    if (!resp.ok) { alert(resp.error ?? "Falha ao adicionar andamento."); return; }
-    void renderDetail(route);
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-remove-andamento]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Remover este andamento?")) return;
-      const andamentoId = btn.dataset.removeAndamento!;
-      const resp = await call("movements_remove", { processo_id: detailId, andamento_id: andamentoId });
-      if (!resp.ok) { alert(resp.error ?? "Falha ao remover."); return; }
-      void renderDetail(route);
-    });
-  });
-
-  document.querySelector<HTMLButtonElement>("#btn-view-pdf")?.addEventListener("click", async () => {
-    const resp = await call<{ conteudo: string | null; content_type: string | null }>(
-      "proceedings_get_pdf", { processo_id: detailId, include_content: true }
-    );
-    if (!resp.ok || !resp.data?.conteudo) { alert("Falha ao carregar PDF."); return; }
-    const bytes = Uint8Array.from(atob(resp.data.conteudo), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: resp.data.content_type ?? "application/pdf" });
-    window.open(URL.createObjectURL(blob), "_blank");
-  });
-
-  document.querySelector<HTMLButtonElement>("#btn-remove-pdf")?.addEventListener("click", async () => {
-    if (!confirm("Remover o PDF anexado?")) return;
-    const resp = await call("proceedings_remove_pdf", { processo_id: detailId });
-    if (!resp.ok) { alert(resp.error ?? "Falha ao remover PDF."); return; }
-    void renderDetail(route);
-  });
-
-  document.querySelector<HTMLInputElement>("#pdf-upload-input")?.addEventListener("change", async (e) => {
-    const file = (e.currentTarget as HTMLInputElement).files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(",")[1];
-      const resp = await call("proceedings_upload_pdf", {
-        request: { processo_id: detailId, nome_arquivo: file.name, conteudo_base64: base64, content_type: file.type || "application/pdf" }
-      });
-      if (!resp.ok) { alert(resp.error ?? "Falha no upload."); return; }
-      void renderDetail(route);
-    };
-    reader.readAsDataURL(file);
-  });
-
-  // Evidence: open panel for selected PM
-  document.querySelectorAll<HTMLButtonElement>("[data-evidence-pm]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      evidencePmId = btn.dataset.evidencePm!;
-      void renderDetail(route);
-    });
-  });
-
-  // Prazos: close active deadline
-  document.querySelector<HTMLButtonElement>("#btn-close-deadline")?.addEventListener("click", async () => {
-    if (!confirm("Encerrar o prazo ativo deste processo?")) return;
-    const resp = await call("deadlines_close", { processo_id: detailId });
-    if (!resp.ok) { alert(resp.error ?? "Falha ao encerrar prazo."); return; }
-    void renderDetail(route);
-  });
-
-  // Prazos: add extension
-  document.querySelector<HTMLFormElement>("#extension-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget as HTMLFormElement);
-    const dp = (form.get("data_portaria") as string).trim();
-    const resp = await call("deadlines_add_extension", {
-      request: {
-        processo_id: detailId,
-        dias_prorrogacao: Number(form.get("dias")),
-        motivo: (form.get("motivo") as string).trim(),
-        autorizado_por: (form.get("autorizado_por") as string).trim(),
-        autorizado_tipo: (form.get("autorizado_tipo") as string).trim(),
-        numero_portaria: (form.get("numero_portaria") as string).trim() || null,
-        data_portaria: dp || null,
-      }
-    });
-    if (!resp.ok) { alert(resp.error ?? "Falha ao prorrogar."); return; }
-    void renderDetail(route);
-  });
+  // Os manipuladores de andamento, PDF, indícios e prazos foram removidos:
+  // pertenciam ao detalhe de processo, que agora tem tela própria em
+  // `telas/processo.ts`. O que resta aqui é ficha de leitura de auditoria e
+  // de mapas salvos.
 
   bindExportEvents({ ...route, csvExport: undefined });
-}
-
-async function renderEvidencePanel(route: Route) {
-  if (!detailId || !evidencePmId) return;
-
-  shell(`<section class="panel"><p>Carregando indícios...</p></section>`);
-
-  type EvidItem = Record<string, unknown>;
-  type Infr = {
-    infracao_id: string; infracao_inciso?: string; infracao_texto?: string;
-    analogia_id: string; analogia_inciso?: string; analogia_texto?: string; analogia_artigo?: string;
-  };
-  type Ev = {
-    pm_envolvido_id: string; categorias: string[];
-    crimes_militares: EvidItem[]; crimes_comuns: EvidItem[];
-    rdpm: EvidItem[]; art29: Infr[]; art32: Infr[];
-  };
-
-  const [evResp, catsResp] = await Promise.all([
-    call<Ev>("evidence_load_for_pm", { pm_envolvido_id: evidencePmId }),
-    call<string[]>("evidence_categories"),
-  ]);
-
-  const ev: Ev = evResp.data ?? {
-    pm_envolvido_id: evidencePmId, categorias: [],
-    crimes_militares: [], crimes_comuns: [], rdpm: [], art29: [], art32: [],
-  };
-  const allCats: string[] = catsResp.data ?? ["crimes_cpm", "transgressoes_rdpm", "transgressoes_art29", "sem_indicios"];
-
-  const arr = (v: unknown): EvidItem[] => (Array.isArray(v) ? (v as EvidItem[]) : []);
-  const itemLabel = (it: EvidItem) => escapeHtml(String(it.artigo ?? it.inciso ?? it.id ?? ""));
-  const itemSub = (it: EvidItem) => escapeHtml(String(it.descricao_artigo ?? it.texto ?? ""));
-  const analogiaLabel = (a: Pick<Infr, "analogia_artigo" | "analogia_inciso">) =>
-    a.analogia_inciso || a.analogia_artigo ? `Art. ${a.analogia_artigo ?? "?"}, Inc. ${a.analogia_inciso ?? ""}` : "";
-
-  const simpleRow = (it: EvidItem) => `
-    <div class="evidence-item">
-      <span>${itemLabel(it)}</span>
-      <small>${itemSub(it)}</small>
-      <button class="danger small" data-item-id="${escapeHtml(String(it.id ?? ""))}">×</button>
-    </div>`;
-
-  const artRow = (infracaoId: string, infrLabel: string, infrText: string, analogiaId: string, analogiaText: string) => `
-    <div class="evidence-item art-item" data-infracao="${escapeHtml(infracaoId)}">
-      <div class="art-infr"><strong>${escapeHtml(infrLabel)}</strong> <small>${escapeHtml(infrText)}</small></div>
-      <div class="art-analogia">
-        <span>Analogia RDPM:</span>
-        <span class="analogia-current">${analogiaId ? escapeHtml(analogiaText) : "(selecione)"}</span>
-        <input class="analogia-input" type="search" placeholder="buscar transgressão RDPM..." />
-        <button class="outline small analogia-search-btn" type="button">Buscar</button>
-        <div class="analogia-results evidence-results"></div>
-      </div>
-      <button class="danger small art-remove" type="button">×</button>
-    </div>`;
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Indícios — PM ${escapeHtml(evidencePmId)}</h1></div>
-        <div class="page-head-right">
-          <button id="save-evidence">Salvar Indícios</button>
-          <button class="secondary" id="back-to-detail">← Voltar ao Processo</button>
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Categorias</h2>
-        <div class="evidence-cats">
-          ${allCats.map((cat) => `
-            <label class="checkbox">
-              <input type="checkbox" name="cat" value="${escapeHtml(cat)}" ${ev.categorias.includes(cat) ? "checked" : ""} />
-              ${escapeHtml(cat)}
-            </label>`).join("")}
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Crimes Militares (${arr(ev.crimes_militares).length})</h2>
-        <div id="crimes-mil-list">${arr(ev.crimes_militares).map(simpleRow).join("") || `<p class="empty">Nenhum</p>`}</div>
-        <div class="evidence-search">
-          <input id="search-crimes-mil-input" type="search" placeholder="Buscar crime militar..." />
-          <button id="btn-search-crimes-mil">Buscar</button>
-        </div>
-        <div id="crimes-mil-results" class="evidence-results"></div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Crimes Comuns (${arr(ev.crimes_comuns).length})</h2>
-        <div id="crimes-com-list">${arr(ev.crimes_comuns).map(simpleRow).join("") || `<p class="empty">Nenhum</p>`}</div>
-        <div class="evidence-search">
-          <input id="search-crimes-com-input" type="search" placeholder="Buscar crime comum..." />
-          <button id="btn-search-crimes-com">Buscar</button>
-        </div>
-        <div id="crimes-com-results" class="evidence-results"></div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Transgressões RDPM (${arr(ev.rdpm).length})</h2>
-        <div id="rdpm-list">${arr(ev.rdpm).map(simpleRow).join("") || `<p class="empty">Nenhuma</p>`}</div>
-        <div class="evidence-search">
-          <input id="search-rdpm-input" type="search" placeholder="Buscar transgressão..." />
-          <button id="btn-search-rdpm">Buscar</button>
-        </div>
-        <div id="rdpm-results" class="evidence-results"></div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Art. 29 — Estatuto (${arr(ev.art29).length})</h2>
-        <p class="hint">Cada infração exige uma transgressão RDPM por analogia.</p>
-        <div id="art29-list">${ev.art29.map((a) => artRow(a.infracao_id, `Inc. ${a.infracao_inciso ?? ""}`, a.infracao_texto ?? "", a.analogia_id, analogiaLabel(a))).join("") || `<p class="empty">Nenhum</p>`}</div>
-        <div class="evidence-search">
-          <input id="search-art29-input" type="search" placeholder="Buscar art. 29..." />
-          <button id="btn-search-art29">Buscar</button>
-        </div>
-        <div id="art29-results" class="evidence-results"></div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Art. 32 — Estatuto (${arr(ev.art32).length})</h2>
-        <p class="hint">Cada infração exige uma transgressão RDPM por analogia.</p>
-        <div id="art32-list">${ev.art32.map((a) => artRow(a.infracao_id, `Inc. ${a.infracao_inciso ?? ""}`, a.infracao_texto ?? "", a.analogia_id, analogiaLabel(a))).join("") || `<p class="empty">Nenhum</p>`}</div>
-        <div class="evidence-search">
-          <input id="search-art32-input" type="search" placeholder="Buscar art. 32..." />
-          <button id="btn-search-art32">Buscar</button>
-        </div>
-        <div id="art32-results" class="evidence-results"></div>
-      </div>
-    </section>
-  `);
-
-  document.querySelector<HTMLButtonElement>("#back-to-detail")?.addEventListener("click", () => {
-    evidencePmId = null;
-    void renderDetail(route);
-  });
-
-  // ── Simple id-set sections (crimes militares/comuns, rdpm) ──
-  const selCrimesMil = new Set(arr(ev.crimes_militares).map((c) => String(c.id)));
-  const selCrimesCom = new Set(arr(ev.crimes_comuns).map((c) => String(c.id)));
-  const selRdpm = new Set(arr(ev.rdpm).map((r) => String(r.id)));
-
-  function bindSimpleRemoves(listId: string, idSet: Set<string>) {
-    document.querySelectorAll<HTMLButtonElement>(`#${listId} [data-item-id]`).forEach((btn) => {
-      btn.addEventListener("click", () => { idSet.delete(btn.dataset.itemId!); btn.closest(".evidence-item")?.remove(); });
-    });
-  }
-  bindSimpleRemoves("crimes-mil-list", selCrimesMil);
-  bindSimpleRemoves("crimes-com-list", selCrimesCom);
-  bindSimpleRemoves("rdpm-list", selRdpm);
-
-  async function doSimpleSearch(command: string, inputId: string, resultsId: string, listId: string, idSet: Set<string>) {
-    const termo = (document.querySelector<HTMLInputElement>(`#${inputId}`)?.value ?? "").trim();
-    const resp = await call<EvidItem[]>(command, { termo });
-    const items = resp.data ?? [];
-    const el = document.querySelector(`#${resultsId}`)!;
-    if (!items.length) { el.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
-    el.innerHTML = items.map((item) => `
-      <div class="evidence-result-item">
-        <div><strong>${itemLabel(item)}</strong> — <small>${escapeHtml(String(item.descricao_artigo ?? item.texto ?? "").substring(0, 80))}</small></div>
-        ${idSet.has(String(item.id)) ? `<span class="badge badge--ok">✓ Adicionado</span>` : `<button class="outline small" data-add-id="${escapeHtml(String(item.id))}">Adicionar</button>`}
-      </div>`).join("");
-    el.querySelectorAll<HTMLButtonElement>("[data-add-id]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const addId = btn.dataset.addId!;
-        const item = items.find((i) => String(i.id) === addId);
-        if (!item || idSet.has(addId)) return;
-        idSet.add(addId);
-        const list = document.querySelector(`#${listId}`)!;
-        list.querySelector(".empty")?.remove();
-        const div = document.createElement("div");
-        div.className = "evidence-item";
-        div.innerHTML = `<span>${itemLabel(item)}</span><small>${itemSub(item)}</small><button class="danger small">×</button>`;
-        div.querySelector("button")!.addEventListener("click", () => { idSet.delete(addId); div.remove(); });
-        list.appendChild(div);
-        btn.outerHTML = `<span class="badge badge--ok">✓ Adicionado</span>`;
-      });
-    });
-  }
-
-  document.querySelector("#btn-search-crimes-mil")?.addEventListener("click", () => doSimpleSearch("evidence_search_crimes", "search-crimes-mil-input", "crimes-mil-results", "crimes-mil-list", selCrimesMil));
-  document.querySelector("#btn-search-crimes-com")?.addEventListener("click", () => doSimpleSearch("evidence_search_crimes", "search-crimes-com-input", "crimes-com-results", "crimes-com-list", selCrimesCom));
-  document.querySelector("#btn-search-rdpm")?.addEventListener("click", () => doSimpleSearch("evidence_search_rdpm", "search-rdpm-input", "rdpm-results", "rdpm-list", selRdpm));
-
-  // ── Art. 29 / Art. 32 sections (infração + analogia RDPM obrigatória) ──
-  const art29 = new Map<string, string>(); // infracao_id -> analogia_id
-  const art32 = new Map<string, string>();
-  ev.art29.forEach((a) => art29.set(a.infracao_id, a.analogia_id));
-  ev.art32.forEach((a) => art32.set(a.infracao_id, a.analogia_id));
-
-  function wireArtItem(row: HTMLElement, map: Map<string, string>) {
-    const infracaoId = row.dataset.infracao!;
-    row.querySelector<HTMLButtonElement>(".art-remove")!.addEventListener("click", () => { map.delete(infracaoId); row.remove(); });
-    const input = row.querySelector<HTMLInputElement>(".analogia-input")!;
-    const results = row.querySelector<HTMLElement>(".analogia-results")!;
-    const current = row.querySelector<HTMLElement>(".analogia-current")!;
-    row.querySelector<HTMLButtonElement>(".analogia-search-btn")!.addEventListener("click", async () => {
-      const termo = input.value.trim();
-      const resp = await call<EvidItem[]>("evidence_search_rdpm", { termo });
-      const items = resp.data ?? [];
-      if (!items.length) { results.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
-      results.innerHTML = items.map((t) => `
-        <div class="evidence-result-item">
-          <div><strong>Art. ${escapeHtml(String(t.artigo ?? "?"))}, Inc. ${escapeHtml(String(t.inciso ?? ""))}</strong> — <small>${escapeHtml(String(t.texto ?? "").substring(0, 70))}</small></div>
-          <button class="outline small" data-pick="${escapeHtml(String(t.id))}" data-label="Art. ${escapeHtml(String(t.artigo ?? "?"))}, Inc. ${escapeHtml(String(t.inciso ?? ""))}">Usar</button>
-        </div>`).join("");
-      results.querySelectorAll<HTMLButtonElement>("[data-pick]").forEach((b) => {
-        b.addEventListener("click", () => {
-          map.set(infracaoId, b.dataset.pick!);
-          current.textContent = b.dataset.label!;
-          results.innerHTML = "";
-          input.value = "";
-        });
-      });
-    });
-  }
-
-  document.querySelectorAll<HTMLElement>("#art29-list .art-item").forEach((row) => wireArtItem(row, art29));
-  document.querySelectorAll<HTMLElement>("#art32-list .art-item").forEach((row) => wireArtItem(row, art32));
-
-  async function doArtSearch(command: string, inputId: string, resultsId: string, listId: string, map: Map<string, string>) {
-    const termo = (document.querySelector<HTMLInputElement>(`#${inputId}`)?.value ?? "").trim();
-    const resp = await call<EvidItem[]>(command, { termo });
-    const items = resp.data ?? [];
-    const el = document.querySelector(`#${resultsId}`)!;
-    if (!items.length) { el.innerHTML = `<p class="empty">Sem resultados.</p>`; return; }
-    el.innerHTML = items.map((item) => `
-      <div class="evidence-result-item">
-        <div><strong>Inc. ${escapeHtml(String(item.inciso ?? ""))}</strong> — <small>${escapeHtml(String(item.texto ?? "").substring(0, 80))}</small></div>
-        ${map.has(String(item.id)) ? `<span class="badge badge--ok">✓ Adicionado</span>` : `<button class="outline small" data-add-id="${escapeHtml(String(item.id))}">Adicionar</button>`}
-      </div>`).join("");
-    el.querySelectorAll<HTMLButtonElement>("[data-add-id]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const addId = btn.dataset.addId!;
-        const item = items.find((i) => String(i.id) === addId);
-        if (!item || map.has(addId)) return;
-        map.set(addId, "");
-        const list = document.querySelector(`#${listId}`)!;
-        list.querySelector(".empty")?.remove();
-        const wrap = document.createElement("div");
-        wrap.innerHTML = artRow(addId, `Inc. ${String(item.inciso ?? "")}`, String(item.texto ?? ""), "", "");
-        const row = wrap.firstElementChild as HTMLElement;
-        list.appendChild(row);
-        wireArtItem(row, map);
-        btn.outerHTML = `<span class="badge badge--ok">✓ Adicionado</span>`;
-      });
-    });
-  }
-
-  document.querySelector("#btn-search-art29")?.addEventListener("click", () => doArtSearch("evidence_search_art29", "search-art29-input", "art29-results", "art29-list", art29));
-  document.querySelector("#btn-search-art32")?.addEventListener("click", () => doArtSearch("evidence_search_art32", "search-art32-input", "art32-results", "art32-list", art32));
-
-  document.querySelector<HTMLButtonElement>("#save-evidence")?.addEventListener("click", async () => {
-    const cats = [...document.querySelectorAll<HTMLInputElement>("input[name='cat']:checked")].map((el) => el.value);
-    const art29Sel = [...art29.entries()];
-    const art32Sel = [...art32.entries()];
-    if (art29Sel.some(([, an]) => !an) || art32Sel.some(([, an]) => !an)) {
-      alert("Cada infração do Art. 29 / Art. 32 precisa de uma transgressão RDPM por analogia.");
-      return;
-    }
-    const resp = await call("evidence_save_for_pm", {
-      request: {
-        pm_envolvido_id: evidencePmId,
-        categorias: cats,
-        crimes_militares: [...selCrimesMil],
-        crimes_comuns: [...selCrimesCom],
-        rdpm: [...selRdpm],
-        art29: art29Sel.map(([infracao_id, analogia_id]) => ({ infracao_id, analogia_id })),
-        art32: art32Sel.map(([infracao_id, analogia_id]) => ({ infracao_id, analogia_id })),
-      }
-    });
-    if (!resp.ok) { alert(resp.error ?? "Falha ao salvar."); return; }
-    evidencePmId = null;
-    void renderDetail(route);
-  });
-}
-
-async function renderPrazosGlobal() {
-  shell(`<section class="panel"><p>Carregando...</p></section>`);
-  const [upcomingResp, overdueResp, summaryResp] = await Promise.all([
-    call<unknown[]>("deadlines_upcoming", { days_ahead: 14 }),
-    call<unknown[]>("deadlines_overdue"),
-    call<Record<string, unknown>>("deadlines_dashboard"),
-  ]);
-
-  const upcoming: unknown[] = upcomingResp.data ?? [];
-  const overdue: unknown[] = overdueResp.data ?? [];
-  const summary = summaryResp.data ?? {};
-
-  const printRoute = { path: "/prazos", label: "Prazos", group: "", printable: true };
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Prazos</h1></div>
-        <div class="page-head-right">${exportBar(printRoute)}</div>
-      </div>
-      <div class="stat-grid" style="margin-bottom:24px">
-        <div class="stat-card"><span class="stat-value">${escapeHtml(String(summary.total ?? 0))}</span><span class="stat-label">Total</span></div>
-        <div class="stat-card stat-card--alert"><span class="stat-value">${escapeHtml(String(summary.vencidos ?? 0))}</span><span class="stat-label">Vencidos</span></div>
-        <div class="stat-card"><span class="stat-value">${escapeHtml(String(summary.proximos_7_dias ?? 0))}</span><span class="stat-label">Próximos 7 dias</span></div>
-      </div>
-      ${overdue.length > 0 ? `
-        <h2 style="color:#dc2626;margin:0 0 12px">Vencidos (${overdue.length})</h2>
-        ${tableFrom(overdue, printRoute)}
-      ` : ""}
-      <h2 style="margin:24px 0 12px">Próximos 14 dias (${upcoming.length})</h2>
-      ${upcoming.length > 0 ? tableFrom(upcoming, printRoute) : `<p class="empty">Nenhum prazo próximo.</p>`}
-    </section>
-  `);
-  bindExportEvents(printRoute);
 }
 
 async function renderMonthlyMap() {
@@ -1568,18 +1175,20 @@ async function renderUserDetail(route: Route) {
   type UserStats = Record<string, unknown>;
   type ProcItem = Record<string, unknown>;
 
-  const [userResp, statsResp, respResp, escrivaoResp, envolvResp] = await Promise.all([
+  // "Como encarregado" e "como escrivão" eram dois comandos porque os papéis
+  // estavam escritos no código. Agora o papel é configuração por apuratório, e
+  // um único comando devolve todas as designações — separá-las por nome de
+  // papel aqui seria reintroduzir o hardcode que a refatoração eliminou.
+  const [userResp, statsResp, designResp, envolvResp] = await Promise.all([
     call<Record<string, unknown>>("users_get", { id: detailId }),
     call<UserStats>("users_statistics", { id: detailId }),
-    call<ProcItem[]>("users_proceedings_responsible", { id: detailId }),
-    call<ProcItem[]>("users_proceedings_escrivao", { id: detailId }),
+    call<ProcItem[]>("users_proceedings_designated", { id: detailId }),
     call<ProcItem[]>("users_proceedings_involved", { id: detailId }),
   ]);
 
   const user = userResp.data ?? {};
   const stats = statsResp.data ?? {};
-  const procResp = respResp.data ?? [];
-  const procEscrivao = escrivaoResp.data ?? [];
+  const procDesignado = designResp.data ?? [];
   const procEnvolv = envolvResp.data ?? [];
   const isInactive = user.ativo === false;
 
@@ -1640,12 +1249,8 @@ async function renderUserDetail(route: Route) {
       </div>
 
       <div class="detail-section">
-        <h2>Como Encarregado (${procResp.length})</h2>
-        ${procTable(procResp)}
-      </div>
-      <div class="detail-section">
-        <h2>Como Escrivão (${procEscrivao.length})</h2>
-        ${procTable(procEscrivao)}
+        <h2>Designado (${procDesignado.length})</h2>
+        ${procTable(procDesignado)}
       </div>
       <div class="detail-section">
         <h2>Como Envolvido (${procEnvolv.length})</h2>
