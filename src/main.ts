@@ -176,6 +176,14 @@ const routes: Route[] = [
   { path: "/stats/procedimentos", label: "Estatísticas de Procedimentos", group: "Relatórios", printable: true }
 ];
 
+/** Fallback quando `activePath` não casa com nenhuma rota. */
+const DASHBOARD: Route = routes[0] ?? {
+  path: "/dashboard",
+  label: "Dashboard",
+  group: "Geral",
+  command: "dashboard_summary"
+};
+
 function formatBytes(bytes: number): string {
   if (!bytes) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -461,8 +469,9 @@ async function loadSession() {
 
 function groupedRoutes() {
   return routes.reduce<Record<string, Route[]>>((acc, route) => {
-    acc[route.group] = acc[route.group] ?? [];
-    acc[route.group].push(route);
+    const grupo = acc[route.group] ?? [];
+    grupo.push(route);
+    acc[route.group] = grupo;
     return acc;
   }, {});
 }
@@ -530,7 +539,7 @@ function renderLogin(error = "") {
 
   document.querySelector<HTMLFormElement>("#login-form")!.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const data = new FormData(event.currentTarget as HTMLFormElement);
     const response = await call<SessionUser>("auth_login", {
       email: data.get("email"),
       senha: data.get("senha")
@@ -668,8 +677,8 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
       .map(async (f) => {
         const resp = await call<Record<string, string>[]>(f.optionsCommand!);
         dynamicOptions[f.name] = (resp.data ?? []).map((item) => {
-          const valueVal = f.optionsValueKey ? (item[f.optionsValueKey] ?? item.id) : item.id;
-          const labelVal = f.optionsLabelKey ? (item[f.optionsLabelKey] ?? item.id) : valueVal;
+          const valueVal = (f.optionsValueKey ? item[f.optionsValueKey] : item.id) ?? item.id ?? "";
+          const labelVal = (f.optionsLabelKey ? item[f.optionsLabelKey] : valueVal) ?? valueVal;
           return { value: valueVal, label: labelVal };
         });
       })
@@ -705,7 +714,7 @@ async function renderCrudForm(route: Route, row: Record<string, unknown> | null 
 
   document.querySelector<HTMLFormElement>("#crud-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(event.currentTarget as HTMLFormElement);
     const request = buildPayload(config, form);
     const isEdit = Boolean(request.id);
     const command = isEdit && config.updateCommand ? config.updateCommand : config.saveCommand;
@@ -795,7 +804,7 @@ async function renderRoute() {
     return;
   }
 
-  const route = routes.find((item) => item.path === activePath) ?? routes[0];
+  const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
   if (route.path === "/estatisticas/anuais") return renderAnnualStats();
   if (route.path === "/prazos") return renderPrazosGlobal();
