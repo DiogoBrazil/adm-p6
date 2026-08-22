@@ -96,6 +96,12 @@ let routes: Route[] = [
     detailCommand: "users_get"
   },
   { path: "/usuarios/novo", label: "Novo usuário", group: "Usuários", command: "users_form_schema", adminOnly: true },
+  {
+    path: ROTA_CONFIG_APURATORIO,
+    label: "Configuração de apuratórios",
+    group: "Catálogos",
+    adminOnly: true
+  },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
   {
     path: "/estatisticas/encarregados",
