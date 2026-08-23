@@ -6,6 +6,22 @@
 > Este arquivo é a fonte de verdade para retomar o trabalho. Leia as seções 1 a 4
 > antes de mudar qualquer coisa; a seção 8 diz exatamente o que fazer a seguir.
 
+> ## ▶ POR ONDE RETOMAR
+>
+> Os itens **8.1 a 8.4 estão concluídos**: o frontend não tem mais chamada não tipada,
+> os módulos têm teste, todo SQL é validado contra o schema e a composição repetida
+> virou uma view.
+>
+> **O próximo passo é a seção 8.5 — a importação dos 128 processos de produção.** Ela
+> está *totalmente especificada*: decisões fechadas (seção 2, linhas 13 a 16), fatos do
+> dump verificados (seção 4), mapeamento coluna a coluna, as oito etapas, o script da
+> primeira delas por inteiro e os comandos para rodar.
+>
+> **Antes de escrever qualquer coisa, decida os dois bloqueios** descritos no começo da
+> 8.5 — os dois derrubam a transação inteira no meio, e os dois foram medidos no dump:
+> as prorrogações que começam no dia do vencimento anterior (97/97) e as que não têm
+> motivo (58/97).
+
 | | |
 |---|---|
 | **Branch** | `migrate_to_rust_with_tauri` |
@@ -21,7 +37,7 @@
 | Migrations | 4 (eram 32) |
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 44 · 57 · 24 · 2 · 2 |
 | Comandos Tauri | 75 (eram 146) |
-| Backend Rust | 6.919 linhas (eram 9.194) |
+| Backend Rust | 6.909 linhas (eram 9.194) |
 | Testes de integração | **84** (eram 0) |
 | Frontend | 5.072 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
@@ -69,6 +85,10 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 10 | Que catálogos vêm semeados? | **Só o que é lei** e não varia por instalação (migration `0003`). O operacional por unidade fica com o administrador. |
 | 11 | Como o administrador configura um apuratório? | Módulo dedicado `apuratorio_config`, não o CRUD genérico: as duas tabelas de associação têm PK composta, sem `id` e sem `nome`. |
 | 12 | Rumo do frontend | Vanilla TS **dividido em módulos**, sem dependência nova, migrando tela por tela. |
+| 13 | Quantos envolvidos cada apuratório aceita? | **Vem do tipo, não de uma lista à mão.** `procedimento` (CP, FP, IPM, SR, SV) fica **sem limite**; `processo` (CD, CJ, PAD, PADE, PADS) fica com **1**. Um processo disciplinar é instaurado contra um militar; um procedimento apura um fato e alcança quantos alcançar. Espécie nova herda a regra do tipo. |
+| 14 | Os 37 processos sem envolvido na importação | **Criar o envolvido.** Não é inventar fato: os 37 têm `nome_pm_id` e `status_pm` preenchidos, e 13 têm solução e 7 têm penalidade. Como essas três informações só existem em `processo_envolvidos` no schema novo, não criar significaria **perdê-las**. |
+| 15 | As unidades além do 7ºBPM | **São unidades de verdade.** CORREGEPOM (16 processos), 9ºBPM (2) e 11ºBPM (1) entram em `unidades_pm`. Importa para a numeração, que é única por unidade. |
+| 16 | Histórico de mapas salvos e de auditoria | **Não é importado.** Os 107 mapas são snapshots no formato antigo, que a tela nova não sabe renderizar como tabela; as 448 linhas de auditoria são do sistema anterior. Ficam no dump. |
 
 ---
 
@@ -116,7 +136,14 @@ reprocessar o dump.
 | `transgressoes.artigo` mapeia 1:1 com `gravidade` (15=leve, 16=média, 17=grave) | gravidade vem do artigo, não duplicada |
 | `natureza_processo` 0/128, `solucao_final` 0/128, `indicios_categorias` todas `[]` | colunas mortas, removidas |
 | Só **7 dos 236** usuários têm e-mail+senha | separação policial × conta confirmada |
-| `andamentos[].usuario` é **nome em texto**, não id | na importação será preciso casar por nome |
+| `andamentos[].usuario` é **nome em texto**, não id | são só **2 autores distintos** em 64 andamentos, e **os dois casam** com militares cadastrados |
+| `tipo_geral` já separa procedimento (CP, FP, IPM, SR, SV) de processo (CD, CJ, PAD, PADE, PADS) | é a fonte de `tipos_apuratorio` **e** de `max_envolvidos` (decisão 13) |
+| Vários envolvidos é a norma, não exceção: 13 dos 23 IPMs e 19 das 55 SRs têm 2+ | o máximo é 9, num IPM |
+| Os 37 processos sem envolvido têm 37/37 `nome_pm_id`, 37/37 `status_pm = Acusado`, 13 soluções e 7 penalidades | fundamenta a decisão 14 |
+| **97/97 prorrogações começam NO dia do vencimento anterior** | o `EXCLUDE` do schema novo usa intervalo fechado `[]` e as recusaria — **bloqueio, ver 8.5** |
+| **58 das 97 prorrogações não têm motivo** | `ck_prazo_motivo` exige motivo quando `ordem >= 1` — **bloqueio, ver 8.5** |
+| `data_vencimento == data_inicio + dias_adicionados` em 141/141, e `dias > 0` em 141/141 | a coluna gerada reproduz o histórico exatamente |
+| `ativo = true` no prazo coincide com a maior `ordem` em 44/44 processos | a vigência derivada da `ordem` reproduz o legado |
 
 ---
 
@@ -547,29 +574,388 @@ view, e uma coluna renomeada quebraria os quatro de uma vez, só em runtime.
 Nenhum índice novo — a `0001` já traz os três que as derivações usam. Índice redundante
 custa em toda escrita e não paga leitura nenhuma.
 
-### 8.5 Importação dos dados de produção — **depois de tudo acima**
+### 8.5 Importação dos dados de produção — **PRÓXIMO PASSO**
 
-Não iniciada. Ordem: catálogos operacionais → policiais militares → processos →
-envolvidos → designações → prazos → andamentos → enquadramentos → anexos → mapas →
-auditoria.
+Estado: **não iniciada**, mas totalmente especificada. As decisões estão fechadas (linhas 13
+a 16 da seção 2) e os fatos do dump foram verificados um a um (seção 4). O que falta é
+escrever e rodar o script.
 
-Pontos de atenção já mapeados:
+#### O que entra
 
-- `usuarios.posto_graduacao` do legado é texto livre: `ST PM` (7 militares) → `SUB TEN PM`,
-  `TC PM` (1) → `TEN CEL PM`, `ASP OF PM` (1) → já existe no catálogo pela 0003.
-- `andamentos[].usuario` é **nome em texto**; casar por nome ou deixar o autor nulo.
-- As 6 soluções `Sugerido_*` vão para `tipos_solucao_sugerida`; as demais para
-  `tipos_solucao_decidida`.
-- `nome_vitima` é array JSON em 71 de 87 registros → `processo_pessoas`.
-- `pessoas_inquiridas` (3 registros, JSON em coluna `TEXT`) → `processo_pessoas`.
-- `historico_encarregados` (19 registros) → `processo_designacoes`, com `data_fim` do
-  antecessor = `data_substituicao` = `data_inicio` do sucessor.
-- Os 37 processos sem envolvidos: criar um envolvido `ordem = 1` de `nome_pm_id` +
-  `status_pm`.
-- `motorista_id` (15) → `e_condutor = true` no envolvido correspondente.
-- Só **1** dos 128 processos tem PDF (41 MB).
-- A 0003 **preservou os UUIDs do dump** para municípios, infrações penais e do Estatuto —
-  use isso para casar sem reconsultar.
+| | |
+|---:|:---|
+| 128 | processos e procedimentos, de 2018 a 2026 |
+| 236 | policiais militares — **7** com conta de acesso |
+| 156 | envolvidos, **mais 37 criados** dos processos que os guardavam em coluna (decisão 14) |
+| 141 | prazos — 44 iniciais e 97 prorrogações |
+| 19 | substituições de encarregado → `processo_designacoes` |
+| 64 | andamentos, de 2 autores, ambos identificáveis |
+| 22 | registros de indício → 12 crimes, 11 transgressões do RDPM, 3 do art. 29 |
+| 1 | PDF (41 MB), de um único processo |
+
+**Não entra:** os 107 mapas salvos e as 448 linhas de auditoria (decisão 16). E as colunas
+mortas: `natureza_processo` (0/128), `solucao_final` (0/128), `indicios_categorias` (todas
+vazias).
+
+---
+
+#### DOIS BLOQUEIOS QUE PRECISAM DE DECISÃO ANTES DE RODAR
+
+Ambos foram medidos no dump, e ambos derrubam a transação inteira no meio.
+
+**Bloqueio 1 — as prorrogações começam no dia do vencimento anterior.**
+
+`ex_prazo_sobreposicao` usa `daterange(data_inicio, data_inicio + dias, '[]')` — intervalo
+**fechado nas duas pontas**. No legado, **97 de 97** prorrogações começam exatamente no dia
+em que o prazo anterior vence. Sob `[]`, os dois intervalos compartilham esse dia e o
+PostgreSQL recusa.
+
+> Exemplo real: o processo `f430289a…` tem a 4ª prorrogação começando em 2024-09-26,
+> mesmo dia em que a 3ª vence.
+
+Não é um defeito do dado: é uma **convenção de domínio diferente** da que o schema novo
+adotou. O teste `prorrogacao_comeca_no_dia_seguinte_ao_vencimento_anterior` fixou "o dia
+seguinte"; a Seção sempre praticou "no mesmo dia".
+
+| Saída | O que custa |
+|---|---|
+| **A — deslocar as datas em +1 dia na importação** | Reescreve 97 vencimentos registrados. Viola o princípio 5 ("configuração não reescreve fatos"). **Não recomendo.** |
+| **B — trocar o `EXCLUDE` para `[)`** | Uma migration de uma linha. Mas muda o sentido de `data_vencimento`: deixaria de ser o último dia válido. **Não recomendo.** |
+| **C — comparar `[data_inicio, data_inicio + dias)` no `EXCLUDE`, mantendo `data_vencimento` como está** | O intervalo de *ocupação* passa a excluir o dia do vencimento, que é justamente o dia em que a prorrogação é concedida. `data_vencimento` continua sendo o último dia válido do prazo. **É a que reflete a prática.** |
+
+Se for a C, a migration `0005` altera só a constraint, e o teste
+`prorrogacao_comeca_no_dia_seguinte_ao_vencimento_anterior` passa a admitir também o mesmo
+dia.
+
+**Bloqueio 2 — 58 das 97 prorrogações não têm motivo.**
+
+`ck_prazo_motivo` exige `motivo` não vazio quando `ordem >= 1`. Saídas: preencher com um
+texto único e reconhecível (`'Motivo não registrado no sistema anterior'`), ou relaxar o
+CHECK para valer só em registros novos. A primeira é honesta e não mexe no schema — o texto
+diz exatamente o que aconteceu.
+
+---
+
+#### Onde o script mora e como se roda
+
+**SQL, não um binário Rust.** O trabalho é mapeamento de conjuntos, o PostgreSQL lê os JSON
+do legado nativamente (`jsonb_array_elements`), e não sobra código descartável no
+repositório. O dump legado é restaurado num **schema separado do mesmo banco**, e o script
+faz `INSERT ... SELECT` cruzando os dois.
+
+O script **não é uma migration**: é um roteiro de uso único, que vive em
+`src-tauri/importacao/` e não é aplicado pelo `sqlx::migrate!`.
+
+O dump legado **não pode ser carregado direto num schema `legado`**: ele qualifica tudo com
+`public.` e referencia o role `app_user`, que não existe aqui. Trocar `public.` por `legado.`
+com `sed` sobre o arquivo arriscaria tocar nos dados. O caminho abaixo foi **testado** e não
+mexe em uma linha do dump.
+
+```bash
+# ── 1. Banco da aplicação, limpo, com as 4 migrations aplicadas ──────────────
+docker compose down -v && docker compose up -d
+cd src-tauri && sqlx migrate run --source migrations && cd ..
+
+# ── 2. O dump legado entra num banco PRÓPRIO, exatamente como está ───────────
+# O role `app_user` aparece nos ALTER ... OWNER TO do dump; criá-lo vazio basta.
+docker compose exec -T postgres psql -U adm_p6_user -d postgres -q \
+  -c "CREATE DATABASE adm_p6_legado;" \
+  -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='app_user')
+        THEN CREATE ROLE app_user; END IF; END \$\$;"
+
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_legado -q < adm-p6.sql
+
+# ── 3. Lá dentro, `public` vira `legado`; então o schema é exportado ─────────
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_legado -q \
+  -c "ALTER SCHEMA public RENAME TO legado;"
+
+docker compose exec -T postgres pg_dump -U adm_p6_user -d adm_p6_legado \
+  -n legado --no-owner --no-acl > /tmp/legado.sql        # ~43 MB
+
+# ── 4. E entra ao lado do schema novo, sem tocar em `public` ────────────────
+# NÃO crie o schema antes: o pg_dump -n já traz o CREATE SCHEMA.
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
+  -q -v ON_ERROR_STOP=1 < /tmp/legado.sql
+
+# ── 5. Conferir que o legado chegou inteiro ANTES de mapear ─────────────────
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db -t \
+  -c "SELECT 'processos: '||count(*) FROM legado.processos_procedimentos;" \
+  -c "SELECT 'militares: '||count(*) FROM legado.usuarios;" \
+  -c "SELECT 'prazos:    '||count(*) FROM legado.prazos_processo;"
+# espera: 128 · 236 · 141
+
+# ── 6. A importação, etapa por etapa ───────────────────────────────────────
+for etapa in src-tauri/importacao/0*.sql; do
+  echo "── $etapa"
+  docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
+      -v ON_ERROR_STOP=1 --single-transaction -q < "$etapa" || break
+done
+
+# ── 7. Conferência final ───────────────────────────────────────────────────
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
+    < src-tauri/importacao/99_conferencia.sql
+
+# ── 8. Só depois de tudo conferido, o legado sai ───────────────────────────
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
+    -c "DROP SCHEMA legado CASCADE;"
+docker compose exec -T postgres psql -U adm_p6_user -d postgres \
+    -c "DROP DATABASE adm_p6_legado;"
+```
+
+**Cada etapa é um arquivo e uma transação.** Se a 04 falhar, as três primeiras já estão
+gravadas e você corrige só a 04 — em vez de recomeçar do zero a cada tentativa. É o que
+permite ir verificando de forma granular, que foi o pedido.
+
+---
+
+#### As oito etapas, na ordem que as FKs impõem
+
+| # | Arquivo | O que faz | Confere com |
+|---|---|---|---|
+| 01 | `01_catalogos.sql` | `tipos_apuratorio`, `apuratorios`, `tipos_documento`, `unidades_pm`, `naturezas_fato`, `status_envolvido`, soluções, penalidades, `papeis_processo`, `tipos_andamento`, `categorias_indicio` | 2 · 10 · 3 · 4 · **16** · 4 · 3 · 5 · 5 |
+| 02 | `02_config_apuratorio.sql` | `apuratorio_documentos_iniciadores` e `apuratorio_papeis` — **sem isto a FK composta recusa todo processo** | todo par (espécie, documento) observado no dump existe |
+| 03 | `03_policiais.sql` | 236 militares; depois as 7 contas | 236 · 7 |
+| 04 | `04_processos.sql` | os 128, com os ids do legado preservados | 128, e 0 violação de numeração |
+| 05 | `05_envolvidos.sql` | 156 do legado + 37 criados (decisão 14) | **193** envolvidos |
+| 06 | `06_designacoes.sql` | encarregado, escrivão, presidente, interrogante + as 19 substituições | ≥ 128 designações |
+| 07 | `07_prazos_andamentos.sql` | 141 prazos e 64 andamentos | 141 · 64 |
+| 08 | `08_enquadramentos_anexos.sql` | indícios, crimes, RDPM, art. 29, e o único PDF | 12 · 11 · 3 · 1 |
+
+---
+
+#### O mapeamento, coluna a coluna
+
+**Catálogos (etapa 01).** Tudo sai de `DISTINCT` do próprio dump — nenhuma lista escrita à
+mão:
+
+| Catálogo novo | Vem de | Observação |
+|---|---|---|
+| `tipos_apuratorio` | `DISTINCT tipo_geral` | exatamente 2: `procedimento`, `processo` |
+| `apuratorios` | `DISTINCT (tipo_geral, tipo_detalhe)` | `max_envolvidos = NULL` se procedimento, `1` se processo (decisão 13) |
+| `tipos_documento` | `DISTINCT documento_iniciador` | Portaria, Memorando Disciplinar, Feito Preliminar |
+| `unidades_pm` | `DISTINCT local_origem` | 7ºBPM, CORREGEPOM, 9ºBPM, 11ºBPM (decisão 15) |
+| `naturezas_fato` | `DISTINCT natureza_procedimento` | **16** (os outros 40 processos não têm rubrica); `exige_condutor = true` nas 2 de sinistro |
+| `status_envolvido` | `DISTINCT status_pm` ∪ o das linhas de envolvido | Sindicado, Acusado, Indiciado, Investigado |
+| `tipos_solucao_decidida` | `solucao_tipo` sem prefixo `Sugerido_` | Homologado, Punido, Arquivado, Absolvido, Avocado — `permite_penalidade` só em Punido |
+| `tipos_solucao_sugerida` | `solucao_tipo` com prefixo `Sugerido_` | 3 |
+| `tipos_penalidade` | `DISTINCT penalidade_tipo` | `usa_quantidade_dias` em Prisão e Detenção |
+| `papeis_processo` | as colunas de papel | Encarregado, Escrivão, Presidente, Interrogante |
+
+**Processo (etapa 04).** As três colunas de número do legado eram o mesmo conceito
+(verificado: `numero == numero_portaria` em 88/89, `numero_memorando` 32/32, `numero_feito`
+7/7):
+
+| Novo | Legado |
+|---|---|
+| `id` | `id` — **preservado**, é o que faz as etapas seguintes casarem sem reconsultar |
+| `apuratorio_id` | resolve `tipo_detalhe` no catálogo criado na etapa 01 |
+| `documento_iniciador_id` | resolve `documento_iniciador` |
+| `numero_documento` | `numero` |
+| `numero_controle` | `numero_controle` (é conceito distinto: difere de `numero` em 5 linhas) |
+| `unidade_origem_id` | resolve `local_origem` |
+| `municipio_fato_id` | resolve `local_fatos` — os UUIDs de município **foram preservados na 0003** |
+| `natureza_fato_id` | resolve `natureza_procedimento` (88 de 128 preenchidos) |
+| `data_conclusao` | `data_conclusao` — a coluna `concluido` é descartada (coincidem 128/128) |
+| `processo_sei`, `numero_rgf`, `resumo_fatos`, `data_*`, `ativo` | diretos |
+
+Os 3 CPs (Carta Precatória) ganham também uma linha em `carta_precatoria_detalhes`, com
+`unidade_deprecada` e `deprecante`.
+
+**Envolvidos (etapa 05).** Duas fontes, unidas:
+
+```sql
+-- (a) os 156 registrados na tabela do legado
+SELECT procedimento_id, pm_id, status_pm, ordem  FROM legado.procedimento_pms_envolvidos
+UNION ALL
+-- (b) os 37 que o legado guardava em coluna do processo (decisão 14)
+SELECT p.id, p.nome_pm_id, p.status_pm, 1
+  FROM legado.processos_procedimentos p
+ WHERE NOT EXISTS (SELECT 1 FROM legado.procedimento_pms_envolvidos e
+                    WHERE e.procedimento_id = p.id)
+```
+
+Sobre esses envolvidos vão ainda:
+- `solucao_sugerida_id` / `solucao_decidida_id` — de `solucao_tipo`, conforme o prefixo;
+- `penalidade_tipo_id` e `penalidade_dias` — de `penalidade_tipo` / `penalidade_dias`;
+- `e_condutor = true` onde `motorista_id = pm_id` (15 casos, todos entre os envolvidos).
+
+**Vítimas e inquiridos → `processo_pessoas`.** `nome_vitima` é array JSON em **71 dos 87**
+preenchidos; os outros 16 são texto simples. `pessoas_inquiridas` são 3 registros, JSON
+dentro de coluna `TEXT`.
+
+**Designações (etapa 06).** As quatro colunas de papel viram linhas, e o `historico_encarregados`
+fecha o período do antecessor:
+
+| Coluna do legado | Papel |
+|---|---|
+| `responsavel_id` | Encarregado (procedimento) ou Presidente (processo) — depende de `tipo_geral` |
+| `escrivao_id`, `escrivao_processo_id` | Escrivão |
+| `presidente_id` | Presidente |
+| `interrogante_id` | Interrogante |
+
+Nas 19 substituições: `data_fim` do antecessor = `data_substituicao` = `data_inicio` do
+sucessor (decisão 6, intervalo `[)`).
+
+**Prazos (etapa 07).** `ordem = COALESCE(ordem_prorrogacao, 0)`, `dias = dias_adicionados`.
+A coluna `data_vencimento` do schema novo é **gerada** e reproduz o legado exatamente
+(verificado 141/141). A coluna `ativo` do legado é descartada: a vigência passa a ser
+derivada da maior `ordem`, e as duas coincidem em 44/44.
+
+**Andamentos (etapa 07).** De `andamentos` jsonb:
+
+```sql
+INSERT INTO processo_andamentos (processo_id, descricao, ocorrido_em, registrado_por_id)
+SELECT p.id,
+       a->>'texto',
+       (a->>'data')::timestamptz,
+       u.id                      -- casado por nome; os 2 autores casam
+  FROM legado.processos_procedimentos p
+  CROSS JOIN LATERAL jsonb_array_elements(p.andamentos) a
+  LEFT JOIN policiais_militares pm ON pm.nome = a->>'usuario'
+  LEFT JOIN usuarios u            ON u.policial_militar_id = pm.id;
+```
+
+**Enquadramentos (etapa 08).** As cinco tabelas do legado viram três. A esfera penal de
+`pm_envolvido_crimes` sai do `dispositivo_legal` do artigo (Código Penal Militar → Militar;
+Código Penal e LCP → Comum) — é a única inferência da importação, e vale registrar que
+depois disso a esfera passa a ser escolhida no vínculo (decisão 4). As categorias de indício
+saem de `pm_envolvido_indicios.categorias_indicios`, que tem 6 combinações distintas.
+
+---
+
+#### Exemplo: a etapa 01, por inteiro
+
+Serve de molde para as outras sete — resolução por `DISTINCT`, id do legado preservado onde
+existe, e nenhuma sigla escrita à mão. **Este script foi executado contra o dump real**: as
+contagens ao final da seção são as que ele produziu, e a decisão 13 saiu correta
+(CP/FP/IPM/SR/SV sem limite; CD/CJ/PAD/PADE/PADS com 1).
+
+```sql
+-- src-tauri/importacao/01_catalogos.sql
+-- Catálogos operacionais, derivados do próprio dump. Roda em transação única.
+BEGIN;
+
+-- Os dois tipos, direto do que o legado já classificava.
+INSERT INTO tipos_apuratorio (nome)
+SELECT DISTINCT initcap(tipo_geral) FROM legado.processos_procedimentos
+ON CONFLICT DO NOTHING;
+
+-- Uma espécie por (tipo_geral, tipo_detalhe). `max_envolvidos` vem do TIPO
+-- (decisão 13): procedimento sem limite, processo com 1.
+INSERT INTO apuratorios (sigla, nome, tipo_apuratorio_id, prazo_base_dias,
+                         max_envolvidos, exige_natureza_fato)
+SELECT DISTINCT
+       l.tipo_detalhe,
+       l.tipo_detalhe,                       -- nome por extenso: revisar depois na tela
+       ta.id,
+       30,                                   -- prazo base: revisar por espécie
+       CASE WHEN l.tipo_geral = 'processo' THEN 1 ELSE NULL END,
+       (l.tipo_geral = 'procedimento')       -- procedimento apura fato: exige natureza
+  FROM legado.processos_procedimentos l
+  JOIN tipos_apuratorio ta ON lower(ta.nome) = lower(l.tipo_geral)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO tipos_documento (nome)
+SELECT DISTINCT documento_iniciador FROM legado.processos_procedimentos
+ WHERE documento_iniciador IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- Unidades (decisão 15). O município é o do 7ºBPM; ajustar se divergir.
+INSERT INTO unidades_pm (nome, municipio_id)
+SELECT DISTINCT l.local_origem,
+       (SELECT id FROM municipios_distritos WHERE nome ILIKE 'Ji-Paran%' LIMIT 1)
+  FROM legado.processos_procedimentos l
+ WHERE l.local_origem IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- Rubrica do fato. `exige_condutor` marca as de sinistro — o atributo semântico
+-- que substituiu o `natureza.includes('sinistro de trânsito')` do legado.
+INSERT INTO naturezas_fato (nome, exige_condutor)
+SELECT DISTINCT natureza_procedimento,
+       natureza_procedimento ILIKE '%sinistro de tr_nsito%'
+  FROM legado.processos_procedimentos
+ WHERE natureza_procedimento IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+INSERT INTO status_envolvido (nome)
+SELECT DISTINCT status_pm FROM legado.procedimento_pms_envolvidos WHERE status_pm IS NOT NULL
+UNION
+SELECT DISTINCT status_pm FROM legado.processos_procedimentos     WHERE status_pm IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+-- Solução: o prefixo `Sugerido_` separa os dois catálogos (decisão 3).
+INSERT INTO tipos_solucao_sugerida (nome)
+SELECT DISTINCT replace(substr(solucao_tipo, 10), '_', ' ')
+  FROM legado.processos_procedimentos WHERE solucao_tipo LIKE 'Sugerido\_%'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO tipos_solucao_decidida (nome, permite_penalidade)
+SELECT DISTINCT solucao_tipo, solucao_tipo = 'Punido'
+  FROM legado.processos_procedimentos
+ WHERE solucao_tipo IS NOT NULL AND solucao_tipo NOT LIKE 'Sugerido\_%'
+ON CONFLICT DO NOTHING;
+
+-- `usa_quantidade_dias` só onde o legado registrou dias.
+INSERT INTO tipos_penalidade (nome, usa_quantidade_dias)
+SELECT replace(penalidade_tipo, '_', ' '),
+       bool_or(penalidade_dias IS NOT NULL)
+  FROM legado.processos_procedimentos
+ WHERE penalidade_tipo IS NOT NULL
+ GROUP BY penalidade_tipo
+ON CONFLICT DO NOTHING;
+
+COMMIT;
+```
+
+Conferência da etapa:
+
+```sql
+SELECT 'tipos_apuratorio' t, count(*) FROM tipos_apuratorio       -- 2
+UNION ALL SELECT 'apuratorios',  count(*) FROM apuratorios         -- 10
+UNION ALL SELECT 'tipos_documento', count(*) FROM tipos_documento  -- 3
+UNION ALL SELECT 'unidades_pm', count(*) FROM unidades_pm          -- 4
+UNION ALL SELECT 'naturezas_fato', count(*) FROM naturezas_fato    -- 16
+UNION ALL SELECT 'status_envolvido', count(*) FROM status_envolvido; -- 4
+```
+
+---
+
+#### Como se sabe que deu certo
+
+**Contagens** (`99_conferencia.sql`): 128 processos · 193 envolvidos · 141 prazos ·
+64 andamentos · 236 militares · 7 contas · 12 crimes · 11 transgressões · 3 do art. 29.
+
+**Invariantes**, que valem mais que as contagens:
+
+```sql
+-- Nenhum processo perdeu espécie, unidade ou natureza na tradução
+SELECT count(*) FROM processos_procedimentos p
+  JOIN legado.processos_procedimentos l ON l.id = p.id
+  JOIN apuratorios a ON a.id = p.apuratorio_id
+  JOIN unidades_pm u ON u.id = p.unidade_origem_id
+ WHERE a.sigla <> l.tipo_detalhe OR u.nome <> l.local_origem;   -- espera 0
+
+-- Todo processo tem responsável, e todo envolvido tem status
+SELECT count(*) FROM v_processos_detalhados WHERE responsavel_nome IS NULL;  -- espera 0
+
+-- As 7 penalidades e as 13 soluções dos 37 sobreviveram (decisão 14)
+SELECT count(*) FROM processo_envolvidos WHERE penalidade_tipo_id IS NOT NULL;  -- espera 7+
+```
+
+**Amostra manual:** abrir cinco processos na tela e comparar campo a campo com o legado —
+de preferência o IPM com 9 envolvidos, um PADS com penalidade, o processo com PDF, uma CP e
+um dos que têm 8 prorrogações.
+
+**Um teste automatizado** vale a pena, no formato dos outros: carrega um recorte do dump num
+banco descartável, roda as oito etapas e afirma as contagens e invariantes acima.
+
+---
+
+#### Depois da importação, uma regra muda
+
+Com dado real dentro, **acaba o `docker compose down -v`**. A partir daí toda mudança de
+schema é migration incremental, e editar um `.sql` já aplicado passa a ser erro — o
+`sqlx::migrate!` guarda checksum por versão. Ver a seção 7.
 
 ### 8.6 Higiene — **baixa**
 
@@ -589,12 +975,13 @@ Pontos de atenção já mapeados:
 
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
-**Solução decidida: por envolvido ou por processo?**
-Ficou **por envolvido**. Mas vale registrar o que os dados mostram: `Homologado` (48) e
-`Avocado` (3) só aparecem em procedimentos e parecem ser atos sobre o **procedimento
-inteiro**; já `Punido` (7) e `Absolvido` (4) só aparecem em processos e são claramente
-individuais. Se, ao cadastrar procedimentos com 3+ sindicados, a solução decidida se
-repetir idêntica em todos, é sinal de que ela é do processo — e aí basta mover a coluna.
+**Solução decidida: por envolvido ou por processo? — RESOLVIDO.**
+Ficou **por envolvido**, e a investigação da importação confirmou. Os 7 `Punido` e os 4
+`Absolvido` são exatamente os processos disciplinares (PADS/PAD/CD/CJ/PADE), e **cada um
+tem um único acusado** — 37/37 com `nome_pm_id` preenchido. Já `Homologado` (48) e
+`Avocado` (3) só aparecem em procedimentos. A coluna fica onde está. Continua valendo o
+sinal de alerta: se, ao cadastrar um procedimento com 3+ sindicados, a solução decidida se
+repetir idêntica em todos, é porque naquele caso ela é do processo.
 
 **"Como escrivão" saiu do detalhe de usuário.** Virou uma seção só, "Designado", porque
 separar por nome de papel reintroduziria o hardcode que a refatoração eliminou. Se a Seção
@@ -672,4 +1059,5 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
 | como uma tela é montada de metadados | `src/telas/catalogos.ts` |
 | como os campos condicionais saem do dado | `src/telas/processo.ts` (cabeçalho do arquivo) |
+| o roteiro da importação, etapa por etapa | seção **8.5** deste arquivo |
 | o diagnóstico do estado anterior | `ANALISE-MIGRACAO.md` |
