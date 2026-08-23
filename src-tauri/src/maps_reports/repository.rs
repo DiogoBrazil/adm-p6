@@ -55,54 +55,38 @@ pub async fn map_rows(
 ) -> Result<Vec<MapRow>, sqlx::Error> {
     sqlx::query_as::<_, MapRow>(
         r#"
-        SELECT p.id::text                                      AS processo_id,
-               a.sigla                                         AS apuratorio_sigla,
-               a.sigla || ' nº ' || COALESCE(p.numero_controle, p.numero_documento)
-                   || '/' || un.nome || '/'
-                   || EXTRACT(YEAR FROM p.data_instauracao)::int::text AS rotulo,
-               un.nome                                         AS unidade_origem,
-               nf.nome                                         AS natureza_fato,
-               p.data_instauracao                              AS data_instauracao,
-               p.data_conclusao                                AS data_conclusao,
-               resp.nome                                       AS responsavel_nome,
-               env.lista                                       AS envolvidos,
-               prazo.data_vencimento                           AS prazo_vencimento,
-               andam.descricao                                 AS ultimo_andamento,
-               andam.ocorrido_em                               AS ultimo_andamento_em
-          FROM processos_procedimentos p
-          JOIN apuratorios a    ON a.id = p.apuratorio_id
-          JOIN unidades_pm un   ON un.id = p.unidade_origem_id
-          LEFT JOIN naturezas_fato nf ON nf.id = p.natureza_fato_id
-          LEFT JOIN LATERAL (
-              SELECT pmr.nome
-                FROM processo_designacoes d
-                JOIN apuratorio_papeis ap    ON ap.apuratorio_id = d.apuratorio_id
-                                            AND ap.papel_id = d.papel_id
-                JOIN policiais_militares pmr ON pmr.id = d.policial_militar_id
-               WHERE d.processo_id = p.id AND d.data_fim IS NULL AND ap.e_responsavel
-               LIMIT 1
-          ) resp ON true
+        SELECT v.id::text          AS processo_id,
+               v.apuratorio_sigla  AS apuratorio_sigla,
+               v.rotulo            AS rotulo,
+               v.unidade_origem    AS unidade_origem,
+               v.natureza_fato     AS natureza_fato,
+               v.data_instauracao  AS data_instauracao,
+               v.data_conclusao    AS data_conclusao,
+               v.responsavel_nome  AS responsavel_nome,
+               env.lista           AS envolvidos,
+               v.prazo_vencimento  AS prazo_vencimento,
+               andam.descricao     AS ultimo_andamento,
+               andam.ocorrido_em   AS ultimo_andamento_em
+          FROM v_processos_detalhados v
+          -- Os envolvidos por extenso e o último andamento são do mapa, não da
+          -- composição comum: ficam aqui.
           LEFT JOIN LATERAL (
               SELECT string_agg(pg.sigla || ' ' || pme.nome, ', ' ORDER BY e.ordem) AS lista
                 FROM processo_envolvidos e
                 JOIN policiais_militares pme ON pme.id = e.policial_militar_id
                 JOIN postos_graduacoes pg    ON pg.id = pme.posto_graduacao_id
-               WHERE e.processo_id = p.id
+               WHERE e.processo_id = v.id
           ) env ON true
           LEFT JOIN LATERAL (
-              SELECT pr.data_vencimento FROM processo_prazos pr
-               WHERE pr.processo_id = p.id ORDER BY pr.ordem DESC LIMIT 1
-          ) prazo ON true
-          LEFT JOIN LATERAL (
               SELECT an.descricao, an.ocorrido_em FROM processo_andamentos an
-               WHERE an.processo_id = p.id AND an.cancelado_em IS NULL
+               WHERE an.processo_id = v.id AND an.cancelado_em IS NULL
                ORDER BY an.ocorrido_em DESC LIMIT 1
           ) andam ON true
-         WHERE p.ativo
-           AND (   (p.data_conclusao IS NULL     AND p.data_instauracao <= $2)
-                OR (p.data_conclusao IS NOT NULL AND p.data_conclusao BETWEEN $1 AND $2) )
-           AND ($3::uuid[] IS NULL OR p.apuratorio_id = ANY($3::uuid[]))
-         ORDER BY a.sigla, p.data_instauracao
+         WHERE v.ativo
+           AND (   (v.data_conclusao IS NULL     AND v.data_instauracao <= $2)
+                OR (v.data_conclusao IS NOT NULL AND v.data_conclusao BETWEEN $1 AND $2) )
+           AND ($3::uuid[] IS NULL OR v.apuratorio_id = ANY($3::uuid[]))
+         ORDER BY v.apuratorio_sigla, v.data_instauracao
         "#,
     )
     .bind(request.periodo_inicio)

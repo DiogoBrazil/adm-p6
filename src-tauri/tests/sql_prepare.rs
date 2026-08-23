@@ -223,7 +223,6 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
             &[
                 "deadlines::repository::list",
                 "deadlines::repository::dashboard",
-                "deadlines::repository::report",
             ],
         ),
         (

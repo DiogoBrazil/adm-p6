@@ -144,50 +144,40 @@ pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummar
 
 /// Relatório de prazos. O escopo de apuratórios vem por parâmetro — antes era um
 /// `IN ('IPM','SR','SV')` escrito no SQL.
+///
+/// Sai de `v_processos_detalhados`: o prazo vigente e o responsável já são
+/// derivações da view. Antes esta função repetia as duas — e derivava a
+/// vigência por `DISTINCT ON`, enquanto o resto do código usava `LATERAL`.
 pub async fn report(
     pool: &PgPool,
     filter: &DeadlineReportFilter,
 ) -> Result<Vec<DeadlineReportItem>, sqlx::Error> {
-    sqlx::query_as::<_, DeadlineReportItem>(&format!(
+    sqlx::query_as::<_, DeadlineReportItem>(
         r#"
-        SELECT pr.id::text                                        AS processo_id,
-               a.sigla                                            AS apuratorio_sigla,
-               COALESCE(pr.numero_controle, pr.numero_documento)  AS numero_controle,
-               un.nome                                            AS unidade_origem,
-               resp.nome                                          AS responsavel_nome,
-               p.data_vencimento                                  AS data_vencimento,
-               (p.data_vencimento - CURRENT_DATE)::int             AS dias_restantes,
-               p.ordem                                            AS ordem
-          FROM processo_prazos p
-          JOIN processos_procedimentos pr ON pr.id = p.processo_id
-          JOIN apuratorios a              ON a.id = pr.apuratorio_id
-          JOIN unidades_pm un             ON un.id = pr.unidade_origem_id
-          -- Responsável = quem ocupa, neste apuratório, o papel marcado como
-          -- responsável na configuração. Não há nome de papel no SQL.
-          LEFT JOIN LATERAL (
-              SELECT pm.nome
-                FROM processo_designacoes d
-                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
-                                         AND ap.papel_id = d.papel_id
-                JOIN policiais_militares pm ON pm.id = d.policial_militar_id
-               WHERE d.processo_id = pr.id AND d.data_fim IS NULL AND ap.e_responsavel
-               LIMIT 1
-          ) resp ON true
-         WHERE {VIGENTE}
-           AND pr.ativo
-           AND pr.data_conclusao IS NULL
-           AND ($1::uuid[] IS NULL OR pr.apuratorio_id = ANY($1::uuid[]))
+        SELECT v.id::text            AS processo_id,
+               v.apuratorio_sigla    AS apuratorio_sigla,
+               v.numero_controle     AS numero_controle,
+               v.unidade_origem      AS unidade_origem,
+               v.responsavel_nome    AS responsavel_nome,
+               v.prazo_vencimento    AS data_vencimento,
+               v.prazo_dias_restantes AS dias_restantes,
+               v.prazo_ordem         AS ordem
+          FROM v_processos_detalhados v
+         WHERE v.ativo
+           AND v.data_conclusao IS NULL
+           AND v.prazo_vencimento IS NOT NULL
+           AND ($1::uuid[] IS NULL OR v.apuratorio_id = ANY($1::uuid[]))
            AND ($2::uuid IS NULL OR EXISTS (
                    SELECT 1 FROM processo_designacoes d
-                    WHERE d.processo_id = pr.id AND d.data_fim IS NULL
+                    WHERE d.processo_id = v.id AND d.data_fim IS NULL
                       AND d.policial_militar_id = $2::uuid))
-           AND (NOT $3 OR p.data_vencimento < CURRENT_DATE)
-           AND ($4::int IS NULL OR p.data_vencimento <= CURRENT_DATE + $4)
-           AND ($5::int IS NULL OR EXTRACT(YEAR FROM pr.data_instauracao)::int = $5)
-         ORDER BY p.data_vencimento
+           AND (NOT $3 OR v.prazo_vencimento < CURRENT_DATE)
+           AND ($4::int IS NULL OR v.prazo_vencimento <= CURRENT_DATE + $4)
+           AND ($5::int IS NULL OR EXTRACT(YEAR FROM v.data_instauracao)::int = $5)
+         ORDER BY v.prazo_vencimento
          LIMIT $6
-        "#
-    ))
+        "#,
+    )
     .bind(filter.apuratorio_ids.as_deref())
     .bind(filter.responsavel_id.as_deref())
     .bind(filter.apenas_vencidos.unwrap_or(false))

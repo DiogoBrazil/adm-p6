@@ -9,6 +9,8 @@
 
 use sqlx::{Connection, Executor, PgConnection, Row};
 
+mod util;
+
 /// Devolve (url_de_manutencao, url_do_banco_de_teste, nome_do_banco).
 fn urls() -> Option<(String, String, String)> {
     let _ = dotenvy::from_filename("../.env");
@@ -190,4 +192,68 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// A view é contrato: quatro módulos leem dela. Uma coluna renomeada quebraria
+/// os quatro de uma vez, e só em runtime.
+#[tokio::test]
+async fn a_view_de_processos_e_um_contrato_estavel() {
+    util::com_banco_descartavel("view_processos", |pool| async move {
+        let colunas: Vec<String> = sqlx::query_scalar(
+            "SELECT column_name::text FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'v_processos_detalhados'
+              ORDER BY 1",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        let esperadas = vec![
+            "apuratorio_id",
+            "apuratorio_nome",
+            "apuratorio_sigla",
+            "ativo",
+            "concluido",
+            "data_conclusao",
+            "data_instauracao",
+            "data_recebimento",
+            "documento_iniciador",
+            "documento_iniciador_id",
+            "id",
+            "municipio_fato",
+            "municipio_fato_id",
+            "natureza_fato",
+            "natureza_fato_id",
+            "numero_controle",
+            "numero_documento",
+            "numero_rgf",
+            "prazo_dias_restantes",
+            "prazo_ordem",
+            "prazo_vencimento",
+            "processo_sei",
+            "responsavel_id",
+            "responsavel_nome",
+            "responsavel_papel",
+            "resumo_fatos",
+            "rotulo",
+            "tipo_apuratorio",
+            "tipo_apuratorio_id",
+            "total_envolvidos",
+            "unidade_origem",
+            "unidade_origem_id",
+        ];
+        assert_eq!(colunas, esperadas, "o contrato da view mudou");
+
+        // NÃO é a antiga `v_processos`, que existia para esconder dez tabelas
+        // quase idênticas — o problema que a remodelagem eliminou.
+        let antiga: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.views
+                             WHERE table_schema='public' AND table_name='v_processos')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!antiga, "a antiga v_processos nao pode voltar");
+    })
+    .await;
 }

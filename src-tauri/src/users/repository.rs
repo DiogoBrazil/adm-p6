@@ -290,24 +290,21 @@ pub async fn statistics(pool: &PgPool, policial_id: &str) -> Result<UserStatisti
     })
 }
 
-/// Colunas de processo compartilhadas pelas duas listagens abaixo.
+/// Colunas de processo das duas listagens abaixo. Saem de
+/// `v_processos_detalhados` (migration 0004), que já resolve os catálogos —
+/// antes esta composição estava escrita aqui, em `proceedings`, em
+/// `maps_reports` e em `deadlines`.
 const COLUNAS_PROCESSO: &str = r#"
-           p.id::text                                       AS id,
-           a.id::text                                       AS apuratorio_id,
-           a.sigla                                          AS apuratorio_sigla,
-           a.nome                                           AS apuratorio_nome,
-           ta.nome                                          AS tipo_apuratorio,
-           p.numero_documento                               AS numero_documento,
-           COALESCE(p.numero_controle, p.numero_documento)  AS numero_controle,
-           p.resumo_fatos                                   AS resumo_fatos,
-           p.data_instauracao                               AS data_instauracao,
-           p.data_conclusao                                 AS data_conclusao
-"#;
-
-const JOIN_PROCESSO: &str = r#"
-    FROM processos_procedimentos p
-    JOIN apuratorios a       ON a.id = p.apuratorio_id
-    JOIN tipos_apuratorio ta ON ta.id = a.tipo_apuratorio_id
+           v.id::text            AS id,
+           v.apuratorio_id::text AS apuratorio_id,
+           v.apuratorio_sigla,
+           v.apuratorio_nome,
+           v.tipo_apuratorio,
+           v.numero_documento,
+           v.numero_controle,
+           v.resumo_fatos,
+           v.data_instauracao,
+           v.data_conclusao
 "#;
 
 /// Processos em que o militar foi designado. `papel_id` nulo traz todos os papéis
@@ -321,13 +318,13 @@ pub async fn proceedings_as_designated(
         "SELECT {COLUNAS_PROCESSO},
                 pp.nome    AS papel,
                 NULL::text AS status_envolvido
-         {JOIN_PROCESSO}
-         JOIN processo_designacoes d ON d.processo_id = p.id
+         FROM v_processos_detalhados v
+         JOIN processo_designacoes d ON d.processo_id = v.id
          JOIN papeis_processo pp     ON pp.id = d.papel_id
          WHERE d.policial_militar_id = $1::uuid
            AND ($2::uuid IS NULL OR d.papel_id = $2::uuid)
-           AND p.ativo
-         ORDER BY p.data_instauracao DESC"
+           AND v.ativo
+         ORDER BY v.data_instauracao DESC"
     ))
     .bind(policial_id)
     .bind(papel_id)
@@ -343,12 +340,12 @@ pub async fn proceedings_as_involved(
         "SELECT {COLUNAS_PROCESSO},
                 NULL::text AS papel,
                 se.nome    AS status_envolvido
-         {JOIN_PROCESSO}
-         JOIN processo_envolvidos e  ON e.processo_id = p.id
+         FROM v_processos_detalhados v
+         JOIN processo_envolvidos e  ON e.processo_id = v.id
          JOIN status_envolvido se    ON se.id = e.status_envolvido_id
          WHERE e.policial_militar_id = $1::uuid
-           AND p.ativo
-         ORDER BY p.data_instauracao DESC"
+           AND v.ativo
+         ORDER BY v.data_instauracao DESC"
     ))
     .bind(policial_id)
     .fetch_all(pool)
