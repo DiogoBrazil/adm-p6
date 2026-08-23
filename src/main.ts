@@ -14,6 +14,7 @@ import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/proc
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
 import { ROTA as ROTA_ENCARREGADOS, renderEncarregados } from "./telas/encarregados";
+import { ROTA as ROTA_AUDITORIA, renderAuditoria } from "./telas/auditoria";
 import {
   ROTA_MENSAL as ROTA_MAPA_MENSAL,
   ROTA_SALVOS as ROTA_MAPAS_SALVOS,
@@ -116,7 +117,7 @@ let routes: Route[] = [
     group: "Catálogos",
     adminOnly: true
   },
-  { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
+  { path: ROTA_AUDITORIA, label: "Auditoria", group: "Auditoria" },
   { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
   {
     path: ROTA_ESTATISTICAS_PROCESSOS,
@@ -570,7 +571,7 @@ async function renderRoute() {
   if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
   if (route.path === ROTA_MAPA_MENSAL) return renderMapaMensal(contexto);
   if (route.path === ROTA_MAPAS_SALVOS) return renderMapasSalvos(contexto);
-  if (route.path === "/auditoria") return renderAuditWithFilters();
+  if (route.path === ROTA_AUDITORIA) return renderAuditoria(contexto);
   if (route.path === "/usuarios/lista") return renderUsersList();
   if (route.path === ROTA_STATS_PROCEDIMENTOS) return renderEstatisticasProcedimentos(contexto);
   if (route.path === "/usuarios/novo") {
@@ -877,60 +878,6 @@ async function renderDetail(route: Route) {
 }
 
 
-async function renderAuditWithFilters() {
-  const auditRoute = routes.find((r) => r.path === "/auditoria")!;
-  shell(`<section class="panel"><p>Carregando...</p></section>`);
-
-  const resp = await call<unknown[]>("audit_list", {
-    limit: 200,
-    offset: 0,
-    tabela: auditFilters.tabela || null,
-    operacao: auditFilters.operacao || null,
-    usuario_id: auditFilters.usuario_id || null,
-  });
-
-  const items = resp.data ?? [];
-  currentRows = items as Record<string, unknown>[];
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Auditoria</h1></div>
-        <div class="page-head-right">${exportBar({ ...auditRoute, csvExport: undefined })}</div>
-      </div>
-      <form id="audit-filter-form" class="search-bar" style="flex-wrap:wrap">
-        <input name="tabela" type="text" placeholder="Tabela" value="${escapeHtml(auditFilters.tabela)}" style="max-width:160px" />
-        <select name="operacao">
-          <option value="">Operação</option>
-          ${["CREATE","UPDATE","DELETE"].map((op) => `<option ${auditFilters.operacao === op ? "selected" : ""}>${op}</option>`).join("")}
-        </select>
-        <input name="usuario_id" type="text" placeholder="ID do usuário" value="${escapeHtml(auditFilters.usuario_id)}" style="max-width:220px" />
-        <button type="submit">Filtrar</button>
-        <button type="button" class="secondary small" id="clear-audit-filter">Limpar</button>
-      </form>
-      ${resp.ok ? tableFrom(items, auditRoute) : `<p class="error">${resp.error}</p>`}
-    </section>
-  `);
-
-  document.querySelector<HTMLFormElement>("#audit-filter-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget as HTMLFormElement);
-    auditFilters = {
-      tabela: (form.get("tabela") as string).trim(),
-      operacao: (form.get("operacao") as string).trim(),
-      usuario_id: (form.get("usuario_id") as string).trim(),
-    };
-    void renderAuditWithFilters();
-  });
-
-  document.querySelector<HTMLButtonElement>("#clear-audit-filter")?.addEventListener("click", () => {
-    auditFilters = { tabela: "", operacao: "", usuario_id: "" };
-    void renderAuditWithFilters();
-  });
-
-  bindCrudEvents(auditRoute);
-  bindExportEvents({ ...auditRoute, csvExport: undefined });
-}
 
 
 async function renderUsersList() {
