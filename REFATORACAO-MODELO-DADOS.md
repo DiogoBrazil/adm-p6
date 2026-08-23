@@ -20,11 +20,12 @@
 |---:|:---|
 | Migrations | 3 (eram 32) |
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 44 · 57 · 24 · 2 · 2 |
-| Comandos Tauri | 67 (eram 146) |
-| Backend Rust | 6.318 linhas (eram 9.194) |
-| Testes de integração | **28** (eram 0) |
-| Frontend | 5.404 linhas em 10 arquivos (era 1 arquivo de 2.124) |
-| Comandos que o frontend invoca e não existem | **15** (eram 87) |
+| Comandos Tauri | 75 (eram 146) |
+| Backend Rust | 6.919 linhas (eram 9.194) |
+| Testes de integração | **36** (eram 0) |
+| Frontend | 5.072 linhas em 16 arquivos (era 1 arquivo de 2.124) |
+| Comandos que o frontend invoca e não existem | **0** (eram 87) |
+| Chamadas fora do cliente tipado | **0** (eram 118) |
 
 ---
 
@@ -224,7 +225,7 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
 `commit`, não no `insert`.** São as únicas triggers do schema; acrescentar outra exige
 justificar por que não cabe em constraint.
 
-### 5.5 Backend Rust — 10 módulos, 67 comandos
+### 5.5 Backend Rust — 11 módulos, 75 comandos
 
 | Módulo | Papel |
 |---|---|
@@ -237,60 +238,91 @@ justificar por que não cabe em constraint.
 | `evidence` | 5 tabelas de enquadramento → 3; esfera penal escolhida no vínculo |
 | `movements` | tabela relacional com **autor** e tipo do catálogo; `cancelado_em` no lugar de booleano |
 | `audit` | `alteracoes JSONB` registra o *diff* das mudanças de configuração |
-| `maps_reports` | escopos de relatório vêm por parâmetro (`apuratorio_ids`), não por `IN ('IPM','SR','SV')` |
+| `maps_reports` | escopos de relatório vêm por parâmetro (`apuratorio_ids`, `papel_ids`, ano), não por `IN ('IPM','SR','SV')` |
+| `files` | **novo.** Um comando: abre o diálogo nativo de "salvar como" e grava. Existe porque `<a download>` não define destino no WebView, e porque a tela não precisa poder escrever em caminho arbitrário |
 
 **Segurança:** as 13 escritas que rodavam só com `require_session` agora exigem
 `require_admin`. Há trava do último administrador, no backend e dentro da transação.
 
-### 5.6 Frontend — cliente tipado e 6 telas migradas
+### 5.6 Frontend — migração fechada
 
 ```
 src/
-  api.ts            252   cliente tipado: mapa `Commands` com os 67 comandos
-  types.ts          789   71 interfaces + 1 enum, derivados de src-tauri/src/*/domain.rs
-  dom.ts             32   escapeHtml, cellDisplay, option
-  main.ts         1.478   shell, rotas, login, e as telas AINDA NÃO migradas
+  api.ts            269   cliente tipado: mapa `Commands` com os 75 comandos
+  types.ts          859   interfaces derivadas de src-tauri/src/*/domain.rs
+  dom.ts            147   escape, tabela, exportação (CSV e impressão)
+  main.ts           272   shell, sessão, menu e roteamento — e nada mais
   telas/
     catalogos.ts    371   os 26 catálogos, gerada de legal_catalogs_definitions
     apuratorio.ts   336   configuração de documentos iniciadores e papéis
     processo.ts     919   lista, formulário completo e detalhe
     indicios.ts     315   enquadramento por envolvido
-    prazos.ts        79   painel de prazos
+    usuarios.ts     356   lista, formulário (militar + conta) e detalhe
+    mapas.ts        300   mapa do período e mapas salvos
+    estatisticas.ts 264   /estatisticas/processos e /stats/procedimentos
+    auditoria.ts    178   lista com filtros e o diff de `alteracoes`
+    encarregados.ts 163   matriz militar × apuratório
+    anual.ts        130   relatório anual, impresso pelo sistema
+    prazos.ts       113   painel de prazos, com exportação CSV
+    dashboard.ts     80   painel de entrada
 ```
 
-**O cliente tipado (`api.ts`) é a peça central.** O nome do comando é `keyof Commands`, e
-argumentos e resposta saem do mesmo mapa. Comando inexistente, argumento errado ou campo de
-resposta inventado passam a ser **erro de compilação** — antes viravam mensagem de erro na
-tela do usuário. `tsconfig.json` roda em `strict` + `noUncheckedIndexedAccess`, e
+**Não sobrou chamada não tipada.** `grep -rn "invoke" src/ --include=*.ts` só
+acha `api.ts`. O `main.ts` caiu de 1.484 para 272 linhas: saíram o `call()`
+legado, o renderizador genérico (`tableFrom`, `crudConfigs`, `renderCrudForm`,
+`renderDetail`, `exportBar`) e as sete telas que viviam ali.
+
+**O cliente tipado (`api.ts`) é a peça central.** O nome do comando é
+`keyof Commands`, e argumentos e resposta saem do mesmo mapa. Comando
+inexistente, argumento errado ou campo de resposta inventado passam a ser
+**erro de compilação** — antes viravam mensagem de erro na tela do usuário.
+`tsconfig.json` roda em `strict` + `noUncheckedIndexedAccess`, e
 `npm run build` executa `tsc --noEmit` antes do Vite.
+
+**O que a migração das últimas telas encontrou quebrado**, tudo invisível até
+o clique: os três filtros da auditoria (mandavam `tabela` e `usuario_id`; o
+comando recebe `entidade` e `usuarioId`), a paginação de usuários (`per_page`
+em vez de `perPage`), o formulário de usuário inteiro (`posto_graduacao` em
+vez de `posto_graduacao_id`, `perfil` textual, um `is_operador` inexistente),
+catorze campos com sigla no nome no detalhe do usuário
+(`stats.encarregado_pads`, `stats.escrivao`…) e o cartão principal do painel
+(`data.total_processos`, que se chama `total`).
 
 **Duas armadilhas que o cliente tipado fixou:**
 
-1. **As chaves de argumento do Tauri v2 são camelCase.** Um parâmetro `processo_id` no Rust
-   chega como `processoId` no JS, salvo se o comando declarar `rename_all = "snake_case"` —
-   e nenhum dos 67 declara. O `main.ts` mandava snake_case, então **toda chamada com
-   argumento de mais de uma palavra falhava**. São 16 parâmetros nessa situação.
-   Atenção: isso vale para os **argumentos do comando**, não para os campos de um struct
-   de request — dentro de `{ request: {...} }` os campos continuam em snake_case, porque
-   ali quem desserializa é o serde.
+1. **As chaves de argumento do Tauri v2 são camelCase.** Um parâmetro
+   `processo_id` no Rust chega como `processoId` no JS, salvo se o comando
+   declarar `rename_all = "snake_case"` — e nenhum dos 75 declara.
+   Atenção: isso vale para os **argumentos do comando**, não para os campos de
+   um struct de request — dentro de `{ request: {...} }` os campos continuam em
+   snake_case, porque ali quem desserializa é o serde.
 2. **`ProceedingListItem` devolve os ids ao lado dos rótulos**
    (`documento_iniciador_id`, `unidade_origem_id`, `municipio_fato_id`,
-   `natureza_fato_id`). Sem eles o formulário de edição teria de casar por nome para
-   repopular os selects — e falharia justamente no caso que o modelo protege: um catálogo
-   desativado não aparece na lista de opções, e o processo antigo perderia o vínculo em
-   silêncio ao ser reeditado.
+   `natureza_fato_id`). Sem eles o formulário de edição teria de casar por nome
+   para repopular os selects — e falharia justamente no caso que o modelo
+   protege: um catálogo desativado não aparece na lista de opções, e o processo
+   antigo perderia o vínculo em silêncio ao ser reeditado.
 
-**Tela de catálogos:** montada inteiramente de `legal_catalogs_definitions`. Acrescentar um
-catálogo no Rust faz a tela aparecer sozinha. Referências aparecem com rótulo legível (o
-rótulo é montado juntando as colunas textuais do catálogo alvo), e o texto `efeito` de cada
-atributo semântico é exibido ao lado do campo.
+**Tela de catálogos:** montada inteiramente de `legal_catalogs_definitions`.
+Acrescentar um catálogo no Rust faz a tela aparecer sozinha.
 
-**Formulário de processo:** os campos condicionais são dirigidos por dado, nunca por sigla —
-natureza obrigatória vem de `apuratorios.exige_natureza_fato`, o campo de condutor de
-`naturezas_fato.exige_condutor`, deprecante/deprecada de `codigo_extensao`, os papéis de
-`apuratorio_papeis`, e penalidade/dias de `permite_penalidade`/`usa_quantidade_dias`.
+**Formulário de processo:** os campos condicionais são dirigidos por dado,
+nunca por sigla — natureza obrigatória vem de `apuratorios.exige_natureza_fato`,
+o campo de condutor de `naturezas_fato.exige_condutor`, deprecante/deprecada de
+`codigo_extensao`, os papéis de `apuratorio_papeis`, e penalidade/dias de
+`permite_penalidade`/`usa_quantidade_dias`.
 
-### 5.7 Rede de proteção — 28 testes
+**Telas de relatório:** o escopo é sempre filtro na tela, nunca sigla no
+código. As caixas de apuratório vêm de `legal_catalogs_list("apuratorios")` e
+as de papel de `papeis_processo`; cadastrar uma espécie nova a faz aparecer nos
+painéis sozinha. Nenhuma sigla aparece em `src/telas/`.
+
+**Como um arquivo é entregue ao usuário:** `dom.ts::baixarCsv` →
+`files_save_download`. Não é `<a download>` com blob — no WebView do Tauri essa
+via não define destino, não abre "salvar como" e varia por plataforma. O
+diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
+
+### 5.7 Rede de proteção — 36 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -303,10 +335,11 @@ natureza obrigatória vem de `apuratorios.exige_natureza_fato`, o campo de condu
 | `proceedings_repository.rs` | **18 testes** — criação completa, prazo inicial vindo da configuração, edição, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
 | `apuratorio_config.rs` | 3 testes — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
 | `deadlines_repository.rs` | 3 testes — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
+| `maps_reports_repository.rs` | **8 testes** — a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 
 ---
 
-## 6. Quatro bugs reais que os testes pegaram
+## 6. Seis bugs reais que os testes pegaram
 
 Vale como argumento para não deixar a rede de proteção de lado.
 
@@ -319,6 +352,12 @@ Vale como argumento para não deixar a rede de proteção de lado.
 4. **Trocar a espécie do apuratório vazava violação de FK crua na tela.** As designações são
    registro histórico e nunca são apagadas, então a FK composta impede a troca —
    corretamente; faltava recusar com uma regra legível.
+5. **O mapa filtrava por `data_instauracao BETWEEN`** e escondia justamente o processo
+   antigo ainda pendente — que é o que a Seção abre o mapa para ver. Vale a regra do
+   sistema legado: aberto até o fim do período, mais concluído dentro dele.
+6. **Escopo vazio significava "nenhum".** `= ANY('{}')` é falso para toda linha, então o
+   operador que não filtrava nada não via nada. `MapPeriodRequest` já documentava "vazio =
+   todas"; o código é que não cumpria.
 
 ---
 
@@ -331,7 +370,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 28 testes, bancos descartáveis
+cargo test                           # 36 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -357,7 +396,8 @@ penal). Os **operacionais** nascem vazios de propósito. Para chegar a um proces
    **Soluções**, **Penalidades**, **Papéis de pessoa**, **Tipos de andamento**
 6. **Catálogos → Configuração de apuratórios** — para cada apuratório, habilitar ao menos
    **um documento iniciador** e **um papel responsável**. Sem isso o banco recusa qualquer
-   processo, e a tela avisa
+   processo, e a tela avisa. É também o que faz as colunas aparecerem em *Designações por
+   Militar* e nos painéis de *Estatísticas de Procedimentos*
 7. **Usuários** — cadastrar os policiais militares
 8. **Procedimentos → Novo**
 
@@ -377,42 +417,29 @@ Depois que houver instalação real, aí sim migrations incrementais.
 
 ## 8. O que FALTA — em ordem de execução
 
-### 8.1 Terminar o frontend — **maior item pendente**
+### 8.1 ~~Terminar o frontend~~ — **CONCLUÍDO**
 
-Restam **15 comandos** que o `main.ts` invoca e que não existem no backend. Todos estão em
-quatro telas de relatório e estatística. Nenhuma outra parte do app depende delas, então dá
-para fazer uma por vez, verificando com `npm run typecheck` a cada passo.
+Os 15 comandos inexistentes acabaram e o `call()` legado foi apagado. O que foi decidido no
+caminho, e não deve ser reaberto sem motivo novo:
 
-| Tela (função em `main.ts`) | Comandos inexistentes | Para onde vai |
-|---|---|---|
-| `renderProceedingsStats` (`/stats/procedimentos`) | `proceedings_in_progress_stats`, `_pads_solutions`, `_ipm_evidence`, `_sr_evidence`, `_top10_transgressions`, `_driver_ranking`, `_nature_stats`, `_common_crimes`, `_military_crimes` (9) | **Decisão necessária** — ver abaixo |
-| `renderMonthlyMap` (`/mapas/mensal`) | `reports_generate_monthly_map`, `reports_generate_complete_map`, `reports_process_types` (3) | `reports_map_rows` com `MapPeriodRequest`; a lista de tipos vem de `legal_catalogs_list("apuratorios")` |
-| `renderAnnualStats` (`/estatisticas/anuais`) | `reports_annual_statistics` (1) | compor de `reports_by_responsible`, `reports_by_nature` e `dashboard_summary`, todos com `ReportFilter` |
-| rota `/estatisticas/processos` | `reports_by_type` (1) | `dashboard_summary` já devolve `por_apuratorio`, `por_natureza`, `por_unidade` e `por_ano` como contagens rotuladas |
-| rota `/estatisticas/prazos` | `reports_overdue_deadlines` (1) | `deadlines_report` com `apenas_vencidos: true`. **Sobrepõe-se a `telas/prazos.ts`**, que já mostra vencidos; a diferença é que esta rota tem exportação CSV. Decidir: remover a rota, ou acrescentar o CSV à tela de prazos |
+| Decisão | |
+|---|---|
+| `/stats/procedimentos` | Painéis genéricos com um filtro só (ano + apuratórios). Os nove comandos antigos **não** foram reimplementados: traziam a sigla no SQL |
+| `/estatisticas/prazos` | **Removida.** Era a mesma listagem de `telas/prazos.ts`; o CSV virou botão lá |
+| Relatório anual | Página HTML + impressão do sistema. **Nenhum crate de PDF no Rust** — o layout fica no frontend, onde é fácil ajustar |
+| Regra do mapa | Aberto até o fim do período + concluído dentro dele. Não é "instaurado no período" |
+| `/estatisticas/encarregados` | Matriz militar × apuratório, com filtro de papel. Conta toda designação, inclusive as encerradas |
+| Entrega de arquivo | Diálogo nativo pelo Rust (`files_save_download`), não `<a download>` |
 
-> **A decisão que trava `renderProceedingsStats`:** os 9 comandos não têm equivalente no
-> backend novo, e não é omissão — eram consultas com sigla escrita no SQL
-> (`IN ('IPM','SR','SV')`) e categorias de indício fixas, exatamente o que a refatoração
-> eliminou. Antes de reimplementar, decida **o que a Seção precisa ver**; então a tela vira
-> um punhado de chamadas a `reports_*` com `apuratorio_ids` por parâmetro. Reimplementar
-> um a um reintroduziria o hardcode.
+**O que sobra do item original:** a escolha da analogia RDPM em `telas/indicios.ts` ainda
+usa `prompt()`. Funciona e respeita a regra, mas merece um seletor de verdade — as três
+buscas de enquadramento (`evidence_search_*`) já existem para isso.
 
-**Ordem sugerida:** `/estatisticas/prazos` (provavelmente só apagar a rota) →
-`/estatisticas/processos` → `/mapas/mensal` → `/estatisticas/anuais` →
-`/stats/procedimentos` (depois da decisão).
-
-**Telas ainda no `main.ts` que funcionam mas usam o `call()` legado, não tipado:**
-dashboard, auditoria, lista e detalhe de usuário, mapas salvos, estatísticas de
-encarregados. Migrar cada uma para `api.ts` é mecânico e de baixo risco. Quando não sobrar
-nenhuma chamada legada, **apagar o `call()` local de `main.ts`** — é o marco que fecha a
-migração do frontend.
-
-### 8.2 Testes para `evidence`, `movements` e `maps_reports` — **alta**
+### 8.2 Testes para `evidence`, `movements`, `audit` e `legal_catalogs` — **alta**
 
 Continuam sem nenhum teste. Ficaram baratos: `util/fixtures.rs` já monta o mundo inteiro,
 então cada arquivo novo é quase só asserção. `evidence` é o mais relevante — 352 linhas de
-SQL e a lógica de esfera penal escolhida no vínculo.
+SQL e a lógica de esfera penal escolhida no vínculo. `maps_reports` saiu desta lista.
 
 **Nenhum comando Tauri foi testado ponta a ponta.** Os testes exercitam os repositórios; os
 guards (`require_admin`), a desserialização dos requests e o envelope `ApiResponse` seguem
@@ -469,15 +496,15 @@ Pontos de atenção já mapeados:
 
 - `README.md` ainda descreve venv, `pip install`, Alembic e PyInstaller.
 - `CLAUDE.md` descreve o framework "reversa", descontinuado.
-- `tauri.conf.json` tem `"csp": null`. O frontend monta HTML por concatenação; a escapagem
-  passa por `dom.ts::escapeHtml` nas telas migradas, mas **o `main.ts` legado ainda
-  interpola sem escapar** — mensagens de erro do backend (`${error}`, `${response.error}`),
-  `session.nome`, `session.perfil`, nomes de coluna vindos das chaves do JSON e rótulos de
-  `stat card`. A maioria é dado estático ou do próprio backend, mas erro de banco pode
-  carregar texto do usuário. Revisar antes de ligar a CSP; as telas em `src/telas/` já
-  estão limpas.
+- `tauri.conf.json` tem `"csp": null`. **A escapagem já está completa**: nenhum arquivo
+  interpola dado de backend sem `escapeHtml`, e as quatro interpolações cruas que sobram
+  no `main.ts` são markup montado ali mesmo. Ligar a CSP virou uma linha de configuração —
+  falta só testar que nada no app depende de `unsafe-inline`.
 - A escolha da analogia RDPM em `telas/indicios.ts` usa `prompt()`. Funciona e respeita a
   regra, mas merece um seletor de verdade.
+- `capabilities/default.json` concede `dialog:default`, que inclui `allow-open` e
+  `allow-message` além do `allow-save` que o app usa. Estreitar para
+  `["dialog:allow-save"]` quando alguém encostar no arquivo.
 
 ---
 
@@ -528,6 +555,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Trocar a espécie de um processo com designação | Recusado por regra de negócio (as designações são histórico e amarram o apuratório) | É intencional; a mensagem explica |
 | `replace` sem `assert` em script de edição | Um `s.replace(a, b)` que não casa é um **no-op silencioso**. Foi assim que a rota de configuração de apuratórios ficou sem botão de menu por três commits | Sempre `assert alvo in s` antes de substituir |
 | Filtrar `ativo` na leitura de registro | Um processo antigo perde o catálogo desativado que usava | Filtrar `ativo` só em lista de **opções** |
+| Lista de escopo vazia num filtro | `= ANY('{}')` é falso para toda linha: quem não filtra nada não vê nada | `maps_reports::repository::escopo()` normaliza vazio para `NULL`. Use-o em todo filtro novo |
+| `<a download>` para entregar arquivo | No WebView não define destino nem abre "salvar como", e muda por plataforma | `dom.ts::baixarCsv` → `files_save_download`, que abre o diálogo nativo no Rust |
 
 ---
 
@@ -544,7 +573,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | o que o banco recusa | `src-tauri/tests/schema_integrity.sql` |
 | como montar um cenário de teste com processo | `src-tauri/tests/util/fixtures.rs` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 67 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 75 |
+| como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
+| por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
+| como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
 | como uma tela é montada de metadados | `src/telas/catalogos.ts` |
 | como os campos condicionais saem do dado | `src/telas/processo.ts` (cabeçalho do arquivo) |
 | o diagnóstico do estado anterior | `ANALISE-MIGRACAO.md` |
