@@ -905,3 +905,12 @@ td.barra span {
   font-size: 0.8rem;
   font-weight: 400;
 }
+
+/* Linha de tabela que abre um detalhe. */
+tr.clicavel {
+  cursor: pointer;
+}
+
+tr.clicavel:hover {
+  background: #f1f5f9;
+}

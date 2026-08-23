@@ -13,6 +13,12 @@ import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 import {
+  ROTA_MENSAL as ROTA_MAPA_MENSAL,
+  ROTA_SALVOS as ROTA_MAPAS_SALVOS,
+  renderMapaMensal,
+  renderMapasSalvos,
+} from "./telas/mapas";
+import {
   ROTA as ROTA_ESTATISTICAS_PROCESSOS,
   ROTA_PROCEDIMENTOS as ROTA_STATS_PROCEDIMENTOS,
   renderEstatisticasProcedimentos,
@@ -122,8 +128,8 @@ let routes: Route[] = [
     label: "Estatísticas de Processos",
     group: "Relatórios"
   },
-  { path: "/mapas/mensal", label: "Mapa Mensal", group: "Mapas", printable: true },
-  { path: "/mapas/anteriores", label: "Mapas Salvos", group: "Mapas", command: "reports_saved_maps", printable: true, detailCommand: "reports_get_saved_map" },
+  { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
+  { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
   { path: "/estatisticas/anuais", label: "Estatísticas Anuais", group: "Relatórios", printable: true },
   { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
 ];
@@ -566,7 +572,8 @@ async function renderRoute() {
   if (route.path === "/estatisticas/anuais") return renderAnnualStats();
   if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
   if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
-  if (route.path === "/mapas/mensal") return renderMonthlyMap();
+  if (route.path === ROTA_MAPA_MENSAL) return renderMapaMensal(contexto);
+  if (route.path === ROTA_MAPAS_SALVOS) return renderMapasSalvos(contexto);
   if (route.path === "/auditoria") return renderAuditWithFilters();
   if (route.path === "/usuarios/lista") return renderUsersList();
   if (route.path === ROTA_STATS_PROCEDIMENTOS) return renderEstatisticasProcedimentos(contexto);
@@ -873,77 +880,6 @@ async function renderDetail(route: Route) {
   bindExportEvents({ ...route, csvExport: undefined });
 }
 
-async function renderMonthlyMap() {
-  shell(`<section class="panel"><p>Carregando...</p></section>`);
-  const [typesResp, yearsResp] = await Promise.all([
-    call<Array<{ codigo: string; total: number }>>("reports_process_types"),
-    call<number[]>("reports_available_years"),
-  ]);
-  const types = typesResp.data ?? [];
-  const years = yearsResp.data ?? [selectedYear];
-
-  const printRoute = { path: "/mapas/mensal", label: "Mapa Mensal", group: "", printable: true };
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Mapa Mensal</h1></div>
-        <div class="page-head-right">${exportBar(printRoute)}</div>
-      </div>
-      <form id="map-form" class="add-movement-form" style="max-width:500px">
-        <label>Mês
-          <select name="mes">
-            ${["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
-              .map((m, i) => `<option value="${i+1}" ${(i+1) === new Date().getMonth()+1 ? "selected" : ""}>${m}</option>`).join("")}
-          </select>
-        </label>
-        <label>Ano
-          <select name="ano">
-            ${years.map((y) => `<option value="${y}" ${y === selectedYear ? "selected" : ""}>${y}</option>`).join("")}
-          </select>
-        </label>
-        <label>Tipo de Processo
-          <select name="tipo_processo">
-            ${types.map((t) => `<option value="${escapeHtml(t.codigo)}">${escapeHtml(t.codigo)} (${t.total})</option>`).join("")}
-            <option value="TODOS">Todos</option>
-          </select>
-        </label>
-        <div style="display:flex;gap:8px">
-          <button type="submit" name="mode" value="mensal">Gerar Mapa Mensal</button>
-          <button type="submit" class="secondary" name="mode" value="completo">Gerar Completo</button>
-        </div>
-      </form>
-      <div id="map-result"></div>
-    </section>
-  `);
-
-  document.querySelector<HTMLFormElement>("#map-form")?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget as HTMLFormElement);
-    const mes = Number(form.get("mes"));
-    const ano = Number(form.get("ano"));
-    const tipo = String(form.get("tipo_processo") ?? "TODOS");
-    const mode = (e.submitter as HTMLButtonElement)?.value ?? "mensal";
-    const resultEl = document.querySelector("#map-result")!;
-    resultEl.innerHTML = `<p>Gerando mapa...</p>`;
-    const resp = mode === "completo"
-      ? await call<Record<string, unknown>>("reports_generate_complete_map", { request: { mes, ano } })
-      : await call<Record<string, unknown>>("reports_generate_monthly_map", { request: { mes, ano, tipo_processo: tipo } });
-    if (!resp.ok) { resultEl.innerHTML = `<p class="error">${escapeHtml(resp.error ?? "Erro")}</p>`; return; }
-    const dados = resp.data as Record<string, unknown>;
-    resultEl.innerHTML = `
-      <h2 style="margin-top:24px">Resultado</h2>
-      <pre>${escapeHtml(JSON.stringify(dados.meta ?? dados, null, 2))}</pre>
-      <button id="btn-save-map">Salvar este Mapa</button>
-    `;
-    document.querySelector<HTMLButtonElement>("#btn-save-map")?.addEventListener("click", async () => {
-      const saveResp = await call("reports_save_map", { request: { dados_mapa: dados } });
-      if (!saveResp.ok) { alert(saveResp.error ?? "Falha ao salvar."); return; }
-      alert("Mapa salvo com sucesso!");
-    });
-  });
-  bindExportEvents(printRoute);
-}
 
 async function renderAuditWithFilters() {
   const auditRoute = routes.find((r) => r.path === "/auditoria")!;
