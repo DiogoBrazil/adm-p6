@@ -12,6 +12,12 @@ import {
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
+import {
+  ROTA as ROTA_ESTATISTICAS_PROCESSOS,
+  ROTA_PROCEDIMENTOS as ROTA_STATS_PROCEDIMENTOS,
+  renderEstatisticasProcedimentos,
+  renderEstatisticasProcessos,
+} from "./telas/estatisticas";
 
 // NOTA DE MIGRAÇÃO
 //
@@ -112,16 +118,14 @@ let routes: Route[] = [
     printable: true
   },
   {
-    path: "/estatisticas/processos",
+    path: ROTA_ESTATISTICAS_PROCESSOS,
     label: "Estatísticas de Processos",
-    group: "Relatórios",
-    command: "reports_by_type",
-    printable: true
+    group: "Relatórios"
   },
   { path: "/mapas/mensal", label: "Mapa Mensal", group: "Mapas", printable: true },
   { path: "/mapas/anteriores", label: "Mapas Salvos", group: "Mapas", command: "reports_saved_maps", printable: true, detailCommand: "reports_get_saved_map" },
   { path: "/estatisticas/anuais", label: "Estatísticas Anuais", group: "Relatórios", printable: true },
-  { path: "/stats/procedimentos", label: "Estatísticas de Procedimentos", group: "Relatórios", printable: true }
+  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
 ];
 
 /** Fallback quando `activePath` não casa com nenhuma rota. */
@@ -561,10 +565,11 @@ async function renderRoute() {
 
   if (route.path === "/estatisticas/anuais") return renderAnnualStats();
   if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
+  if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
   if (route.path === "/mapas/mensal") return renderMonthlyMap();
   if (route.path === "/auditoria") return renderAuditWithFilters();
   if (route.path === "/usuarios/lista") return renderUsersList();
-  if (route.path === "/stats/procedimentos") return renderProceedingsStats();
+  if (route.path === ROTA_STATS_PROCEDIMENTOS) return renderEstatisticasProcedimentos(contexto);
   if (route.path === "/usuarios/novo") {
     activePath = "/usuarios/lista";
     if (!canWrite()) {
@@ -1274,125 +1279,6 @@ async function renderUserDetail(route: Route) {
   bindExportEvents({ ...route, csvExport: undefined });
 }
 
-async function renderProceedingsStats() {
-  shell(`<section class="panel"><p>Carregando estatísticas...</p></section>`);
-
-  const statsRoute = { path: "/stats/procedimentos", label: "Estatísticas de Procedimentos", group: "", printable: true };
-
-  const yearParam = { ano: selectedYear };
-  const [inProgressResp, padsSolResp, ipmEvResp, srEvResp, top10Resp, driverResp, natureResp, crimeResp, milResp] = await Promise.all([
-    call<Record<string, unknown>>("proceedings_in_progress_stats"),
-    call<unknown[]>("proceedings_pads_solutions", yearParam),
-    call<Record<string, unknown>>("proceedings_ipm_evidence", yearParam),
-    call<Record<string, unknown>>("proceedings_sr_evidence", yearParam),
-    call<unknown[]>("proceedings_top10_transgressions", yearParam),
-    call<unknown[]>("proceedings_driver_ranking", yearParam),
-    call<unknown[]>("proceedings_nature_stats", yearParam),
-    call<unknown[]>("proceedings_common_crimes", yearParam),
-    call<unknown[]>("proceedings_military_crimes", yearParam),
-  ]);
-
-  const inProg = inProgressResp.data ?? {};
-  const ipmEv = ipmEvResp.data ?? {};
-  const srEv = srEvResp.data ?? {};
-
-  const yearsResp = await call<number[]>("reports_available_years");
-  const years = yearsResp.data ?? [selectedYear];
-  const yearOptions = years.map((y) => `<option value="${y}" ${y === selectedYear ? "selected" : ""}>${y}</option>`).join("");
-
-  function simpleTable(items: unknown[], cols: string[]) {
-    if (!Array.isArray(items) || items.length === 0) return `<p class="empty">Sem dados.</p>`;
-    return `<div class="table-wrap"><table>
-      <thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
-      <tbody>${(items as Record<string, unknown>[]).map((row) =>
-        `<tr>${cols.map((c) => `<td>${escapeHtml(String(row[c.toLowerCase().replace(/ /g,"_")] ?? row[c] ?? ""))}</td>`).join("")}</tr>`
-      ).join("")}</tbody>
-    </table></div>`;
-  }
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Estatísticas de Procedimentos</h1></div>
-        <div class="page-head-right">
-          <form id="year-form" class="search-bar">
-            <select name="ano">${yearOptions}</select>
-            <button type="submit">Ver</button>
-          </form>
-          ${exportBar(statsRoute)}
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Em Andamento</h2>
-        <div class="stat-grid">
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(inProg.total ?? 0))}</span><span class="stat-label">Total</span></div>
-          <div class="stat-card badge--ok"><span class="stat-value">${escapeHtml(String(inProg.concluidos ?? 0))}</span><span class="stat-label">Concluídos</span></div>
-          ${Array.isArray(inProg.por_tipo) ? (inProg.por_tipo as Record<string,unknown>[]).map((t) =>
-            `<div class="stat-card"><span class="stat-value">${escapeHtml(String(t.quantidade ?? 0))}</span><span class="stat-label">${escapeHtml(String(t.tipo ?? ""))}</span></div>`
-          ).join("") : ""}
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Indícios IPM/Sindicância — ${selectedYear}</h2>
-        <div class="stat-grid">
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(ipmEv.com_indicios ?? 0))}</span><span class="stat-label">Com Indícios</span></div>
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(ipmEv.sem_indicios ?? 0))}</span><span class="stat-label">Sem Indícios</span></div>
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(ipmEv.com_indicios_crime ?? 0))}</span><span class="stat-label">Crimes</span></div>
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(ipmEv.com_indicios_transgressao ?? 0))}</span><span class="stat-label">Transgressões</span></div>
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Indícios SR — ${selectedYear}</h2>
-        <div class="stat-grid">
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(srEv.crimes_comuns ?? 0))}</span><span class="stat-label">Crimes Comuns</span></div>
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(srEv.transgressoes ?? 0))}</span><span class="stat-label">Transgressões</span></div>
-          <div class="stat-card"><span class="stat-value">${escapeHtml(String(srEv.sem_indicios ?? 0))}</span><span class="stat-label">Sem Indícios</span></div>
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <h2>Top 10 Transgressões — ${selectedYear}</h2>
-        ${tableFrom(top10Resp.data ?? [], statsRoute)}
-      </div>
-
-      <div class="detail-section">
-        <h2>Soluções PADS/PAD — ${selectedYear}</h2>
-        ${tableFrom(padsSolResp.data ?? [], statsRoute)}
-      </div>
-
-      <div class="detail-section">
-        <h2>Crimes Comuns — ${selectedYear}</h2>
-        ${tableFrom(crimeResp.data ?? [], statsRoute)}
-      </div>
-
-      <div class="detail-section">
-        <h2>Crimes Militares (IPM) — ${selectedYear}</h2>
-        ${tableFrom(milResp.data ?? [], statsRoute)}
-      </div>
-
-      <div class="detail-section">
-        <h2>Naturezas Apuradas — ${selectedYear}</h2>
-        ${tableFrom(natureResp.data ?? [], statsRoute)}
-      </div>
-
-      <div class="detail-section">
-        <h2>Ranking de Motoristas (Sinistros) — ${selectedYear}</h2>
-        ${tableFrom(driverResp.data ?? [], statsRoute)}
-      </div>
-    </section>
-  `);
-
-  document.querySelector<HTMLFormElement>("#year-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    selectedYear = Number(new FormData(e.currentTarget as HTMLFormElement).get("ano")) || selectedYear;
-    void renderProceedingsStats();
-  });
-
-  bindExportEvents(statsRoute);
-}
 
 function downloadCsvBase64(filename: string, base64: string) {
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
