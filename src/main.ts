@@ -13,6 +13,7 @@ import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
+import { ROTA as ROTA_ENCARREGADOS, renderEncarregados } from "./telas/encarregados";
 import {
   ROTA_MENSAL as ROTA_MAPA_MENSAL,
   ROTA_SALVOS as ROTA_MAPAS_SALVOS,
@@ -116,14 +117,7 @@ let routes: Route[] = [
     adminOnly: true
   },
   { path: "/auditoria", label: "Auditoria", group: "Auditoria", command: "audit_list", printable: true, detailCommand: "audit_get" },
-  {
-    path: "/estatisticas/encarregados",
-    label: "Estatísticas de Encarregados",
-    group: "Relatórios",
-    command: "reports_by_responsible",
-    csvExport: { tipoRelatorio: "encarregados" },
-    printable: true
-  },
+  { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
   {
     path: ROTA_ESTATISTICAS_PROCESSOS,
     label: "Estatísticas de Processos",
@@ -571,6 +565,7 @@ async function renderRoute() {
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
   if (route.path === ROTA_ANUAL) return renderRelatorioAnual(contexto);
+  if (route.path === ROTA_ENCARREGADOS) return renderEncarregados(contexto);
   if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
   if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
   if (route.path === ROTA_MAPA_MENSAL) return renderMapaMensal(contexto);

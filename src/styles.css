@@ -931,3 +931,13 @@ tr.clicavel {
 tr.clicavel:hover {
   background: #f1f5f9;
 }
+
+/* Linha de totais da matriz de designações. */
+tr.linha-total {
+  border-top: 2px solid #cbd5e1;
+  font-weight: 600;
+}
+
+td.total {
+  font-weight: 600;
+}
