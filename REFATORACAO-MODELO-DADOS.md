@@ -22,7 +22,7 @@
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 44 · 57 · 24 · 2 · 2 |
 | Comandos Tauri | 75 (eram 146) |
 | Backend Rust | 6.919 linhas (eram 9.194) |
-| Testes de integração | **36** (eram 0) |
+| Testes de integração | **75** (eram 0) |
 | Frontend | 5.072 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
@@ -322,7 +322,7 @@ painéis sozinha. Nenhuma sigla aparece em `src/telas/`.
 via não define destino, não abre "salvar como" e varia por plataforma. O
 diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 
-### 5.7 Rede de proteção — 36 testes
+### 5.7 Rede de proteção — 75 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -336,10 +336,15 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `apuratorio_config.rs` | 3 testes — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
 | `deadlines_repository.rs` | 3 testes — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
 | `maps_reports_repository.rs` | **8 testes** — a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
+| `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
+| `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
+| `audit_repository.rs` | **7 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
+| `legal_catalogs_repository.rs` | **9 testes** — os 26 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro |
+| `commands_ipc.rs` | **6 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, as duas convenções de argumento e o envelope `ApiResponse` |
 
 ---
 
-## 6. Seis bugs reais que os testes pegaram
+## 6. Sete bugs reais que os testes pegaram
 
 Vale como argumento para não deixar a rede de proteção de lado.
 
@@ -358,6 +363,10 @@ Vale como argumento para não deixar a rede de proteção de lado.
 6. **Escopo vazio significava "nenhum".** `= ANY('{}')` é falso para toda linha, então o
    operador que não filtrava nada não via nada. `MapPeriodRequest` já documentava "vazio =
    todas"; o código é que não cumpria.
+7. **Rótulo de enquadramento com prefixo duplicado:** "Art. **Art. 15**, inciso I do RDPM".
+   `artigos_rdpm.artigo` e `infracoes_estatuto.artigo` já guardam o artigo por extenso — é o
+   que o administrador digita e o que a tela de catálogos exibe — e o SQL de `evidence`
+   prefixava `'Art. '` de novo. Aparecia em toda a tela de indícios.
 
 ---
 
@@ -370,7 +379,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 36 testes, bancos descartáveis
+cargo test                           # 75 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -435,16 +444,27 @@ caminho, e não deve ser reaberto sem motivo novo:
 usa `prompt()`. Funciona e respeita a regra, mas merece um seletor de verdade — as três
 buscas de enquadramento (`evidence_search_*`) já existem para isso.
 
-### 8.2 Testes para `evidence`, `movements`, `audit` e `legal_catalogs` — **alta**
+### 8.2 ~~Testes para os módulos sem cobertura~~ — **CONCLUÍDO**
 
-Continuam sem nenhum teste. Ficaram baratos: `util/fixtures.rs` já monta o mundo inteiro,
-então cada arquivo novo é quase só asserção. `evidence` é o mais relevante — 352 linhas de
-SQL e a lógica de esfera penal escolhida no vínculo. `maps_reports` saiu desta lista.
+`evidence`, `movements`, `audit` e `legal_catalogs` passaram a ter teste, e os comandos
+Tauri são exercitados **pelo IPC de verdade** em `commands_ipc.rs`, sobre o `MockRuntime`.
+Guards, desserialização de request e envelope `ApiResponse` deixaram de ser ponto cego.
 
-**Nenhum comando Tauri foi testado ponta a ponta.** Os testes exercitam os repositórios; os
-guards (`require_admin`), a desserialização dos requests e o envelope `ApiResponse` seguem
-sem cobertura. Se algo quebrar de forma estranha ao ligar uma tela, é o primeiro lugar para
-olhar.
+Duas coisas ficaram registradas no código e valem para quem acrescentar comando:
+
+- **`registrar_comandos` é a lista única** de plugins e comandos, usada pelo `run()` e pelo
+  teste. Duas listas deixariam um comando passar no teste sem estar registrado no app.
+- Um comando que receba `AppHandle` precisa ser **genérico no runtime** (`AppHandle<R>`),
+  senão não compila sob o `MockRuntime`. `files_save_download` é o exemplo.
+
+O que o teste de IPC mostrou sobre as duas convenções de argumento, e que vale saber ao
+depurar: **argumento de comando com a grafia errada é ignorado em silêncio** — o comando
+roda com o default, sem erro nenhum —, enquanto **campo de request faltando vira `Err` do
+IPC**, que no frontend cai no `catch` do `call()`. Por isso o primeiro tipo de defeito
+sobreviveu tanto tempo no `main.ts` legado.
+
+**Ainda sem teste:** `apuratorio_config` tem 3, `users` tem 1 e `auth` tem 1 — cobrem o
+caminho feliz, não os limites. E a cobertura de IPC é de amostra: seis comandos dos 75.
 
 ### 8.3 `cargo sqlx prepare` — **alta**
 
@@ -553,6 +573,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Editar migration já aplicada | `VersionMismatch` no próximo startup | `docker compose down -v && docker compose up -d` |
 | Schema aplicado fora do sqlx | Se alguém rodar o `.sql` por `psql`, não existe `_sqlx_migrations` e o startup seguinte tenta recriar tudo | Conferir `select * from _sqlx_migrations;` |
 | Trocar a espécie de um processo com designação | Recusado por regra de negócio (as designações são histórico e amarram o apuratório) | É intencional; a mensagem explica |
+| Comando novo com `AppHandle` não genérico | Não compila sob o `MockRuntime`, e o teste de IPC quebra | Declare `AppHandle<R>` com `R: Runtime`, como em `files_save_download` |
+| Registrar comando fora de `registrar_comandos` | O comando existe no app e não no teste, ou o contrário | A lista é uma só, em `lib.rs::registrar_comandos` |
 | `replace` sem `assert` em script de edição | Um `s.replace(a, b)` que não casa é um **no-op silencioso**. Foi assim que a rota de configuração de apuratórios ficou sem botão de menu por três commits | Sempre `assert alvo in s` antes de substituir |
 | Filtrar `ativo` na leitura de registro | Um processo antigo perde o catálogo desativado que usava | Filtrar `ativo` só em lista de **opções** |
 | Lista de escopo vazia num filtro | `= ANY('{}')` é falso para toda linha: quem não filtra nada não vê nada | `maps_reports::repository::escopo()` normaliza vazio para `NULL`. Use-o em todo filtro novo |
@@ -572,6 +594,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | por que apuratório não é um catálogo comum | `src-tauri/src/apuratorio_config/domain.rs` |
 | o que o banco recusa | `src-tauri/tests/schema_integrity.sql` |
 | como montar um cenário de teste com processo | `src-tauri/tests/util/fixtures.rs` |
+| como chamar um comando como o frontend chama | `src-tauri/tests/commands_ipc.rs` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
 | o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 75 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
