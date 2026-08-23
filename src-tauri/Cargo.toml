@@ -24,7 +24,18 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync"] }
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+# `migrate` chegava por unificacao transitiva de features, embora
+# `sqlx::migrate!` seja usado em lib.rs e nos testes. Declarado, para que uma
+# mudanca de dependencia nao derrube o build sem aviso.
+#
+# `macros` NAO entra: as macros `query!`/`query_as!` verificam o SQL em
+# compilacao, mas exigem `uuid::Uuid` onde o parametro e `$n::uuid` — e a
+# aplicacao carrega ids como String de ponta a ponta, desde o JSON do frontend.
+# Isso alcancaria 9 das 128 consultas. A verificacao equivalente, para as 128,
+# esta em tests/sql_prepare.rs. Ver secao 8.3 do guia.
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls", "postgres", "chrono", "uuid", "json", "migrate",
+] }
 thiserror = "2"
 bcrypt = "0.16"
 sha2 = "0.10"

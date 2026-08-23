@@ -199,3 +199,223 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
     })
     .await;
 }
+
+// ── Leitura ──────────────────────────────────────────────────────────────────
+//
+// As consultas abaixo montam SQL em tempo de execução (`SELECT_PM`,
+// `COLUNAS_PROCESSO`, `JOIN_PROCESSO`), então não há verificação possível em
+// compilação nem por `PREPARE`: só executá-las. É o que `sql_prepare.rs` cobra.
+
+use adm_p6_tauri_lib::users::domain::UserListItem;
+use chrono::NaiveDate;
+use util::fixtures::{self, envolvido, processo};
+
+fn data(ano: i32, mes: u32, dia: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(ano, mes, dia).unwrap()
+}
+
+fn achar<'a>(itens: &'a [UserListItem], matricula: &str) -> &'a UserListItem {
+    itens
+        .iter()
+        .find(|u| u.matricula == matricula)
+        .unwrap_or_else(|| panic!("militar {matricula} nao esta na lista"))
+}
+
+/// A listagem pagina, busca por nome ou matrícula e ordena pela hierarquia —
+/// não pelo nome, que era o critério do sistema legado.
+#[tokio::test]
+async fn listagem_pagina_busca_e_ordena_pela_hierarquia() {
+    util::com_banco_descartavel("users_lista", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let tudo = repository::list_paginated(&pool, None, 1, 50)
+            .await
+            .unwrap();
+        assert_eq!(tudo.total, 3, "os tres da fixture");
+        assert_eq!(tudo.items.len(), 3);
+        assert_eq!(tudo.page, 1);
+
+        // Busca casa nome e matrícula, sem diferenciar maiúsculas.
+        let por_nome = repository::list_paginated(&pool, Some("pm um"), 1, 50)
+            .await
+            .unwrap();
+        assert_eq!(por_nome.total, 1);
+        assert_eq!(por_nome.items[0].nome, "PM UM");
+
+        let matricula = &tudo.items[0].matricula.clone();
+        let por_matricula = repository::list_paginated(&pool, Some(matricula), 1, 50)
+            .await
+            .unwrap();
+        assert_eq!(por_matricula.total, 1);
+
+        // A paginação devolve o total do escopo, não o tamanho da página.
+        let pagina = repository::list_paginated(&pool, None, 1, 2).await.unwrap();
+        assert_eq!(pagina.items.len(), 2);
+        assert_eq!(pagina.total, 3);
+        let segunda = repository::list_paginated(&pool, None, 2, 2).await.unwrap();
+        assert_eq!(segunda.items.len(), 1);
+        assert_ne!(segunda.items[0].id, pagina.items[0].id);
+
+        // Página fora do intervalo devolve vazio, não erro.
+        let longe = repository::list_paginated(&pool, None, 99, 2)
+            .await
+            .unwrap();
+        assert!(longe.items.is_empty());
+        assert_eq!(longe.total, 3);
+
+        let _ = m;
+    })
+    .await;
+}
+
+/// Só quem pode ser designado entra na lista de encarregados — é o que alimenta
+/// o formulário de processo.
+#[tokio::test]
+async fn lista_de_encarregados_traz_so_quem_pode_ser_designado() {
+    util::com_banco_descartavel("users_encarregados", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let encarregados = repository::list_encarregados(&pool).await.unwrap();
+        assert_eq!(encarregados.len(), 2, "PM TRES nao e encarregado");
+        assert!(encarregados.iter().all(|u| u.is_encarregado));
+
+        // Desativar o militar o tira da lista, sem apagar nada.
+        let mut tx = pool.begin().await.unwrap();
+        repository::set_ativo(&mut tx, &m.pm_um, false)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let depois = repository::list_encarregados(&pool).await.unwrap();
+        assert_eq!(depois.len(), 1);
+    })
+    .await;
+}
+
+/// O detalhe traz o militar com a conta ao lado — ou sem ela, que é o caso de
+/// 229 dos 236 usuários do sistema legado.
+#[tokio::test]
+async fn detalhe_traz_militar_com_e_sem_conta() {
+    util::com_banco_descartavel("users_detalhe", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let sem_conta = repository::get_by_id(&pool, &m.pm_um)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(sem_conta.nome, "PM UM");
+        assert_eq!(
+            sem_conta.posto_graduacao, "Posto Teste PM",
+            "vem o nome, nao a sigla"
+        );
+        assert!(
+            sem_conta.conta_id.is_none(),
+            "militar da fixture nao tem conta"
+        );
+        assert!(sem_conta.conta_email.is_none());
+
+        // Com conta, os campos da conta vêm preenchidos.
+        let perfil: String = sqlx::query_scalar("SELECT id::text FROM perfis_acesso LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO usuarios (policial_militar_id, email, senha_hash, perfil_id)
+             VALUES ($1::uuid, 'pmum@teste.com', 'x', $2::uuid)",
+        )
+        .bind(&m.pm_um)
+        .bind(&perfil)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let com_conta = repository::get_by_id(&pool, &m.pm_um)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(com_conta.conta_email.as_deref(), Some("pmum@teste.com"));
+        assert_eq!(com_conta.conta_perfil.as_deref(), Some("Administrador"));
+
+        // Id inexistente é `None`, não erro.
+        assert!(
+            repository::get_by_id(&pool, &fixtures::conta_admin(&pool).await)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    })
+    .await;
+}
+
+/// As duas listas do detalhe do usuário: onde ele foi designado e onde figurou
+/// como envolvido. São perguntas diferentes e não podem se misturar.
+#[tokio::test]
+async fn processos_do_militar_separam_designacao_de_envolvimento() {
+    util::com_banco_descartavel("users_processos", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p1 = processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 5), None).await;
+        let p2 = processo(&pool, &m, &m.apuratorio, "002", data(2026, 2, 5), None).await;
+
+        // PM UM encarregado do primeiro, escrivão do segundo.
+        for (proc, papel) in [(&p1, &m.papel_encarregado), (&p2, &m.papel_escrivao)] {
+            sqlx::query(
+                "INSERT INTO processo_designacoes
+                     (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+                 SELECT $1::uuid, p.apuratorio_id, $2::uuid, $3::uuid, p.data_instauracao
+                   FROM processos_procedimentos p WHERE p.id = $1::uuid",
+            )
+            .bind(proc)
+            .bind(&m.pm_um)
+            .bind(papel)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        // E envolvido no segundo.
+        envolvido(&pool, &m, &p2, &m.pm_um, 1).await;
+
+        let designados = repository::proceedings_as_designated(&pool, &m.pm_um, None)
+            .await
+            .unwrap();
+        assert_eq!(designados.len(), 2);
+        assert_eq!(designados[0].apuratorio_sigla, "TST-A");
+        assert!(designados.iter().all(|p| p.papel.is_some()));
+        assert!(
+            designados.iter().all(|p| p.status_envolvido.is_none()),
+            "designacao nao traz status de envolvido"
+        );
+        // Mais recente primeiro.
+        assert_eq!(designados[0].numero_documento, "002");
+
+        // O filtro de papel é o que substitui a coluna "como escrivão".
+        let so_escrivao =
+            repository::proceedings_as_designated(&pool, &m.pm_um, Some(&m.papel_escrivao))
+                .await
+                .unwrap();
+        assert_eq!(so_escrivao.len(), 1);
+        assert_eq!(so_escrivao[0].numero_documento, "002");
+
+        let envolvido_em = repository::proceedings_as_involved(&pool, &m.pm_um)
+            .await
+            .unwrap();
+        assert_eq!(envolvido_em.len(), 1);
+        assert!(envolvido_em[0].papel.is_none());
+        assert_eq!(
+            envolvido_em[0].status_envolvido.as_deref(),
+            Some("Sindicado Teste")
+        );
+
+        // Quem não tem nada devolve listas vazias.
+        assert!(
+            repository::proceedings_as_designated(&pool, &m.pm_tres, None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(repository::proceedings_as_involved(&pool, &m.pm_tres)
+            .await
+            .unwrap()
+            .is_empty());
+    })
+    .await;
+}

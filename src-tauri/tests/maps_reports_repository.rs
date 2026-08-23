@@ -474,3 +474,138 @@ async fn categorias_de_indicio_saem_do_catalogo() {
     })
     .await;
 }
+
+// ── Mapas salvos ─────────────────────────────────────────────────────────────
+//
+// O mapa salvo é a única coluna JSONB de domínio do schema, e é justificada:
+// recalcular hoje daria outro resultado, e preservar exatamente o que foi
+// emitido é a razão de o mapa ser salvo. Estas três consultas montam SQL em
+// tempo de execução (`SAVED_MAP_COLS`, `SAVED_MAP_JOINS`), então só executá-las
+// as valida — é o que `sql_prepare.rs` cobra.
+
+use adm_p6_tauri_lib::maps_reports::domain::SaveMapRequest;
+use serde_json::json;
+use util::fixtures::conta_admin;
+
+#[tokio::test]
+async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
+    util::com_banco_descartavel("mapa_salvo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let autor = conta_admin(&pool).await;
+        let snapshot = json!([{ "rotulo": "TST-A nº 001", "responsavel_nome": "PM UM" }]);
+
+        let mut tx = pool.begin().await.unwrap();
+        let id = repository::save_map(
+            &mut tx,
+            &SaveMapRequest {
+                titulo: "Mapa de Março/2026".into(),
+                apuratorio_id: Some(m.apuratorio.clone()),
+                periodo_inicio: data(2026, 3, 1),
+                periodo_fim: data(2026, 3, 31),
+                total_processos: 1,
+                total_concluidos: 0,
+                total_andamento: 1,
+                dados_mapa: snapshot.clone(),
+            },
+            &autor,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let lista = repository::list_saved_maps(&pool).await.unwrap();
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].id, id);
+        assert_eq!(lista[0].titulo, "Mapa de Março/2026");
+        assert_eq!(lista[0].apuratorio_sigla.as_deref(), Some("TST-A"));
+        assert_eq!(lista[0].total_processos, 1);
+        assert_eq!(
+            lista[0].gerado_por.as_deref(),
+            Some("ADMINISTRADOR DO SISTEMA"),
+            "o autor e a conta que gerou"
+        );
+
+        let completo = repository::get_saved_map(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(completo.dados_mapa, snapshot, "o snapshot volta intacto");
+        assert_eq!(completo.cabecalho.titulo, "Mapa de Março/2026");
+
+        // Mudar o mundo depois NÃO reescreve o mapa emitido.
+        sqlx::query("UPDATE apuratorios SET sigla = 'TST-Z' WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let depois = repository::get_saved_map(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(depois.dados_mapa, snapshot, "o snapshot e imutavel");
+    })
+    .await;
+}
+
+/// Mapa sem apuratório é o "completo": todas as espécies num documento só.
+#[tokio::test]
+async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
+    util::com_banco_descartavel("mapa_completo", |pool| async move {
+        fixtures::mundo_configurado(&pool).await;
+        let autor = conta_admin(&pool).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        let id = repository::save_map(
+            &mut tx,
+            &SaveMapRequest {
+                titulo: "Mapa completo".into(),
+                apuratorio_id: None,
+                periodo_inicio: data(2026, 3, 1),
+                periodo_fim: data(2026, 3, 31),
+                total_processos: 0,
+                total_concluidos: 0,
+                total_andamento: 0,
+                dados_mapa: json!([]),
+            },
+            &autor,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let lista = repository::list_saved_maps(&pool).await.unwrap();
+        assert!(lista[0].apuratorio_id.is_none());
+        assert!(
+            lista[0].apuratorio_sigla.is_none(),
+            "o LEFT JOIN aceita a ausencia"
+        );
+
+        // "Excluir" é exclusão lógica: o mapa sai da lista, mas a linha fica.
+        let mut tx = pool.begin().await.unwrap();
+        repository::delete_saved_map(&mut tx, &id).await.unwrap();
+        tx.commit().await.unwrap();
+        assert!(repository::list_saved_maps(&pool).await.unwrap().is_empty());
+
+        // E `get_saved_map` NÃO filtra `ativo`, então ainda alcança o excluído
+        // por id. Nenhuma tela chega lá — só se navega para um mapa a partir da
+        // lista —, mas a assimetria entre as duas consultas ficou registrada na
+        // seção 9 do guia para ser decidida.
+        assert!(repository::get_saved_map(&pool, &id)
+            .await
+            .unwrap()
+            .is_some());
+
+        // Excluir de novo não é erro: o UPDATE afeta a mesma linha.
+        let mut tx = pool.begin().await.unwrap();
+        assert!(repository::delete_saved_map(&mut tx, &id).await.is_ok());
+        tx.commit().await.unwrap();
+
+        // Id inexistente, esse sim, é recusado com regra legível.
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::delete_saved_map(&mut tx, "00000000-0000-4000-8000-000000000000")
+            .await
+            .expect_err("id inexistente");
+        assert!(erro.message().contains("nao encontrado"), "{erro}");
+    })
+    .await;
+}
