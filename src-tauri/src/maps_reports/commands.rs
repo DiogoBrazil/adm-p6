@@ -4,8 +4,9 @@ use crate::app_state::AppState;
 use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::maps_reports::domain::{
-    ContagemRotulada, CsvExport, DriverRankingItem, MapPeriodRequest, MapRow, ReportFilter,
-    SaveMapRequest, SavedMapFull, SavedMapListItem,
+    ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
+    EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
+    SavedMapListItem, SolucoesResumo, StatusPorApuratorio,
 };
 use crate::maps_reports::repository;
 use crate::response::{from_result, ApiResponse};
@@ -172,6 +173,118 @@ pub async fn reports_export_csv(
             require_session(&state).await?;
             let pool = state.pool().await?;
             Ok(repository::export_csv(&pool, &request).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_status_by_apuratorio(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<StatusPorApuratorio>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::status_by_apuratorio(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_by_solution(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<SolucoesResumo>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::by_solution(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_by_evidence_category(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<ContagemRotulada>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::by_evidence_category(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_transgressoes(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<EnquadramentoContagem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::transgressoes(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_infracoes_estatuto(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<EnquadramentoContagem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::infracoes_estatuto(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_infracoes_penais(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<EnquadramentoContagem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::infracoes_penais(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_designations_matrix(
+    state: State<'_, AppState>,
+    filter: Option<DesignacaoMatrizFiltro>,
+) -> Result<ApiResponse<Vec<DesignacaoMatrizLinha>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::designations_matrix(&pool, &filter.unwrap_or_default()).await?)
         }
         .await,
     )

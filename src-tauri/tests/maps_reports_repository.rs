@@ -1,0 +1,521 @@
+//! Mapas e relatórios de escopo configurável.
+//!
+//! Dois motivos para este arquivo. O primeiro é a regra do período do mapa:
+//! `map_rows` filtrava por `data_instauracao BETWEEN`, o que escondia
+//! exatamente o processo antigo que continua pendente — que é o que a Seção
+//! abre o mapa para ver. O segundo é que os sete relatórios novos substituem
+//! consultas que traziam a sigla escrita no SQL; se o escopo voltar a ser
+//! literal, estes testes deixam de passar.
+
+use adm_p6_tauri_lib::maps_reports::domain::{
+    DesignacaoMatrizFiltro, MapPeriodRequest, ReportFilter,
+};
+use adm_p6_tauri_lib::maps_reports::repository;
+use chrono::NaiveDate;
+use sqlx::PgPool;
+
+mod util;
+use util::fixtures::{self, Mundo};
+
+fn data(ano: i32, mes: u32, dia: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(ano, mes, dia).unwrap()
+}
+
+/// Cria um processo. `conclusao` presente = concluído (a coluna booleana foi
+/// eliminada: `concluido` ⟺ `data_conclusao IS NOT NULL`, 128/128 no dump).
+async fn processo(
+    pool: &PgPool,
+    m: &Mundo,
+    apuratorio: &str,
+    numero: &str,
+    instauracao: NaiveDate,
+    conclusao: Option<NaiveDate>,
+) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO processos_procedimentos
+             (apuratorio_id, documento_iniciador_id, numero_documento,
+              unidade_origem_id, municipio_fato_id, natureza_fato_id,
+              data_instauracao, data_recebimento, data_conclusao)
+         VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6::uuid, $7, $7, $8)
+      RETURNING id::text",
+    )
+    .bind(apuratorio)
+    .bind(&m.documento)
+    .bind(numero)
+    .bind(&m.unidade)
+    .bind(&m.municipio)
+    .bind(&m.natureza)
+    .bind(instauracao)
+    .bind(conclusao)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn envolvido(pool: &PgPool, m: &Mundo, processo_id: &str, pm: &str, ordem: i32) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO processo_envolvidos
+             (processo_id, policial_militar_id, status_envolvido_id, ordem)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
+      RETURNING id::text",
+    )
+    .bind(processo_id)
+    .bind(pm)
+    .bind(&m.status_envolvido)
+    .bind(ordem)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn designar(pool: &PgPool, processo_id: &str, pm: &str, papel: &str) {
+    sqlx::query(
+        "INSERT INTO processo_designacoes
+             (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+         SELECT $1::uuid, p.apuratorio_id, $2::uuid, $3::uuid, p.data_instauracao
+           FROM processos_procedimentos p WHERE p.id = $1::uuid",
+    )
+    .bind(processo_id)
+    .bind(pm)
+    .bind(papel)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Um artigo qualquer do RDPM semeado pela 0003 — o relatório precisa de dado
+/// legal real, e a fixture só cobre os catálogos operacionais.
+async fn alguma_transgressao(pool: &PgPool) -> String {
+    sqlx::query_scalar("SELECT id::text FROM transgressoes ORDER BY inciso LIMIT 1")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn alguma_infracao_penal(pool: &PgPool) -> String {
+    sqlx::query_scalar("SELECT id::text FROM infracoes_penais ORDER BY artigo LIMIT 1")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn esfera(pool: &PgPool, ordem: &str) -> String {
+    sqlx::query_scalar(&format!(
+        "SELECT id::text FROM esferas_penais ORDER BY nome {ordem} LIMIT 1"
+    ))
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+// =============================================================================
+
+/// A regra do mapa não é "instaurado no período".
+///
+/// O mapa de março responde "o que a Seção tinha em mãos em março": tudo que
+/// ainda estava aberto naquela data, inclusive de anos anteriores, mais o que
+/// foi concluído dentro do mês.
+#[tokio::test]
+async fn mapa_acumula_o_que_estava_aberto_no_periodo() {
+    util::com_banco_descartavel("mapa_periodo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // Instaurado em 2019 e nunca concluído: é o caso que o filtro antigo
+        // escondia, e o motivo desta correção.
+        processo(&pool, &m, &m.apuratorio, "001", data(2019, 1, 10), None).await;
+        // Concluído dentro do período.
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "002",
+            data(2026, 3, 5),
+            Some(data(2026, 3, 20)),
+        )
+        .await;
+        // Concluído ANTES do período: já não estava em mãos em março.
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "003",
+            data(2026, 1, 5),
+            Some(data(2026, 2, 10)),
+        )
+        .await;
+        // Instaurado DEPOIS do fim do período.
+        processo(&pool, &m, &m.apuratorio, "004", data(2026, 5, 1), None).await;
+
+        let linhas = repository::map_rows(
+            &pool,
+            &MapPeriodRequest {
+                periodo_inicio: data(2026, 3, 1),
+                periodo_fim: data(2026, 3, 31),
+                apuratorio_ids: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let numeros: Vec<&str> = linhas
+            .iter()
+            .map(|l| {
+                l.rotulo
+                    .split(" nº ")
+                    .nth(1)
+                    .unwrap()
+                    .split('/')
+                    .next()
+                    .unwrap()
+            })
+            .collect();
+        assert!(
+            numeros.contains(&"001"),
+            "o aberto desde 2019 tem de aparecer"
+        );
+        assert!(
+            numeros.contains(&"002"),
+            "o concluído no mês tem de aparecer"
+        );
+        assert!(
+            !numeros.contains(&"003"),
+            "concluído antes do período não entra"
+        );
+        assert!(
+            !numeros.contains(&"004"),
+            "instaurado depois do período não entra"
+        );
+        assert_eq!(linhas.len(), 2);
+    })
+    .await;
+}
+
+/// Escopo vazio quer dizer "todos". `= ANY('{}')` é falso para toda linha, e
+/// sem normalizar a lista o operador que não filtra nada não vê nada.
+#[tokio::test]
+async fn escopo_vazio_significa_todos() {
+    util::com_banco_descartavel("mapa_escopo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        processo(&pool, &m, &m.apuratorio, "001", data(2026, 3, 5), None).await;
+
+        let pedido = |ids| MapPeriodRequest {
+            periodo_inicio: data(2026, 1, 1),
+            periodo_fim: data(2026, 12, 31),
+            apuratorio_ids: ids,
+        };
+
+        let vazio = repository::map_rows(&pool, &pedido(Some(vec![])))
+            .await
+            .unwrap();
+        let nulo = repository::map_rows(&pool, &pedido(None)).await.unwrap();
+        assert_eq!(vazio.len(), 1, "lista vazia não pode zerar o mapa");
+        assert_eq!(vazio.len(), nulo.len());
+
+        // Já um escopo preenchido filtra de verdade.
+        let outro = repository::map_rows(&pool, &pedido(Some(vec![m.apuratorio_livre.clone()])))
+            .await
+            .unwrap();
+        assert!(outro.is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn status_por_apuratorio_separa_andamento_de_concluido() {
+    util::com_banco_descartavel("rel_status", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 10), None).await;
+        processo(&pool, &m, &m.apuratorio, "002", data(2026, 2, 10), None).await;
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "003",
+            data(2026, 3, 10),
+            Some(data(2026, 4, 1)),
+        )
+        .await;
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "004",
+            data(2026, 3, 10),
+            None,
+        )
+        .await;
+        // Ano anterior: o filtro de ano tem de deixá-lo de fora.
+        processo(&pool, &m, &m.apuratorio, "005", data(2025, 3, 10), None).await;
+
+        let linhas = repository::status_by_apuratorio(
+            &pool,
+            &ReportFilter {
+                ano: Some(2026),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let a = linhas.iter().find(|l| l.sigla == "TST-A").unwrap();
+        assert_eq!((a.em_andamento, a.concluidos, a.total), (2, 1, 3));
+        let b = linhas.iter().find(|l| l.sigla == "TST-B").unwrap();
+        assert_eq!((b.em_andamento, b.concluidos, b.total), (1, 0, 1));
+        // O tipo vem junto, para a tela agrupar sem conhecer sigla nenhuma.
+        assert_eq!(a.tipo_apuratorio_nome, "procedimento");
+    })
+    .await;
+}
+
+/// A esfera penal é escolhida no vínculo (art. 9º do CPM), então a mesma
+/// infração aparece uma vez por esfera. Era isso que os dois comandos separados
+/// `common_crimes_stats` e `military_crimes_stats` não conseguiam expressar.
+#[tokio::test]
+async fn infracao_penal_conta_por_esfera_do_vinculo() {
+    util::com_banco_descartavel("rel_penal", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let infracao = alguma_infracao_penal(&pool).await;
+        let militar = esfera(&pool, "ASC").await;
+        let comum = esfera(&pool, "DESC").await;
+        assert_ne!(militar, comum, "a 0003 semeia duas esferas");
+
+        let p = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "001",
+            data(2026, 2, 1),
+            None,
+        )
+        .await;
+        let e1 = envolvido(&pool, &m, &p, &m.pm_um, 1).await;
+        let e2 = envolvido(&pool, &m, &p, &m.pm_dois, 2).await;
+
+        for (env, esf) in [(&e1, &militar), (&e2, &comum)] {
+            sqlx::query(
+                "INSERT INTO envolvido_infracoes_penais
+                     (envolvido_id, infracao_penal_id, esfera_penal_id)
+                 VALUES ($1::uuid, $2::uuid, $3::uuid)",
+            )
+            .bind(env)
+            .bind(&infracao)
+            .bind(esf)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let linhas = repository::infracoes_penais(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(linhas.len(), 2, "uma linha por esfera, não uma só somada");
+        assert!(linhas.iter().all(|l| l.total == 1));
+        let classificacoes: Vec<&str> = linhas
+            .iter()
+            .map(|l| l.classificacao.as_deref().unwrap())
+            .collect();
+        assert_ne!(classificacoes[0], classificacoes[1]);
+        // A classificação vem de JOIN, nunca de literal no SQL.
+        assert!(classificacoes.iter().all(|c| c.contains(" · ")));
+    })
+    .await;
+}
+
+/// Relatório lê registro existente, não lista opções: o catálogo desativado
+/// continua contando. Espelha
+/// `processo_antigo_continua_exibindo_catalogo_desativado`.
+#[tokio::test]
+async fn relatorio_continua_contando_catalogo_desativado() {
+    util::com_banco_descartavel("rel_desativado", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let transgressao = alguma_transgressao(&pool).await;
+
+        let p = processo(&pool, &m, &m.apuratorio, "001", data(2019, 5, 1), None).await;
+        let env = envolvido(&pool, &m, &p, &m.pm_um, 1).await;
+        sqlx::query(
+            "INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&env)
+        .bind(&transgressao)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE transgressoes SET ativo = false WHERE id = $1::uuid")
+            .bind(&transgressao)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let linhas = repository::transgressoes(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            linhas.len(),
+            1,
+            "desativar o artigo não apaga o que já foi imputado"
+        );
+        assert_eq!(linhas[0].total, 1);
+        assert!(linhas[0].rotulo.contains("inc."));
+        assert!(
+            linhas[0].classificacao.is_some(),
+            "a gravidade vem do artigo"
+        );
+    })
+    .await;
+}
+
+/// A quebra por papel é parâmetro. O legado lia colunas fixas (`escrivao_id`,
+/// `presidente_id`) e, quando saíram do schema, a informação sumiu junto.
+#[tokio::test]
+async fn matriz_de_designacoes_isola_o_papel() {
+    util::com_banco_descartavel("rel_matriz", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let p1 = processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 5), None).await;
+        let p2 = processo(&pool, &m, &m.apuratorio, "002", data(2026, 2, 5), None).await;
+        let p3 = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "003",
+            data(2026, 3, 5),
+            None,
+        )
+        .await;
+
+        designar(&pool, &p1, &m.pm_um, &m.papel_encarregado).await;
+        designar(&pool, &p2, &m.pm_um, &m.papel_encarregado).await;
+        designar(&pool, &p3, &m.pm_um, &m.papel_encarregado).await;
+        // O mesmo militar, como escrivão, num dos processos.
+        designar(&pool, &p1, &m.pm_dois, &m.papel_escrivao).await;
+
+        let todos = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
+            .await
+            .unwrap();
+        assert_eq!(todos.len(), 2, "dois militares designados");
+        let um = todos
+            .iter()
+            .find(|l| l.policial_militar_id == m.pm_um)
+            .unwrap();
+        assert_eq!(um.total, 3);
+        // Duas colunas: TST-A com 2 e TST-B com 1.
+        assert_eq!(um.celulas.len(), 2);
+        let a = um.celulas.iter().find(|c| c.rotulo == "TST-A").unwrap();
+        assert_eq!(a.total, 2);
+
+        // Filtrado pelo papel de escrivão sobra só o segundo militar.
+        let so_escrivao = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                papel_ids: Some(vec![m.papel_escrivao.clone()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(so_escrivao.len(), 1);
+        assert_eq!(so_escrivao[0].policial_militar_id, m.pm_dois);
+        assert_eq!(so_escrivao[0].total, 1);
+    })
+    .await;
+}
+
+/// Sugerida e decidida são catálogos distintos, e o relatório não pode fundi-los:
+/// o encarregado sugere, a autoridade decide.
+#[tokio::test]
+async fn solucoes_sugeridas_e_decididas_sao_contadas_em_separado() {
+    util::com_banco_descartavel("rel_solucao", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "001",
+            data(2026, 2, 1),
+            None,
+        )
+        .await;
+        let e1 = envolvido(&pool, &m, &p, &m.pm_um, 1).await;
+        let e2 = envolvido(&pool, &m, &p, &m.pm_dois, 2).await;
+
+        sqlx::query(
+            "UPDATE processo_envolvidos
+                SET solucao_sugerida_id = $2::uuid, solucao_decidida_id = $3::uuid
+              WHERE id = $1::uuid",
+        )
+        .bind(&e1)
+        .bind(&m.solucao_sugerida)
+        .bind(&m.solucao_punido)
+        .execute(&pool)
+        .await
+        .unwrap();
+        // O segundo só tem sugestão: a autoridade ainda não decidiu.
+        sqlx::query(
+            "UPDATE processo_envolvidos SET solucao_sugerida_id = $2::uuid WHERE id = $1::uuid",
+        )
+        .bind(&e2)
+        .bind(&m.solucao_sugerida)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let resumo = repository::by_solution(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(resumo.sugeridas.len(), 1);
+        assert_eq!(resumo.sugeridas[0].total, 2);
+        assert_eq!(resumo.decididas.len(), 1);
+        assert_eq!(resumo.decididas[0].total, 1, "só um teve decisão");
+        assert_eq!(resumo.decididas[0].rotulo, "Punido Teste");
+    })
+    .await;
+}
+
+/// As categorias vêm do catálogo. Antes eram quatro strings procuradas dentro
+/// de um array JSONB.
+#[tokio::test]
+async fn categorias_de_indicio_saem_do_catalogo() {
+    util::com_banco_descartavel("rel_categoria", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "001",
+            data(2026, 2, 1),
+            None,
+        )
+        .await;
+        let env = envolvido(&pool, &m, &p, &m.pm_um, 1).await;
+        sqlx::query(
+            "INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&env)
+        .bind(&m.categoria_indicio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let linhas = repository::by_evidence_category(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(linhas.len(), 1);
+        assert_eq!(linhas[0].rotulo, "Sem Indicios Teste");
+        assert_eq!(linhas[0].total, 1);
+
+        // Fora do escopo, some.
+        let outro = repository::by_evidence_category(
+            &pool,
+            &ReportFilter {
+                apuratorio_ids: Some(vec![m.apuratorio.clone()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(outro.is_empty());
+    })
+    .await;
+}

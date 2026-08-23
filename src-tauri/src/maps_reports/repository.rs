@@ -3,9 +3,20 @@ use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::error::AppError;
 use crate::maps_reports::domain::{
-    ContagemRotulada, CsvExport, DriverRankingItem, MapPeriodRequest, MapRow, ReportFilter,
-    SaveMapRequest, SavedMapFull, SavedMapListItem,
+    ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
+    EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
+    SavedMapListItem, SolucoesResumo, StatusPorApuratorio,
 };
+
+/// Lista de escopo vazia significa "todos", não "nenhum".
+///
+/// Sem isto, `= ANY('{}')` é falso para toda linha e a tela devolve zero
+/// resultados justamente quando o operador não filtrou nada — que é o caso
+/// mais comum. `MapPeriodRequest.apuratorio_ids` já documentava "vazio =
+/// todas"; agora o código cumpre o que estava escrito.
+fn escopo(ids: &Option<Vec<String>>) -> Option<&[String]> {
+    ids.as_deref().filter(|lista| !lista.is_empty())
+}
 
 const SAVED_MAP_COLS: &str = r#"
     m.id::text                         AS id,
@@ -31,6 +42,13 @@ const SAVED_MAP_JOINS: &str = r#"
 /// Mapa do período: uma linha por processo, com responsável vigente, envolvidos,
 /// prazo vigente e último andamento. O último andamento vem da tabela relacional
 /// — antes o mapa lia um jsonb que nenhum código escrevia mais.
+///
+/// **A regra do período não é `data_instauracao BETWEEN`.** O mapa responde
+/// "o que a Seção tinha em mãos neste período": os processos **ainda abertos**
+/// instaurados até o fim dele — inclusive os de anos anteriores — mais os
+/// **concluídos dentro** dele. Um filtro por instauração esconderia justamente
+/// o processo antigo que continua pendente, que é o que o mapa existe para
+/// mostrar. Travado por `mapa_acumula_o_que_estava_aberto_no_periodo`.
 pub async fn map_rows(
     pool: &PgPool,
     request: &MapPeriodRequest,
@@ -81,14 +99,15 @@ pub async fn map_rows(
                ORDER BY an.ocorrido_em DESC LIMIT 1
           ) andam ON true
          WHERE p.ativo
-           AND p.data_instauracao BETWEEN $1 AND $2
+           AND (   (p.data_conclusao IS NULL     AND p.data_instauracao <= $2)
+                OR (p.data_conclusao IS NOT NULL AND p.data_conclusao BETWEEN $1 AND $2) )
            AND ($3::uuid[] IS NULL OR p.apuratorio_id = ANY($3::uuid[]))
          ORDER BY a.sigla, p.data_instauracao
         "#,
     )
     .bind(request.periodo_inicio)
     .bind(request.periodo_fim)
-    .bind(request.apuratorio_ids.as_deref())
+    .bind(escopo(&request.apuratorio_ids))
     .fetch_all(pool)
     .await
 }
@@ -177,7 +196,7 @@ pub async fn by_responsible(
           ORDER BY total DESC, pm.nome
           LIMIT $3",
     )
-    .bind(filter.apuratorio_ids.as_deref())
+    .bind(escopo(&filter.apuratorio_ids))
     .bind(filter.ano)
     .bind(filter.limit.unwrap_or(50).clamp(1, 500))
     .fetch_all(pool)
@@ -203,11 +222,13 @@ pub async fn driver_ranking(
            JOIN policiais_militares pm    ON pm.id = e.policial_militar_id
            JOIN postos_graduacoes pg      ON pg.id = pm.posto_graduacao_id
           WHERE e.e_condutor AND nf.exige_condutor AND p.ativo
-            AND ($1::int IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $1)
+            AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
+            AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $2)
           GROUP BY pm.id, pm.nome, pm.matricula, pg.sigla
           ORDER BY total DESC, pm.nome
-          LIMIT $2",
+          LIMIT $3",
     )
+    .bind(escopo(&filter.apuratorio_ids))
     .bind(filter.ano)
     .bind(filter.limit.unwrap_or(20).clamp(1, 200))
     .fetch_all(pool)
@@ -230,7 +251,7 @@ pub async fn by_nature(
           GROUP BY nf.id, nf.nome
           ORDER BY total DESC, nf.nome",
     )
-    .bind(filter.apuratorio_ids.as_deref())
+    .bind(escopo(&filter.apuratorio_ids))
     .bind(filter.ano)
     .fetch_all(pool)
     .await
@@ -293,4 +314,310 @@ pub async fn export_csv(
         conteudo: base64::engine::general_purpose::STANDARD
             .encode(format!("\u{feff}{csv}").as_bytes()),
     })
+}
+
+// =============================================================================
+// Relatórios de escopo configurável
+//
+// Substituem os 9 comandos `proceedings_*_stats` do frontend legado, que
+// escreviam a espécie no SQL (`IN ('IPM','SR','SV')`) e conheciam as quatro
+// categorias de indício pelo nome. Aqui o escopo é sempre PARÂMETRO.
+//
+// Regra de leitura (princípio 6 do guia): os JOINs para catálogos NÃO filtram
+// `ativo`. Relatório lê registro existente, não lista opções — um enquadramento
+// de 2019 continua contando mesmo que o artigo tenha sido desativado depois.
+// =============================================================================
+
+/// Filtro comum a todos os relatórios abaixo: escopo de apuratórios e ano de
+/// instauração. `$1` e `$2` ficam reservados para ele.
+const FILTRO_ESCOPO: &str = "AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
+            AND ($2::int    IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $2)";
+
+/// Situação por apuratório. Substitui `in_progress_stats`, que agrupava pela
+/// coluna de texto `tipo_detalhe` e só sabia contar o que estava em andamento.
+pub async fn status_by_apuratorio(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<StatusPorApuratorio>, sqlx::Error> {
+    sqlx::query_as::<_, StatusPorApuratorio>(&format!(
+        "SELECT a.id::text  AS apuratorio_id,
+                a.sigla     AS sigla,
+                a.nome      AS nome,
+                ta.id::text AS tipo_apuratorio_id,
+                ta.nome     AS tipo_apuratorio_nome,
+                count(*) FILTER (WHERE p.data_conclusao IS NULL)     AS em_andamento,
+                count(*) FILTER (WHERE p.data_conclusao IS NOT NULL) AS concluidos,
+                count(*)                                             AS total
+           FROM processos_procedimentos p
+           JOIN apuratorios a       ON a.id = p.apuratorio_id
+           JOIN tipos_apuratorio ta ON ta.id = a.tipo_apuratorio_id
+          WHERE p.ativo
+            {FILTRO_ESCOPO}
+          GROUP BY a.id, a.sigla, a.nome, ta.id, ta.nome
+          ORDER BY ta.nome, a.sigla"
+    ))
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .fetch_all(pool)
+    .await
+}
+
+/// O que foi sugerido e o que foi decidido, por envolvido.
+///
+/// São dois catálogos porque são dois atos distintos: o encarregado sugere, a
+/// autoridade decide (seção 2 do guia). O legado tinha uma coluna só,
+/// `solucao_tipo`, e o relatório classificava por `'punido' in solucao.lower()`.
+pub async fn by_solution(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<SolucoesResumo, sqlx::Error> {
+    async fn contar(
+        pool: &PgPool,
+        filter: &ReportFilter,
+        tabela: &str,
+        coluna: &str,
+    ) -> Result<Vec<ContagemRotulada>, sqlx::Error> {
+        // `tabela` e `coluna` são literais do código, nunca da requisição.
+        sqlx::query_as::<_, ContagemRotulada>(&format!(
+            "SELECT s.id::text AS id, s.nome AS rotulo, count(*) AS total
+               FROM processo_envolvidos e
+               JOIN processos_procedimentos p ON p.id = e.processo_id
+               JOIN {tabela} s                ON s.id = e.{coluna}
+              WHERE p.ativo
+                {FILTRO_ESCOPO}
+              GROUP BY s.id, s.nome
+              ORDER BY total DESC, s.nome"
+        ))
+        .bind(escopo(&filter.apuratorio_ids))
+        .bind(filter.ano)
+        .fetch_all(pool)
+        .await
+    }
+
+    Ok(SolucoesResumo {
+        sugeridas: contar(
+            pool,
+            filter,
+            "tipos_solucao_sugerida",
+            "solucao_sugerida_id",
+        )
+        .await?,
+        decididas: contar(
+            pool,
+            filter,
+            "tipos_solucao_decidida",
+            "solucao_decidida_id",
+        )
+        .await?,
+    })
+}
+
+/// Envolvidos por categoria de indício. As categorias vêm do catálogo — antes
+/// eram as quatro strings fixas que `ipm_evidence_stats` procurava dentro de um
+/// array JSONB.
+pub async fn by_evidence_category(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<ContagemRotulada>, sqlx::Error> {
+    sqlx::query_as::<_, ContagemRotulada>(&format!(
+        "SELECT c.id::text AS id, c.nome AS rotulo, count(*) AS total
+           FROM envolvido_categorias_indicio eci
+           JOIN categorias_indicio c      ON c.id = eci.categoria_indicio_id
+           JOIN processo_envolvidos e     ON e.id = eci.envolvido_id
+           JOIN processos_procedimentos p ON p.id = e.processo_id
+          WHERE p.ativo
+            {FILTRO_ESCOPO}
+          GROUP BY c.id, c.nome
+          ORDER BY total DESC, c.nome"
+    ))
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .fetch_all(pool)
+    .await
+}
+
+/// Transgressões do RDPM mais imputadas. A gravidade sai do artigo, não de um
+/// `CASE nt.codigo WHEN 'leve' THEN '15'` — que era como o legado a reconstruía.
+pub async fn transgressoes(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<EnquadramentoContagem>, sqlx::Error> {
+    sqlx::query_as::<_, EnquadramentoContagem>(&format!(
+        "SELECT t.id::text                          AS id,
+                ar.artigo || ', inc. ' || t.inciso   AS rotulo,
+                t.texto                              AS descricao,
+                nt.nome                              AS classificacao,
+                count(*)                             AS total
+           FROM envolvido_transgressoes et
+           JOIN transgressoes t           ON t.id = et.transgressao_id
+           JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
+           JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+           JOIN processo_envolvidos e     ON e.id = et.envolvido_id
+           JOIN processos_procedimentos p ON p.id = e.processo_id
+          WHERE p.ativo
+            {FILTRO_ESCOPO}
+          GROUP BY t.id, ar.artigo, t.inciso, t.texto, nt.nome
+          ORDER BY total DESC, ar.artigo, t.inciso
+          LIMIT $3"
+    ))
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .bind(filter.limit.unwrap_or(10).clamp(1, 500))
+    .fetch_all(pool)
+    .await
+}
+
+/// Infrações do Estatuto mais imputadas. O rótulo se monta do dado — o legado
+/// tinha `'Art. 29, Inc. ' || inciso` escrito no SQL, e por isso o art. 32 não
+/// aparecia em relatório nenhum.
+pub async fn infracoes_estatuto(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<EnquadramentoContagem>, sqlx::Error> {
+    sqlx::query_as::<_, EnquadramentoContagem>(&format!(
+        "SELECT ie.id::text                          AS id,
+                ie.artigo || ', inc. ' || ie.inciso  AS rotulo,
+                ie.texto                             AS descricao,
+                dl.nome                              AS classificacao,
+                count(*)                             AS total
+           FROM envolvido_infracoes_estatuto eie
+           JOIN infracoes_estatuto ie     ON ie.id = eie.infracao_estatuto_id
+           JOIN dispositivos_legais dl    ON dl.id = ie.dispositivo_legal_id
+           JOIN processo_envolvidos e     ON e.id = eie.envolvido_id
+           JOIN processos_procedimentos p ON p.id = e.processo_id
+          WHERE p.ativo
+            {FILTRO_ESCOPO}
+          GROUP BY ie.id, ie.artigo, ie.inciso, ie.texto, dl.nome
+          ORDER BY total DESC, ie.artigo, ie.inciso
+          LIMIT $3"
+    ))
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .bind(filter.limit.unwrap_or(10).clamp(1, 500))
+    .fetch_all(pool)
+    .await
+}
+
+/// Infrações penais imputadas, quebradas por **esfera**.
+///
+/// A esfera é escolhida no vínculo, não no artigo (art. 9º do CPM), então a
+/// mesma infração pode aparecer em duas linhas — uma militar, outra comum. Isso
+/// é o resultado correto, e é o que substitui os dois comandos separados
+/// `common_crimes_stats` e `military_crimes_stats`, que decidiam a esfera pelo
+/// nome do dispositivo legal escrito no SQL.
+pub async fn infracoes_penais(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<EnquadramentoContagem>, sqlx::Error> {
+    sqlx::query_as::<_, EnquadramentoContagem>(&format!(
+        "SELECT ip.id::text AS id,
+                dl.nome || ', ' || ip.artigo
+                    || COALESCE(', ' || ip.paragrafo, '')
+                    || COALESCE(', inc. ' || ip.inciso, '')
+                    || COALESCE(', al. ' || ip.alinea, '') AS rotulo,
+                ip.descricao                               AS descricao,
+                ef.nome || ' · ' || esp.nome               AS classificacao,
+                count(*)                                   AS total
+           FROM envolvido_infracoes_penais eip
+           JOIN infracoes_penais ip          ON ip.id = eip.infracao_penal_id
+           JOIN esferas_penais ef            ON ef.id = eip.esfera_penal_id
+           JOIN especies_infracao_penal esp  ON esp.id = ip.especie_id
+           JOIN dispositivos_legais dl       ON dl.id = ip.dispositivo_legal_id
+           JOIN processo_envolvidos e        ON e.id = eip.envolvido_id
+           JOIN processos_procedimentos p    ON p.id = e.processo_id
+          WHERE p.ativo
+            {FILTRO_ESCOPO}
+          GROUP BY ip.id, dl.nome, ip.artigo, ip.paragrafo, ip.inciso, ip.alinea,
+                   ip.descricao, ef.nome, esp.nome
+          ORDER BY total DESC, dl.nome, ip.artigo
+          LIMIT $3"
+    ))
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .bind(filter.limit.unwrap_or(20).clamp(1, 500))
+    .fetch_all(pool)
+    .await
+}
+
+/// Matriz militar × apuratório, contando designações.
+///
+/// Substitui `obter_estatisticas_encarregados`, que fazia 11 consultas por
+/// militar, uma por sigla, e lia colunas fixas de papel (`escrivao_id`,
+/// `presidente_id`, `interrogante_id`). Aqui o recorte por papel é o parâmetro
+/// `papel_ids`, e as colunas saem do catálogo de apuratórios.
+///
+/// Conta **toda designação registrada**, inclusive as já encerradas: se um
+/// militar foi encarregado e depois substituído, o trabalho que ele teve não
+/// desaparece do panorama. Quem quer só o responsável vigente usa
+/// `by_responsible`.
+pub async fn designations_matrix(
+    pool: &PgPool,
+    filter: &DesignacaoMatrizFiltro,
+) -> Result<Vec<DesignacaoMatrizLinha>, sqlx::Error> {
+    #[derive(sqlx::FromRow)]
+    struct Celula {
+        policial_militar_id: String,
+        nome: String,
+        matricula: String,
+        posto_graduacao: String,
+        apuratorio_id: String,
+        apuratorio_sigla: String,
+        total: i64,
+    }
+
+    let celulas: Vec<Celula> = sqlx::query_as(
+        "SELECT pm.id::text AS policial_militar_id,
+                pm.nome      AS nome,
+                pm.matricula AS matricula,
+                pg.sigla     AS posto_graduacao,
+                a.id::text   AS apuratorio_id,
+                a.sigla      AS apuratorio_sigla,
+                count(DISTINCT d.processo_id) AS total
+           FROM processo_designacoes d
+           JOIN processos_procedimentos p ON p.id = d.processo_id
+           JOIN apuratorios a             ON a.id = p.apuratorio_id
+           JOIN policiais_militares pm    ON pm.id = d.policial_militar_id
+           JOIN postos_graduacoes pg      ON pg.id = pm.posto_graduacao_id
+          WHERE p.ativo
+            AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
+            AND ($2::uuid[] IS NULL OR d.papel_id = ANY($2::uuid[]))
+            AND ($3::int    IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $3)
+          GROUP BY pm.id, pm.nome, pm.matricula, pg.sigla, a.id, a.sigla
+          ORDER BY pm.nome, a.sigla",
+    )
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(escopo(&filter.papel_ids))
+    .bind(filter.ano)
+    .fetch_all(pool)
+    .await?;
+
+    // As linhas já vêm ordenadas por militar, então basta agrupar em sequência.
+    let mut linhas: Vec<DesignacaoMatrizLinha> = Vec::new();
+    for celula in celulas {
+        let linha = match linhas.last_mut() {
+            Some(ultima) if ultima.policial_militar_id == celula.policial_militar_id => ultima,
+            _ => {
+                linhas.push(DesignacaoMatrizLinha {
+                    policial_militar_id: celula.policial_militar_id.clone(),
+                    nome: celula.nome,
+                    matricula: celula.matricula,
+                    posto_graduacao: celula.posto_graduacao,
+                    celulas: Vec::new(),
+                    total: 0,
+                });
+                linhas.last_mut().expect("acabou de ser inserida")
+            }
+        };
+        linha.total += celula.total;
+        linha.celulas.push(ContagemRotulada {
+            id: celula.apuratorio_id,
+            rotulo: celula.apuratorio_sigla,
+            total: celula.total,
+        });
+    }
+
+    linhas.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.nome.cmp(&b.nome)));
+    let limite = filter.limit.unwrap_or(100).clamp(1, 500) as usize;
+    linhas.truncate(limite);
+    Ok(linhas)
 }
