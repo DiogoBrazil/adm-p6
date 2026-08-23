@@ -12,6 +12,7 @@ import {
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
+import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
 import {
   ROTA_MENSAL as ROTA_MAPA_MENSAL,
   ROTA_SALVOS as ROTA_MAPAS_SALVOS,
@@ -130,7 +131,7 @@ let routes: Route[] = [
   },
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
-  { path: "/estatisticas/anuais", label: "Estatísticas Anuais", group: "Relatórios", printable: true },
+  { path: ROTA_ANUAL, label: "Relatório Anual", group: "Relatórios" },
   { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
 ];
 
@@ -569,7 +570,7 @@ async function renderRoute() {
 
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;
 
-  if (route.path === "/estatisticas/anuais") return renderAnnualStats();
+  if (route.path === ROTA_ANUAL) return renderRelatorioAnual(contexto);
   if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
   if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
   if (route.path === ROTA_MAPA_MENSAL) return renderMapaMensal(contexto);
@@ -936,90 +937,6 @@ async function renderAuditWithFilters() {
   bindExportEvents({ ...auditRoute, csvExport: undefined });
 }
 
-async function renderAnnualStats() {
-  shell(`<section class="panel"><p>Carregando...</p></section>`);
-
-  const yearsResp = await call<number[]>("reports_available_years");
-  const years: number[] = yearsResp.data ?? [selectedYear];
-
-  const statsResp = await call<Record<string, unknown>>("reports_annual_statistics", { ano: selectedYear });
-  const stats = statsResp.data;
-
-  const yearOptions = years.map((y) =>
-    `<option value="${y}" ${y === selectedYear ? "selected" : ""}>${y}</option>`
-  ).join("");
-
-  const summaryCards = stats ? `
-    <div class="stat-grid">
-      ${[
-        ["Total Geral", stats.total_geral],
-        ["Processos", stats.total_processos],
-        ["Procedimentos", stats.total_procedimentos],
-        ["Punidos (PAD/PADS)", stats.pad_pads_punidos],
-        ["Absolvidos/Arq.", stats.pad_pads_absolvidos_arquivados],
-        ["Indícios Crime", stats.ipm_sindicancia_indicios_crime],
-        ["Indícios Transgressão", stats.ipm_sindicancia_indicios_transgressao],
-      ].map(([label, value]) => `
-        <div class="stat-card">
-          <span class="stat-value">${escapeHtml(String(value ?? 0))}</span>
-          <span class="stat-label">${label}</span>
-        </div>
-      `).join("")}
-    </div>
-  ` : `<p class="error">${statsResp.error ?? "Erro ao carregar"}</p>`;
-
-  const buildTypeTable = (rows: unknown[]) => {
-    if (!Array.isArray(rows) || rows.length === 0) return `<p class="empty">Sem dados.</p>`;
-    return `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Tipo</th><th>Total</th><th>Concluídos</th><th>Em Andamento</th></tr></thead>
-          <tbody>
-            ${rows.map((r) => {
-              const row = r as Record<string, unknown>;
-              return `<tr>
-                <td>${escapeHtml(String(row.tipo_detalhe ?? row.categoria ?? "—"))}</td>
-                <td>${escapeHtml(String(row.total ?? 0))}</td>
-                <td>${escapeHtml(String(row.concluidos ?? 0))}</td>
-                <td>${escapeHtml(String(row.em_andamento ?? 0))}</td>
-              </tr>`;
-            }).join("")}
-          </tbody>
-        </table>
-      </div>`;
-  };
-
-  shell(`
-    <section class="panel">
-      <div class="page-head">
-        <div><h1>Estatísticas Anuais</h1></div>
-        <div class="page-head-right">
-          <form id="year-form" class="search-bar">
-            <select name="ano">${yearOptions}</select>
-            <button type="submit">Ver</button>
-          </form>
-          ${exportBar({ path: "/estatisticas/anuais", label: "", group: "", printable: true })}
-        </div>
-      </div>
-      ${summaryCards}
-      ${stats ? `
-        <h2 style="margin-top:24px">Processos por Tipo</h2>
-        ${buildTypeTable(stats.processos_por_tipo as unknown[])}
-        <h2 style="margin-top:24px">Procedimentos por Tipo</h2>
-        ${buildTypeTable(stats.procedimentos_por_tipo as unknown[])}
-      ` : ""}
-    </section>
-  `);
-
-  document.querySelector<HTMLFormElement>("#year-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget as HTMLFormElement);
-    selectedYear = Number(form.get("ano")) || selectedYear;
-    void renderAnnualStats();
-  });
-
-  bindExportEvents({ path: "/estatisticas/anuais", label: "", group: "", printable: true });
-}
 
 async function renderUsersList() {
   shell(`<section class="panel"><p>Carregando...</p></section>`);

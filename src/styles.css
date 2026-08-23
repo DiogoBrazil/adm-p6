@@ -813,8 +813,25 @@ tr.atrasado {
   .row-actions,
   .export-bar,
   .search-bar,
+  .filtro-bar,
   .actions {
     display: none !important;
+  }
+
+  /* Painel de relatório não pode ser partido no meio pela quebra de página. */
+  .stat-panel {
+    break-inside: avoid;
+  }
+
+  /* Em uma coluna: duas colunas de tabela em A4 ficam ilegíveis. */
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* A barra proporcional some no fundo branco da impressora. */
+  td.barra span {
+    background: #94a3b8 !important;
+    print-color-adjust: exact;
   }
 
   .main {
