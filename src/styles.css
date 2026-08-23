@@ -831,3 +831,9 @@ tr.atrasado {
     background: #fff;
   }
 }
+
+/* Coluna numérica: alinhada à direita para os dígitos se lerem em coluna. */
+td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

@@ -18,6 +18,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# Diálogo nativo de "salvar como". No WebView o `<a download>` não define
+# destino nem abre seletor — ver src/files/commands.rs.
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync"] }

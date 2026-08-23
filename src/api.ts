@@ -48,6 +48,8 @@ import type {
   CategoriaIndicioItem,
   Coluna,
   ContagemRotulada,
+  DesignacaoMatrizFiltro,
+  DesignacaoMatrizLinha,
   CsvExport,
   DashboardSummary,
   DeadlineItem,
@@ -58,6 +60,7 @@ import type {
   DesignacaoRequest,
   DocumentoIniciadorItem,
   DriverRankingItem,
+  EnquadramentoContagem,
   EnvolvidoComIndicios,
   EnvolvidoItem,
   EnvolvidoRequest,
@@ -83,6 +86,7 @@ import type {
   SaveDocumentoIniciadorRequest,
   SaveEvidenceRequest,
   SaveMapRequest,
+  SaveFileRequest,
   SavePapelRequest,
   SaveProceedingRequest,
   SaveUserRequest,
@@ -92,6 +96,8 @@ import type {
   SelecaoInfracaoEstatuto,
   SelecaoInfracaoPenal,
   SessionUser,
+  StatusPorApuratorio,
+  SolucoesResumo,
   SubstituirDesignacaoRequest,
   TipoColuna,
   TransgressaoItem,
@@ -114,7 +120,7 @@ export type ApiResponse<T> = {
 };
 
 /**
- * Contrato dos 67 comandos registrados em `src-tauri/src/lib.rs`.
+ * Contrato dos 75 comandos registrados em `src-tauri/src/lib.rs`.
  *
  * Se `generate_handler!` mudar lá, este mapa precisa mudar aqui — é
  * deliberado: a divergência vira erro de compilação em vez de erro de runtime.
@@ -199,6 +205,17 @@ export interface Commands {
   reports_driver_ranking: { args: { filter?: ReportFilter | null }; result: DriverRankingItem[] };
   reports_available_years: { args: Record<string, never>; result: number[] };
   reports_export_csv: { args: { request: MapPeriodRequest }; result: CsvExport };
+  reports_status_by_apuratorio: { args: { filter?: ReportFilter | null }; result: StatusPorApuratorio[] };
+  reports_by_solution: { args: { filter?: ReportFilter | null }; result: SolucoesResumo };
+  reports_by_evidence_category: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
+  reports_transgressoes: { args: { filter?: ReportFilter | null }; result: EnquadramentoContagem[] };
+  reports_infracoes_estatuto: { args: { filter?: ReportFilter | null }; result: EnquadramentoContagem[] };
+  reports_infracoes_penais: { args: { filter?: ReportFilter | null }; result: EnquadramentoContagem[] };
+  reports_designations_matrix: { args: { filter?: DesignacaoMatrizFiltro | null }; result: DesignacaoMatrizLinha[] };
+
+  // ── Arquivos ──────────────────────────────────────────────────────
+  /** Abre o diálogo nativo de "salvar como". `null` = o usuário cancelou. */
+  files_save_download: { args: { request: SaveFileRequest }; result: string | null };
 
   // ── Auditoria ─────────────────────────────────────────────────────
   audit_list: { args: { limit?: number | null, offset?: number | null, entidade?: string | null, operacao?: string | null, usuarioId?: string | null }; result: AuditDetailItem[] };

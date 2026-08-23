@@ -6,14 +6,44 @@
 // diferença entre "vencendo" e "vencido" passou a ser argumento, não comando.
 // O terceiro sumiu porque prazo não se "encerra": a vigência é derivada da
 // ordem, e prorrogar cria a próxima linha.
+//
+// Esta tela absorveu a rota `/estatisticas/prazos`, que mostrava a mesma
+// listagem de vencidos e existia só pela exportação CSV. Duas telas para o
+// mesmo dado divergem; o CSV é um botão.
 
 import { call, type DeadlineReportItem } from "../api";
-import { escapeHtml } from "../dom";
+import { barraDeExportacao, baixarCsv, escapeHtml, ligarExportacao, tabela } from "../dom";
+import type { Linha } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/prazos";
 
 let janelaDias = 14;
+
+const COLUNAS = ["Processo", "Unidade", "Responsável", "Vencimento", "Dias", "Prazo"];
+
+const identificacao = (i: DeadlineReportItem) => `${i.apuratorio_sigla} nº ${i.numero_controle}`;
+
+const situacao = (i: DeadlineReportItem) =>
+  i.dias_restantes < 0 ? `${-i.dias_restantes} em atraso` : `${i.dias_restantes} restantes`;
+
+const vigencia = (i: DeadlineReportItem) =>
+  i.ordem === 0 ? "inicial" : `${i.ordem}ª prorrogação`;
+
+function linhas(itens: DeadlineReportItem[]): Linha[] {
+  return itens.map((i) => ({
+    // `tr.atrasado` destaca a linha inteira, não só a célula dos dias.
+    classe: i.dias_restantes < 0 ? "atrasado" : "",
+    celulas: [
+      identificacao(i),
+      i.unidade_origem,
+      i.responsavel_nome ?? "—",
+      i.data_vencimento,
+      { texto: situacao(i), numerica: true },
+      vigencia(i),
+    ],
+  }));
+}
 
 export async function renderPrazos(ctx: ContextoTela): Promise<void> {
   const [resumo, aVencer, vencidos] = await Promise.all([
@@ -24,38 +54,20 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     call("deadlines_report", { filter: { apenas_vencidos: true } }).then((r) => r.data ?? []),
   ]);
 
-  const tabela = (itens: DeadlineReportItem[], vazio: string) =>
-    itens.length
-      ? `<div class="table-wrap"><table>
-          <thead><tr>
-            <th>Processo</th><th>Unidade</th><th>Responsável</th>
-            <th>Vencimento</th><th>Dias</th><th>Prazo</th>
-          </tr></thead>
-          <tbody>${itens
-            .map(
-              (i) => `<tr${i.dias_restantes < 0 ? ' class="atrasado"' : ""}>
-                <td>${escapeHtml(`${i.apuratorio_sigla} nº ${i.numero_controle}`)}</td>
-                <td>${escapeHtml(i.unidade_origem)}</td>
-                <td>${escapeHtml(i.responsavel_nome ?? "—")}</td>
-                <td>${escapeHtml(i.data_vencimento)}</td>
-                <td>${i.dias_restantes < 0 ? `${-i.dias_restantes} em atraso` : `${i.dias_restantes} restantes`}</td>
-                <td>${i.ordem === 0 ? "inicial" : `${i.ordem}ª prorrogação`}</td>
-              </tr>`,
-            )
-            .join("")}</tbody></table></div>`
-      : `<p class="empty">${vazio}</p>`;
-
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
         <div><h1>Prazos</h1><p>Processos em andamento, pelo prazo vigente.</p></div>
-        <label>Janela
-          <select id="janela">
-            ${[7, 14, 30, 60]
-              .map((d) => `<option value="${d}"${d === janelaDias ? " selected" : ""}>${d} dias</option>`)
-              .join("")}
-          </select>
-        </label>
+        <div class="page-head-right">
+          <label>Janela
+            <select id="janela">
+              ${[7, 14, 30, 60]
+                .map((d) => `<option value="${d}"${d === janelaDias ? " selected" : ""}>${d} dias</option>`)
+                .join("")}
+            </select>
+          </label>
+          ${barraDeExportacao({ imprimir: true, csv: true })}
+        </div>
       </div>
 
       <div class="stat-row">
@@ -65,15 +77,37 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
       </div>
 
       <h2>Vencidos</h2>
-      ${tabela(vencidos, "Nenhum prazo vencido.")}
+      ${tabela(COLUNAS, linhas(vencidos), "Nenhum prazo vencido.")}
 
-      <h2>Vencendo em até ${janelaDias} dias</h2>
-      ${tabela(aVencer, "Nenhum prazo na janela.")}
+      <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
+      ${tabela(COLUNAS, linhas(aVencer), "Nenhum prazo na janela.")}
     </section>
   `);
 
   document.querySelector<HTMLSelectElement>("#janela")?.addEventListener("change", (e) => {
     janelaDias = Number((e.currentTarget as HTMLSelectElement).value);
     void renderPrazos(ctx);
+  });
+
+  // O CSV sai do dado já carregado: uma coluna a mais diz de qual bloco cada
+  // linha veio, para a planilha não perder essa distinção.
+  ligarExportacao(() => {
+    const linha = (i: DeadlineReportItem, bloco: string) => [
+      bloco,
+      identificacao(i),
+      i.unidade_origem,
+      i.responsavel_nome ?? "",
+      i.data_vencimento,
+      i.dias_restantes,
+      vigencia(i),
+    ];
+    return baixarCsv(
+      `prazos-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Situacao", ...COLUNAS.slice(0, 4), "Dias restantes", "Prazo"],
+      [
+        ...vencidos.map((i) => linha(i, "Vencido")),
+        ...aVencer.map((i) => linha(i, `Vence em ate ${janelaDias} dias`)),
+      ],
+    );
   });
 }

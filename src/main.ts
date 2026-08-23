@@ -118,14 +118,6 @@ let routes: Route[] = [
     command: "reports_by_type",
     printable: true
   },
-  {
-    path: "/estatisticas/prazos",
-    label: "Prazos Vencidos",
-    group: "Relatórios",
-    command: "reports_overdue_deadlines",
-    csvExport: { tipoRelatorio: "prazos" },
-    printable: true
-  },
   { path: "/mapas/mensal", label: "Mapa Mensal", group: "Mapas", printable: true },
   { path: "/mapas/anteriores", label: "Mapas Salvos", group: "Mapas", command: "reports_saved_maps", printable: true, detailCommand: "reports_get_saved_map" },
   { path: "/estatisticas/anuais", label: "Estatísticas Anuais", group: "Relatórios", printable: true },

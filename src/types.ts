@@ -435,6 +435,76 @@ export interface CsvExport {
   conteudo: string;
 }
 
+/**
+ * `files` — arquivo a entregar ao usuário.
+ *
+ * O conteúdo vai em base64 porque é o mesmo formato em que `CsvExport.conteudo`
+ * já chega do backend, e porque nem todo relatório é texto.
+ */
+export interface SaveFileRequest {
+  /** Nome oferecido no diálogo; a extensão daqui vira o filtro do seletor. */
+  nome_sugerido: string;
+  conteudo_base64: string;
+}
+
+/** `maps_reports` — situação dos processos de um apuratório no escopo do filtro. */
+export interface StatusPorApuratorio {
+  apuratorio_id: string;
+  sigla: string;
+  nome: string;
+  /** Permite agrupar processo × procedimento sem conhecer sigla nenhuma. */
+  tipo_apuratorio_id: string;
+  tipo_apuratorio_nome: string;
+  em_andamento: number;
+  concluidos: number;
+  total: number;
+}
+
+/** `maps_reports` — o encarregado sugere, a autoridade decide. Dois catálogos. */
+export interface SolucoesResumo {
+  sugeridas: ContagemRotulada[];
+  decididas: ContagemRotulada[];
+}
+
+/**
+ * `maps_reports` — contagem de um enquadramento imputado a envolvidos.
+ *
+ * `classificacao` vem sempre de JOIN: a esfera penal escolhida no vínculo, a
+ * espécie do artigo ou a gravidade do artigo do RDPM. Nas infrações penais a
+ * mesma infração pode aparecer em duas linhas, uma por esfera — é o art. 9º do
+ * CPM, não duplicata.
+ */
+export interface EnquadramentoContagem {
+  id: string;
+  rotulo: string;
+  descricao: string;
+  classificacao: string | null;
+  total: number;
+}
+
+/** `maps_reports` — `ReportFilter` mais o recorte por papel. */
+export interface DesignacaoMatrizFiltro {
+  apuratorio_ids?: string[] | null;
+  papel_ids?: string[] | null;
+  ano?: number | null;
+  limit?: number | null;
+}
+
+/**
+ * `maps_reports` — linha da matriz militar × apuratório.
+ *
+ * `celulas` traz só os apuratórios em que o militar foi designado (`id` =
+ * apuratório, `rotulo` = sigla); as colunas da tabela saem do catálogo.
+ */
+export interface DesignacaoMatrizLinha {
+  policial_militar_id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  celulas: ContagemRotulada[];
+  total: number;
+}
+
 /** `movements` */
 export interface MovementItem {
   id: string;

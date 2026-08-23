@@ -6,6 +6,7 @@ pub mod db;
 pub mod deadlines;
 pub mod error;
 pub mod evidence;
+pub mod files;
 pub mod legal_catalogs;
 pub mod maps_reports;
 pub mod movements;
@@ -32,6 +33,7 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             auth::commands::auth_login,
@@ -108,6 +110,7 @@ pub fn run() {
             maps_reports::commands::reports_infracoes_estatuto,
             maps_reports::commands::reports_infracoes_penais,
             maps_reports::commands::reports_designations_matrix,
+            files::commands::files_save_download,
             audit::commands::audit_list,
             audit::commands::audit_get,
             audit::commands::audit_by_record,
