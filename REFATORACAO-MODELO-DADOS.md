@@ -22,7 +22,7 @@
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 44 · 57 · 24 · 2 · 2 |
 | Comandos Tauri | 75 (eram 146) |
 | Backend Rust | 6.919 linhas (eram 9.194) |
-| Testes de integração | **75** (eram 0) |
+| Testes de integração | **83** (eram 0) |
 | Frontend | 5.072 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
@@ -322,7 +322,7 @@ painéis sozinha. Nenhuma sigla aparece em `src/telas/`.
 via não define destino, não abre "salvar como" e varia por plataforma. O
 diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 
-### 5.7 Rede de proteção — 75 testes
+### 5.7 Rede de proteção — 83 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -331,16 +331,17 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `migrations.rs` | migrations aplicam do zero **e são idempotentes**; tabelas extintas não ressuscitam; nenhuma FK sem `ON DELETE`; JSONB só nas 2 colunas justificadas; **a fronteira do seed** (11 catálogos legais com contagem exata, 17 operacionais vazios) |
 | `schema_integrity.sql` + `.rs` | 38 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
-| `users_repository.rs` | policial com e sem conta; normalização; retirar acesso desativa |
+| `users_repository.rs` | **5 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina, busca e ordena pela hierarquia; as duas listas de processos do militar |
 | `proceedings_repository.rs` | **18 testes** — criação completa, prazo inicial vindo da configuração, edição, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
 | `apuratorio_config.rs` | 3 testes — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
 | `deadlines_repository.rs` | 3 testes — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
-| `maps_reports_repository.rs` | **8 testes** — a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
+| `maps_reports_repository.rs` | **10 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
 | `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
 | `audit_repository.rs` | **7 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
 | `legal_catalogs_repository.rs` | **9 testes** — os 26 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro |
 | `commands_ipc.rs` | **6 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, as duas convenções de argumento e o envelope `ApiResponse` |
+| `sql_prepare.rs` | **2 testes** — as 88 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
 
 ---
 
@@ -379,7 +380,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 75 testes, bancos descartáveis
+cargo test                           # 83 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -466,19 +467,40 @@ sobreviveu tanto tempo no `main.ts` legado.
 **Ainda sem teste:** `apuratorio_config` tem 3, `users` tem 1 e `auth` tem 1 — cobrem o
 caminho feliz, não os limites. E a cobertura de IPC é de amostra: seis comandos dos 75.
 
-### 8.3 `cargo sqlx prepare` — **alta**
+### 8.3 ~~`cargo sqlx prepare`~~ — **RESOLVIDO POR OUTRO CAMINHO**
 
-Migrar `sqlx::query`/`query_as` para `query!`/`query_as!` onde a consulta for estática, e
-versionar `.sqlx/`. Assim erro de SQL aparece no build, e não em runtime. Onde a macro não
-couber (o SQL montado dinamicamente de `legal_catalogs` e os filtros compostos), manter
-teste que faça `PREPARE` contra um banco recém-migrado.
+O objetivo era "erro de SQL aparece no build, e não em runtime". O caminho previsto —
+migrar as consultas estáticas para `sqlx::query!` — **não sobrevive ao código**: alcança
+**9 das 128 consultas**.
 
-```bash
-cargo install sqlx-cli --no-default-features --features postgres
-# habilitar a feature `macros` no Cargo.toml — hoje ela NÃO está ligada
-cargo sqlx prepare
-cargo sqlx prepare --check   # no CI
-```
+O obstáculo não é o SQL dinâmico que este item antecipava. É o **tipo do parâmetro**: 79
+das 88 consultas literais ligam um id com `$n::uuid`, e a macro então exige `uuid::Uuid`
+onde a aplicação carrega `String`. Os ids chegam do frontend como texto JSON, atravessam os
+structs de request e as assinaturas dos repositórios assim, e as fixtures os escrevem como
+literal. Não há como contornar pelo SQL: `WHERE id::text = $1` perde o índice da chave
+primária, e o sqlx não aceita anotação de tipo em parâmetro de entrada.
+
+Sem macros, `cargo sqlx prepare` responde `no queries found` e cria um `.sqlx/` vazio — não
+há o que versionar.
+
+**O que foi feito no lugar**, em `tests/sql_prepare.rs`, alcançando as 128:
+
+| | |
+|---|---|
+| As **88 literais** | são extraídas do próprio código-fonte e submetidas ao `PREPARE` do PostgreSQL. É a mesma análise que a macro faria — coluna, tabela, tipo de parâmetro — no `cargo test` em vez de no `cargo build`. Erro aponta arquivo, linha e a mensagem do banco |
+| As **40 dinâmicas** | nem a macro nem o `PREPARE` alcançam: o SQL não existe até rodar. O teste cobra que cada uma tenha um arquivo de teste que a execute, e confere a lista **nos dois sentidos** contra o mesmo extrator |
+
+Isso achou sete lacunas reais, agora cobertas: mapas salvos e cinco leituras de `users`.
+
+> **A decisão que sobra:** migrar os ids de `String` para `uuid::Uuid` em todo o caminho —
+> structs de request, assinaturas de repositório, fixtures — e então usar as macros de
+> verdade. Ganha-se verificação em compilação; paga-se um refactor cruzado e um tratamento
+> novo para UUID malformado vindo da tela, que hoje vira erro de banco legível. Não é
+> trabalho mecânico, e por isso não foi feito por conta própria.
+
+No `Cargo.toml`, `migrate` passou a ser **declarado** em vez de chegar por unificação
+transitiva de features — era frágil, e uma mudança de dependência derrubaria o build sem
+aviso. `macros` fica de fora, com o porquê escrito ao lado.
 
 ### 8.4 Views de conveniência — **média**
 
@@ -550,6 +572,13 @@ históricos. Se virar regra rígida, promover a CHECK.
 (~133 MB de string). Se o volume crescer, avaliar armazenamento em disco com o caminho no
 banco.
 
+**Mapa excluído continua alcançável por id.** `delete_saved_map` é exclusão lógica
+(`ativo = false`) e `list_saved_maps` filtra `m.ativo`, mas `get_saved_map` não — então um
+mapa "excluído" ainda volta se alguém pedir por id. Nenhuma tela chega lá: só se navega
+para um mapa a partir da lista. A assimetria está travada por teste como está; decidir se
+`get_saved_map` deve filtrar, ou se a leitura por id é deliberada (mapa é documento
+emitido, e o princípio 6 diz que leitura de registro não filtra `ativo`).
+
 **JSONB remanescente — os dois são justificados e travados por teste:**
 `mapas_salvos.dados_mapa` (snapshot imutável de relatório já emitido) e
 `auditoria.alteracoes` (diff heterogêneo e imutável). O teste `migrations.rs` **falha** se
@@ -573,6 +602,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Editar migration já aplicada | `VersionMismatch` no próximo startup | `docker compose down -v && docker compose up -d` |
 | Schema aplicado fora do sqlx | Se alguém rodar o `.sql` por `psql`, não existe `_sqlx_migrations` e o startup seguinte tenta recriar tudo | Conferir `select * from _sqlx_migrations;` |
 | Trocar a espécie de um processo com designação | Recusado por regra de negócio (as designações são histórico e amarram o apuratório) | É intencional; a mensagem explica |
+| Consulta nova com SQL montado em `format!` | `sql_prepare.rs` falha até você escrever um teste que a execute e listá-la | É intencional: aquele SQL só é validado executando |
 | Comando novo com `AppHandle` não genérico | Não compila sob o `MockRuntime`, e o teste de IPC quebra | Declare `AppHandle<R>` com `R: Runtime`, como em `files_save_download` |
 | Registrar comando fora de `registrar_comandos` | O comando existe no app e não no teste, ou o contrário | A lista é uma só, em `lib.rs::registrar_comandos` |
 | `replace` sem `assert` em script de edição | Um `s.replace(a, b)` que não casa é um **no-op silencioso**. Foi assim que a rota de configuração de apuratórios ficou sem botão de menu por três commits | Sempre `assert alvo in s` antes de substituir |
@@ -595,6 +625,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | o que o banco recusa | `src-tauri/tests/schema_integrity.sql` |
 | como montar um cenário de teste com processo | `src-tauri/tests/util/fixtures.rs` |
 | como chamar um comando como o frontend chama | `src-tauri/tests/commands_ipc.rs` |
+| por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
 | o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 75 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
