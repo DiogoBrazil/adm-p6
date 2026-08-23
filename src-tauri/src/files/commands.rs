@@ -14,7 +14,7 @@
 //! neste caminho" — poder que nenhuma tela precisa ter.
 
 use base64::Engine;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::app_state::AppState;
@@ -26,8 +26,10 @@ use crate::response::{from_result, ApiResponse};
 /// Grava um arquivo escolhido pelo usuário. Devolve o caminho gravado, ou
 /// `None` se o diálogo foi cancelado — cancelar não é erro.
 #[tauri::command]
-pub async fn files_save_download(
-    app: AppHandle,
+pub async fn files_save_download<R: Runtime>(
+    // Genérico no runtime para que o teste de integração possa montar o
+    // comando sobre o `MockRuntime`. `AppHandle` sem parâmetro é `AppHandle<Wry>`.
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request: SaveFileRequest,
 ) -> Result<ApiResponse<Option<String>>, String> {

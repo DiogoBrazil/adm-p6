@@ -15,59 +15,14 @@ use chrono::NaiveDate;
 use sqlx::PgPool;
 
 mod util;
-use util::fixtures::{self, Mundo};
+use util::fixtures::{self, envolvido, processo};
 
 fn data(ano: i32, mes: u32, dia: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(ano, mes, dia).unwrap()
 }
 
-/// Cria um processo. `conclusao` presente = concluído (a coluna booleana foi
-/// eliminada: `concluido` ⟺ `data_conclusao IS NOT NULL`, 128/128 no dump).
-async fn processo(
-    pool: &PgPool,
-    m: &Mundo,
-    apuratorio: &str,
-    numero: &str,
-    instauracao: NaiveDate,
-    conclusao: Option<NaiveDate>,
-) -> String {
-    sqlx::query_scalar(
-        "INSERT INTO processos_procedimentos
-             (apuratorio_id, documento_iniciador_id, numero_documento,
-              unidade_origem_id, municipio_fato_id, natureza_fato_id,
-              data_instauracao, data_recebimento, data_conclusao)
-         VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6::uuid, $7, $7, $8)
-      RETURNING id::text",
-    )
-    .bind(apuratorio)
-    .bind(&m.documento)
-    .bind(numero)
-    .bind(&m.unidade)
-    .bind(&m.municipio)
-    .bind(&m.natureza)
-    .bind(instauracao)
-    .bind(conclusao)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
-
-async fn envolvido(pool: &PgPool, m: &Mundo, processo_id: &str, pm: &str, ordem: i32) -> String {
-    sqlx::query_scalar(
-        "INSERT INTO processo_envolvidos
-             (processo_id, policial_militar_id, status_envolvido_id, ordem)
-         VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
-      RETURNING id::text",
-    )
-    .bind(processo_id)
-    .bind(pm)
-    .bind(&m.status_envolvido)
-    .bind(ordem)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
-
+/// Designa um militar num processo, no papel indicado. Local: só a matriz de
+/// designações precisa disto.
 async fn designar(pool: &PgPool, processo_id: &str, pm: &str, papel: &str) {
     sqlx::query(
         "INSERT INTO processo_designacoes

@@ -1,4 +1,6 @@
-mod app_state;
+// Público para que o teste de integração possa montar um estado apontando
+// para o banco descartável.
+pub mod app_state;
 pub mod apuratorio_config;
 pub mod audit;
 pub mod auth;
@@ -16,25 +18,15 @@ pub mod users;
 
 use app_state::AppState;
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    dotenvy::dotenv().ok();
-    let state = AppState::from_env();
-
-    tauri::async_runtime::block_on(async {
-        let pool = state
-            .pool()
-            .await
-            .expect("Falha ao conectar ao banco de dados");
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("Falha ao aplicar migrations do banco de dados");
-    });
-
-    tauri::Builder::default()
+/// Plugins e comandos da aplicação, num lugar só.
+///
+/// Genérica no runtime **de propósito**: é assim que o teste de integração
+/// monta o mesmo app sobre o `MockRuntime` do Tauri e exercita os comandos por
+/// IPC de verdade. Se esta lista e a do teste fossem duas, um comando poderia
+/// passar no teste e não estar registrado no app.
+pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
         .plugin(tauri_plugin_dialog::init())
-        .manage(state)
         .invoke_handler(tauri::generate_handler![
             auth::commands::auth_login,
             auth::commands::auth_logout,
@@ -117,6 +109,26 @@ pub fn run() {
             audit::commands::audit_by_user,
             audit::commands::audit_statistics,
         ])
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    dotenvy::dotenv().ok();
+    let state = AppState::from_env();
+
+    tauri::async_runtime::block_on(async {
+        let pool = state
+            .pool()
+            .await
+            .expect("Falha ao conectar ao banco de dados");
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Falha ao aplicar migrations do banco de dados");
+    });
+
+    registrar_comandos(tauri::Builder::default())
+        .manage(state)
         .run(tauri::generate_context!())
         .expect("error while running ADM P6 Tauri application");
 }

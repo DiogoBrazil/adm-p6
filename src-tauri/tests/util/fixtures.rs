@@ -202,3 +202,73 @@ INSERT INTO tipos_andamento (id, nome) VALUES ('{andamento}', 'Despacho Teste');
     pool.execute(&*sql).await.expect("montar mundo de teste");
     m
 }
+
+// ── Atalhos compartilhados pelos arquivos de teste ───────────────────────────
+//
+// Processo, envolvido e conta aparecem em quase todo cenário. Ficam aqui para
+// que os testes de cada módulo digam só o que é próprio deles.
+
+/// Cria um processo no apuratório indicado.
+///
+/// `conclusao` presente = concluído: a coluna booleana foi eliminada porque
+/// `concluido` ⟺ `data_conclusao IS NOT NULL` em 128/128 registros do dump.
+pub async fn processo(
+    pool: &PgPool,
+    m: &Mundo,
+    apuratorio: &str,
+    numero: &str,
+    instauracao: chrono::NaiveDate,
+    conclusao: Option<chrono::NaiveDate>,
+) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO processos_procedimentos
+             (apuratorio_id, documento_iniciador_id, numero_documento,
+              unidade_origem_id, municipio_fato_id, natureza_fato_id,
+              data_instauracao, data_recebimento, data_conclusao)
+         VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6::uuid, $7, $7, $8)
+      RETURNING id::text",
+    )
+    .bind(apuratorio)
+    .bind(&m.documento)
+    .bind(numero)
+    .bind(&m.unidade)
+    .bind(&m.municipio)
+    .bind(&m.natureza)
+    .bind(instauracao)
+    .bind(conclusao)
+    .fetch_one(pool)
+    .await
+    .expect("criar processo")
+}
+
+/// Vincula um policial militar ao processo como envolvido.
+pub async fn envolvido(
+    pool: &PgPool,
+    m: &Mundo,
+    processo_id: &str,
+    pm: &str,
+    ordem: i32,
+) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO processo_envolvidos
+             (processo_id, policial_militar_id, status_envolvido_id, ordem)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
+      RETURNING id::text",
+    )
+    .bind(processo_id)
+    .bind(pm)
+    .bind(&m.status_envolvido)
+    .bind(ordem)
+    .fetch_one(pool)
+    .await
+    .expect("criar envolvido")
+}
+
+/// A conta administrativa da migration 0002. É o autor de qualquer escrita
+/// auditada: o autor é uma CONTA, não um policial militar.
+pub async fn conta_admin(pool: &PgPool) -> String {
+    sqlx::query_scalar("SELECT id::text FROM usuarios WHERE email = 'admin@sistema.com'")
+        .fetch_one(pool)
+        .await
+        .expect("conta do seed")
+}

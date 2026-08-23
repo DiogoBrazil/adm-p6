@@ -17,12 +17,15 @@ const ROTULO_PENAL: &str = r#"
       || ' - ' || ip.descricao
 "#;
 
+// `artigos_rdpm.artigo` e `infracoes_estatuto.artigo` já guardam o artigo por
+// extenso ("Art. 15", "Art. 29") — é o que o administrador digita e o que a
+// tela de catálogos exibe. Prefixar com 'Art. ' aqui produzia "Art. Art. 15".
 const ROTULO_TRANSGRESSAO: &str = r#"
-    'Art. ' || ar.artigo || ', inciso ' || t.inciso || ' do RDPM (' || nt.nome || ') - ' || t.texto
+    ar.artigo || ', inciso ' || t.inciso || ' do RDPM (' || nt.nome || ') - ' || t.texto
 "#;
 
 const ROTULO_ESTATUTO: &str = r#"
-    'Art. ' || ie.artigo || ', inciso ' || ie.inciso || ' - ' || dl.nome || ' - ' || ie.texto
+    ie.artigo || ', inciso ' || ie.inciso || ' - ' || dl.nome || ' - ' || ie.texto
 "#;
 
 // ── Buscas para o formulário ─────────────────────────────────────────────────

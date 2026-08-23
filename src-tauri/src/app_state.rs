@@ -21,6 +21,12 @@ impl AppState {
             format!("postgres://{user}:{password}@{host}:{port}/{name}")
         };
 
+        Self::from_url(database_url)
+    }
+
+    /// Estado apontando para uma URL explícita. Existe para o teste de
+    /// integração, que sobe um banco descartável por arquivo.
+    pub fn from_url(database_url: String) -> Self {
         Self {
             database_url,
             pool: RwLock::new(None),

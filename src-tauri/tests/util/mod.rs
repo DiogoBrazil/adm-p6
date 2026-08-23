@@ -20,9 +20,23 @@ fn urls(sufixo: &str) -> Option<(String, String, String)> {
     ))
 }
 
+// Cada arquivo de teste compila `util` por conta própria, então uma das duas
+// variantes fica sem uso em cada um.
+#[allow(dead_code)]
 pub async fn com_banco_descartavel<F, Fut>(sufixo: &str, corpo: F)
 where
     F: FnOnce(PgPool) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    com_banco_descartavel_com_url(sufixo, |pool, _url| corpo(pool)).await
+}
+
+/// Igual, mas entrega também a URL do banco descartável. O teste de IPC precisa
+/// dela para montar um `AppState` apontando para o mesmo banco.
+#[allow(dead_code)]
+pub async fn com_banco_descartavel_com_url<F, Fut>(sufixo: &str, corpo: F)
+where
+    F: FnOnce(PgPool, String) -> Fut,
     Fut: std::future::Future<Output = ()>,
 {
     let Some((manutencao, teste, nome)) = urls(sufixo) else {
@@ -53,9 +67,11 @@ where
         .expect("aplicar migrations");
 
     // O corpo roda isolado para que uma falha ainda derrube o banco de teste.
-    let resultado =
-        futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(corpo(pool.clone())))
-            .await;
+    let resultado = futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(corpo(
+        pool.clone(),
+        teste.clone(),
+    )))
+    .await;
     pool.close().await;
 
     admin
