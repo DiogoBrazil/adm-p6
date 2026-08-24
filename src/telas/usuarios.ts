@@ -19,7 +19,16 @@
 // apagar o militar. Um formulário só grava os dois, numa transação.
 
 import { call, type UserListItem, type UserProcessItem } from "../api";
-import { barraDeExportacao, baixarCsv, escapeHtml, ligarExportacao, option, tabela } from "../dom";
+import {
+  barraDeExportacao,
+  baixarCsv,
+  escapeHtml,
+  ligarExportacao,
+  ligarPaginacao,
+  option,
+  paginacao,
+  tabela,
+} from "../dom";
 import { painelContagem } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
@@ -28,7 +37,11 @@ export const ROTA_NOVO = "/usuarios/novo";
 
 type Opcao = { id: string; rotulo: string };
 
+/** Tamanho da página da listagem. O backend trava `per_page` em 200. */
+const POR_PAGINA = 50;
+
 let busca = "";
+let pagina = 1;
 let detalheAberto: string | null = null;
 
 async function opcoes(catalogo: string, campo: string): Promise<Opcao[]> {
@@ -43,7 +56,11 @@ const nomeCompleto = (u: UserListItem) => `${u.posto_graduacao} ${u.matricula} $
 export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
   if (detalheAberto) return renderDetalheUsuario(ctx, detalheAberto);
 
-  const resposta = await call("users_list", { search: busca || null, perPage: 200 });
+  const resposta = await call("users_list", {
+    search: busca || null,
+    page: pagina,
+    perPage: POR_PAGINA,
+  });
   const itens = resposta.data?.items ?? [];
   const total = resposta.data?.total ?? 0;
 
@@ -88,17 +105,25 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
             )
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
+      ${paginacao(pagina, POR_PAGINA, total)}
     </section>
   `);
+
+  ligarPaginacao(pagina, (nova) => {
+    pagina = nova;
+    void renderListaUsuarios(ctx);
+  });
 
   document.querySelector<HTMLFormElement>("#busca-usuarios")?.addEventListener("submit", (e) => {
     e.preventDefault();
     busca = String(new FormData(e.currentTarget as HTMLFormElement).get("q") ?? "").trim();
+    pagina = 1;
     void renderListaUsuarios(ctx);
   });
 
   document.querySelector<HTMLButtonElement>("#limpar-busca")?.addEventListener("click", () => {
     busca = "";
+    pagina = 1;
     void renderListaUsuarios(ctx);
   });
 

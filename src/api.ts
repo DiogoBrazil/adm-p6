@@ -120,7 +120,7 @@ export type ApiResponse<T> = {
 };
 
 /**
- * Contrato dos 75 comandos registrados em `src-tauri/src/lib.rs`.
+ * Contrato dos 76 comandos registrados em `src-tauri/src/lib.rs`.
  *
  * Se `generate_handler!` mudar lá, este mapa precisa mudar aqui — é
  * deliberado: a divergência vira erro de compilação em vez de erro de runtime.
@@ -136,6 +136,7 @@ export interface Commands {
   users_save: { args: { request: SaveUserRequest }; result: SaveUserResult };
   users_delete: { args: { id: string }; result: boolean };
   users_reactivate: { args: { id: string }; result: boolean };
+  users_list_ativos: { args: Record<string, never>; result: UserListItem[] };
   users_list_encarregados: { args: Record<string, never>; result: UserListItem[] };
   users_get: { args: { id: string }; result: UserListItem | null };
   users_statistics: { args: { id: string }; result: UserStatistics };

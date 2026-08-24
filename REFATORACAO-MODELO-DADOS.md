@@ -9,26 +9,40 @@
 
 > ## ▶ POR ONDE RETOMAR
 >
-> **Estado:** as seções 8.1 a 8.7 estão concluídas. O banco tem os dados de produção dentro
+> **Estado:** as seções 8.1 a 8.9 estão concluídas. O banco tem os dados de produção dentro
 > — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
 > conferidos por 24 contagens, 17 invariantes e 377 comparações campo a campo, e travados
-> por 88 testes. As 6 migrations estão aplicadas.
+> por **90 testes**. As 6 migrations estão aplicadas.
 >
-> **Tudo o que resta é conferência humana na tela.** Não há código pendente: nenhum item
-> abaixo pede que você escreva algo, só que olhe e decida. É deliberado — o que sobrou é
-> exatamente o que teste automatizado não alcança.
+> **O que resta é conferência humana na tela**, e o checklist para percorrê-la está em
+> **`CONFERENCIA-DE-TELA.md`**, na raiz — é a §7.5 transformada em lista para marcar.
+>
+> ⚠ **A frase que estava aqui — "não há código pendente" — era falsa**, e a §8.9 conta o
+> que se achou ao conferir: os seletores de militar do formulário de processo estavam
+> **truncados em 200** com 235 militares no efetivo, e 35 policiais não podiam ser lançados
+> em processo nenhum. Foi corrigido. A lição está na §10 e na §6.
 >
 > ### Faça nesta ordem
 >
 > | # | O que | Onde está descrito | Bloqueia? |
 > |---|---|---|---|
-> | 1 | **Conferir a amostra na tela** — abrir os 6 processos e olhar rótulo e layout. O campo a campo já está feito e acusa **0 divergências em 377 comparações** | §8.5, "A pendência que sobra" | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco e ninguém deve usar o app para valer |
-> | 2 | **Percorrer as telas com o console aberto (F12)** — a CSP foi ligada e nunca foi exercida clicando. Violação aparece como `Refused to…` no console do WebView, não no log do processo | §7.5 | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
-> | 3 | **Remover o schema `legado`** — só depois de 1 e 2 | §8.5, passo 8 do roteiro | não |
-> | 4 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor novo | §8.5, "A pendência que sobra" | não |
+> | 1 | **Percorrer as telas com o binário de produção e o console aberto (F12)** — `npm run tauri build -- --no-bundle`, e abrir `src-tauri/target/release/adm-p6-tauri`. `tauri dev` usa a `devCsp` e **não** exerce a CSP restritiva | `CONFERENCIA-DE-TELA.md` e §7.5 | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
+> | 2 | **Conferir a amostra na tela** — abrir os 6 processos e olhar rótulo e layout. O campo a campo já está feito e acusa **0 divergências em 377 comparações**, rodado contra o banco de produção | §8.5, "A pendência que sobra" | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco |
+> | 3 | **Apagar o IPM de teste** `250d8ee1-c167-4604-8cdf-2bd5a62d8422`, criado ao conferir as telas — é o que faz o banco ter 129 processos e não 128 | §8.9 | não |
+> | 4 | **Remover o schema `legado`** — só depois de 1, 2 e 3 | §8.5, passo 8 do roteiro | não |
+> | 5 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor novo | §8.5, "A pendência que sobra" | não |
 >
-> Feitos os quatro, **a migração está concluída** e o trabalho seguinte é manutenção
+> Feitos os cinco, **a migração está concluída** e o trabalho seguinte é manutenção
 > normal: §7.3 para mudar schema, §7.4 para acrescentar catálogo.
+>
+> ### Há backup, e ele foi testado
+>
+> `~/backups/adm-p6/adm_p6_db_<data>.dump` (`pg_dump --format=custom`, ~46 MB, o schema
+> `legado` incluído). **Restaurado num banco descartável e conferido contra a origem** —
+> as 8 contagens batem e o anexo de 20 MB casa no md5. O comando está na §7.6.
+>
+> Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão que
+> `adm-p6.sql` está no `.gitignore`.
 >
 > ### Antes de tocar em qualquer coisa, leia
 >
@@ -60,11 +74,12 @@
 | Migrations | 6 (eram 32) |
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 43 · 55 · 25 · 2 · 2 |
 | Catálogos administráveis | 25 |
-| Comandos Tauri | 75 (eram 146) |
+| Comandos Tauri | 76 (eram 146) |
 | Backend Rust | 7.002 linhas (eram 9.194) |
-| Testes de integração | **88** (eram 0) |
+| Testes de integração | **90** (eram 0) |
 | Frontend | 5.263 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
+| Comandos registrados que nenhuma tela chama | 15 — capacidade sem entrada de UI, ver §9 |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
 | Scripts de importação | 10 arquivos, 1.428 linhas de SQL |
 | **Dados de produção no banco** | **128 processos · 193 envolvidos · 235 militares · 123 enquadramentos** |
@@ -473,6 +488,26 @@ Vale como argumento para não deixar a rede de proteção de lado.
    que o administrador digita e o que a tela de catálogos exibe — e o SQL de `evidence`
    prefixava `'Art. '` de novo. Aparecia em toda a tela de indícios.
 
+### E o oitavo, que os testes **não** pegaram
+
+8. **Os seletores de militar estavam truncados em 200.** O formulário de processo pedia
+   `perPage: 500` a `users_list`, e `users::repository::list_paginated` faz
+   `per_page.clamp(1, 200)`. O clamp corta **em silêncio**: nem erro, nem aviso, nem
+   resposta parcial sinalizada. Com 235 militares no efetivo, os 35 últimos em ordem
+   alfabética — de `RODRIGO SANTOS MADEIRA` a `ZAQUEU DE ALMEIDA KVIATKOSKI` — não podiam
+   ser lançados como envolvido nem como designado em processo nenhum.
+
+   **Por que a rede de proteção não pegou:** nenhum teste exercitava uma lista maior que o
+   clamp. A fixture tem 3 militares, e 3 < 200 para qualquer valor de `per_page`. O teste
+   de paginação existia e passava — ele conferia que a paginação *funciona*, não que a
+   *tela* pedisse a coisa certa.
+
+   Corrigido separando os dois papéis, que é o que o princípio 6 já dizia: lista de
+   **opções** não pagina (`users_list_ativos`, sem `LIMIT`), listagem de **tela** pagina
+   (`users_list`, com controle de página de verdade — que também não existia). O teste
+   `lista_de_opcoes_de_militar_nao_pagina` monta **250 militares** justamente para passar
+   do teto.
+
 ---
 
 ## 7. Como rodar e verificar
@@ -585,11 +620,60 @@ isso é um **atributo booleano** na tabela: foi assim que `permite_penalidade`,
 
 ---
 
+### 7.6 Backup — e por que gerar não basta
+
+O banco vive num **único volume Docker**, e até esta rodada não havia cópia nenhuma. A
+regra "nunca `docker compose down -v`" é disciplina, não backup: não protege de disco
+morto, de `DROP` errado, nem de uma migration que dê errado no meio.
+
+```bash
+mkdir -p ~/backups/adm-p6
+DATA=$(date +%Y%m%d-%H%M%S)
+docker compose exec -T postgres pg_dump -U adm_p6_user -d adm_p6_db --format=custom \
+  > ~/backups/adm-p6/adm_p6_db_${DATA}.dump      # ~46 MB, o schema `legado` incluído
+```
+
+**Fora do repositório de propósito:** tem dado pessoal de 235 militares, pela mesma razão
+que `adm-p6.sql` está no `.gitignore`.
+
+**Um dump nunca restaurado não é backup.** Verificar custa um minuto:
+
+```bash
+docker compose exec -T postgres psql -U adm_p6_user -d postgres -q \
+  -c "DROP DATABASE IF EXISTS adm_p6_backup_teste;" -c "CREATE DATABASE adm_p6_backup_teste;"
+docker compose exec -T postgres pg_restore -U adm_p6_user -d adm_p6_backup_teste \
+  --no-owner --no-acl < ~/backups/adm-p6/adm_p6_db_<data>.dump
+
+# As contagens dos dois lados têm de bater — e o anexo de 20 MB, casar no md5.
+for DB in adm_p6_db adm_p6_backup_teste; do
+  docker compose exec -T postgres psql -U adm_p6_user -d $DB -t -A -c \
+    "select count(*) from processos_procedimentos;
+     select md5(conteudo::text) from processo_anexos;"
+done
+
+docker compose exec -T postgres psql -U adm_p6_user -d postgres -c "DROP DATABASE adm_p6_backup_teste;"
+```
+
+Feito assim antes de tocar no schema `legado`: 8 contagens iguais e o md5 do anexo
+idêntico.
+
+---
+
 ### 7.5 O roteiro de conferência de tela
 
 **É o que falta para dar a migração por concluída.** Nada aqui é automatizável: são as duas
 coisas que teste não alcança — a CSP, que só falha dentro do WebView, e o julgamento de
 quem conhece o domínio.
+
+> **A lista para marcar está em `CONFERENCIA-DE-TELA.md`, na raiz.** É esta seção
+> transformada em checklist, mais o que a §8.9 acrescentou. Use aquele arquivo para
+> percorrer; este aqui explica o porquê de cada item.
+
+> ⚠ **Rode o binário de produção, não `tauri dev`.** A `csp` restritiva só vale no build;
+> em desenvolvimento o Tauri usa a `devCsp`, que afrouxa `style-src` justamente onde mora o
+> risco. `npm run tauri build -- --no-bundle` e depois
+> `./src-tauri/target/release/adm-p6-tauri`. O `--no-bundle` é necessário enquanto
+> `bundle.icon` estiver vazio (§8.9).
 
 Rode `npm run tauri dev`, entre com `admin@sistema.com` / `123456` e **deixe o console
 aberto (F12)**. Toda violação de CSP aparece lá como `Refused to…`, e em lugar nenhum mais:
@@ -672,6 +756,7 @@ amostra (fim da 8.5) e a CSP (§7.5). **8.8 é o que foi deliberadamente descart
 | 8.6 | Higiene | ✅ concluída |
 | 8.7 | Ajustes nos catálogos administráveis | ✅ concluída |
 | 8.8 | O que NÃO está planejado | — registro |
+| 8.9 | O que a conferência de tela achou de código | ✅ concluída |
 
 ### 8.1 ~~Terminar o frontend~~ — **CONCLUÍDO**
 
@@ -1270,6 +1355,81 @@ Registrado para que ninguém gaste tempo redescobrindo que a decisão já foi to
 | Tirar o dispositivo legal também das **infrações penais** | Ali é diferente do Estatuto (decisão 29): há **4 dispositivos distintos** entre as 26 infrações — Código Penal, CPM, CTB e LCP —, e a coluna é filtro de verdade em `evidence::search_infracoes_penais`. O que existe é uma capacidade morta: o comando aceita `dispositivo_legal_id` e a tela nunca o envia. Expor esse filtro é melhoria de tela, não remoção de campo |
 | Devolver a ordenação hierárquica de militares | Decisão 27, tomada com a consequência à vista. Voltar atrás custa migration nova **e** redigitar os 13 valores, que a `0006` não guardou |
 
+### 8.9 ~~O que a conferência de tela achou de código~~ — **CONCLUÍDA**
+
+O topo deste arquivo afirmava, antes desta rodada, que **não havia código pendente** — só
+conferência humana. Não era verdade, e o que se achou é instrutivo: os defeitos que
+sobraram eram todos do tipo que **nenhum teste alcança e nenhuma tela acusa**.
+
+#### 1. Os seletores de militar, truncados em 200
+
+O defeito mais grave, e o que mais tempo passou escondido. Está contado na §6, item 8, com
+o porquê de a rede de proteção não ter pego. O resumo: `perPage: 500` a um comando que faz
+`clamp(1, 200)`, e o clamp corta calado. 35 dos 235 militares não podiam ser lançados em
+processo nenhum.
+
+| O que mudou | Onde |
+|---|---|
+| `users_list_ativos` — militares ativos, **sem `LIMIT`**, para os seletores | `users/repository.rs::list_ativos`, `users/commands.rs`, registrado em `lib.rs` |
+| Os dois seletores do formulário de processo passam a lê-lo | `src/telas/processo.ts::carregarCatalogos` |
+| O filtro de autor da auditoria também | `src/telas/auditoria.ts` |
+| Controle de página de verdade nas duas listagens | `dom.ts::paginacao`/`ligarPaginacao`, usados por `telas/usuarios.ts` e `telas/processo.ts` |
+| O valor atual sobrevive quando falta na lista de opções | `src/telas/processo.ts::selectMilitares` |
+
+**`users_list_encarregados` foi considerado e recusado para o seletor de designações**, e
+o motivo importa: `is_encarregado` **não** gate quem pode ser designado, na prática. Dos
+178 designados do banco real, **5 militares exerceram Encarregado sem a marca** e 2
+exerceram Escrivão. Estreitar o seletor por essa flag apagaria 9 designações existentes ao
+reeditar o processo — trocaria um defeito por outro pior. A flag continua servindo à lista
+de encarregados, que é outra coisa.
+
+#### 2. Os filtros de busca que a tela nunca enviava
+
+Três parâmetros que o backend sempre aceitou e nenhuma tela mandava. Dois viraram select,
+alimentados por catálogo (nenhum nome escrito no código):
+
+| Comando | Parâmetro | O que foi feito |
+|---|---|---|
+| `evidence_search_infracoes_penais` | `dispositivo_legal_id` | **select "Dispositivo"** — há 4 distintos entre as 26 infrações, é filtro de verdade (§8.8 já endossava) |
+| `evidence_search_transgressoes` | `natureza_id` | **select "Natureza"** na busca principal — antes só existia no overlay de analogia |
+| `evidence_search_infracoes_estatuto` | `artigo` | **fica sem select, de propósito:** é texto livre, e a própria consulta já casa `termo` contra `artigo`. Um segundo campo de texto ao lado do primeiro só confundiria |
+
+No caminho, o helper `buscar()` de `indicios.ts` ganhou o **carimbo de sequência** que o
+seletor de analogia já tinha e as três buscas não: sem ele, a resposta atrasada de um termo
+antigo sobrescreve a lista do atual.
+
+#### 3. O build de produção, que nunca havia sido rodado
+
+`npm run tauri build` **nunca tinha sido executado neste repositório** — não havia
+`target/release/`. Como a `devCsp` afrouxa `style-src`, a CSP restritiva **jamais foi
+exercida**, embora a §8.6.2 a descrevesse como ligada.
+
+Roda, e o binário sai em 3m41s (24 MB). O caminho é `--no-bundle`, que compila o
+executável sem passar pelo empacotamento — necessário porque `bundle.icon` é `[]` e
+`targets` é `"all"`, o que faria o empacotamento falhar. Conferido que a CSP embutida no
+binário é a restritiva, sem `'unsafe-inline'`.
+
+> **Pendência registrada, fora do escopo desta rodada:** gerar instalador (deb/rpm/AppImage)
+> exige o conjunto de ícones — hoje há um `icons/icon.png` só — e decidir como cada
+> instalação alcança o PostgreSQL. Só faz sentido quando o app for para outra máquina.
+
+#### 4. Um IPM de teste no banco de produção
+
+Criado ao conferir as telas: `250d8ee1-c167-4604-8cdf-2bd5a62d8422`, IPM nº 1, instaurado
+17/08/2026, com 1 envolvido, 1 prazo e 2 designações. Não existe no `legado` — é por isso
+que as contagens dão 129/194/142 em vez de 128/193/141. **Sai antes do go-live**, e é o
+passo 3 do quadro no topo.
+
+#### O que ficou de fora, e por quê
+
+**Os 15 comandos registrados que nenhuma tela chama** (`users_delete`, `proceedings_delete`,
+`audit_by_record`, `evidence_remove_for_pm`, `proceedings_substitute_designation`…). Não é
+código morto: é **capacidade sem entrada de UI**, e algumas são lacunas de verdade — não há
+como desativar um militar pela tela, embora haja botão de reativar. Levantado e registrado
+na §9; virar tela é decisão de produto, não conserto de defeito.
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**
@@ -1285,6 +1445,16 @@ separar por nome de papel reintroduziria o hardcode que a refatoração eliminou
 precisa dessa quebra, o caminho é filtrar por `papel_id` escolhido pelo usuário —
 `users_proceedings_designated` já aceita o parâmetro.
 
+**Quinze comandos registrados que nenhuma tela chama.** Levantados na §8.9. Não são código
+morto — são capacidade sem entrada de UI —, mas alguns são lacuna de verdade: `users_delete`
+(não há como **desativar** um militar pela tela, embora `users_reactivate` tenha botão —
+assimetria visível), `proceedings_delete`, `evidence_remove_for_pm`, `audit_by_record` e
+`audit_by_user` (não há trilha de auditoria por registro nem por usuário),
+`deadlines_calculate` (nenhuma prévia de cálculo de prazo) e
+`proceedings_substitute_designation` (a substituição hoje acontece reescrevendo o array em
+`proceedings_save`). Expor cada um é decisão de produto: o backend e os testes já estão de
+pé. A lista completa está no levantamento da §8.9.
+
 **Formato da matrícula.** `9 caracteres, prefixo 1000 ou 3000` ficou como validação de
 domínio (`users/domain.rs`), não como CHECK, para não impedir a importação de registros
 históricos. Se virar regra rígida, promover a CHECK.
@@ -1293,12 +1463,13 @@ históricos. Se virar regra rígida, promover a CHECK.
 (~133 MB de string). Se o volume crescer, avaliar armazenamento em disco com o caminho no
 banco.
 
-**Mapa excluído continua alcançável por id.** `delete_saved_map` é exclusão lógica
-(`ativo = false`) e `list_saved_maps` filtra `m.ativo`, mas `get_saved_map` não — então um
-mapa "excluído" ainda volta se alguém pedir por id. Nenhuma tela chega lá: só se navega
-para um mapa a partir da lista. A assimetria está travada por teste como está; decidir se
-`get_saved_map` deve filtrar, ou se a leitura por id é deliberada (mapa é documento
-emitido, e o princípio 6 diz que leitura de registro não filtra `ativo`).
+**Mapa excluído continua alcançável por id — RESOLVIDO: fica como está.** `delete_saved_map`
+é exclusão lógica (`ativo = false`) e `list_saved_maps` filtra `m.ativo`, mas `get_saved_map`
+não. A assimetria é **correta**, pelo princípio 6: lista de *opções* filtra, leitura de
+*registro existente* não, e um mapa é documento já emitido. O que faltava era o comentário
+dizendo isso — está agora em `maps_reports/repository.rs`, para o próximo leitor não
+"consertar" o que está certo. Excluir duas vezes também não é erro, e é deliberado:
+exclusão idempotente. Id inexistente, esse sim, é recusado com regra legível.
 
 **JSONB remanescente — os dois são justificados e travados por teste:**
 `mapas_salvos.dados_mapa` (snapshot imutável de relatório já emitido) e
@@ -1341,6 +1512,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
 | Supor que um conceito tem **uma** fonte no legado | O enquadramento tinha duas, que nunca se encontraram: `pm_envolvido_*` para procedimentos e o jsonb `transgressoes_ids` para PADS. A segunda tinha 73 vínculos e quase ficou de fora | Antes de dar um conceito por importado, contar **por espécie de apuratório**: um zero redondo numa espécie inteira é sinal de fonte paralela |
 | Cruzar `jsonb_array_elements` com cast no `WHERE` | `(item->>'id')::int` estoura nos itens cujo `id` é UUID, mesmo com `WHERE tipo='rdpm'` ao lado: o Postgres não garante a ordem de avaliação | Separar em duas consultas, uma por tipo — foi o que a conferência precisou fazer |
+| **Comando paginado servindo de lista de opções** | `list_paginated` trava `per_page` em 200 e **corta em silêncio**: quem pede 500 recebe 200 sem erro, sem aviso e sem sinal de que faltou. Custou 35 militares invisíveis nos seletores do formulário de processo, por toda a migração | Lista de **opções** não pagina — comando próprio sem `LIMIT` (`users_list_ativos`, `list_encarregados`). Paginação é da **listagem de tela**, e aí precisa de controle de página, senão o resto fica inalcançável do mesmo jeito |
+| Teste de paginação que nunca passa do teto | A fixture tem 3 militares, e 3 < 200 para qualquer `per_page`: o teste passa e o clamp nunca é exercido | Teste de limite monta **mais que o limite**. `lista_de_opcoes_de_militar_nao_pagina` insere 250 |
+| Select cujo valor atual não está na lista de opções | A lista filtra `ativo`; um registro gravado antes da desativação aponta para quem não está lá, o `<select>` cai no vazio e a edição apaga o vínculo calado | `selectMilitares` acrescenta o valor atual como opção própria quando falta. É a mesma razão de `ProceedingListItem` devolver os ids ao lado dos rótulos |
+| Busca incremental sem carimbo de sequência | Cada tecla dispara uma consulta, e a resposta atrasada de um termo antigo sobrescreve a lista do termo atual | Um contador local: descarte a resposta cuja sequência não é a última. O seletor de analogia já fazia; as três buscas de indícios, não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 
 ---
@@ -1375,7 +1550,11 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | como esconder da tela uma coluna obrigatória no banco | `legal_catalogs/domain.rs::referencia_fixa` e `repository.rs::expressao` |
 | como um campo de catálogo aparece só quando outro está marcado | `legal_catalogs/domain.rs::referencia_condicional` e o `[data-visivel-se]` de `src/telas/catalogos.ts` |
 | como fazer uma mudança de schema agora que há dado real | §**7.3** |
-| o que falta fazer | §**7.5**, o roteiro de conferência de tela — e o quadro no topo deste arquivo |
+| o que falta fazer | `CONFERENCIA-DE-TELA.md` (a lista para marcar), §**7.5** (o porquê) e o quadro no topo |
+| por que lista de opções não pode paginar | §**8.9** e `users/repository.rs::list_ativos` |
+| como paginar uma listagem de tela | `dom.ts::paginacao` e `ligarPaginacao`, usados em `telas/usuarios.ts` |
+| como fazer backup, e como saber que ele presta | §**7.6** |
+| como rodar o app com a CSP de produção | §**7.5** (o aviso do topo) e §**8.9**, item 3 |
 | o que foi deliberadamente **não** planejado | §**8.8** |
 | como o recorte de teste da importação é gerado | `src-tauri/tests/fixtures/gerar_legado_amostra.sh` |
 | como "escrivão só em IPM" virou configuração, sem lista de siglas | `src-tauri/importacao/02_config_apuratorio.sql` |

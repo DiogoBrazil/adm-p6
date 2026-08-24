@@ -1,9 +1,10 @@
 // Helpers de renderização compartilhados entre as telas.
 //
 // O app monta HTML por concatenação de template literal. Isso só é seguro
-// enquanto TODO valor interpolado passa por `escapeHtml` — e o `tauri.conf.json`
-// ainda está com `"csp": null`, então uma string com HTML vinda do banco
-// executaria no contexto do WebView.
+// enquanto TODO valor interpolado passa por `escapeHtml`: uma string com HTML
+// vinda do banco executaria no contexto do WebView. A CSP do `tauri.conf.json`
+// fecha o resto — e é ela que recusa `style=""` interpolado no markup, por isso
+// largura calculada sai em `data-*` e é aplicada pela CSSOM.
 
 import { call } from "./api";
 
@@ -126,6 +127,39 @@ export function barraDeExportacao(opcoes: { imprimir?: boolean; csv?: boolean })
     opcoes.csv ? `<button class="outline small" id="btn-csv">Exportar CSV</button>` : "",
   ].filter(Boolean);
   return botoes.length ? `<div class="export-bar">${botoes.join("")}</div>` : "";
+}
+
+/**
+ * Controle de página para as listagens paginadas.
+ *
+ * Existe porque as duas telas de lista pediam uma página grande e paravam por
+ * aí: usuários pedia 200 (o teto do backend) com 235 militares no efetivo, e
+ * processos pedia 100 com 128 processos. O resto não era alcançável por
+ * caminho nenhum — não havia próxima página, e a contagem no cabeçalho dizia
+ * um número maior que o de linhas na tela.
+ *
+ * Devolve string vazia quando tudo cabe numa página, para não poluir a tela.
+ */
+export function paginacao(pagina: number, porPagina: number, total: number): string {
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  if (paginas <= 1) return "";
+  const primeiro = (pagina - 1) * porPagina + 1;
+  const ultimo = Math.min(pagina * porPagina, total);
+  return `<div class="paginacao">
+    <button class="outline small" id="btn-pagina-anterior"${pagina <= 1 ? " disabled" : ""}>Anterior</button>
+    <span>${primeiro}–${ultimo} de ${total} (página ${pagina} de ${paginas})</span>
+    <button class="outline small" id="btn-pagina-proxima"${pagina >= paginas ? " disabled" : ""}>Próxima</button>
+  </div>`;
+}
+
+/** Liga os botões de `paginacao`. `aoMudar` recebe a página escolhida. */
+export function ligarPaginacao(pagina: number, aoMudar: (pagina: number) => void): void {
+  document
+    .querySelector<HTMLButtonElement>("#btn-pagina-anterior")
+    ?.addEventListener("click", () => aoMudar(pagina - 1));
+  document
+    .querySelector<HTMLButtonElement>("#btn-pagina-proxima")
+    ?.addEventListener("click", () => aoMudar(pagina + 1));
 }
 
 /** Liga os botões de `barraDeExportacao`. `aoExportar` pode ser assíncrono. */

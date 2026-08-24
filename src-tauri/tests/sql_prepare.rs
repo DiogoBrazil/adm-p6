@@ -272,6 +272,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
             &[
                 "users::repository::list_paginated",
                 "users::repository::get_by_id",
+                "users::repository::list_ativos",
                 "users::repository::list_encarregados",
                 "users::repository::proceedings_as_designated",
                 "users::repository::proceedings_as_involved",

@@ -128,6 +128,9 @@ export async function renderIndicios(
         </div>
         <div class="linha-form">
           <label>Buscar artigo<input id="busca-penal" placeholder="artigo ou descrição" /></label>
+          <label>Dispositivo
+            <select id="filtro-penal"><option value="">Todos</option></select>
+          </label>
           <div id="res-penal" class="resultados"></div>
         </div>
 
@@ -144,6 +147,9 @@ export async function renderIndicios(
         </div>
         <div class="linha-form">
           <label>Buscar transgressão<input id="busca-transg" placeholder="inciso ou texto" /></label>
+          <label>Natureza
+            <select id="filtro-transg"><option value="">Todas</option></select>
+          </label>
           <div id="res-transg" class="resultados"></div>
         </div>
 
@@ -198,21 +204,37 @@ export async function renderIndicios(
     removedor("data-rm-transg", (i) => selecao.transgressoes.splice(i, 1));
     removedor("data-rm-est", (i) => selecao.estatuto.splice(i, 1));
 
+    // `filtroId` é opcional e nomeia um `<select>` ao lado da busca. O valor
+    // escolhido vai para `procurar` como segundo argumento — é assim que os
+    // filtros que o backend sempre aceitou passam a ser usados de verdade.
     const buscar = <T extends { id: string; rotulo: string }>(
       inputId: string,
       destinoId: string,
-      procurar: (termo: string) => Promise<T[]>,
+      procurar: (termo: string, filtro: string | null) => Promise<T[]>,
       escolher: (item: T) => void | Promise<void>,
+      filtroId?: string,
     ) => {
       const input = document.querySelector<HTMLInputElement>(`#${inputId}`);
       const destino = document.querySelector<HTMLDivElement>(`#${destinoId}`);
-      input?.addEventListener("input", async () => {
-        const termo = input.value.trim();
-        if (termo.length < 2 || !destino) {
-          if (destino) destino.innerHTML = "";
+      const filtro = filtroId
+        ? document.querySelector<HTMLSelectElement>(`#${filtroId}`)
+        : null;
+
+      // Carimbo de sequência: cada tecla dispara uma consulta, e sem ele a
+      // resposta atrasada de um termo antigo sobrescreve a lista do atual. O
+      // seletor de analogia já fazia isso; estas três buscas, não.
+      let sequencia = 0;
+
+      const rodar = async () => {
+        const termo = input?.value.trim() ?? "";
+        if (!destino) return;
+        if (termo.length < 2) {
+          destino.innerHTML = "";
           return;
         }
-        const achados = await procurar(termo);
+        const minha = ++sequencia;
+        const achados = await procurar(termo, filtro?.value || null);
+        if (minha !== sequencia) return;
         destino.innerHTML = achados
           .map((a) => `<button type="button" class="secondary small" data-escolher="${escapeHtml(a.id)}">${escapeHtml(a.rotulo)}</button>`)
           .join("");
@@ -225,29 +247,53 @@ export async function renderIndicios(
             desenhar();
           }),
         );
-      });
+      };
+
+      input?.addEventListener("input", () => void rodar());
+      filtro?.addEventListener("change", () => void rodar());
     };
 
     if (!ctx.podeEscrever()) return;
 
+    // Os dois filtros saem de catálogo, como tudo mais: nenhum nome de
+    // dispositivo ou de natureza escrito aqui. Cadastrar um quinto dispositivo
+    // o faz aparecer sozinho. Ver §3.1 do guia.
+    const popular = (seletor: string, catalogo: string) =>
+      void call("legal_catalogs_list", { catalogo }).then((r) => {
+        const alvo = document.querySelector<HTMLSelectElement>(`#${seletor}`);
+        for (const linha of r.data ?? []) {
+          const id = String(linha.id ?? "");
+          const nome = String(linha.nome ?? "");
+          if (id && nome) alvo?.insertAdjacentHTML("beforeend", option(id, nome, false));
+        }
+      });
+    popular("filtro-penal", "dispositivos_legais");
+    popular("filtro-transg", "naturezas_transgressao");
+
     buscar(
       "busca-penal",
       "res-penal",
-      (termo) => call("evidence_search_infracoes_penais", { termo }).then((r) => r.data ?? []),
+      (termo, dispositivoLegalId) =>
+        call("evidence_search_infracoes_penais", { termo, dispositivoLegalId }).then(
+          (r) => r.data ?? [],
+        ),
       (item) => {
         const esfera = esferas[0];
         if (!esfera) return;
         selecao.penais.push({ infracao_penal_id: item.id, esfera_penal_id: esfera.id });
       },
+      "filtro-penal",
     );
 
     buscar(
       "busca-transg",
       "res-transg",
-      (termo) => call("evidence_search_transgressoes", { termo }).then((r) => r.data ?? []),
+      (termo, naturezaId) =>
+        call("evidence_search_transgressoes", { termo, naturezaId }).then((r) => r.data ?? []),
       (item) => {
         if (!selecao.transgressoes.includes(item.id)) selecao.transgressoes.push(item.id);
       },
+      "filtro-transg",
     );
 
     buscar(

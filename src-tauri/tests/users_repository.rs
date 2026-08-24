@@ -291,6 +291,108 @@ async fn lista_de_encarregados_traz_so_quem_pode_ser_designado() {
     .await;
 }
 
+/// A lista de **opções** de militar não pode paginar.
+///
+/// Este teste existe por um defeito que atravessou a migração inteira sem ser
+/// visto: os seletores do formulário de processo eram alimentados por
+/// `list_paginated`, que trava `per_page` em 200. A tela pedia 500 e recebia
+/// 200 — o clamp corta calado, sem erro e sem aviso. Com 235 militares no
+/// efetivo real, os 35 últimos em ordem alfabética não apareciam em seletor
+/// nenhum, e não havia como lançá-los como envolvido ou designado.
+///
+/// Nenhum teste pegou porque nenhum exercitava uma lista maior que o clamp: a
+/// fixture tem 3 militares. Por isso este monta **mais de 200**.
+#[tokio::test]
+async fn lista_de_opcoes_de_militar_nao_pagina() {
+    util::com_banco_descartavel("users_opcoes", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // 250 militares além dos 3 da fixture, para passar do teto de 200.
+        // O posto sai do banco: `Mundo` não o expõe, e um posto qualquer serve.
+        let posto: String = sqlx::query_scalar("SELECT id::text FROM postos_graduacoes LIMIT 1")
+            .fetch_one(&pool)
+            .await
+            .expect("posto da fixture");
+
+        let extras: String = (0..250)
+            .map(|i| {
+                format!(
+                    "('2000{:05}', 'PM EXTRA {:03}', '{posto}', {})",
+                    i,
+                    i,
+                    i % 2 == 0
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n");
+        pool.execute(
+            format!(
+                "INSERT INTO policiais_militares
+                     (matricula, nome, posto_graduacao_id, is_encarregado)
+                 VALUES {extras};"
+            )
+            .as_str(),
+        )
+        .await
+        .expect("inserir os 250 militares extras");
+
+        let total_esperado = 253;
+
+        // O comando paginado corta em 200, e é isso que ele deve fazer:
+        // é a listagem de tela, onde paginar é o certo.
+        let paginado = repository::list_paginated(&pool, None, 1, 500)
+            .await
+            .unwrap();
+        assert_eq!(
+            paginado.items.len(),
+            200,
+            "list_paginated trava em 200 — se isso mudar, o motivo deste teste mudou"
+        );
+        assert_eq!(
+            paginado.total, total_esperado,
+            "o total e do escopo inteiro"
+        );
+
+        // A lista de opções devolve todos. É a diferença que o defeito escondia.
+        let opcoes = repository::list_ativos(&pool).await.unwrap();
+        assert_eq!(
+            opcoes.len(),
+            total_esperado as usize,
+            "lista de opcoes nao pagina: todo militar ativo tem de ser selecionavel"
+        );
+
+        // E o último em ordem alfabética é alcançável — era exatamente quem
+        // sumia (no efetivo real, ZAQUEU DE ALMEIDA KVIATKOSKI).
+        let ultimo = opcoes.last().expect("lista nao vazia");
+        assert!(
+            opcoes.iter().any(|u| u.id == ultimo.id),
+            "o ultimo alfabetico precisa estar na lista"
+        );
+        let mut nomes: Vec<&str> = opcoes.iter().map(|u| u.nome.as_str()).collect();
+        let ordenados = {
+            let mut c = nomes.clone();
+            c.sort();
+            c
+        };
+        assert_eq!(nomes, ordenados, "a lista de opcoes sai ordenada por nome");
+        nomes.clear();
+
+        // Desativar tira da lista de opções (princípio 6), sem apagar nada.
+        let mut tx = pool.begin().await.unwrap();
+        repository::set_ativo(&mut tx, &m.pm_um, false)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let depois = repository::list_ativos(&pool).await.unwrap();
+        assert_eq!(depois.len(), total_esperado as usize - 1);
+        assert!(
+            !depois.iter().any(|u| u.id == m.pm_um),
+            "militar desativado sai da lista de opcoes"
+        );
+    })
+    .await;
+}
+
 /// O detalhe traz o militar com a conta ao lado — ou sem ela, que é o caso de
 /// 229 dos 236 usuários do sistema legado.
 #[tokio::test]

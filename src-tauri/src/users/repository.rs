@@ -76,6 +76,29 @@ pub async fn get_by_id(pool: &PgPool, id: &str) -> Result<Option<UserListItem>, 
         .await
 }
 
+/// Militares ativos, **sem limite** — é a lista de *opções* dos seletores de
+/// militar, não uma listagem de tela.
+///
+/// `list_paginated` não serve aqui: ela pagina e trava o `per_page` em 200, e a
+/// tela pedia 500 achando que recebia 500. Com 235 militares no efetivo, os 35
+/// últimos em ordem alfabética simplesmente não apareciam em seletor nenhum —
+/// sem erro e sem aviso, porque o clamp corta calado. Lista de opções não pagina.
+///
+/// Filtra `ativo` porque é lista de opções (princípio 6): quem foi desativado não
+/// pode ser escolhido de novo. Leitura de registro já gravado continua não
+/// filtrando — um envolvido lançado antes da desativação segue aparecendo.
+pub async fn list_ativos(pool: &PgPool) -> Result<Vec<UserListItem>, sqlx::Error> {
+    sqlx::query_as::<_, UserListItem>(&format!(
+        "{SELECT_PM}
+         WHERE pm.ativo
+         ORDER BY pm.nome"
+    ))
+    .fetch_all(pool)
+    .await
+}
+
+/// Encarregados ativos, **sem limite** — mesma razão de `list_ativos`, recortada
+/// a quem pode ser designado.
 pub async fn list_encarregados(pool: &PgPool) -> Result<Vec<UserListItem>, sqlx::Error> {
     sqlx::query_as::<_, UserListItem>(&format!(
         "{SELECT_PM}

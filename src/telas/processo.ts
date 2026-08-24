@@ -29,7 +29,7 @@ import {
   type SaveProceedingRequest,
   type UserListItem,
 } from "../api";
-import { baixarArquivoBase64, escapeHtml, option } from "../dom";
+import { baixarArquivoBase64, escapeHtml, ligarPaginacao, option, paginacao } from "../dom";
 import type { ContextoTela } from "./catalogos";
 import { renderIndicios } from "./indicios";
 
@@ -88,7 +88,7 @@ async function carregarCatalogos(): Promise<Catalogos> {
     catalogo("tipos_solucao_decidida", ["nome"]),
     catalogo("tipos_penalidade", ["nome"]),
     catalogo("papeis_pessoa", ["nome"]),
-    call("users_list", { perPage: 500 }).then((r) => r.data?.items ?? []),
+    call("users_list_ativos", {}).then((r) => r.data ?? []),
   ]);
   return {
     apuratorios,
@@ -100,7 +100,7 @@ async function carregarCatalogos(): Promise<Catalogos> {
     solucoesDecididas,
     penalidades,
     papeisPessoa,
-    militares: militares.filter((m) => m.ativo),
+    militares,
   };
 }
 
@@ -201,8 +201,18 @@ function nomeMilitar(m: UserListItem): string {
 }
 
 function selectMilitares(nome: string, militares: UserListItem[], atual: string): string {
+  // A lista de opções só traz militar ativo (princípio 6). Um registro já
+  // gravado, porém, pode apontar para quem foi desativado depois — e aí o
+  // `<option>` correspondente não existe, o select cai no vazio e a edição
+  // apagaria o vínculo sem dizer nada. É a mesma armadilha que fez
+  // `ProceedingListItem` devolver os ids ao lado dos rótulos.
+  //
+  // Então o valor atual é preservado como opção própria quando falta na lista.
+  // O id é tudo o que o rascunho carrega; o rótulo diz por que está ali.
+  const ausente = atual !== "" && !militares.some((m) => m.id === atual);
   return `<select name="${nome}" required>
     <option value=""></option>
+    ${ausente ? option(atual, "— militar desativado (vínculo preservado) —", true) : ""}
     ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === atual)).join("")}
   </select>`;
 }
@@ -374,7 +384,7 @@ export async function renderFormularioProcesso(
           <div class="campo"><label>Instauração<input name="data_instauracao" type="date" value="${escapeHtml(r.data_instauracao)}" required /></label></div>
           <div class="campo"><label>Recebimento<input name="data_recebimento" type="date" value="${escapeHtml(r.data_recebimento ?? "")}" />
             <small class="campo-efeito">Dispara o prazo inicial: sem ela, nenhum prazo nasce.</small></label></div>
-          <div class="campo"><label>Remessa ao encarregado<input name="data_remessa_encarregado" type="date" value="${escapeHtml(r.data_remessa_encarregado ?? "")}" /></label></div>
+          <div class="campo"><label>Remessa do encarregado<input name="data_remessa_encarregado" type="date" value="${escapeHtml(r.data_remessa_encarregado ?? "")}" /></label></div>
           <div class="campo"><label>Remessa à comissão<input name="data_remessa_comissao" type="date" value="${escapeHtml(r.data_remessa_comissao ?? "")}" /></label></div>
           <div class="campo"><label>Julgamento<input name="data_julgamento" type="date" value="${escapeHtml(r.data_julgamento ?? "")}" /></label></div>
           <div class="campo"><label>Conclusão<input name="data_conclusao" type="date" value="${escapeHtml(r.data_conclusao ?? "")}" />
@@ -531,13 +541,18 @@ export async function renderFormularioProcesso(
 
 const filtro = { busca: "", concluido: null as boolean | null, ano: null as number | null };
 
+/** Tamanho da página da listagem. O backend trava `per_page` em 200. */
+const POR_PAGINA = 50;
+let pagina = 1;
+
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
   const resposta = await call("proceedings_list", {
     filter: {
       busca: filtro.busca || null,
       concluido: filtro.concluido,
       ano: filtro.ano,
-      per_page: 100,
+      page: pagina,
+      per_page: POR_PAGINA,
     },
   });
   if (!resposta.ok || !resposta.data) {
@@ -594,10 +609,21 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
               </tbody></table></div>`
           : `<p class="empty">Nenhum processo encontrado.</p>`
       }
+      ${paginacao(pagina, POR_PAGINA, total)}
     </section>
   `);
 
-  const recarregar = () => void renderListaProcessos(ctx);
+  ligarPaginacao(pagina, (nova) => {
+    pagina = nova;
+    void renderListaProcessos(ctx);
+  });
+
+  // Mudar filtro volta para a primeira página: seguir na 3ª de um resultado
+  // que agora tem 1 mostraria tela vazia sem dizer por quê.
+  const recarregar = () => {
+    pagina = 1;
+    void renderListaProcessos(ctx);
+  };
   const busca = document.querySelector<HTMLInputElement>("#busca");
   busca?.addEventListener("change", () => {
     filtro.busca = busca.value.trim();
@@ -691,7 +717,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Natureza do fato", d.natureza_fato)}
         ${linha("Instauração", d.data_instauracao)}
         ${linha("Recebimento", d.data_recebimento)}
-        ${linha("Remessa ao encarregado", d.data_remessa_encarregado)}
+        ${linha("Remessa do encarregado", d.data_remessa_encarregado)}
         ${linha("Remessa à comissão", d.data_remessa_comissao)}
         ${linha("Julgamento", d.data_julgamento)}
         ${linha("Conclusão", d.data_conclusao)}

@@ -162,6 +162,24 @@ pub async fn users_reactivate(
     .await)
 }
 
+/// Lista de **opções** para os seletores de militar. Sem paginação de propósito:
+/// `users_list` pagina e trava em 200, e um seletor truncado esconde militar sem
+/// dizer que escondeu. Ver `repository::list_ativos`.
+#[tauri::command]
+pub async fn users_list_ativos(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<Vec<UserListItem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::list_ativos(&pool).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
 #[tauri::command]
 pub async fn users_list_encarregados(
     state: State<'_, AppState>,

@@ -587,9 +587,9 @@ async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
         assert!(repository::list_saved_maps(&pool).await.unwrap().is_empty());
 
         // E `get_saved_map` NÃO filtra `ativo`, então ainda alcança o excluído
-        // por id. Nenhuma tela chega lá — só se navega para um mapa a partir da
-        // lista —, mas a assimetria entre as duas consultas ficou registrada na
-        // seção 9 do guia para ser decidida.
+        // por id. A §9 do guia deixava a assimetria em aberto; foi decidida
+        // pelo princípio 6 — lista de opções filtra, leitura de registro
+        // existente não —, e um mapa é documento já emitido. Fica assim.
         assert!(repository::get_saved_map(&pool, &id)
             .await
             .unwrap()

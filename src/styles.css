@@ -467,6 +467,20 @@ button.outline:hover {
   gap: 8px;
 }
 
+/* Controle de página das listagens. Ver `dom.ts::paginacao`. */
+.paginacao {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.paginacao span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
 .search-bar {
   display: flex;
   gap: 8px;
@@ -869,6 +883,7 @@ tr.atrasado {
   .export-bar,
   .search-bar,
   .filtro-bar,
+  .paginacao,
   .actions {
     display: none !important;
   }

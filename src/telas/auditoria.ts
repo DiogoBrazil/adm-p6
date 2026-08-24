@@ -38,7 +38,11 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
       usuarioId: filtros.usuarioId || null,
     }),
     call("audit_statistics", {}).then((r) => r.data),
-    call("users_list", { perPage: 500 }).then((r) => r.data?.items ?? []),
+    // Lista de opções do filtro de autor. `users_list` pagina e trava em 200,
+    // então pedir 500 devolvia 200 calado — e um autor fora dos 200 primeiros
+    // sumia do filtro. Só quem tem conta é autor de auditoria (o recorte é
+    // logo abaixo), mas o recorte precisa partir da lista inteira.
+    call("users_list_ativos", {}).then((r) => r.data ?? []),
   ]);
 
   const itens = resposta.data ?? [];

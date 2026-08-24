@@ -36,6 +36,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             users::commands::users_save,
             users::commands::users_delete,
             users::commands::users_reactivate,
+            users::commands::users_list_ativos,
             users::commands::users_list_encarregados,
             users::commands::users_statistics,
             users::commands::users_proceedings_designated,

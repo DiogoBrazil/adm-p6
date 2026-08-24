@@ -311,3 +311,27 @@ fn resposta_traz_os_campos_que_o_frontend_espera() {
         assert!(ok(&anos).is_array());
     });
 }
+
+/// `users_list_ativos` alimenta os seletores de militar do formulário de
+/// processo. Passa pelo IPC aqui porque o defeito que ele corrige era
+/// invisível justamente na fronteira: a tela pedia `perPage: 500` a um comando
+/// que trava em 200, e recebia 200 sem erro nenhum.
+#[test]
+fn lista_de_opcoes_de_militar_responde_pelo_ipc() {
+    com_app_e_banco("ipc_militares", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+
+        // É leitura: não exige administrador.
+        let dados = ok(&invocar(&webview, "users_list_ativos", json!({}))).clone();
+        let itens = dados.as_array().expect("lista de militares");
+        assert_eq!(itens.len(), 3, "os 3 da fixture, sem paginação no caminho");
+
+        // Os campos que `selectMilitares` monta em `src/telas/processo.ts`.
+        for campo in ["id", "nome", "matricula", "posto_graduacao", "ativo"] {
+            assert!(
+                itens[0].get(campo).is_some(),
+                "UserListItem sem '{campo}' — o seletor monta o rótulo com ele"
+            );
+        }
+    });
+}

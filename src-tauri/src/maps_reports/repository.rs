@@ -130,6 +130,15 @@ pub async fn list_saved_maps(pool: &PgPool) -> Result<Vec<SavedMapListItem>, sql
     .await
 }
 
+/// Leitura por id **não filtra `ativo`** — e isso é deliberado, não esquecimento.
+///
+/// O princípio 6 do modelo separa os dois casos: lista de *opções* filtra
+/// `ativo` (e `list_saved_maps` filtra), leitura de *registro existente* não.
+/// Um mapa é documento já emitido; excluí-lo o tira da lista sem apagar o que
+/// foi emitido, e quem tiver o id continua alcançando o que foi lido na época.
+///
+/// A assimetria com `list_saved_maps` estava registrada na §9 do guia como
+/// pendente de decisão. Fica **como está**, pelo princípio 6.
 pub async fn get_saved_map(pool: &PgPool, id: &str) -> Result<Option<SavedMapFull>, sqlx::Error> {
     sqlx::query_as::<_, SavedMapFull>(&format!(
         "SELECT {SAVED_MAP_COLS}, m.dados_mapa AS dados_mapa {SAVED_MAP_JOINS}
@@ -140,6 +149,9 @@ pub async fn get_saved_map(pool: &PgPool, id: &str) -> Result<Option<SavedMapFul
     .await
 }
 
+/// Exclusão lógica. Excluir duas vezes **não** é erro: o `UPDATE` alcança a
+/// mesma linha e a operação é idempotente, que é o que se quer de uma exclusão.
+/// O que é recusado, com regra legível, é id que não existe.
 pub async fn delete_saved_map(
     tx: &mut Transaction<'_, Postgres>,
     id: &str,
