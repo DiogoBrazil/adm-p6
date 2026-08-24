@@ -9,31 +9,46 @@
 
 > ## ▶ POR ONDE RETOMAR
 >
-> **Estado:** as seções 8.1 a 8.9 estão concluídas. O banco tem os dados de produção dentro
-> — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
+> **Estado:** as seções 8.1 a 8.10 estão concluídas. O banco tem os dados de produção
+> dentro — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
 > conferidos por 24 contagens, 17 invariantes e 377 comparações campo a campo, e travados
-> por **90 testes**. As 6 migrations estão aplicadas.
+> por **92 testes**. As **7 migrations** estão aplicadas.
 >
-> **O que resta é conferência humana na tela**, e o checklist para percorrê-la está em
-> **`CONFERENCIA-DE-TELA.md`**, na raiz — é a §7.5 transformada em lista para marcar.
+> **Não há tarefa de código pendente.** O que falta é **conferência humana na tela**, e a
+> lista para percorrê-la está em **`CONFERENCIA-DE-TELA.md`**, na raiz.
 >
-> ⚠ **A frase que estava aqui — "não há código pendente" — era falsa**, e a §8.9 conta o
-> que se achou ao conferir: os seletores de militar do formulário de processo estavam
-> **truncados em 200** com 235 militares no efetivo, e 35 policiais não podiam ser lançados
-> em processo nenhum. Foi corrigido. A lição está na §10 e na §6.
+> ⚠ **Esta frase já esteve aqui antes e era falsa duas vezes.** Nas duas rodadas em que
+> alguém sentou para conferir a tela, apareceu código quebrado que nenhum teste alcançava:
+> os seletores de militar truncados em 200 (§8.9) e o formulário de carta precatória que
+> não renderizava (§8.10). Ambos corrigidos. A lição é que **a conferência de tela é a
+> tarefa que resta, e ela encontra coisa** — não é formalidade.
 >
 > ### Faça nesta ordem
 >
 > | # | O que | Onde está descrito | Bloqueia? |
 > |---|---|---|---|
-> | 1 | **Percorrer as telas com o binário de produção e o console aberto (F12)** — `npm run tauri build -- --no-bundle`, e abrir `src-tauri/target/release/adm-p6-tauri`. `tauri dev` usa a `devCsp` e **não** exerce a CSP restritiva | `CONFERENCIA-DE-TELA.md` e §7.5 | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
-> | 2 | **Conferir a amostra na tela** — abrir os 6 processos e olhar rótulo e layout. O campo a campo já está feito e acusa **0 divergências em 377 comparações**, rodado contra o banco de produção | §8.5, "A pendência que sobra" | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco |
-> | 3 | **Apagar o IPM de teste** `250d8ee1-c167-4604-8cdf-2bd5a62d8422`, criado ao conferir as telas — é o que faz o banco ter 129 processos e não 128 | §8.9 | não |
-> | 4 | **Remover o schema `legado`** — só depois de 1, 2 e 3 | §8.5, passo 8 do roteiro | não |
-> | 5 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor novo | §8.5, "A pendência que sobra" | não |
+> | 1 | **Percorrer as telas com o binário de produção e o console aberto (F12).** `npm run tauri build -- --no-bundle`, depois `./src-tauri/target/release/adm-p6-tauri`. `tauri dev` usa a `devCsp` e **não** exerce a CSP restritiva | `CONFERENCIA-DE-TELA.md`, seções (a) a (e2); §7.5 explica o porquê de cada item | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
+> | 2 | **Criar uma carta precatória de ponta a ponta.** É o item que mais importa: até a §8.10 a espécie era **impossível de cadastrar**, e nenhum teste automatizado chegava lá | `CONFERENCIA-DE-TELA.md`, seção (e2); §8.10 e §6, item 9 | **Sim** — é a prova de que a correção pegou |
+> | 3 | **Conferir a amostra dos 6 processos na tela.** O campo a campo já está feito e acusa **0 divergências em 377 comparações**, rodado contra o banco de produção; falta o olho: rótulo, layout, o que a Seção reconhece | §8.5, "A pendência que sobra"; `CONFERENCIA-DE-TELA.md`, seção (f) | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco |
+> | 4 | **Apagar o IPM de teste** `250d8ee1-c167-4604-8cdf-2bd5a62d8422` — criado ao conferir as telas, é o que faz o banco ter 129 processos e não 128. É também a única linha que `99_conferencia.sql` ainda acusa | §8.9, item 4 | não |
+> | 5 | **Remover o schema `legado`** — só depois de 1 a 4 | §8.5, passo 8 do roteiro | não |
+> | 6 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor de analogia | §8.5, "A pendência que sobra" | não |
 >
-> Feitos os cinco, **a migração está concluída** e o trabalho seguinte é manutenção
-> normal: §7.3 para mudar schema, §7.4 para acrescentar catálogo.
+> Feitos os seis, **a migração está concluída** e o trabalho seguinte é manutenção normal:
+> §7.3 para mudar schema, §7.4 para acrescentar catálogo.
+>
+> ### O estado do banco agora, para você reconhecer o que vê
+>
+> | | Esperado hoje | Depois do passo 4 |
+> |---|---:|---:|
+> | Processos | 129 | **128** |
+> | Envolvidos | 194 | **193** |
+> | Prazos | 142 | **141** |
+> | Designações | 180 | 178 |
+> | Papéis de processo | 5 | 5 |
+>
+> A diferença é inteira do IPM de teste. `99_conferencia.sql` acusa exatamente **uma**
+> linha — "envolvido novo sem origem no legado | 1" — e some quando ele for apagado.
 >
 > ### Há backup, e ele foi testado
 >
@@ -43,6 +58,9 @@
 >
 > Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão que
 > `adm-p6.sql` está no `.gitignore`.
+>
+> **Refaça o backup antes do passo 5.** Remover o `legado` é irreversível, e é o gabarito
+> de tudo que a §8.5 conferiu.
 >
 > ### Antes de tocar em qualquer coisa, leia
 >
@@ -58,6 +76,10 @@
 > roteiro completo (recriar volume → migrations → restaurar `adm-p6.sql` → oito etapas →
 > conferência) está em **§8.5, "O roteiro, do zero"**. Ele foi testado de ponta a ponta e
 > não edita uma linha do dump.
+>
+> ⚠ **Aquele roteiro apaga o que foi digitado pelo app.** Enquanto só houver o IPM de
+> teste, não custa nada; assim que a Seção lançar processo de verdade, ele deixa de ser
+> uma opção e correção de importação passa a ser incremental.
 
 | | |
 |---|---|
@@ -75,14 +97,15 @@
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 43 · 55 · 25 · 2 · 2 |
 | Catálogos administráveis | 25 |
 | Comandos Tauri | 76 (eram 146) |
-| Backend Rust | 7.002 linhas (eram 9.194) |
-| Testes de integração | **92** (eram 0) |
-| Frontend | 5.263 linhas em 16 arquivos (era 1 arquivo de 2.124) |
+| Backend Rust | 7.134 linhas (eram 9.194) |
+| Testes de integração | **92**, em 6.215 linhas (eram 0) |
+| Frontend | 5.484 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Comandos registrados que nenhuma tela chama | 15 — capacidade sem entrada de UI, ver §9 |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
 | Scripts de importação | 10 arquivos, 1.428 linhas de SQL |
-| **Dados de produção no banco** | **128 processos · 193 envolvidos · 235 militares · 123 enquadramentos** |
+| **Dados de produção no banco** | **128 processos · 193 envolvidos · 235 militares · 123 enquadramentos** — o que a importação trouxe |
+| No banco **agora** | 129 processos · 194 envolvidos: há **um IPM de teste** a apagar (passo 4 do quadro acima) |
 
 ---
 
@@ -340,14 +363,14 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
 `commit`, não no `insert`.** São as únicas triggers do schema; acrescentar outra exige
 justificar por que não cabe em constraint.
 
-### 5.5 Backend Rust — 11 módulos, 75 comandos
+### 5.5 Backend Rust — 11 módulos, 76 comandos
 
 | Módulo | Papel |
 |---|---|
 | `auth` | login por conta, `pode_administrar` no lugar de `perfil == "admin"`, upgrade de hash SHA-256 legado |
-| `users` | policial militar e conta **separados**, gravados por um formulário só, numa transação. Trava do último administrador |
+| `users` | policial militar e conta **separados**, gravados por um formulário só, numa transação. Trava do último administrador. **Duas leituras sem `LIMIT`** (`list_ativos`, `list_encarregados`) alimentam os seletores: lista de opções não pagina (§8.9) |
 | `legal_catalogs` | **7 comandos genéricos** sobre o registro `domain::CATALOGOS` (25 catálogos). Nome de tabela/coluna vem sempre do registro, nunca da requisição |
-| `apuratorio_config` | **novo.** 5 comandos que cadastram `apuratorio_documentos_iniciadores` e `apuratorio_papeis` — sem eles nenhum processo pode existir |
+| `apuratorio_config` | 5 comandos que cadastram `apuratorio_documentos_iniciadores` e `apuratorio_papeis` — sem eles nenhum processo pode existir. `apuratorio_config_get` é também **a fonte dos atributos de comportamento** que o formulário de processo consulta, e não o registro de catálogos (§8.10) |
 | `proceedings` | uma tabela só; `tipo_to_table()` eliminado. Validações leem atributos semânticos |
 | `deadlines` | `ordem` (0 = inicial); dias vêm de `COALESCE(adi.prazo_base_dias, a.prazo_base_dias)` |
 | `evidence` | 5 tabelas de enquadramento → 3; esfera penal escolhida no vínculo |
@@ -363,19 +386,22 @@ justificar por que não cabe em constraint.
 
 ```
 src/
-  api.ts            269   cliente tipado: mapa `Commands` com os 75 comandos
-  types.ts          863   interfaces derivadas de src-tauri/src/*/domain.rs
-  dom.ts            150   escape, tabela, entrega de arquivo (CSV, anexo, impressão)
+  api.ts            270   cliente tipado: mapa `Commands` com os 76 comandos
+  types.ts          882   interfaces derivadas de src-tauri/src/*/domain.rs
+  dom.ts            186   escape, tabela, paginação, entrega de arquivo
   main.ts           279   shell, sessão, menu e roteamento — e nada mais
+  styles.css              a folha única; ver "Listagem densa" e `.crud-form`
   telas/
-    processo.ts     921   lista, formulário completo e detalhe
-    indicios.ts     421   enquadramento por envolvido, com o seletor de analogia
+    processo.ts    1011   lista, formulário completo e detalhe — o maior do
+                          frontend: os campos condicionais são oito blocos
+                          dirigidos pela configuração do apuratório (§8.10)
+    indicios.ts     467   enquadramento por envolvido, com o seletor de analogia
     catalogos.ts    417   os 25 catálogos, gerada de legal_catalogs_definitions
-    usuarios.ts     356   lista, formulário (militar + conta) e detalhe
+    usuarios.ts     381   lista paginada, formulário (militar + conta) e detalhe
     apuratorio.ts   336   configuração de documentos iniciadores e papéis
     mapas.ts        300   mapa do período e mapas salvos
     estatisticas.ts 287   /estatisticas/processos e /stats/procedimentos
-    auditoria.ts    178   lista com filtros e o diff de `alteracoes`
+    auditoria.ts    182   lista com filtros e o diff de `alteracoes`
     encarregados.ts 163   matriz militar × apuratório
     anual.ts        130   relatório anual, impresso pelo sistema
     prazos.ts       113   painel de prazos, com exportação CSV
@@ -422,10 +448,32 @@ catorze campos com sigla no nome no detalhe do usuário
 Acrescentar um catálogo no Rust faz a tela aparecer sozinha.
 
 **Formulário de processo:** os campos condicionais são dirigidos por dado,
-nunca por sigla — natureza obrigatória vem de `apuratorios.exige_natureza_fato`,
-o campo de condutor de `naturezas_fato.exige_condutor`, deprecante/deprecada de
-`codigo_extensao`, os papéis de `apuratorio_papeis`, e penalidade/dias de
-`permite_penalidade`/`usa_quantidade_dias`.
+nunca por sigla. **Todos os atributos vêm de `apuratorio_config_get`** — não do
+registro de catálogos, pela razão da §8.10:
+
+| Campo | Vem de |
+|---|---|
+| natureza do fato obrigatória | `apuratorios.exige_natureza_fato` |
+| campo de condutor | `naturezas_fato.exige_condutor` |
+| deprecante / unidade deprecada | `apuratorios.codigo_extensao` |
+| data de julgamento | `apuratorios.permite_julgamento` |
+| data de remessa à comissão | `apuratorios.permite_remessa_comissao` |
+| penalidade e dias | `apuratorios.permite_punicao` **e** `tipos_solucao_decidida.permite_penalidade` **e** `tipos_penalidade.usa_quantidade_dias` |
+| quais papéis designar | `apuratorio_papeis` |
+| limite de envolvidos | `apuratorios.max_envolvidos` |
+
+**Campo escondido preserva o que já foi gravado.** `FormData.get` não distingue
+"apagado" de "não renderizado"; `textoSePresente` usa `dados.has()` para separar
+os dois, e valor gravado fora da configuração continua à vista, com nota. Sem
+isso, desligar um atributo apagaria fato registrado na primeira edição — o
+princípio 5 diz o contrário.
+
+**Como o formulário e a listagem se organizam** (§8.10.5): cada `<fieldset>` é
+uma grade `auto-fit`, que dá 2–4 campos por linha no monitor e 1 na janela
+estreita, sem media query; as coleções usam `auto-fill`, para que envolvidos com
+número diferente de campos **alinhem** entre si. A listagem tem largura de coluna
+em porcentagem, reticências com `title`, etiquetas de situação, cabeçalho fixo e
+rolagem horizontal em vez de espremer. Tudo em classes: a CSP recusa `style=""`.
 
 **Telas de relatório:** o escopo é sempre filtro na tela, nunca sigla no
 código. As caixas de apuratório vêm de `legal_catalogs_list("apuratorios")` e
@@ -444,33 +492,35 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 88 testes
+### 5.7 Rede de proteção — 92 testes
 
 | Arquivo | O que cobre |
 |---|---|
 | `util/mod.rs` | cria banco descartável, aplica migrations, remove ao final mesmo com pânico |
 | `util/fixtures.rs` | `mundo_configurado()`: monta a cadeia inteira até um apuratório configurado. **Base de todo teste que toque em processo** |
-| `migrations.rs` | **2 testes** — o contrato de 32 colunas de `v_processos_detalhados`, e que a antiga `v_processos` não voltou; migrations aplicam do zero **e são idempotentes**; tabelas extintas não ressuscitam; nenhuma FK sem `ON DELETE`; JSONB só nas 2 colunas justificadas; **a fronteira do seed** (11 catálogos legais com contagem exata, 17 operacionais vazios) |
+| `migrations.rs` | **3 testes** — o contrato de 32 colunas de `v_processos_detalhados`, e que a antiga `v_processos` não voltou; migrations aplicam do zero **e são idempotentes**; tabelas extintas não ressuscitam; nenhuma FK sem `ON DELETE`; JSONB só nas 2 colunas justificadas; **a fronteira do seed** (11 catálogos legais com contagem exata, 17 operacionais vazios, e nenhum papel de escrivão semeado pela `0007`); e os três atributos de comportamento nascendo `NOT NULL DEFAULT false` |
 | `schema_integrity.sql` + `.rs` | 42 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
-| `users_repository.rs` | **5 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina, busca e ordena pela hierarquia; as duas listas de processos do militar |
+| `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
 | `proceedings_repository.rs` | **18 testes** — criação completa, prazo inicial vindo da configuração, edição, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
-| `apuratorio_config.rs` | **3 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
+| `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
 | `deadlines_repository.rs` | **3 testes** — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
 | `maps_reports_repository.rs` | **10 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
 | `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
 | `audit_repository.rs` | **7 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
 | `legal_catalogs_repository.rs` | **10 testes** — os 25 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
-| `commands_ipc.rs` | **6 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, as duas convenções de argumento e o envelope `ApiResponse` |
+| `commands_ipc.rs` | **7 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, as duas convenções de argumento, o envelope `ApiResponse` e a lista de opções de militar |
 | `sql_prepare.rs` | **2 testes** — as 88 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
 | `importacao.rs` | **3 testes** — as oito etapas de `importacao/` rodam de verdade, na ordem, sobre um recorte do dump (`tests/fixtures/legado_amostra.sql`, 26 dos 128 processos, as 10 espécies). As contagens são comparadas com o próprio recorte, não com número mágico; o que fica fixado são as **decisões** — o colapso das trocas do mesmo dia, o motivo suprido, a solução replicada e o art. 29 que fica de fora. O terceiro roda o relatório de conferência da amostra e cobra **0 divergências** |
 
 ---
 
-## 6. Sete bugs reais que os testes pegaram
+## 6. Nove bugs reais — sete que os testes pegaram, dois que só a tela pegou
 
-Vale como argumento para não deixar a rede de proteção de lado.
+Vale como argumento para não deixar a rede de proteção de lado — e, nos dois últimos, para
+não deixar a **conferência de tela** de lado. Os itens 8 e 9 atravessaram a migração
+inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o app.
 
 1. O hash bcrypt do seed **não correspondia** à senha `123456`. Passaria despercebido até
    alguém tentar entrar.
@@ -547,7 +597,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 88 testes, bancos descartáveis
+cargo test                           # 92 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -555,9 +605,19 @@ cd ..
 npm install
 npm run typecheck                    # tsc --noEmit — é aqui que erro de comando aparece
 npm run build                        # typecheck + vite build
+
+# Binário de produção — é o único que exerce a CSP restritiva.
+# `--no-bundle` compila o executável sem empacotar: necessário enquanto
+# `bundle.icon` estiver vazio (§8.9, item 3).
+npm run tauri build -- --no-bundle
+./src-tauri/target/release/adm-p6-tauri
 ```
 
 Login inicial: `admin@sistema.com` / `123456`.
+
+> **`cargo run` e `npm run tauri dev` usam a `devCsp`**, que afrouxa `style-src` e libera o
+> WebSocket do HMR. Servem para desenvolver; **não** servem para conferir a CSP. Para isso
+> é o binário de produção acima.
 
 ### 7.1 Primeiro uso — **só numa instalação nova**
 
@@ -589,7 +649,7 @@ valia enquanto o banco estava vazio — "editou migration, recria o banco" — n
 
 O `sqlx::migrate!` guarda um checksum por versão: editar um `.sql` já aplicado gera
 `VersionMismatch` no próximo startup. A partir de agora **toda mudança de schema é uma
-migration nova** (`0006`, `0007`…), e os cinco arquivos existentes são imutáveis.
+migration nova** (`0008`…), e os sete arquivos existentes são imutáveis.
 
 Se ainda assim for preciso recomeçar do zero — numa máquina de desenvolvimento, por
 exemplo — o caminho completo é: recriar o volume, aplicar as migrations, restaurar o
@@ -648,45 +708,6 @@ isso é um **atributo booleano** na tabela: foi assim que `permite_penalidade`,
 
 ---
 
-### 7.6 Backup — e por que gerar não basta
-
-O banco vive num **único volume Docker**, e até esta rodada não havia cópia nenhuma. A
-regra "nunca `docker compose down -v`" é disciplina, não backup: não protege de disco
-morto, de `DROP` errado, nem de uma migration que dê errado no meio.
-
-```bash
-mkdir -p ~/backups/adm-p6
-DATA=$(date +%Y%m%d-%H%M%S)
-docker compose exec -T postgres pg_dump -U adm_p6_user -d adm_p6_db --format=custom \
-  > ~/backups/adm-p6/adm_p6_db_${DATA}.dump      # ~46 MB, o schema `legado` incluído
-```
-
-**Fora do repositório de propósito:** tem dado pessoal de 235 militares, pela mesma razão
-que `adm-p6.sql` está no `.gitignore`.
-
-**Um dump nunca restaurado não é backup.** Verificar custa um minuto:
-
-```bash
-docker compose exec -T postgres psql -U adm_p6_user -d postgres -q \
-  -c "DROP DATABASE IF EXISTS adm_p6_backup_teste;" -c "CREATE DATABASE adm_p6_backup_teste;"
-docker compose exec -T postgres pg_restore -U adm_p6_user -d adm_p6_backup_teste \
-  --no-owner --no-acl < ~/backups/adm-p6/adm_p6_db_<data>.dump
-
-# As contagens dos dois lados têm de bater — e o anexo de 20 MB, casar no md5.
-for DB in adm_p6_db adm_p6_backup_teste; do
-  docker compose exec -T postgres psql -U adm_p6_user -d $DB -t -A -c \
-    "select count(*) from processos_procedimentos;
-     select md5(conteudo::text) from processo_anexos;"
-done
-
-docker compose exec -T postgres psql -U adm_p6_user -d postgres -c "DROP DATABASE adm_p6_backup_teste;"
-```
-
-Feito assim antes de tocar no schema `legado`: 8 contagens iguais e o md5 do anexo
-idêntico.
-
----
-
 ### 7.5 O roteiro de conferência de tela
 
 **É o que falta para dar a migração por concluída.** Nada aqui é automatizável: são as duas
@@ -716,7 +737,7 @@ usuários, mapas, estatísticas (as duas), auditoria, encarregados, relatório a
 
 | Sintoma | Causa provável |
 |---|---|
-| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 75 comandos passam |
+| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 76 comandos passam |
 | Uma tela abre **sem estilo** | `style-src`. Em produção o Vite emite `<link>`; em dev injeta `<style>`, e é por isso que existe `devCsp` |
 | As **barras** dos painéis de contagem aparecem sem largura | `aplicarBarras()` não rodou, ou voltou um `style=""` no markup (§10) |
 
@@ -767,12 +788,105 @@ divergências; o que falta é o olho: rótulo, layout, o que a Seção reconhece
 
 ---
 
+### 7.6 Backup — e por que gerar não basta
+
+O banco vive num **único volume Docker**, e até esta rodada não havia cópia nenhuma. A
+regra "nunca `docker compose down -v`" é disciplina, não backup: não protege de disco
+morto, de `DROP` errado, nem de uma migration que dê errado no meio.
+
+```bash
+mkdir -p ~/backups/adm-p6
+DATA=$(date +%Y%m%d-%H%M%S)
+docker compose exec -T postgres pg_dump -U adm_p6_user -d adm_p6_db --format=custom \
+  > ~/backups/adm-p6/adm_p6_db_${DATA}.dump      # ~46 MB, o schema `legado` incluído
+```
+
+**Fora do repositório de propósito:** tem dado pessoal de 235 militares, pela mesma razão
+que `adm-p6.sql` está no `.gitignore`.
+
+**Um dump nunca restaurado não é backup.** Verificar custa um minuto:
+
+```bash
+docker compose exec -T postgres psql -U adm_p6_user -d postgres -q \
+  -c "DROP DATABASE IF EXISTS adm_p6_backup_teste;" -c "CREATE DATABASE adm_p6_backup_teste;"
+docker compose exec -T postgres pg_restore -U adm_p6_user -d adm_p6_backup_teste \
+  --no-owner --no-acl < ~/backups/adm-p6/adm_p6_db_<data>.dump
+
+# As contagens dos dois lados têm de bater — e o anexo de 20 MB, casar no md5.
+for DB in adm_p6_db adm_p6_backup_teste; do
+  docker compose exec -T postgres psql -U adm_p6_user -d $DB -t -A -c \
+    "select count(*) from processos_procedimentos;
+     select md5(conteudo::text) from processo_anexos;"
+done
+
+docker compose exec -T postgres psql -U adm_p6_user -d postgres -c "DROP DATABASE adm_p6_backup_teste;"
+```
+
+Feito assim antes de tocar no schema `legado`: 8 contagens iguais e o md5 do anexo
+idêntico.
+
+---
+
+### 7.7 Como acrescentar um campo que só alguns apuratórios usam
+
+É a operação que a §8.10 tornou rotina, e o caminho é sempre o mesmo — **nunca** um `if`
+sobre a sigla.
+
+1. **Migration nova** com a coluna do dado (se ainda não existir) e o **atributo booleano**
+   que decide quem a usa, `NOT NULL DEFAULT false`. Ligue-o nas espécies certas por
+   `UPDATE`, e comente que é carga única de valor administrável — senão o próximo leitor
+   vai achar que é comportamento por nome (§8.10.1).
+2. **`legal_catalogs/domain.rs::CATALOGOS`**, entrada `apuratorios`: uma linha
+   `booleano("...", "Rótulo", "o que revela")`. A tela de catálogos passa a oferecê-lo
+   sozinha (§7.4).
+3. **`apuratorio_config/domain.rs::ApuratorioConfig`** e o `SELECT` de
+   `repository.rs::get`: é por aqui que o formulário enxerga o atributo. **Não** deixe a
+   tela lê-lo de `legal_catalogs_list` — foi o que matou a carta precatória (§8.10.2).
+4. **`src/types.ts`**, o mesmo campo na interface.
+5. **`src/telas/processo.ts`**: a condição de renderização, e — se o campo puder esconder
+   dado já gravado — `textoSePresente` na coleta e a regra "aparece assim mesmo quando há
+   valor" (§8.10.4).
+6. **Teste** em `tests/apuratorio_config.rs`, no molde de
+   `configuracao_entrega_os_atributos_de_comportamento`.
+
+### 7.8 Como mexer numa migration de dado com segurança
+
+A `0007` estabeleceu o procedimento, e ele vale para qualquer migration que **altere linhas
+existentes** e não só o schema:
+
+```bash
+# 1. Ensaiar numa cópia restaurada do backup — nunca direto no banco real.
+docker compose exec -T postgres psql -U adm_p6_user -d postgres \
+  -c "DROP DATABASE IF EXISTS adm_p6_ensaio;" -c "CREATE DATABASE adm_p6_ensaio;"
+docker compose exec -T postgres pg_restore -U adm_p6_user -d adm_p6_ensaio \
+  --no-owner --no-acl < ~/backups/adm-p6/adm_p6_db_<data>.dump
+
+# 2. Aplicar a migration sozinha, e CONFERIR o resultado com consultas próprias.
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_ensaio \
+  -v ON_ERROR_STOP=1 < src-tauri/migrations/0007_....sql
+
+# 3. Só então: cargo test verde, e o ciclo da §7.3 no banco real.
+docker compose exec -T postgres psql -U adm_p6_user -d postgres \
+  -c "DROP DATABASE adm_p6_ensaio;"
+```
+
+**Duas armadilhas que a `0007` teve de resolver, e que voltarão:**
+
+| | |
+|---|---|
+| **A fronteira do seed** | Catálogo operacional tem de nascer **vazio** num banco novo, e `tests/migrations.rs` cobra. Migration que insere linha de catálogo precisa ser condicionada a haver o que corrigir (`DO $$ … IF … RETURN`), senão todo banco novo nasce com dado que ninguém pediu |
+| **A ordem imposta pelas FKs** | Mexer em `processo_designacoes` exige que o par `(apuratorio_id, papel_id)` já exista em `apuratorio_papeis`. Cadastre o novo, **depois** migre as linhas, **depois** desative o antigo — nunca o contrário |
+
 ## 8. O caminho percorrido, e o que falta
 
-As subseções estão na ordem em que foram executadas. **8.1 a 8.7 estão concluídas** e
+As subseções estão na ordem em que foram executadas. **8.1 a 8.10 estão concluídas** e
 ficam aqui porque registram *por que* cada coisa é como é — reabrir uma delas sem ler o
-registro costuma refazer trabalho já feito. O que falta é **conferência de tela**: a
-amostra (fim da 8.5) e a CSP (§7.5). **8.8 é o que foi deliberadamente descartado.**
+registro costuma refazer trabalho já feito. **8.8 é o que foi deliberadamente descartado.**
+
+O que falta é **conferência de tela**: a amostra (fim da 8.5), a CSP (§7.5) e os campos por
+apuratório (§8.10). As duas últimas rodadas — **8.9** e **8.10** — nasceram justamente
+dessa conferência, e cada uma achou código quebrado que nenhum teste alcançava. É o melhor
+argumento disponível para fazê-la antes de liberar o app.
 
 | | | |
 |---|---|---|
@@ -785,6 +899,7 @@ amostra (fim da 8.5) e a CSP (§7.5). **8.8 é o que foi deliberadamente descart
 | 8.7 | Ajustes nos catálogos administráveis | ✅ concluída |
 | 8.8 | O que NÃO está planejado | — registro |
 | 8.9 | O que a conferência de tela achou de código | ✅ concluída |
+| 8.10 | Campos por apuratório, e a reforma do formulário e da listagem | ✅ concluída |
 
 ### 8.1 ~~Terminar o frontend~~ — **CONCLUÍDO**
 
@@ -1007,7 +1122,7 @@ declaradas no cabeçalho da etapa 01:
 Testado de ponta a ponta. **Não edita uma linha do `adm-p6.sql`.**
 
 ```bash
-# ── 1. Banco da aplicação, limpo, com as 5 migrations ────────────────────────
+# ── 1. Banco da aplicação, limpo, com as 7 migrations ────────────────────────
 docker compose down -v && docker compose up -d
 cd src-tauri && sqlx migrate run --source migrations && cd ..
 
@@ -1246,7 +1361,7 @@ object-src 'none'; base-uri 'self'; frame-src 'none'; form-action 'none'
 ```
 
 **`connect-src` precisa de `ipc: http://ipc.localhost`.** É por aí que todo o IPC do Tauri
-v2 passa: sem isso não é uma tela que quebra, são os 75 comandos de uma vez.
+v2 passa: sem isso não é uma tela que quebra, são os 76 comandos de uma vez.
 
 **`devCsp` existe porque desenvolvimento e produção carregam o CSS de formas diferentes.**
 Em dev o Vite injeta o `styles.css` por `<style>` via JS (e o overlay de erro faz o mesmo),
@@ -1458,6 +1573,208 @@ na §9; virar tela é decisão de produto, não conserto de defeito.
 
 ---
 
+### 8.10 ~~Campos por apuratório, e a reforma do formulário e da listagem~~ — **CONCLUÍDA**
+
+Pedido do responsável, depois de usar o cadastro: **o formulário mostrava os mesmos campos
+para os dez apuratórios**. Data de julgamento num IPM, remessa à comissão numa sindicância,
+penalidade onde nunca se pune. E as telas estavam mal organizadas.
+
+Ao implementar, apareceu um defeito maior que o pedido — a carta precatória, abaixo.
+
+#### 1. Os três atributos que decidem os campos
+
+A regra existia no domínio e não no código. O dado do legado a confirma:
+
+| Coluna | Onde está preenchida no legado |
+|---|---|
+| `data_julgamento` | CD (1), PAD (1), PADS (11) — **zero** em qualquer procedimento |
+| `data_remessa_comissao` | **nenhum dos 128** |
+
+Como sempre neste schema, quem decide não é a sigla (§3.2). A migration `0007` acrescentou
+três booleanos em `apuratorios`, administráveis em *Catálogos → Apuratórios*:
+
+| Atributo | Ligado em | O que revela |
+|---|---|---|
+| `permite_julgamento` | CD, CJ, PAD, PADE, PADS | a data de julgamento |
+| `permite_punicao` | CD, CJ, PAD, PADE, PADS | penalidade e dias, **em cada envolvido** |
+| `permite_remessa_comissao` | CD, PAD, CJ | a data de remessa à comissão |
+
+> **`permite_punicao` não substitui `tipos_solucao_decidida.permite_penalidade`** — são
+> dois gates em níveis diferentes e os dois valem. O apuratório diz se a **espécie** pune
+> (um IPM não pune nunca); a solução decidida diz se **aquele desfecho** pune (um PADS pune
+> quando a solução é "Punido", não quando é "Absolvido"). A punição continua sendo do
+> envolvido, como a decisão 2 fixou.
+
+**A carga inicial da `0007` é por sigla, e está comentada como deliberada.** Parece violar o
+princípio 2, e não viola: o princípio veta o **código** perguntar "a sigla é IPM?" em tempo
+de execução, porque o administrador pode renomear a linha. Aqui é carga **única** de um
+valor que passa a morar no dado — mesmo molde de `prazo_base_dias` (decisão 23) e
+`max_envolvidos` (decisão 13). Num banco novo `apuratorios` nasce vazio, o `UPDATE` alcança
+0 linhas e vale o `DEFAULT false`.
+
+#### 2. 🔴 O formulário de carta precatória estava morto
+
+**O achado desta rodada, e o mais grave até aqui:** a espécie era **impossível de
+cadastrar**, e nada acusava.
+
+A tela decidia o bloco Deprecante/Unidade deprecada assim:
+
+```ts
+const ehCartaPrecatoria = apuratorio?.extra?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
+```
+
+`extra` vinha de `legal_catalogs_list("apuratorios")`, e
+`legal_catalogs/repository.rs::colunas_select` projeta **apenas `id`, as colunas declaradas
+no registro de administração e `ativo`**. A decisão 29 (§8.7) tirou `codigo_extensao` do
+registro — de propósito, para a pergunta sumir do cadastro do apuratório. Efeito colateral
+não previsto: **a tela de processo lia do mesmo lugar**, `codigo_extensao` passou a chegar
+`undefined`, e o bloco nunca mais renderizou. O backend continuou exigindo deprecante
+(`proceedings/repository.rs::validar_contra_configuracao`), então o formulário não oferecia
+os campos e o salvamento era recusado.
+
+A §8.7 argumentava que esconder a coluna era seguro "porque o `UPDATE` genérico monta o
+`SET` só com as colunas declaradas". **Verdade para a escrita; ninguém verificou a
+leitura.**
+
+**A correção é uma separação de responsabilidade, não um remendo:**
+
+> O **registro de catálogos** governa o que o administrador **edita**.
+> **`apuratorio_config_get`** entrega o que o formulário precisa **saber**.
+
+`ApuratorioConfig` passou a trazer, ao lado de `documentos` e `papeis`:
+`max_envolvidos`, `exige_natureza_fato`, os três atributos novos e **`codigo_extensao`**.
+A tela lê tudo de lá. `codigo_extensao` continua fora do registro — a decisão 29 vale.
+
+O formulário já chamava `apuratorio_config_get` a cada troca de apuratório, então não há
+requisição nova.
+
+#### 3. O escrivão do IPM e o escrivão do processo, outra vez separados
+
+O legado guardava **dois** escrivães, em colunas distintas — `escrivao_id` e
+`escrivao_processo_id` — e a importação mapeou as duas para o mesmo papel `'Escrivão'`
+(`importacao/01_catalogos.sql`, `legado.map_papeis`). Foi simplificação de script, não
+decisão de domínio.
+
+O corte no dump é limpo, e é o que torna a separação segura:
+
+| Coluna do legado | Onde aparece |
+|---|---|
+| `escrivao_id` | só IPM (23) |
+| `escrivao_processo_id` | só CD (2), CJ (1), PAD (1) |
+
+Nenhum processo usou as duas. Por isso dá para separar **pelo apuratório**, sem depender do
+schema `legado`, que sai do banco quando a conferência fechar.
+
+A `0007` faz, nesta ordem — que é imposta pela FK composta `(apuratorio_id, papel_id)`:
+
+1. cria o papel **"Escrivão de Processo"**;
+2. cadastra as associações novas em `apuratorio_papeis`, copiando `obrigatorio` e
+   `max_ocupantes` da antiga;
+3. migra as designações históricas (troca de papel, nunca exclusão);
+4. **desativa** as associações antigas — não apaga (princípio 6). A FK segue satisfeita,
+   porque chave estrangeira não olha `ativo`.
+
+**Como o apuratório colegiado é identificado sem nomear sigla:** é o que prevê o escrivão
+**e** um terceiro papel não responsável (o Interrogante). O IPM prevê só Encarregado, que é
+o responsável, e o Escrivão — nunca um terceiro.
+
+⚠ **O bloco inteiro é condicionado a haver o que separar** (`DO $$ … IF … RETURN`). É o que
+preserva a fronteira do seed: `papeis_processo` é catálogo **operacional** e tem de nascer
+**vazio** num banco novo, e há teste cobrando isso (`tests/migrations.rs`). Numa instalação
+nova não existe 'Escrivão' nenhum, o bloco é pulado, e quem cadastra os papéis é o
+administrador (§7.1). **Não remova a condição.**
+
+#### 4. Campo escondido não pode apagar fato já registrado
+
+O formulário monta a requisição a partir do DOM, e `FormData.get` devolve `null` para dois
+casos diferentes: "o usuário apagou" e "o campo nem foi renderizado". Tratar os dois igual
+zeraria a `data_julgamento` de um PADS na primeira edição depois de alguém desligar
+`permite_julgamento` — exatamente o que o princípio 5 proíbe.
+
+Duas defesas, ambas em `src/telas/processo.ts`:
+
+| | |
+|---|---|
+| `textoSePresente(campo, atual)` | usa `dados.has(campo)` para separar ausente de vazio, e preserva o valor do rascunho quando o campo não foi renderizado. O mesmo vale para `penalidade_tipo_id` e `penalidade_dias` de cada envolvido |
+| O campo **aparece assim mesmo** | se há valor gravado que a configuração não prevê mais, ele é renderizado com nota explicando. É a mesma escolha de `selectMilitares`, que preserva o militar fora da lista de opções em vez de perder o vínculo em silêncio |
+
+#### 5. A reforma de tela
+
+Conferida **renderizando o CSS num navegador**, não no olho: três iterações, e duas coisas
+só apareceram ali.
+
+**Formulário** — era uma coluna de 760px com ~20 campos empilhados:
+
+- cada `<fieldset>` virou grade responsiva `repeat(auto-fit, minmax(230px, 1fr))`: 2–4
+  campos por linha num monitor, 1 numa janela estreita, **sem media query**;
+- `.campo--largo` para o que atravessa a linha (resumo, avisos, coleções);
+- as coleções (envolvido, designação, pessoa) saíram do `flex-wrap`.
+
+> **`auto-fill`, e não `auto-fit`, nas coleções.** `auto-fit` **colapsa** as trilhas vazias,
+> então um envolvido com 4 campos ganhava uma grade diferente do que tem 6 e nada alinhava
+> entre linhas. Com `auto-fill` as trilhas permanecem e "Situação" fica na mesma coluna em
+> todos. Foi a primeira das duas coisas que só a renderização mostrou.
+
+**Listagem** — já era `<table>`; o problema eram nove colunas sem largura declarada:
+
+- largura em **porcentagem** nas colunas de texto. Sem ela, a primeira coluna sem restrição
+  ficava com toda a sobra e as outras encolhiam até "7º Batalhã…" — a segunda coisa que só
+  a renderização mostrou;
+- texto longo com reticências e `title` com o conteúdo inteiro;
+- situação e "vencido" viraram etiqueta (`.badge`), não texto solto;
+- cabeçalho fixo ao rolar, zebra e realce de linha;
+- `.tabela-dados--larga` dá `min-width` às listagens de muitas colunas, para
+  `.table-wrap` **rolar** em vez de espremer. Só as largas levam o modificador: uma tabela
+  de três colunas não deve exigir rolagem.
+
+**Um defeito pré-existente no caminho:** abaixo de 860px, `.page-head` virava coluna com
+`align-items: stretch` — e em coluna o eixo cruzado é o horizontal, então o botão "Novo"
+atravessava a tela inteira. Passou a `flex-start`.
+
+Tudo em classes: **a CSP recusa `style=""` interpolado** (§10), e a reforma não introduziu
+nenhum.
+
+#### 6. O que ficou de fora, e por quê
+
+| Pedido | Decisão |
+|---|---|
+| **Listar todos os documentos iniciadores**, independentemente do apuratório | **Não** (decisão 33). A FK composta `(apuratorio_id, documento_iniciador_id)` exige o par cadastrado, e cada apuratório tem hoje um só habilitado — oferecer os três faria o salvamento falhar com erro de FK cru. Quem precisar habilita em *Catálogos → Configuração de apuratórios* |
+| Usar `users_list_encarregados` no seletor de **designações** | **Não.** `is_encarregado` não gate quem pode ser designado na prática: **5 militares exerceram Encarregado sem a marca** e 2 exerceram Escrivão. Estreitar por ela apagaria 9 designações existentes ao reeditar o processo — trocaria um defeito por outro pior |
+| Expor o filtro `artigo` das **infrações do Estatuto** | **Não.** É texto livre, e a própria consulta já casa `termo` contra `artigo`. Um segundo campo de texto ao lado do primeiro só confundiria. Os outros dois filtros (dispositivo legal e natureza) viraram select, alimentados por catálogo |
+
+#### Como se soube que não quebrou
+
+A `0007` foi **ensaiada numa cópia restaurada do backup de produção** antes de tocar no
+banco real — é um passo que vale repetir em toda migration de dado:
+
+```bash
+docker compose exec -T postgres psql -U adm_p6_user -d postgres \
+  -c "CREATE DATABASE adm_p6_ensaio;"
+docker compose exec -T postgres pg_restore -U adm_p6_user -d adm_p6_ensaio \
+  --no-owner --no-acl < ~/backups/adm-p6/adm_p6_db_<data>.dump
+docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_ensaio \
+  -v ON_ERROR_STOP=1 < src-tauri/migrations/0007_campos_por_apuratorio.sql
+```
+
+Depois, aplicada em produção pelo ciclo da §7.3, com `cargo test` verde antes. Conferido:
+
+- **129 processos, 180 designações, 194 envolvidos** atravessaram intactos;
+- os escrivães ficaram **24 no IPM** e **4 em CD/CJ/PAD**, no papel novo;
+- os três atributos ligados exatamente nas espécies previstas;
+- `98_amostra_lado_a_lado.sql` segue em **377 comparações, 0 divergências**;
+- `99_conferencia.sql` acusa **uma** linha, e é o IPM de teste (passo 4 do quadro do topo),
+  não regressão.
+
+**Testes novos (90 → 92):**
+
+| Teste | O que trava |
+|---|---|
+| `configuracao_entrega_os_atributos_de_comportamento` | `apuratorio_config_get` devolve `codigo_extensao` e os três atributos. **É o teste que teria pego a carta precatória morta** |
+| `atributos_de_comportamento_do_apuratorio_nascem_desligados` | os três são booleanos `NOT NULL DEFAULT false` — o comportamento vem do dado, e quem liga é o administrador |
+| asserção nova em `migrations.rs` | nenhum papel `Escriv%` é semeado em banco novo — é o que impede alguém "melhorar" a `0007` tirando a condição do `DO $$` |
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**
@@ -1530,11 +1847,11 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Filtrar `ativo` na leitura de registro | Um processo antigo perde o catálogo desativado que usava | Filtrar `ativo` só em lista de **opções** |
 | Lista de escopo vazia num filtro | `= ANY('{}')` é falso para toda linha: quem não filtra nada não vê nada | `maps_reports::repository::escopo()` normaliza vazio para `NULL`. Use-o em todo filtro novo |
 | `<a download>` para entregar arquivo | No WebView não define destino nem abre "salvar como", e muda por plataforma. Sobreviveu no download de anexo até a §8.6.6, porque nenhum teste chega lá e a tela não acusa | `dom.ts::baixarArquivoBase64` → `files_save_download`, que abre o diálogo nativo no Rust. Vale para **todo** arquivo, não só o CSV |
-| **`docker compose down -v` com dado de produção dentro** | Apaga 8 anos de registro. A regra "editou migration, recria o banco" **acabou** | Migration incremental (`0006`…). Se realmente precisar recomeçar, o roteiro completo está na 8.5 |
+| **`docker compose down -v` com dado de produção dentro** | Apaga 8 anos de registro. A regra "editou migration, recria o banco" **acabou** | Migration incremental (`0008`…). Se realmente precisar recomeçar, o roteiro completo está na 8.5 |
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (§5.3) |
-| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **75 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
+| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **76 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Largura calculada vai num `data-*` e é aplicada em JS. `aplicarBarras()` faz isso, chamada de `shell()` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver §8.6.2 |
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
@@ -1588,7 +1905,13 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | quais campos cada apuratório mostra, e por quê | decisões **31** a **33**, e `apuratorio_config/domain.rs::ApuratorioConfig` |
 | por que o comportamento não vem de `legal_catalogs_list` | o cabeçalho de `ApuratorioConfig`, e a §**6**, item 9 |
 | como esconder um campo sem apagar o que já foi gravado | `processo.ts::textoSePresente` e o princípio 5 |
-| como o formulário e a listagem se organizam na tela | o bloco "Listagem densa" e as regras de `.crud-form` em `src/styles.css` |
+| como o formulário e a listagem se organizam na tela | §**8.10**, item 5, e o bloco "Listagem densa" em `src/styles.css` |
+| como acrescentar um campo que só alguns apuratórios usam | §**7.7** — o passo a passo completo |
+| como mexer numa migration que altera dado existente | §**7.8** — o ensaio sobre cópia do backup |
+| por que o escrivão do IPM é um papel diferente | decisão **32** e §**8.10**, item 3 |
+| por que o documento iniciador não lista todos | decisão **33** |
+| onde estão as duas coisas que a conferência de tela já achou | §**8.9** e §**8.10** — e é por isso que ela não é formalidade |
+| o que falta, em ordem, para fechar a migração | o quadro **▶ POR ONDE RETOMAR**, no topo, e `CONFERENCIA-DE-TELA.md` |
 | como rodar o app com a CSP de produção | §**7.5** (o aviso do topo) e §**8.9**, item 3 |
 | o que foi deliberadamente **não** planejado | §**8.8** |
 | como o recorte de teste da importação é gerado | `src-tauri/tests/fixtures/gerar_legado_amostra.sh` |
