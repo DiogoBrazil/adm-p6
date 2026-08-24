@@ -15,7 +15,6 @@ const SELECT_PM: &str = r#"
            pg.id::text                  AS posto_graduacao_id,
            pg.nome                      AS posto_graduacao,
            ch.nome                      AS circulo_hierarquico,
-           pg.ordem_hierarquica         AS ordem_hierarquica,
            pm.is_encarregado            AS is_encarregado,
            pm.ativo                     AS ativo,
            u.id::text                   AS conta_id,
@@ -53,7 +52,7 @@ pub async fn list_paginated(
         "{SELECT_PM}
          WHERE ($1::text IS NULL
                 OR lower(pm.nome) LIKE $1 OR lower(pm.matricula) LIKE $1)
-         ORDER BY pg.ordem_hierarquica DESC, pm.nome
+         ORDER BY pm.nome
          LIMIT $2 OFFSET $3"
     ))
     .bind(termo.as_deref())
@@ -81,7 +80,7 @@ pub async fn list_encarregados(pool: &PgPool) -> Result<Vec<UserListItem>, sqlx:
     sqlx::query_as::<_, UserListItem>(&format!(
         "{SELECT_PM}
          WHERE pm.ativo AND pm.is_encarregado
-         ORDER BY pg.ordem_hierarquica DESC, pm.nome"
+         ORDER BY pm.nome"
     ))
     .fetch_all(pool)
     .await

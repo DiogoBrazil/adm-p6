@@ -78,6 +78,9 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         "infracoes_estatuto_art32",
         "tipos_prazo",
         "crimes_contravencoes",
+        // Nunca teve uma linha, aqui ou no legado, e nenhuma consulta a
+        // projetava. Removida pela 0006 — ver decisão 30.
+        "subdivisao_textos_normativos",
     ] {
         let existe: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
             .bind(format!("public.{extinta}"))
@@ -183,7 +186,6 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         "papeis_processo",
         "papeis_pessoa",
         "tipos_andamento",
-        "subdivisao_textos_normativos",
     ] {
         let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {vazio}"))
             .fetch_one(&mut conn)

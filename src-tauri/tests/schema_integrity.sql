@@ -43,15 +43,15 @@ $fn$;
 -- podem colidir com eles nos indices unicos case-insensitive.
 INSERT INTO circulos_hierarquicos (id, nome) VALUES
     ('11111111-0000-0000-0000-000000000001', 'Circulo Teste');
-INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica) VALUES
-    ('11111111-0000-0000-0000-000000000002', 'TST PM', 'Soldado Teste PM', '11111111-0000-0000-0000-000000000001', -1);
+INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id) VALUES
+    ('11111111-0000-0000-0000-000000000002', 'TST PM', 'Soldado Teste PM', '11111111-0000-0000-0000-000000000001');
 INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id) VALUES
     ('22222222-0000-0000-0000-000000000001', '100000001', 'PM UM',   '11111111-0000-0000-0000-000000000002'),
     ('22222222-0000-0000-0000-000000000002', '100000002', 'PM DOIS', '11111111-0000-0000-0000-000000000002'),
     ('22222222-0000-0000-0000-000000000003', '100000003', 'PM TRES', '11111111-0000-0000-0000-000000000002');
 
-INSERT INTO municipios_distritos (id, nome, tipo) VALUES
-    ('33333333-0000-0000-0000-000000000001', 'Cidade Teste', 'municipio');
+INSERT INTO municipios_distritos (id, nome, e_distrito) VALUES
+    ('33333333-0000-0000-0000-000000000001', 'Cidade Teste', false);
 INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
     ('33333333-0000-0000-0000-000000000002', 'Unidade Teste', '33333333-0000-0000-0000-000000000001');
 
@@ -120,6 +120,21 @@ VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 0, DATE '2026-01-10', 30);
 INSERT INTO processo_designacoes (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
 VALUES ('aaaaaaaa-0000-0000-0000-000000000001', '44444444-0000-0000-0000-000000000002',
         '22222222-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', DATE '2026-01-10');
+
+-- Processo dedicado a UMA asserção: a prorrogação que começa no próprio dia do
+-- vencimento anterior (migration 0005). Precisa ser um processo à parte porque
+-- `deve_aceitar` PERSISTE o que grava, e o caso "no dia seguinte" abaixo já
+-- ocupa a ordem 1 do processo base.
+INSERT INTO processos_procedimentos
+    (id, apuratorio_id, documento_iniciador_id, numero_documento, unidade_origem_id,
+     municipio_fato_id, data_instauracao)
+VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000002', '44444444-0000-0000-0000-000000000003',
+     '55555555-0000-0000-0000-000000000001', '900', '33333333-0000-0000-0000-000000000002',
+     '33333333-0000-0000-0000-000000000001', DATE '2026-01-10');
+
+INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000002', 0, DATE '2026-01-10', 30);
 
 -- ------------------------------------------------------------------ casos ---
 CREATE TEMP TABLE resultado_integridade (ordem serial, linha text);
@@ -272,6 +287,27 @@ INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('municipi
   UPDATE municipios_distritos SET municipio_pai_id = id
    WHERE id='33333333-0000-0000-0000-000000000001'$$);
 
+-- A coerência distrito ↔ município pai, que antes vivia só na cabeça de quem
+-- preenchia o formulário: `tipo` era texto livre e o pai era opcional para
+-- todo mundo. Desde a 0006 é CHECK, e vale para qualquer caminho de escrita.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('distrito sem municipio pai', $$
+  INSERT INTO municipios_distritos (nome, e_distrito, municipio_pai_id)
+  VALUES ('Distrito Orfao Teste', true, NULL)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('municipio com municipio pai', $$
+  INSERT INTO municipios_distritos (nome, e_distrito, municipio_pai_id)
+  VALUES ('Cidade Com Pai Teste', false, '33333333-0000-0000-0000-000000000001')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('distrito com o municipio a que pertence', $$
+  INSERT INTO municipios_distritos (nome, e_distrito, municipio_pai_id)
+  VALUES ('Distrito Teste', true, '33333333-0000-0000-0000-000000000001')$$);
+
+-- Só um dispositivo legal pode ser O Estatuto: é dele que a infração do
+-- Estatuto tira o dispositivo, sem perguntar a ninguém.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('segundo dispositivo marcado como Estatuto', $$
+  UPDATE dispositivos_legais SET e_estatuto_militar = true
+   WHERE NOT e_estatuto_militar$$);
+
 
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo numero em ano diferente', $$
   INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
@@ -288,6 +324,18 @@ INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo num
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('prorrogacao imediatamente apos o vencimento', $$
   INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, motivo)
   VALUES ('aaaaaaaa-0000-0000-0000-000000000001', 1, DATE '2026-02-10', 30, 'prorrogado')$$);
+
+-- A convenção que a Seção pratica, e que a migration 0005 passou a admitir: a
+-- prorrogação começa NO DIA do vencimento anterior (10/01 + 30 = 09/02). Sob o
+-- `[]` original o dia era disputado pelos dois prazos e o banco recusava.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('prorrogacao no proprio dia do vencimento anterior', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000002', 1, DATE '2026-02-09', 30, 'prorrogado')$$);
+
+-- Um dia ANTES do vencimento continua sendo sobreposição de verdade.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('prorrogacao um dia antes do vencimento anterior', $$
+  INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias, motivo)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000002', 2, DATE '2026-02-08', 30, 'prorrogado')$$);
 
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('substituicao de encarregado na data da troca', $$
   UPDATE processo_designacoes SET data_fim = DATE '2026-03-01'

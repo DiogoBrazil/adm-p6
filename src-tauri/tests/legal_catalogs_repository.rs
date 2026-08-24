@@ -1,4 +1,4 @@
-//! CRUD genérico dos 26 catálogos.
+//! CRUD genérico dos 25 catálogos.
 //!
 //! Este módulo monta SQL com **nome de tabela e de coluna interpolados**. Isso
 //! só é seguro porque esses nomes vêm sempre do registro `domain::CATALOGOS`,
@@ -39,7 +39,7 @@ async fn gravar(pool: &PgPool, chave: &str, id: Option<&str>, pares: Value) -> S
 #[tokio::test]
 async fn todo_catalogo_do_registro_existe_no_banco() {
     util::com_banco_descartavel("cat_registro", |pool| async move {
-        assert_eq!(CATALOGOS.len(), 26, "o guia fala em 26 catalogos");
+        assert_eq!(CATALOGOS.len(), 25, "o guia fala em 25 catalogos");
 
         for cat in CATALOGOS {
             // `list` monta o SELECT com todas as colunas declaradas: se alguma
@@ -149,7 +149,6 @@ async fn cada_tipo_de_coluna_e_lido_como_o_que_declara() {
                 "prazo_base_dias": 45,
                 "max_envolvidos": Value::Null,
                 "exige_natureza_fato": true,
-                "codigo_extensao": "  ",
             }),
         )
         .await;
@@ -165,14 +164,49 @@ async fn cada_tipo_de_coluna_e_lido_como_o_que_declara() {
             "opcional vazio e null"
         );
         assert_eq!(
-            linha["codigo_extensao"],
-            Value::Null,
-            "texto opcional so com espacos vira null, nao string vazia"
-        );
-        assert_eq!(
             linha["tipo_apuratorio_id"],
             json!(tipo),
             "referencia sai como texto"
+        );
+
+        // `texto_opcional` só existe em infrações penais desde que o código de
+        // extensão saiu do registro. Os catálogos legais da 0003 dão as duas
+        // referências obrigatórias.
+        let dispositivo: String =
+            sqlx::query_scalar("SELECT id::text FROM dispositivos_legais ORDER BY nome LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let especie: String = sqlx::query_scalar(
+            "SELECT id::text FROM especies_infracao_penal ORDER BY nome LIMIT 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let penal = gravar(
+            &pool,
+            "infracoes_penais",
+            None,
+            json!({
+                "dispositivo_legal_id": dispositivo,
+                "especie_id": especie,
+                "artigo": "999",
+                "descricao": "Infração de teste",
+                "paragrafo": "  ",
+                "inciso": Value::Null,
+                "alinea": Value::Null,
+            }),
+        )
+        .await;
+        let cat_penal = catalogo("infracoes_penais").unwrap();
+        let linha_penal = repository::get(&pool, cat_penal, &penal)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            linha_penal["paragrafo"],
+            Value::Null,
+            "texto opcional so com espacos vira null, nao string vazia"
         );
     })
     .await;
@@ -408,6 +442,63 @@ async fn busca_recusa_campo_fora_do_registro() {
 
         // A tabela continua de pé.
         assert_eq!(repository::list(&pool, cat, true).await.unwrap().len(), 2);
+    })
+    .await;
+}
+
+/// Uma `ReferenciaFixa` é resolvida pelo atributo do catálogo alvo, e o valor
+/// **nunca vem da requisição**.
+///
+/// É o que permitiu tirar o select "Dispositivo legal" do cadastro de infração
+/// do Estatuto: a resposta era sempre a mesma, mas a coluna é NOT NULL e monta
+/// o rótulo que a tela de indícios exibe. Sem este teste, um dia em que a linha
+/// marcada sumisse do catálogo o insert passaria a gravar NULL — ou a falhar
+/// com erro de banco cru, longe da causa.
+#[tokio::test]
+async fn referencia_fixa_e_resolvida_pelo_atributo() {
+    util::com_banco_descartavel("cat_ref_fixa", |pool| async move {
+        // Nada de `dispositivo_legal_id` no que se manda: é o ponto.
+        let id = gravar(
+            &pool,
+            "infracoes_estatuto",
+            None,
+            json!({
+                "artigo": "Art. 99",
+                "inciso": "TST",
+                "texto": "Infração de teste do Estatuto",
+            }),
+        )
+        .await;
+
+        let esperado: String =
+            sqlx::query_scalar("SELECT id::text FROM dispositivos_legais WHERE e_estatuto_militar")
+                .fetch_one(&pool)
+                .await
+                .expect("a 0006 marca exatamente um dispositivo como o Estatuto");
+
+        let cat = catalogo("infracoes_estatuto").unwrap();
+        let linha = repository::get(&pool, cat, &id).await.unwrap().unwrap();
+        assert_eq!(
+            linha["dispositivo_legal_id"],
+            json!(esperado),
+            "o dispositivo sai do atributo, nao da requisicao"
+        );
+
+        // E a edição não o perde: o UPDATE reaplica a mesma subconsulta.
+        gravar(
+            &pool,
+            "infracoes_estatuto",
+            Some(&id),
+            json!({
+                "artigo": "Art. 99",
+                "inciso": "TST",
+                "texto": "Texto corrigido",
+            }),
+        )
+        .await;
+        let linha = repository::get(&pool, cat, &id).await.unwrap().unwrap();
+        assert_eq!(linha["texto"], json!("Texto corrigido"));
+        assert_eq!(linha["dispositivo_legal_id"], json!(esperado));
     })
     .await;
 }

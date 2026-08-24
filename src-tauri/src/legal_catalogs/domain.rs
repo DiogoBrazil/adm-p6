@@ -14,6 +14,14 @@ pub enum TipoColuna {
     /// Referência a outro catálogo. `alvo` diz qual, para o formulário montar o select.
     Referencia,
     ReferenciaOpcional,
+    /// Referência que o sistema resolve sozinho, e que por isso NÃO aparece
+    /// nem no formulário nem na lista. O valor sai da linha do catálogo `alvo`
+    /// marcada por `marcador` — nunca de comparação por nome.
+    ///
+    /// Existe para a coluna que é obrigatória no banco e cuja resposta é
+    /// sempre a mesma: perguntá-la seria pedir ao administrador que confirme
+    /// o óbvio, e removê-la do schema custaria o rótulo que ela monta.
+    ReferenciaFixa,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -26,6 +34,14 @@ pub struct Coluna {
     /// Explicação do efeito da coluna quando ela carrega comportamento, e não só
     /// apresentação. É o texto que a tela mostra ao lado do campo.
     pub efeito: Option<&'static str>,
+    /// Coluna booleana do catálogo `alvo` que marca a linha a usar, quando o
+    /// tipo é `ReferenciaFixa`.
+    pub marcador: Option<&'static str>,
+    /// Nome de uma coluna booleana DESTE catálogo que revela este campo. O
+    /// formulário o esconde enquanto ela estiver desmarcada, e limpa o valor
+    /// ao desmarcar. Quem garante a regra é o banco; isto é a tela não pedir
+    /// o que não se aplica.
+    pub visivel_se: Option<&'static str>,
 }
 
 const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -35,6 +51,8 @@ const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
         tipo: TipoColuna::Texto,
         alvo: None,
         efeito: None,
+        marcador: None,
+        visivel_se: None,
     }
 }
 const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -44,6 +62,8 @@ const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
         tipo: TipoColuna::TextoOpcional,
         alvo: None,
         efeito: None,
+        marcador: None,
+        visivel_se: None,
     }
 }
 const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -53,6 +73,8 @@ const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str
         tipo: TipoColuna::Booleano,
         alvo: None,
         efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
     }
 }
 const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -62,6 +84,8 @@ const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str)
         tipo: TipoColuna::Inteiro,
         alvo: None,
         efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
     }
 }
 const fn inteiro_opcional(
@@ -75,6 +99,8 @@ const fn inteiro_opcional(
         tipo: TipoColuna::InteiroOpcional,
         alvo: None,
         efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
     }
 }
 const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str) -> Coluna {
@@ -84,8 +110,43 @@ const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str
         tipo: TipoColuna::Referencia,
         alvo: Some(alvo),
         efeito: None,
+        marcador: None,
+        visivel_se: None,
     }
 }
+/// Referência que o sistema resolve pela linha marcada com `marcador` no
+/// catálogo `alvo`. Não aparece na tela — ver `TipoColuna::ReferenciaFixa`.
+const fn referencia_fixa(nome: &'static str, alvo: &'static str, marcador: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo: "",
+        tipo: TipoColuna::ReferenciaFixa,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: Some(marcador),
+        visivel_se: None,
+    }
+}
+
+/// Igual a `referencia_opcional`, mas só exibida quando a coluna booleana
+/// `gatilho` deste mesmo catálogo estiver marcada.
+const fn referencia_condicional(
+    nome: &'static str,
+    rotulo: &'static str,
+    alvo: &'static str,
+    gatilho: &'static str,
+) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::ReferenciaOpcional,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: None,
+        visivel_se: Some(gatilho),
+    }
+}
+
 const fn referencia_opcional(
     nome: &'static str,
     rotulo: &'static str,
@@ -97,6 +158,8 @@ const fn referencia_opcional(
         tipo: TipoColuna::ReferenciaOpcional,
         alvo: Some(alvo),
         efeito: None,
+        marcador: None,
+        visivel_se: None,
     }
 }
 
@@ -140,7 +203,12 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Em branco = sem limite. O banco recusa gravar acima deste número."),
             booleano("exige_natureza_fato", "Exige natureza do fato",
                 "Torna a rubrica do fato apurado obrigatória no cadastro."),
-            texto_opcional("codigo_extensao", "Código de extensão"),
+            // `codigo_extensao` NÃO entra: é o único código técnico do schema
+            // (§5.3), e acrescentar uma extensão de formulário é mudança de
+            // código, não operação de administrador. A coluna continua no banco
+            // e continua dirigindo a carta precatória — o `UPDATE` genérico só
+            // escreve o que está declarado aqui, então editar um apuratório
+            // pela tela não a apaga.
         ],
         ordenacao: "sigla",
     },
@@ -245,23 +313,12 @@ pub const CATALOGOS: &[Catalogo] = &[
         ordenacao: "nome",
     },
     Catalogo {
-        chave: "subdivisao_textos_normativos",
-        tabela: "subdivisao_textos_normativos",
-        rotulo: "Subdivisões de textos normativos",
-        colunas: &[
-            texto("nome", "Nome"),
-            referencia("dispositivo_legal_id", "Dispositivo legal", "dispositivos_legais"),
-        ],
-        ordenacao: "nome",
-    },
-    Catalogo {
         chave: "infracoes_penais",
         tabela: "infracoes_penais",
         rotulo: "Infrações penais",
         colunas: &[
             referencia("dispositivo_legal_id", "Dispositivo legal", "dispositivos_legais"),
             referencia("especie_id", "Espécie", "especies_infracao_penal"),
-            referencia_opcional("subdivisao_id", "Subdivisão", "subdivisao_textos_normativos"),
             texto("artigo", "Artigo"),
             texto("descricao", "Descrição"),
             texto_opcional("paragrafo", "Parágrafo"),
@@ -296,7 +353,10 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "infracoes_estatuto",
         rotulo: "Infrações do Estatuto",
         colunas: &[
-            referencia("dispositivo_legal_id", "Dispositivo legal", "dispositivos_legais"),
+            // Uma infração do Estatuto é, por definição, do Estatuto: o select
+            // só podia ter uma resposta. A coluna fica porque monta o rótulo
+            // completo, e é resolvida pelo atributo — nunca pelo nome.
+            referencia_fixa("dispositivo_legal_id", "dispositivos_legais", "e_estatuto_militar"),
             texto("artigo", "Artigo"),
             texto("inciso", "Inciso"),
             texto("texto", "Texto"),
@@ -323,8 +383,10 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Municípios e distritos",
         colunas: &[
             texto("nome", "Nome"),
-            texto("tipo", "Tipo"),
-            referencia_opcional("municipio_pai_id", "Município", "municipios_distritos"),
+            booleano("e_distrito", "É distrito",
+                "Marcado, exige o município a que o distrito pertence — e o banco recusa gravar sem ele."),
+            referencia_condicional("municipio_pai_id", "Município",
+                "municipios_distritos", "e_distrito"),
         ],
         ordenacao: "nome",
     },
@@ -353,10 +415,8 @@ pub const CATALOGOS: &[Catalogo] = &[
             texto("sigla", "Sigla"),
             texto("nome", "Nome"),
             referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos"),
-            inteiro("ordem_hierarquica", "Ordem hierárquica",
-                "Maior valor = posto mais alto. É a ordenação usada em listas e relatórios."),
         ],
-        ordenacao: "ordem_hierarquica DESC",
+        ordenacao: "nome",
     },
     Catalogo {
         chave: "perfis_acesso",

@@ -68,7 +68,7 @@ async fn dias_base_vem_do_documento_e_cai_no_apuratorio() {
 }
 
 #[tokio::test]
-async fn prorrogacao_comeca_no_dia_seguinte_ao_vencimento_anterior() {
+async fn prorrogacao_comeca_no_dia_do_vencimento_anterior() {
     util::com_banco_descartavel("prazo_prorr", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
         let id = processo_com_prazo_inicial(&pool, &m, data(2026, 1, 10)).await;
@@ -113,12 +113,14 @@ async fn prorrogacao_comeca_no_dia_seguinte_ao_vencimento_anterior() {
         assert_eq!(prazos[0].data_inicio, data(2026, 1, 10));
         assert_eq!(prazos[0].data_vencimento, data(2026, 2, 9)); // 10/01 + 30
 
-        // Cada prorrogação começa no dia seguinte ao vencimento anterior — é o
-        // que o EXCLUDE de intervalo fechado `[]` exige.
-        assert_eq!(prazos[1].data_inicio, data(2026, 2, 10));
-        assert_eq!(prazos[1].data_vencimento, data(2026, 2, 25)); // +15
-        assert_eq!(prazos[2].data_inicio, data(2026, 2, 26));
-        assert_eq!(prazos[2].data_vencimento, data(2026, 3, 8)); // +10
+        // Cada prorrogação começa NO DIA do vencimento anterior — a convenção
+        // que a Seção pratica (97/97 no histórico importado). O EXCLUDE da
+        // migration 0005 a acomoda comparando a ocupação como `[inicio, fim)`,
+        // sem que `data_vencimento` deixe de ser o último dia válido.
+        assert_eq!(prazos[1].data_inicio, data(2026, 2, 9));
+        assert_eq!(prazos[1].data_vencimento, data(2026, 2, 24)); // +15
+        assert_eq!(prazos[2].data_inicio, data(2026, 2, 24));
+        assert_eq!(prazos[2].data_vencimento, data(2026, 3, 6)); // +10
 
         // A coluna gerada é a única fonte da aritmética.
         for p in &prazos {

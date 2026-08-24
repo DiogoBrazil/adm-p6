@@ -532,6 +532,61 @@ button.outline:hover {
   white-space: nowrap;
 }
 
+/* ---------------------------------------------------------------- modal ----
+   Um só no sistema: a escolha da transgressão análoga, que antes era um
+   `prompt()` do navegador. Fica em `document.body`, fora de `#app`, porque a
+   tela de indícios se redesenha inteira a cada mudança.
+
+   `z-index: 10` basta: a `.sidebar` é o único elemento posicionado do arquivo,
+   e não disputa camada com nada. */
+.modal-overlay {
+  align-items: center;
+  background: rgb(15 23 42 / 45%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 10;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  max-height: 100%;
+  max-width: 620px;
+  width: 100%;
+}
+
+.modal .page-head h1 {
+  font-size: 18px;
+}
+
+/* A busca devolve até 50 incisos; sem o recorte, a lista empurraria os botões
+   de ação para fora da tela. */
+.modal .evidence-results {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* O item de resultado é um `button` por causa do teclado — foco e Enter saem
+   de graça —, mas precisa ler como linha de lista, não como botão de ação. */
+button.evidence-result-item {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #0f172a;
+  font-weight: 400;
+  text-align: left;
+  width: 100%;
+}
+
+button.evidence-result-item:hover,
+button.evidence-result-item:focus-visible {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
 .extension-details summary {
   color: #10b981;
   cursor: pointer;

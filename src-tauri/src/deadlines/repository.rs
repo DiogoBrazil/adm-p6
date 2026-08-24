@@ -86,9 +86,14 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
     .await
 }
 
-/// Concede uma prorrogação: ela começa no dia seguinte ao vencimento vigente e
-/// recebe a próxima `ordem`. O EXCLUDE do schema recusa qualquer sobreposição,
-/// então não é possível prorrogar duas vezes a partir do mesmo ponto.
+/// Concede uma prorrogação: ela começa NO DIA do vencimento vigente e recebe a
+/// próxima `ordem`. É a convenção que a Seção sempre praticou — 97 de 97
+/// prorrogações do histórico começam no dia em que o prazo anterior vence —, e
+/// o EXCLUDE da migration 0005 a acomoda comparando o intervalo de ocupação
+/// como `[data_inicio, data_inicio + dias)`. `data_vencimento` continua sendo o
+/// último dia válido do prazo; o que o dia da troca não faz é ser ocupado duas
+/// vezes. Qualquer sobreposição real continua recusada pelo banco, então não é
+/// possível prorrogar duas vezes a partir do mesmo ponto.
 pub async fn add_extension(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddExtensionRequest,
@@ -114,7 +119,7 @@ pub async fn add_extension(
     )
     .bind(&request.processo_id)
     .bind(ordem_atual + 1)
-    .bind(vencimento_atual + chrono::Duration::days(1))
+    .bind(vencimento_atual)
     .bind(request.dias)
     .bind(request.motivo.trim())
     .bind(request.documento_autorizador_id.as_deref())

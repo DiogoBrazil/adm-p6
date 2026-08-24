@@ -79,7 +79,10 @@ export function tabela(colunas: string[], linhas: Linha[], vazio = "Nada a exibi
  * Devolve o caminho gravado, ou `null` se o usuário cancelou — cancelar não é
  * erro e não deve virar alerta.
  */
-async function baixar(nomeArquivo: string, conteudoBase64: string): Promise<string | null> {
+export async function baixarArquivoBase64(
+  nomeArquivo: string,
+  conteudoBase64: string,
+): Promise<string | null> {
   const resposta = await call("files_save_download", {
     request: { nome_sugerido: nomeArquivo, conteudo_base64: conteudoBase64 },
   });
@@ -92,7 +95,7 @@ async function baixar(nomeArquivo: string, conteudoBase64: string): Promise<stri
 
 /** CSV que o backend já montou (`CsvExport.conteudo` vem em base64). */
 export function baixarCsvBase64(nomeArquivo: string, base64: string): Promise<string | null> {
-  return baixar(nomeArquivo, base64);
+  return baixarArquivoBase64(nomeArquivo, base64);
 }
 
 /**
@@ -113,7 +116,7 @@ export function baixarCsv(
   const bytes = new TextEncoder().encode(`\ufeff${csv}\n`);
   let binario = "";
   for (const b of bytes) binario += String.fromCharCode(b);
-  return baixar(nomeArquivo, btoa(binario));
+  return baixarArquivoBase64(nomeArquivo, btoa(binario));
 }
 
 /** Barra com os botões de saída da tela. Os ids são ligados por `ligarExportacao`. */

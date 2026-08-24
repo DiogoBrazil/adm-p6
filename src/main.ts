@@ -29,6 +29,7 @@ import {
   renderMapasSalvos,
 } from "./telas/mapas";
 import {
+  aplicarBarras,
   ROTA as ROTA_ESTATISTICAS_PROCESSOS,
   ROTA_PROCEDIMENTOS as ROTA_STATS_PROCEDIMENTOS,
   renderEstatisticasProcedimentos,
@@ -160,6 +161,12 @@ function shell(content: string) {
       ${content}
     </main>
   `;
+
+  // As barras proporcionais dos painéis de contagem: a largura é calculada e
+  // por isso não cabe no CSS, e com a CSP ligada também não cabe num `style=""`
+  // no markup. Aplicá-la aqui — o único ponto que escreve em `#app` — evita que
+  // uma tela nova esqueça de fazê-lo.
+  aplicarBarras(document);
 
   document.querySelectorAll<HTMLButtonElement>("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {

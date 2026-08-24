@@ -65,6 +65,17 @@ function ehReferencia(coluna: Coluna): boolean {
 }
 
 /**
+ * Colunas que a tela mostra.
+ *
+ * `referencia_fixa` existe no banco e é resolvida pelo backend a partir de um
+ * atributo — perguntá-la seria pedir ao administrador que confirme o óbvio.
+ * Some da lista, do formulário e do que é enviado ao salvar.
+ */
+function colunasVisiveis(cat: Catalogo): Coluna[] {
+  return cat.colunas.filter((c) => c.tipo !== "referencia_fixa");
+}
+
+/**
  * Rótulo legível de uma linha, para os selects de referência e para a coluna
  * resolvida na tabela.
  *
@@ -86,7 +97,7 @@ async function carregarReferencias(
   cat: Catalogo,
   definicoes: Catalogo[],
 ): Promise<Record<string, { value: string; label: string }[]>> {
-  const alvos = [...new Set(cat.colunas.filter(ehReferencia).map((c) => c.alvo!))];
+  const alvos = [...new Set(colunasVisiveis(cat).filter(ehReferencia).map((c) => c.alvo!))];
   const pares = await Promise.all(
     alvos.map(async (alvo) => {
       const destino = definicoes.find((d) => d.chave === alvo);
@@ -111,14 +122,24 @@ function campo(
   referencias: Record<string, { value: string; label: string }[]>,
 ): string {
   const valor = linha?.[coluna.nome];
-  const obrigatorio = ehOpcional(coluna) ? "" : " required";
   const ajuda = coluna.efeito
     ? `<small class="campo-efeito">${escapeHtml(coluna.efeito)}</small>`
     : "";
 
+  // Campo condicional: enquanto o booleano-porta estiver desmarcado, o campo
+  // fica escondido e não é exigido. Quem garante a regra de verdade é o CHECK
+  // do banco; aqui é só não pedir o que não se aplica.
+  const porta = coluna.visivel_se;
+  const abertoAgora = porta ? linha?.[porta] === true : true;
+  const marca = porta ? ` data-visivel-se="${escapeHtml(porta)}"` : "";
+  const oculto = abertoAgora ? "" : " hidden";
+  // Um campo escondido não pode ser `required`: o navegador recusaria enviar o
+  // formulário apontando para um campo que ninguém vê.
+  const obrigatorio = ehOpcional(coluna) && !porta ? "" : abertoAgora ? " required" : "";
+
   if (coluna.tipo === "booleano") {
     return `
-      <div class="campo">
+      <div class="campo"${marca}${oculto}>
         <label class="checkbox">
           <input name="${coluna.nome}" type="checkbox"${valor === true ? " checked" : ""} />
           ${escapeHtml(coluna.rotulo)}
@@ -131,7 +152,7 @@ function campo(
     const opcoes = referencias[coluna.alvo ?? ""] ?? [];
     const atual = valor === null || valor === undefined ? "" : String(valor);
     return `
-      <div class="campo">
+      <div class="campo"${marca}${oculto}>
         <label>${escapeHtml(coluna.rotulo)}
           <select name="${coluna.nome}"${obrigatorio}>
             <option value=""></option>
@@ -145,7 +166,7 @@ function campo(
   const numero = coluna.tipo === "inteiro" || coluna.tipo === "inteiro_opcional";
   const texto = valor === null || valor === undefined ? "" : String(valor);
   return `
-    <div class="campo">
+    <div class="campo"${marca}${oculto}>
       <label>${escapeHtml(coluna.rotulo)}
         <input name="${coluna.nome}" type="${numero ? "number" : "text"}"
                value="${escapeHtml(texto)}"${obrigatorio} />
@@ -157,7 +178,13 @@ function campo(
 /** FormData → o objeto `valores` que `legal_catalogs_save` espera. */
 function montarValores(cat: Catalogo, form: FormData): Record<string, unknown> {
   const valores: Record<string, unknown> = {};
-  for (const coluna of cat.colunas) {
+  for (const coluna of colunasVisiveis(cat)) {
+    // Campo condicional fechado vai como nulo, e não com o que ficou digitado
+    // antes de desmarcar: é o que o CHECK do banco exige de um município.
+    if (coluna.visivel_se && form.get(coluna.visivel_se) !== "on") {
+      valores[coluna.nome] = null;
+      continue;
+    }
     if (coluna.tipo === "booleano") {
       valores[coluna.nome] = form.get(coluna.nome) === "on";
       continue;
@@ -200,7 +227,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
   if (estado.busca) {
     const termo = estado.busca.toLowerCase();
     linhas = linhas.filter((l) =>
-      cat.colunas.some((c) => String(l[c.nome] ?? "").toLowerCase().includes(termo)),
+      colunasVisiveis(cat).some((c) => String(l[c.nome] ?? "").toLowerCase().includes(termo)),
     );
   }
 
@@ -216,7 +243,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
         <table>
           <thead>
             <tr>
-              ${cat.colunas.map((c) => `<th>${escapeHtml(c.rotulo)}</th>`).join("")}
+              ${colunasVisiveis(cat).map((c) => `<th>${escapeHtml(c.rotulo)}</th>`).join("")}
               <th>Situação</th>
               ${podeEscrever ? "<th>Ações</th>" : ""}
             </tr>
@@ -226,7 +253,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
               .map(
                 (linha) => `
               <tr${linha.ativo ? "" : ' class="inativo"'}>
-                ${cat.colunas
+                ${colunasVisiveis(cat)
                   .map(
                     (c) =>
                       `<td>${escapeHtml(
@@ -341,7 +368,7 @@ async function renderFormulario(
         <button class="secondary" id="cancelar">Cancelar</button>
       </div>
       <form id="form-catalogo" class="crud-form">
-        ${cat.colunas.map((c) => campo(c, linha, referencias)).join("")}
+        ${colunasVisiveis(cat).map((c) => campo(c, linha, referencias)).join("")}
         ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
         <div class="form-actions"><button type="submit">Salvar</button></div>
       </form>
@@ -351,6 +378,25 @@ async function renderFormulario(
   document.querySelector<HTMLButtonElement>("#cancelar")?.addEventListener("click", () => {
     void renderCatalogo(cat.chave, ctx);
   });
+
+  // Cada campo condicional acompanha o seu booleano-porta. Guiado pelo
+  // registro: nenhum nome de catálogo ou de coluna aparece aqui.
+  for (const alvo of document.querySelectorAll<HTMLElement>("[data-visivel-se]")) {
+    const porta = document.querySelector<HTMLInputElement>(
+      `input[name="${alvo.dataset.visivelSe}"]`,
+    );
+    if (!porta) continue;
+    const sincronizar = () => {
+      alvo.hidden = !porta.checked;
+      const entrada = alvo.querySelector<HTMLInputElement | HTMLSelectElement>("input, select");
+      if (entrada) {
+        entrada.required = porta.checked;
+        if (!porta.checked) entrada.value = "";
+      }
+    };
+    porta.addEventListener("change", sincronizar);
+    sincronizar();
+  }
 
   document.querySelector<HTMLFormElement>("#form-catalogo")?.addEventListener("submit", async (evento) => {
     evento.preventDefault();

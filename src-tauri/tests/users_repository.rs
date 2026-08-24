@@ -15,9 +15,9 @@ async fn catalogos_minimos(pool: &PgPool) -> (String, String) {
         // (círculos, postos) e os índices únicos são case-insensitive.
         "INSERT INTO circulos_hierarquicos (id, nome) VALUES
             ('10000000-0000-0000-0000-000000000001', 'Circulo Teste');
-         INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica)
+         INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id)
          VALUES ('10000000-0000-0000-0000-000000000002', 'TST PM', 'Soldado Teste PM',
-                 '10000000-0000-0000-0000-000000000001', -1);
+                 '10000000-0000-0000-0000-000000000001');
          INSERT INTO perfis_acesso (id, nome, pode_administrar) VALUES
             ('10000000-0000-0000-0000-000000000003', 'Comum', false);",
     )
@@ -86,7 +86,6 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
         assert_eq!(item.conta_email.as_deref(), Some("maria.souza@pm.ro"));
         assert_eq!(item.posto_graduacao, "Soldado Teste PM");
         assert_eq!(item.circulo_hierarquico, "Circulo Teste");
-        assert_eq!(item.ordem_hierarquica, -1);
 
         // 3. Editar sem enviar senha mantém o hash existente.
         let hash_antes: String =

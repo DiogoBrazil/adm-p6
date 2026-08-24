@@ -10,7 +10,7 @@
 // exatamente essa regra.
 
 /** `legal_catalogs` */
-export type TipoColuna = "texto" | "texto_opcional" | "booleano" | "inteiro" | "inteiro_opcional" | "referencia" | "referencia_opcional";
+export type TipoColuna = "texto" | "texto_opcional" | "booleano" | "inteiro" | "inteiro_opcional" | "referencia" | "referencia_opcional" | "referencia_fixa";
 
 /** `apuratorio_config` */
 export interface ApuratorioConfig {
@@ -320,6 +320,11 @@ export interface Coluna {
   /** Explicação do efeito da coluna quando ela carrega comportamento, e não só */
   /** apresentação. É o texto que a tela mostra ao lado do campo. */
   efeito: string | null;
+  /** Coluna booleana do catálogo `alvo` que marca a linha a usar, quando o */
+  /** tipo é `referencia_fixa`. */
+  marcador: string | null;
+  /** Nome de uma coluna booleana DESTE catálogo que revela este campo. */
+  visivel_se: string | null;
 }
 
 /** `legal_catalogs` */
@@ -777,7 +782,6 @@ export interface UserListItem {
   posto_graduacao_id: string;
   posto_graduacao: string;
   circulo_hierarquico: string;
-  ordem_hierarquica: number;
   is_encarregado: boolean;
   ativo: boolean;
   conta_id: string | null;

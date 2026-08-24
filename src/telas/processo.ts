@@ -29,7 +29,7 @@ import {
   type SaveProceedingRequest,
   type UserListItem,
 } from "../api";
-import { escapeHtml, option } from "../dom";
+import { baixarArquivoBase64, escapeHtml, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 import { renderIndicios } from "./indicios";
 
@@ -629,19 +629,21 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
 //   - o histórico de designações é tabela com período, não um jsonb;
 //   - cada andamento tem autor e tipo, que o modelo antigo havia perdido.
 
+/**
+ * O anexo sai pelo mesmo caminho do CSV: o diálogo nativo aberto no Rust.
+ *
+ * Já saiu por `<a download>` com `blob:`, e era o único ponto do sistema que
+ * ainda fazia isso — no WebView do Tauri essa via não define destino, não abre
+ * "salvar como" e muda de comportamento por plataforma. O conteúdo já chega em
+ * base64, que é exatamente o que `files_save_download` recebe.
+ */
 async function baixarAnexo(anexoId: string): Promise<void> {
   const r = await call("proceedings_get_attachment", { anexoId });
   if (!r.ok || !r.data) {
     alert(r.error ?? "Falha ao obter o anexo.");
     return;
   }
-  const bytes = Uint8Array.from(atob(r.data.conteudo), (c) => c.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: r.data.mime_type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = r.data.nome_arquivo;
-  link.click();
-  URL.revokeObjectURL(url);
+  await baixarArquivoBase64(r.data.nome_arquivo, r.data.conteudo);
 }
 
 export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {

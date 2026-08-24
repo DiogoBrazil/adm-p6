@@ -1,51 +1,67 @@
-# adm-p6
+# ADM P6
 
-## Setup Rápido
+Sistema da **Seção de Justiça e Disciplina do 7º BPM** (PMRO): cadastro e
+acompanhamento dos apuratórios disciplinares e dos procedimentos de apuração —
+IPM, sindicância, PADS, carta precatória e as demais espécies —, com prazos,
+designações, enquadramento e os relatórios que a Seção emite.
 
-- Python 3.10+ e virtualenv
-- PostgreSQL acessível conforme seu `.env`
+Aplicativo de desktop em **Rust + Tauri 2**, com frontend em TypeScript e
+PostgreSQL 16. Foi migrado de uma versão anterior em Python/Eel; o banco carrega
+os registros de 2018 em diante.
 
-```
-python -m venv .venv
-source .venv/bin/activate  # Windows: .\.venv\Scripts\activate
-pip install -r requirements.txt
-```
+## Rodar
 
-Crie um arquivo `.env` (ou copie do `.env.example`) na raiz com:
+Requer Rust estável, Node 18+ e Docker.
 
-```
-DB_HOST=192.168.0.137
-DB_PORT=5432
-DB_NAME=app_db
-DB_USER=app_user
-DB_PASSWORD=p67bpm
+```bash
+cp .env.example .env          # já aponta para o compose (porta 5438)
+docker compose up -d          # PostgreSQL 16
 
-# Alembic (opcional; o env.py lê este valor se presente)
-DATABASE_URL=postgresql+psycopg2://app_user:p67bpm@192.168.0.137:5432/app_db
+npm install
+npm run tauri dev             # aplica as migrations no startup e abre o app
 ```
 
-## Migrações (Alembic)
+Login inicial: `admin@sistema.com` / `123456` — **troque numa instalação real.**
 
-```
-source .venv/bin/activate
-alembic upgrade head
-```
+## Conferir
 
-O Alembic lê automaticamente o `.env` (ou a variável de ambiente `DATABASE_URL`).
-
-## Executar o App
-
-```
-source .venv/bin/activate
-python main.py
+```bash
+cd src-tauri
+cargo fmt --check
+cargo test                    # 88 testes de integração, em bancos descartáveis
+cd ..
+npm run typecheck             # é aqui que erro de comando aparece
+npm run build                 # typecheck + vite build
 ```
 
-Credenciais iniciais: `admin@sistema.com` / `123456`
+Os testes sobem e derrubam o próprio banco; não tocam no de desenvolvimento.
 
-## Empacotar (PyInstaller)
+## ⚠ Antes de mexer no banco
+
+**Não rode `docker compose down -v`.** O banco de desenvolvimento tem os dados
+de produção dentro, e recriar o volume apaga oito anos de registro.
+
+Mudança de schema agora é **migration nova** (`0006`, `0007`…) — os cinco
+arquivos de `src-tauri/migrations/` são imutáveis, e editar um já aplicado
+quebra o startup seguinte com `VersionMismatch`.
+
+## Onde está o resto
+
+**[`REFATORACAO-MODELO-DADOS.md`](REFATORACAO-MODELO-DADOS.md) é a fonte de
+verdade** deste projeto e o lugar por onde começar. Ele traz o modelo de dados e
+o porquê de cada decisão, as decisões de negócio já tomadas, o roteiro da
+importação dos dados de produção, as armadilhas conhecidas e o que ainda falta.
+
+- `ANALISE-MIGRACAO.md` — diagnóstico do estado anterior à refatoração, datado.
+- `src-tauri/migrations/0001_schema.sql` — o schema, comentado seção por seção.
+- `src-tauri/importacao/` — a importação do banco legado, etapa por etapa.
+
+## Estrutura
 
 ```
-pyinstaller --noconsole --onefile   --add-data="web;web"   --add-data="static;static"   --add-data="db_config.py;."   --add-data="prazos_andamentos_manager.py;."   --icon="web/static/images/SJD-GESTOR.ico"   --name="Gestao-P6" main.py
+src/               frontend TypeScript (sem framework), uma tela por arquivo
+src-tauri/src/     backend Rust, um módulo por área
+src-tauri/migrations/   o schema
+src-tauri/tests/        os testes de integração
+src-tauri/importacao/   a importação do banco legado (SQL, uso pontual)
 ```
-
-Observação: garanta que o banco está migrado (alembic upgrade head) antes de rodar o executável.

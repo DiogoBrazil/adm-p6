@@ -12,9 +12,9 @@ fn colunas_select(cat: &Catalogo) -> String {
     let mut partes = vec!["id::text AS id".to_string()];
     for c in cat.colunas {
         match c.tipo {
-            TipoColuna::Referencia | TipoColuna::ReferenciaOpcional => {
-                partes.push(format!("{}::text AS {}", c.nome, c.nome))
-            }
+            TipoColuna::Referencia
+            | TipoColuna::ReferenciaOpcional
+            | TipoColuna::ReferenciaFixa => partes.push(format!("{}::text AS {}", c.nome, c.nome)),
             _ => partes.push(c.nome.to_string()),
         }
     }
@@ -32,7 +32,9 @@ fn ler_linha(cat: &Catalogo, row: &PgRow) -> Result<Map<String, Value>, sqlx::Er
                 .try_get::<Option<String>, _>(c.nome)?
                 .map(Value::String)
                 .unwrap_or(Value::Null),
-            TipoColuna::Referencia => Value::String(row.try_get::<String, _>(c.nome)?),
+            TipoColuna::Referencia | TipoColuna::ReferenciaFixa => {
+                Value::String(row.try_get::<String, _>(c.nome)?)
+            }
             TipoColuna::Booleano => Value::Bool(row.try_get::<bool, _>(c.nome)?),
             TipoColuna::Inteiro => Value::from(row.try_get::<i32, _>(c.nome)?),
             TipoColuna::InteiroOpcional => row
@@ -90,12 +92,29 @@ pub async fn get(
     row.as_ref().map(|r| ler_linha(cat, r)).transpose()
 }
 
-/// Placeholder com o cast que a coluna exige. Referências são uuid.
-fn placeholder(coluna: &Coluna, posicao: usize) -> String {
+/// O que a coluna escreve no SQL: um placeholder, ou — para `ReferenciaFixa` —
+/// a subconsulta que resolve a linha marcada.
+///
+/// A fixa não consome posição de parâmetro **e não recebe valor nenhum do
+/// frontend**: o dado nasce do próprio banco. Tabela e coluna saem do registro,
+/// nunca da requisição, como todo o resto deste arquivo.
+fn expressao(coluna: &Coluna, posicao: usize) -> String {
     match coluna.tipo {
         TipoColuna::Referencia | TipoColuna::ReferenciaOpcional => format!("${posicao}::uuid"),
+        TipoColuna::ReferenciaFixa => format!(
+            "(SELECT id FROM {} WHERE {})",
+            coluna.alvo.unwrap_or("dispositivos_legais"),
+            coluna.marcador.unwrap_or("false")
+        ),
         _ => format!("${posicao}"),
     }
+}
+
+/// As colunas que de fato viram parâmetro, na ordem em que são ligadas.
+fn colunas_ligadas(cat: &Catalogo) -> impl Iterator<Item = &'static Coluna> {
+    cat.colunas
+        .iter()
+        .filter(|c| c.tipo != TipoColuna::ReferenciaFixa)
 }
 
 pub async fn save(
@@ -106,13 +125,30 @@ pub async fn save(
 ) -> Result<String, AppError> {
     let nomes: Vec<&str> = cat.colunas.iter().map(|c| c.nome).collect();
 
+    // A posição do parâmetro conta só as colunas ligadas: uma `ReferenciaFixa`
+    // no meio da lista deslocaria todas as seguintes se fosse contada.
+    let mut posicao = 0usize;
+    let deslocamento = if id.is_some() { 2 } else { 1 };
+    let expressoes: Vec<String> = cat
+        .colunas
+        .iter()
+        .map(|c| {
+            if c.tipo == TipoColuna::ReferenciaFixa {
+                expressao(c, 0)
+            } else {
+                posicao += 1;
+                expressao(c, posicao + deslocamento - 1)
+            }
+        })
+        .collect();
+
     let sql = match id {
         Some(_) => {
             let atribuicoes: Vec<String> = cat
                 .colunas
                 .iter()
-                .enumerate()
-                .map(|(i, c)| format!("{} = {}", c.nome, placeholder(c, i + 2)))
+                .zip(&expressoes)
+                .map(|(c, e)| format!("{} = {}", c.nome, e))
                 .collect();
             format!(
                 "UPDATE {} SET {}, updated_at = now() WHERE id = $1::uuid RETURNING id::text",
@@ -120,20 +156,12 @@ pub async fn save(
                 atribuicoes.join(", ")
             )
         }
-        None => {
-            let placeholders: Vec<String> = cat
-                .colunas
-                .iter()
-                .enumerate()
-                .map(|(i, c)| placeholder(c, i + 1))
-                .collect();
-            format!(
-                "INSERT INTO {} ({}) VALUES ({}) RETURNING id::text",
-                cat.tabela,
-                nomes.join(", "),
-                placeholders.join(", ")
-            )
-        }
+        None => format!(
+            "INSERT INTO {} ({}) VALUES ({}) RETURNING id::text",
+            cat.tabela,
+            nomes.join(", "),
+            expressoes.join(", ")
+        ),
     };
 
     let mut query = sqlx::query_scalar::<_, String>(&sql);
@@ -141,7 +169,7 @@ pub async fn save(
         query = query.bind(id.to_string());
     }
     // Cada valor é LIGADO como parâmetro, com o tipo que a coluna declara.
-    for coluna in cat.colunas {
+    for coluna in colunas_ligadas(cat) {
         let valor = valores.get(coluna.nome);
         query = match coluna.tipo {
             TipoColuna::Texto | TipoColuna::Referencia => {
@@ -170,6 +198,8 @@ pub async fn save(
             TipoColuna::InteiroOpcional => {
                 query.bind(valor.and_then(|v| v.as_i64()).map(|v| v as i32))
             }
+            // Filtrada por `colunas_ligadas`: não recebe valor do frontend.
+            TipoColuna::ReferenciaFixa => query,
         };
     }
 

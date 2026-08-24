@@ -37,13 +37,36 @@ export function painelContagem(
   const html = tabela([rotuloColuna, "Quantidade", ""], linhas);
   // A barra entra depois, porque `tabela()` escapa todo conteúdo — e aqui o
   // conteúdo é marcação, não dado.
+  //
+  // A largura vai num `data-largura`, e não num `style=""`: com a CSP ligada o
+  // atributo `style` no markup é recusado, enquanto atribuir pela CSSOM não é.
+  // Quem aplica é `aplicarBarras()`, chamada por `shell()` depois de cada
+  // render — ver o cabeçalho dela.
   let indice = -1;
   const comBarras = html.replace(/<td class="barra"><\/td>/g, () => {
     indice += 1;
     const largura = Math.round(((itens[indice]?.total ?? 0) / maior) * 100);
-    return `<td class="barra"><span style="width:${largura}%"></span></td>`;
+    return `<td class="barra" data-largura="${largura}"><span></span></td>`;
   });
   return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${comBarras}</section>`;
+}
+
+/**
+ * Aplica a largura das barras proporcionais depois que o HTML entrou no DOM.
+ *
+ * Existe por causa da CSP: `style-src 'self'` recusa o atributo `style` escrito
+ * no markup, mas não governa a CSSOM — `elemento.style.width = …` passa. Como
+ * a barra é a única largura calculada do sistema, isolar isso aqui deixou
+ * `style-src` fechado sem `'unsafe-inline'` em produção.
+ *
+ * Chamada por `shell()`, que é o único ponto que escreve em `#app`; assim
+ * nenhuma tela nova precisa lembrar de chamá-la.
+ */
+export function aplicarBarras(raiz: ParentNode = document): void {
+  raiz.querySelectorAll<HTMLElement>("td.barra[data-largura]").forEach((celula) => {
+    const barra = celula.querySelector<HTMLElement>("span");
+    if (barra) barra.style.width = `${celula.dataset.largura ?? 0}%`;
+  });
 }
 
 export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<void> {

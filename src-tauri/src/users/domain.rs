@@ -20,7 +20,6 @@ pub struct UserListItem {
     pub posto_graduacao_id: String,
     pub posto_graduacao: String,
     pub circulo_hierarquico: String,
-    pub ordem_hierarquica: i32,
     pub is_encarregado: bool,
     pub ativo: bool,
     pub conta_id: Option<String>,

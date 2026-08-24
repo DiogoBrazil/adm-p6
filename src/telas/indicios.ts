@@ -295,21 +295,127 @@ export async function renderIndicios(
   desenhar();
 }
 
-/** Escolha da transgressão usada como analogia. Obrigatória por regra do modelo. */
-async function pedirAnalogia(rotulos: Rotulos): Promise<string | null> {
-  const termo = prompt("Transgressão do RDPM usada como analogia (busque por inciso ou texto):");
-  if (!termo) return null;
-  const achados = (await call("evidence_search_transgressoes", { termo })).data ?? [];
-  if (achados.length === 0) {
-    alert("Nenhuma transgressão encontrada.");
-    return null;
-  }
-  const escolha = prompt(
-    `Escolha o número:\n${achados.map((a, i) => `${i + 1}. ${a.rotulo}`).join("\n")}`,
-  );
-  const indice = Number(escolha) - 1;
-  const item = achados[indice];
-  if (!item) return null;
-  rotulos[item.id] = item.rotulo;
-  return item.id;
+/**
+ * Escolha da transgressão usada como analogia. Obrigatória por regra do modelo.
+ *
+ * Já foram dois `prompt()` do navegador — um para o termo, outro para "digite o
+ * número da opção". Era a única tela do sistema que pedia um número digitado, e
+ * a que mais precisava não pedir: escolher o inciso análogo é classificação
+ * jurídica, e quem escolhe quer LER as opções antes.
+ *
+ * A busca é a mesma que a tela já usava (`evidence_search_transgressoes`), com
+ * o filtro opcional por natureza que o comando sempre aceitou e ninguém expunha
+ * — é por gravidade que se procura o inciso análogo.
+ *
+ * Devolve `null` quando o usuário desiste, e os dois pontos de chamada tratam
+ * `null` como "não mexe em nada". É o comportamento certo: a analogia é
+ * `NOT NULL`, então metade de uma escolha não pode virar registro.
+ */
+function pedirAnalogia(rotulos: Rotulos): Promise<string | null> {
+  return new Promise((resolver) => {
+    // Dois cliques rápidos em "Trocar analogia" empilhariam dois seletores —
+    // cada um resolvendo a sua Promise, e o de baixo escondido. Um por vez.
+    if (document.querySelector(".modal-overlay")) {
+      resolver(null);
+      return;
+    }
+
+    // Montado em `document.body`, e não em `#app`: `desenhar()` reescreve o
+    // `#app` inteiro, e o seletor montado lá seria destruído no meio do fluxo.
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal panel" role="dialog" aria-modal="true" aria-label="Escolher transgressão análoga">
+        <div class="page-head">
+          <div>
+            <h1>Transgressão análoga</h1>
+            <p>Busque por inciso ou pelo texto e escolha uma da lista.</p>
+          </div>
+        </div>
+        <div class="linha-form">
+          <label>Buscar<input id="analogia-termo" placeholder="inciso ou texto" autocomplete="off" /></label>
+          <label>Natureza
+            <select id="analogia-natureza"><option value="">Todas</option></select>
+          </label>
+        </div>
+        <div id="analogia-resultados" class="evidence-results">
+          <p class="empty">Digite ao menos 2 caracteres.</p>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" id="analogia-cancelar">Cancelar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    // O overlay sai ANTES de resolver: quem chamou segue direto para
+    // `desenhar()`, e um seletor ainda pendurado apareceria sobre a tela nova.
+    let encerrado = false;
+    const encerrar = (escolhido: string | null) => {
+      if (encerrado) return;
+      encerrado = true;
+      document.removeEventListener("keydown", aoTeclar);
+      overlay.remove();
+      resolver(escolhido);
+    };
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") encerrar(null);
+    };
+    document.addEventListener("keydown", aoTeclar);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) encerrar(null);
+    });
+    overlay.querySelector("#analogia-cancelar")?.addEventListener("click", () => encerrar(null));
+
+    const entrada = overlay.querySelector<HTMLInputElement>("#analogia-termo");
+    const filtro = overlay.querySelector<HTMLSelectElement>("#analogia-natureza");
+    const destino = overlay.querySelector<HTMLDivElement>("#analogia-resultados");
+
+    // A natureza é catálogo, como tudo mais: nada de "leve/média/grave" no
+    // código. Se o cadastro ganhar uma quarta, ela aparece aqui sozinha.
+    void call("legal_catalogs_list", { catalogo: "naturezas_transgressao" }).then((r) => {
+      for (const linha of r.data ?? []) {
+        const id = String(linha.id ?? "");
+        const nome = String(linha.nome ?? "");
+        if (id && nome) filtro?.insertAdjacentHTML("beforeend", option(id, nome, false));
+      }
+    });
+
+    let sequencia = 0;
+    const buscar = async () => {
+      const termo = entrada?.value.trim() ?? "";
+      if (!destino) return;
+      if (termo.length < 2) {
+        destino.innerHTML = `<p class="empty">Digite ao menos 2 caracteres.</p>`;
+        return;
+      }
+      // Cada tecla dispara uma busca; sem o carimbo, uma resposta atrasada de
+      // um termo antigo sobrescreveria a lista do termo atual.
+      const minha = ++sequencia;
+      const naturezaId = filtro?.value || null;
+      const achados = (await call("evidence_search_transgressoes", { termo, naturezaId })).data ?? [];
+      if (minha !== sequencia || encerrado) return;
+      if (achados.length === 0) {
+        destino.innerHTML = `<p class="empty">Nenhuma transgressão encontrada.</p>`;
+        return;
+      }
+      destino.innerHTML = achados
+        .map(
+          (a) =>
+            `<button type="button" class="evidence-result-item" data-escolher="${escapeHtml(a.id)}">${escapeHtml(a.rotulo)}</button>`,
+        )
+        .join("");
+      destino.querySelectorAll<HTMLButtonElement>("[data-escolher]").forEach((b) =>
+        b.addEventListener("click", () => {
+          const item = achados.find((a) => a.id === b.dataset.escolher);
+          if (!item) return;
+          rotulos[item.id] = item.rotulo;
+          encerrar(item.id);
+        }),
+      );
+    };
+
+    entrada?.addEventListener("input", () => void buscar());
+    filtro?.addEventListener("change", () => void buscar());
+    entrada?.focus();
+  });
 }

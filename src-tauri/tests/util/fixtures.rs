@@ -110,14 +110,14 @@ pub async fn mundo_configurado(pool: &PgPool) -> Mundo {
     let sql = format!(
         r#"
 INSERT INTO circulos_hierarquicos (id, nome) VALUES ('{circulo}', 'Circulo Teste');
-INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id, ordem_hierarquica)
-VALUES ('{posto}', 'TST PM', 'Posto Teste PM', '{circulo}', 1);
+INSERT INTO postos_graduacoes (id, sigla, nome, circulo_hierarquico_id)
+VALUES ('{posto}', 'TST PM', 'Posto Teste PM', '{circulo}');
 INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id, is_encarregado) VALUES
     ('{pm_um}',   '100000001', 'PM UM',   '{posto}', true),
     ('{pm_dois}', '100000002', 'PM DOIS', '{posto}', true),
     ('{pm_tres}', '100000003', 'PM TRES', '{posto}', false);
 
-INSERT INTO municipios_distritos (id, nome, tipo) VALUES ('{municipio}', 'Cidade Teste', 'municipio');
+INSERT INTO municipios_distritos (id, nome, e_distrito) VALUES ('{municipio}', 'Cidade Teste', false);
 INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
     ('{unidade}',           'Unidade Teste',    '{municipio}'),
     ('{unidade_deprecada}', 'Unidade Deprecada','{municipio}');
