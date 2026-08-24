@@ -19,6 +19,25 @@ export interface ApuratorioConfig {
   nome: string;
   /** Prazo herdado por um documento iniciador que não declare o seu. */
   prazo_base_dias: number;
+
+  // Atributos de comportamento: é o que o formulário de processo consulta para
+  // saber quais campos existem nesta espécie. Vêm daqui, e não de
+  // `legal_catalogs_list("apuratorios")`, que projeta só o que está no registro
+  // de administração — ver o cabeçalho de `ApuratorioConfig` no Rust.
+
+  /** Em branco = sem limite de envolvidos. */
+  max_envolvidos: number | null;
+  /** A rubrica do fato é obrigatória nesta espécie. */
+  exige_natureza_fato: boolean;
+  /** A espécie é julgada: revela a data de julgamento. */
+  permite_julgamento: boolean;
+  /** Da espécie pode resultar punição: revela penalidade e dias no envolvido. */
+  permite_punicao: boolean;
+  /** A espécie tramita por comissão: revela a data de remessa à comissão. */
+  permite_remessa_comissao: boolean;
+  /** Único código técnico do schema. Hoje só `carta_precatoria`. */
+  codigo_extensao: string | null;
+
   documentos: DocumentoIniciadorItem[];
   papeis: PapelItem[];
 }

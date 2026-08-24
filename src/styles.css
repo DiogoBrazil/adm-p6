@@ -177,9 +177,17 @@ textarea {
 .page-head {
   align-items: flex-start;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
   margin-bottom: 18px;
+}
+
+/* Numa janela estreita o cabeçalho quebra em duas linhas, e sem isto o botão
+   herda a largura toda — "Novo" atravessando a tela inteira. Botão de ação tem
+   o tamanho do seu rótulo. */
+.page-head > button {
+  flex: 0 0 auto;
 }
 
 .page-head h1 {
@@ -210,10 +218,13 @@ textarea {
   color: #64748b;
 }
 
+/* O formulário era UMA coluna de 760px. Com ~20 campos, o cadastro de processo
+   virava uma fita vertical: o operador rolava para achar campo, e nada se
+   relacionava visualmente com nada. Agora cada `<fieldset>` é um bloco e os
+   campos se distribuem dentro dele. */
 .crud-form {
   display: grid;
   gap: 14px;
-  max-width: 760px;
 }
 
 .crud-form label {
@@ -255,13 +266,81 @@ td {
   border-bottom: 1px solid #e5e7eb;
   padding: 10px;
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 th {
   color: #64748b;
   font-size: 13px;
   text-transform: uppercase;
+}
+
+/* ── Listagem densa ──────────────────────────────────────────────────────
+   A lista de processos tem nove colunas. Sem largura declarada, o navegador
+   as dimensiona pelo conteúdo: um resumo longo espremia data e situação até
+   quebrarem em três linhas, e a tabela ficava impossível de varrer. As regras
+   abaixo dão ritmo à leitura sem fixar pixel em coluna nenhuma. */
+
+/* Cabeçalho acompanha a rolagem: com 50 linhas por página, saber que coluna
+   se está lendo importa mais que os 36px que ele ocupa. */
+.tabela-dados thead th {
+  background: #fff;
+  border-bottom: 1px solid #d1d5db;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Tabela de muitas colunas: abaixo desta largura, `.table-wrap` rola em vez de
+   espremer. Sem o mínimo, as colunas percentuais encolhem até "7…" e "C…", que
+   é pior que rolar. Só as listagens largas levam o modificador — uma tabela de
+   três colunas não deve exigir rolagem. */
+.tabela-dados--larga {
+  min-width: 940px;
+}
+
+.tabela-dados tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+.tabela-dados tbody tr:hover {
+  background: #f1f5f9;
+}
+
+/* Coluna estreita, de conteúdo previsível: data, contagem, situação. */
+.tabela-dados .col-curta {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.tabela-dados .col-numero {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* Texto que pode ser longo: corta com reticências em vez de empurrar o resto
+   da tabela. O `title` no markup entrega o conteúdo inteiro.
+
+   A largura em porcentagem é o que reparte o espaço com justiça. Sem ela, a
+   primeira coluna sem restrição fica com toda a sobra e as demais encolhem até
+   virar "7º Batalhã…" — foi o que a primeira versão destas regras produziu. */
+.tabela-dados .col-texto,
+.tabela-dados .col-principal {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabela-dados .col-principal {
+  font-weight: 600;
+  width: 20%;
+}
+
+.tabela-dados .col-texto {
+  width: 16%;
 }
 
 pre {
@@ -327,6 +406,16 @@ pre {
 .badge--warn {
   background: #fef3c7;
   color: #92400e;
+}
+
+.badge--erro {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge--neutro {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .detail-section {
@@ -618,9 +707,15 @@ button.evidence-result-item:focus-visible {
     margin-left: 0;
   }
 
-  .page-head,
   .topbar {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  /* O cabeçalho de página também empilha, mas `stretch` fazia o botão de ação
+     atravessar a tela inteira — em coluna, o eixo cruzado é o horizontal. */
+  .page-head {
+    align-items: flex-start;
     flex-direction: column;
   }
 }
@@ -727,13 +822,18 @@ tr.inativo td:first-child {
 
 /* ── Processo: formulário e detalhe ────────────────────────────────────── */
 
+/* `auto-fit` + `minmax` faz o número de colunas seguir a largura disponível:
+   três campos por linha num monitor, um só numa janela estreita, sem media
+   query e sem tamanho fixo em lugar nenhum. */
 .crud-form fieldset {
+  align-items: start;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   display: grid;
-  gap: 12px;
+  gap: 12px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   margin: 0 0 18px;
-  padding: 16px;
+  padding: 16px 18px 18px;
 }
 
 .crud-form legend {
@@ -742,15 +842,42 @@ tr.inativo td:first-child {
   padding: 0 6px;
 }
 
-/* Uma entrada de coleção aninhada (envolvido, designação, pessoa). */
+/* Um `<legend>` não participa da grade; o que precisa atravessar a linha
+   inteira é o conteúdo largo — resumo, avisos, coleções. */
+.crud-form fieldset > .campo--largo,
+.crud-form fieldset > .aviso,
+.crud-form fieldset > .empty,
+.crud-form fieldset > .secao-ajuda,
+.crud-form fieldset > .linha-colecao,
+.crud-form fieldset > button {
+  grid-column: 1 / -1;
+}
+
+.crud-form fieldset > button {
+  justify-self: start;
+}
+
+.crud-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+/* Uma entrada de coleção aninhada (envolvido, designação, pessoa).
+   Era `flex-wrap`, e por isso cada campo tinha a largura do seu conteúdo: com
+   três envolvidos, "Situação" caía em posição diferente em cada linha e não
+   dava para ler a coluna de cima para baixo. Em grade, as linhas se alinham. */
 .linha-colecao {
   align-items: end;
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  gap: 10px 12px;
+  /* `auto-fill`, e não `auto-fit`: as trilhas vazias PERMANECEM, então um
+     envolvido com 4 campos alinha os seus com os 4 primeiros do envolvido que
+     tem 6. `auto-fit` colapsaria as vazias e cada linha teria a sua própria
+     grade — que é o desalinhamento que se está corrigindo. */
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   padding: 12px;
 }
 
@@ -758,6 +885,16 @@ tr.inativo td:first-child {
   display: grid;
   font-size: 13px;
   gap: 4px;
+  min-width: 0;
+}
+
+/* O botão de remover não é um campo, e não pode disputar célula com eles: como
+   o número de campos muda por linha (condutor só em sinistro, penalidade só
+   onde se pune), ele caía numa posição diferente em cada envolvido. Ocupa a
+   linha inteira e ancora à direita — mesmo lugar, sempre. */
+.linha-colecao > button {
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 
 .linha-colecao label.checkbox {

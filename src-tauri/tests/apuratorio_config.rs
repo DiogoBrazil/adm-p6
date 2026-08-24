@@ -248,3 +248,74 @@ async fn desativar_documento_preserva_os_processos_que_ja_o_usam() {
     })
     .await;
 }
+
+/// `apuratorio_config_get` entrega os **atributos de comportamento** do
+/// apuratório, e não só as duas associações.
+///
+/// Este teste existe por um defeito que deixou uma espécie inteira impossível
+/// de cadastrar, em silêncio. O formulário de processo lia `codigo_extensao` de
+/// `legal_catalogs_list("apuratorios")`, que projeta apenas as colunas
+/// declaradas no registro de administração. Quando a decisão 29 tirou
+/// `codigo_extensao` do registro — de propósito, para sumir do formulário do
+/// administrador —, a tela de processo parou de enxergá-lo junto: o bloco de
+/// carta precatória nunca mais renderizou, enquanto o backend seguia exigindo
+/// deprecante e unidade deprecada.
+///
+/// Nenhum teste pegou porque nenhum lia o apuratório pelo caminho da tela. A
+/// lição, e o motivo de os atributos morarem aqui: o registro governa o que o
+/// administrador **edita**; este comando entrega o que o formulário precisa
+/// **saber**.
+#[tokio::test]
+async fn configuracao_entrega_os_atributos_de_comportamento() {
+    util::com_banco_descartavel("apconfig_atributos", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // O apuratório de carta precatória: é o `codigo_extensao` que liga a
+        // extensão de formulário, e ele NÃO está no registro de catálogos.
+        let cp = repository::get(&pool, &m.apuratorio_cp)
+            .await
+            .unwrap()
+            .expect("configuracao do apuratorio de carta precatoria");
+        assert_eq!(
+            cp.codigo_extensao.as_deref(),
+            Some("carta_precatoria"),
+            "sem isto o formulario nao mostra deprecante, e o salvamento e recusado"
+        );
+
+        // O apuratório comum não tem extensão, e os atributos novos nascem
+        // desligados: quem os liga é o administrador, por apuratório.
+        let comum = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .expect("configuracao do apuratorio comum");
+        assert!(comum.codigo_extensao.is_none());
+        assert!(comum.exige_natureza_fato, "a fixture declara que exige");
+        assert_eq!(comum.max_envolvidos, Some(1));
+        assert!(!comum.permite_julgamento);
+        assert!(!comum.permite_punicao);
+        assert!(!comum.permite_remessa_comissao);
+
+        // Ligados, chegam ligados — é o que o formulário consulta para revelar
+        // julgamento, punição e remessa à comissão.
+        sqlx::query(
+            "UPDATE apuratorios
+                SET permite_julgamento = true,
+                    permite_punicao = true,
+                    permite_remessa_comissao = true
+              WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let depois = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(depois.permite_julgamento);
+        assert!(depois.permite_punicao);
+        assert!(depois.permite_remessa_comissao);
+    })
+    .await;
+}

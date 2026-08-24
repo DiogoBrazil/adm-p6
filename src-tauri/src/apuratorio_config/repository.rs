@@ -12,13 +12,41 @@ use crate::error::AppError;
 /// precisa continuar visível para poder ser reativado. Quem filtra `ativo` são as
 /// listas de opções de um cadastro novo.
 pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<ApuratorioConfig>, AppError> {
-    let cabecalho: Option<(String, String, i32)> =
-        sqlx::query_as("SELECT sigla, nome, prazo_base_dias FROM apuratorios WHERE id = $1::uuid")
-            .bind(apuratorio_id)
-            .fetch_optional(pool)
-            .await?;
+    // Os atributos de comportamento vêm daqui, e não do registro de catálogos —
+    // ver o cabeçalho de `ApuratorioConfig` para o porquê.
+    type Cabecalho = (
+        String,
+        String,
+        i32,
+        Option<i32>,
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<String>,
+    );
+    let cabecalho: Option<Cabecalho> = sqlx::query_as(
+        "SELECT sigla, nome, prazo_base_dias, max_envolvidos, exige_natureza_fato,
+                permite_julgamento, permite_punicao, permite_remessa_comissao,
+                codigo_extensao
+           FROM apuratorios WHERE id = $1::uuid",
+    )
+    .bind(apuratorio_id)
+    .fetch_optional(pool)
+    .await?;
 
-    let Some((sigla, nome, prazo_base_dias)) = cabecalho else {
+    let Some((
+        sigla,
+        nome,
+        prazo_base_dias,
+        max_envolvidos,
+        exige_natureza_fato,
+        permite_julgamento,
+        permite_punicao,
+        permite_remessa_comissao,
+        codigo_extensao,
+    )) = cabecalho
+    else {
         return Ok(None);
     };
 
@@ -66,6 +94,12 @@ pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<Apuratorio
         sigla,
         nome,
         prazo_base_dias,
+        max_envolvidos,
+        exige_natureza_fato,
+        permite_julgamento,
+        permite_punicao,
+        permite_remessa_comissao,
+        codigo_extensao,
         documentos,
         papeis,
     }))

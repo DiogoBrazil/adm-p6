@@ -203,6 +203,13 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Em branco = sem limite. O banco recusa gravar acima deste número."),
             booleano("exige_natureza_fato", "Exige natureza do fato",
                 "Torna a rubrica do fato apurado obrigatória no cadastro."),
+            booleano("permite_julgamento", "Permite julgamento",
+                "Revela a data de julgamento no cadastro do processo."),
+            booleano("permite_punicao", "Permite punição",
+                "Revela penalidade e dias em cada envolvido. Vale junto com o atributo \
+                 da solução decidida: a espécie precisa punir E o desfecho precisa punir."),
+            booleano("permite_remessa_comissao", "Permite remessa à comissão",
+                "Revela a data de remessa à comissão no cadastro do processo."),
             // `codigo_extensao` NÃO entra: é o único código técnico do schema
             // (§5.3), e acrescentar uma extensão de formulário é mudança de
             // código, não operação de administrador. A coluna continua no banco

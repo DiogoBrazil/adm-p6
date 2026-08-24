@@ -11,6 +11,24 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Além das duas associações, este comando entrega os **atributos de
+/// comportamento** do apuratório — o que o formulário de processo precisa saber
+/// para decidir quais campos existem naquela espécie.
+///
+/// POR QUE AQUI, E NÃO NO CATÁLOGO
+///
+/// A tela lia esses atributos de `legal_catalogs_list("apuratorios")`, e isso
+/// se mostrou frágil: aquele comando projeta **só as colunas declaradas no
+/// registro de administração**. Quando a decisão 29 tirou `codigo_extensao` do
+/// registro — de propósito, para sumir do formulário de cadastro do apuratório
+/// —, a tela de processo parou de enxergá-lo junto, e o bloco de carta
+/// precatória deixou de renderizar. O backend continuava exigindo deprecante,
+/// então a espécie ficou impossível de cadastrar, sem erro que apontasse a
+/// causa.
+///
+/// A separação que faltava: o **registro** governa o que o administrador edita;
+/// **este comando** entrega o que o formulário precisa saber. São perguntas
+/// diferentes, e não podiam depender da mesma lista.
 #[derive(Debug, Serialize)]
 pub struct ApuratorioConfig {
     pub apuratorio_id: String,
@@ -18,6 +36,25 @@ pub struct ApuratorioConfig {
     pub nome: String,
     /// Prazo herdado por um documento iniciador que não declare o seu.
     pub prazo_base_dias: i32,
+
+    /// Em branco = sem limite de envolvidos.
+    pub max_envolvidos: Option<i32>,
+    /// A rubrica do fato é obrigatória nesta espécie.
+    pub exige_natureza_fato: bool,
+    /// A espécie é julgada: revela a data de julgamento.
+    pub permite_julgamento: bool,
+    /// Da espécie pode resultar punição: revela penalidade e dias no envolvido.
+    /// Vale **junto** com `tipos_solucao_decidida.permite_penalidade`, não no
+    /// lugar dele — um diz se a espécie pune, o outro se aquele desfecho pune.
+    pub permite_punicao: bool,
+    /// A espécie tramita por comissão: revela a data de remessa à comissão.
+    pub permite_remessa_comissao: bool,
+    /// O único código técnico do schema (§5.3). Dirige a extensão de formulário
+    /// — hoje só `carta_precatoria`. Fica fora do registro de administração de
+    /// propósito: acrescentar extensão é mudança de código, não operação de
+    /// administrador.
+    pub codigo_extensao: Option<String>,
+
     pub documentos: Vec<DocumentoIniciadorItem>,
     pub papeis: Vec<PapelItem>,
 }

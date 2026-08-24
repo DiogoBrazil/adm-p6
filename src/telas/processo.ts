@@ -143,6 +143,15 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   const dados = new FormData(form);
   const texto = (campo: string) => String(dados.get(campo) ?? "").trim() || null;
 
+  // Campo que a configuração do apuratório pode esconder precisa deste, e não
+  // de `texto`: `FormData.get` devolve `null` tanto para "o usuário apagou"
+  // quanto para "o campo nem foi renderizado". Tratar os dois igual apagaria
+  // fato já registrado só porque a espécie deixou de prever aquele campo — o
+  // princípio 5 diz o contrário: configuração define comportamento futuro, não
+  // reescreve o que já foi gravado. `has()` separa os dois casos.
+  const textoSePresente = (campo: string, atual: string | null | undefined) =>
+    dados.has(campo) ? texto(campo) : (atual ?? null);
+
   rascunho.apuratorio_id = String(dados.get("apuratorio_id") ?? "");
   rascunho.documento_iniciador_id = String(dados.get("documento_iniciador_id") ?? "");
   rascunho.numero_documento = String(dados.get("numero_documento") ?? "").trim();
@@ -155,8 +164,11 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   rascunho.data_instauracao = String(dados.get("data_instauracao") ?? "");
   rascunho.data_recebimento = texto("data_recebimento");
   rascunho.data_remessa_encarregado = texto("data_remessa_encarregado");
-  rascunho.data_remessa_comissao = texto("data_remessa_comissao");
-  rascunho.data_julgamento = texto("data_julgamento");
+  rascunho.data_remessa_comissao = textoSePresente(
+    "data_remessa_comissao",
+    rascunho.data_remessa_comissao,
+  );
+  rascunho.data_julgamento = textoSePresente("data_julgamento", rascunho.data_julgamento);
   rascunho.data_conclusao = texto("data_conclusao");
   rascunho.resumo_fatos = texto("resumo_fatos");
 
@@ -167,15 +179,22 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
       ? ({ deprecante: deprecante ?? "", unidade_deprecada_id: deprecada } as CartaPrecatoriaRequest)
       : null;
 
-  rascunho.envolvidos = rascunho.envolvidos.map((_, i) => ({
+  rascunho.envolvidos = rascunho.envolvidos.map((anterior, i) => ({
     policial_militar_id: String(dados.get(`env_${i}_pm`) ?? ""),
     status_envolvido_id: String(dados.get(`env_${i}_status`) ?? ""),
     ordem: i + 1,
     e_condutor: dados.get(`env_${i}_condutor`) === "on",
     solucao_sugerida_id: String(dados.get(`env_${i}_sug`) ?? "") || null,
     solucao_decidida_id: String(dados.get(`env_${i}_dec`) ?? "") || null,
-    penalidade_tipo_id: String(dados.get(`env_${i}_pena`) ?? "") || null,
-    penalidade_dias: Number(dados.get(`env_${i}_dias`) ?? 0) || null,
+    // Penalidade e dias somem quando a espécie não pune ou o desfecho não
+    // permite. Ausente ≠ apagado: preserva o que estava, pela mesma razão de
+    // `textoSePresente`.
+    penalidade_tipo_id: dados.has(`env_${i}_pena`)
+      ? String(dados.get(`env_${i}_pena`) ?? "") || null
+      : (anterior.penalidade_tipo_id ?? null),
+    penalidade_dias: dados.has(`env_${i}_dias`)
+      ? Number(dados.get(`env_${i}_dias`) ?? 0) || null
+      : (anterior.penalidade_dias ?? null),
   }));
 
   rascunho.designacoes = rascunho.designacoes.map((d, i) => ({
@@ -301,17 +320,39 @@ export async function renderFormularioProcesso(
     rascunho.apuratorio_id = cats.apuratorios[0].id;
   }
 
-  // Configuração do apuratório escolhido: é ela que decide o que aparece.
   const apuratorio = cats.apuratorios.find((a) => a.id === rascunho.apuratorio_id);
-  const exigeNatureza = apuratorio?.extra?.exige_natureza_fato === true;
-  const ehCartaPrecatoria = apuratorio?.extra?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
-  const maxEnvolvidos = (apuratorio?.extra?.max_envolvidos as number | null) ?? null;
 
+  // Configuração do apuratório escolhido: é ela que decide o que aparece.
+  //
+  // Os atributos de comportamento vêm de `apuratorio_config_get`, NÃO de
+  // `cats.apuratorios`. A lista de catálogos projeta só as colunas declaradas
+  // no registro de administração, e foi assim que a carta precatória parou de
+  // funcionar: a decisão 29 tirou `codigo_extensao` do registro, `extra`
+  // deixou de trazê-lo, o bloco de deprecante nunca mais renderizou — e o
+  // backend continuou exigindo os campos, tornando a espécie impossível de
+  // cadastrar. Ver o cabeçalho de `ApuratorioConfig` no Rust.
   let config: ApuratorioConfig | null = null;
   if (rascunho.apuratorio_id) {
     const r = await call("apuratorio_config_get", { apuratorioId: rascunho.apuratorio_id });
     config = r.data ?? null;
   }
+
+  const exigeNatureza = config?.exige_natureza_fato === true;
+  const ehCartaPrecatoria = config?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
+  const maxEnvolvidos = config?.max_envolvidos ?? null;
+
+  // Campo escondido não pode apagar fato já registrado (princípio 5). Se a
+  // configuração mudar depois de o processo existir, o valor gravado continua
+  // aparecendo — com nota dizendo por quê — em vez de sumir da tela e ser
+  // zerado no próximo salvamento. Mesma escolha de `selectMilitares`.
+  const mostrar = (permitido: boolean | undefined, valorGravado: string | null | undefined) =>
+    permitido === true || !!valorGravado;
+
+  const mostraJulgamento = mostrar(config?.permite_julgamento, rascunho.data_julgamento);
+  const mostraRemessaComissao = mostrar(
+    config?.permite_remessa_comissao,
+    rascunho.data_remessa_comissao,
+  );
   const documentos = (config?.documentos ?? []).filter((d) => d.ativo);
   const papeis = (config?.papeis ?? []).filter((p) => p.ativo);
 
@@ -325,7 +366,11 @@ export async function renderFormularioProcesso(
   const natureza = cats.naturezas.find((n) => n.id === rascunho.natureza_fato_id);
   const exigeCondutor = natureza?.extra?.exige_condutor === true;
 
+  // Dois gates, em níveis diferentes, e os dois valem: o apuratório diz se a
+  // ESPÉCIE pune (um IPM nunca pune), a solução decidida diz se AQUELE desfecho
+  // pune (um PADS pune quando a solução é "Punido", não quando é "Absolvido").
   const permitePenalidade = (solucaoId: string | null | undefined) =>
+    config?.permite_punicao === true &&
     cats.solucoesDecididas.find((s) => s.id === solucaoId)?.extra?.permite_penalidade === true;
   const usaDias = (penalidadeId: string | null | undefined) =>
     cats.penalidades.find((p) => p.id === penalidadeId)?.extra?.usa_quantidade_dias === true;
@@ -385,8 +430,18 @@ export async function renderFormularioProcesso(
           <div class="campo"><label>Recebimento<input name="data_recebimento" type="date" value="${escapeHtml(r.data_recebimento ?? "")}" />
             <small class="campo-efeito">Dispara o prazo inicial: sem ela, nenhum prazo nasce.</small></label></div>
           <div class="campo"><label>Remessa do encarregado<input name="data_remessa_encarregado" type="date" value="${escapeHtml(r.data_remessa_encarregado ?? "")}" /></label></div>
-          <div class="campo"><label>Remessa à comissão<input name="data_remessa_comissao" type="date" value="${escapeHtml(r.data_remessa_comissao ?? "")}" /></label></div>
-          <div class="campo"><label>Julgamento<input name="data_julgamento" type="date" value="${escapeHtml(r.data_julgamento ?? "")}" /></label></div>
+          ${
+            mostraRemessaComissao
+              ? `<div class="campo"><label>Remessa à comissão<input name="data_remessa_comissao" type="date" value="${escapeHtml(r.data_remessa_comissao ?? "")}" />
+                   ${config?.permite_remessa_comissao === false ? `<small class="campo-efeito">Esta espécie não prevê comissão; o campo aparece porque já há data registrada.</small>` : ""}</label></div>`
+              : ""
+          }
+          ${
+            mostraJulgamento
+              ? `<div class="campo"><label>Julgamento<input name="data_julgamento" type="date" value="${escapeHtml(r.data_julgamento ?? "")}" />
+                   ${config?.permite_julgamento === false ? `<small class="campo-efeito">Esta espécie não é julgada; o campo aparece porque já há data registrada.</small>` : ""}</label></div>`
+              : ""
+          }
           <div class="campo"><label>Conclusão<input name="data_conclusao" type="date" value="${escapeHtml(r.data_conclusao ?? "")}" />
             <small class="campo-efeito">Preenchida = processo concluído.</small></label></div>
         </fieldset>
@@ -426,7 +481,9 @@ export async function renderFormularioProcesso(
               <label>Solução sugerida${selectOpcoes(`env_${i}_sug`, cats.solucoesSugeridas, e.solucao_sugerida_id ?? "")}</label>
               <label>Solução decidida${selectOpcoes(`env_${i}_dec`, cats.solucoesDecididas, e.solucao_decidida_id ?? "")}</label>
               ${
-                permitePenalidade(e.solucao_decidida_id)
+                // Penalidade já gravada continua à vista mesmo se a configuração
+                // mudar depois — esconder apagaria o fato no próximo salvamento.
+                permitePenalidade(e.solucao_decidida_id) || e.penalidade_tipo_id
                   ? `<label>Penalidade${selectOpcoes(`env_${i}_pena`, cats.penalidades, e.penalidade_tipo_id ?? "")}</label>
                      ${usaDias(e.penalidade_tipo_id) ? `<label>Dias<input name="env_${i}_dias" type="number" min="1" value="${e.penalidade_dias ?? ""}" /></label>` : ""}`
                   : ""
@@ -455,7 +512,7 @@ export async function renderFormularioProcesso(
 
         <fieldset>
           <legend>Fatos</legend>
-          <div class="campo"><label>Resumo<textarea name="resumo_fatos" rows="4">${escapeHtml(r.resumo_fatos ?? "")}</textarea></label></div>
+          <div class="campo campo--largo"><label>Resumo<textarea name="resumo_fatos" rows="4">${escapeHtml(r.resumo_fatos ?? "")}</textarea></label></div>
         </fieldset>
 
         ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
@@ -579,32 +636,39 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
       </div>
       ${
         items.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--larga">
               <thead><tr>
-                <th>Rótulo</th><th>Apuratório</th><th>Unidade</th><th>Natureza</th>
-                <th>Instauração</th><th>Responsável</th><th>Envolvidos</th>
-                <th>Vencimento</th><th>Situação</th>
+                <th>Rótulo</th>
+                <th class="col-curta">Espécie</th>
+                <th class="col-texto">Unidade</th>
+                <th class="col-texto">Natureza</th>
+                <th class="col-curta">Instauração</th>
+                <th class="col-texto">Responsável</th>
+                <th class="col-numero">Envolv.</th>
+                <th class="col-curta">Vencimento</th>
+                <th class="col-curta">Situação</th>
               </tr></thead>
               <tbody>
                 ${items
-                  .map(
-                    (p) => `
+                  .map((p) => {
+                    const vencido = p.prazo_dias_restantes !== null && p.prazo_dias_restantes < 0;
+                    return `
                   <tr data-processo="${escapeHtml(p.id)}">
-                    <td>${escapeHtml(p.rotulo)}</td>
-                    <td>${escapeHtml(p.apuratorio_sigla)}</td>
-                    <td>${escapeHtml(p.unidade_origem)}</td>
-                    <td>${escapeHtml(p.natureza_fato ?? "")}</td>
-                    <td>${escapeHtml(p.data_instauracao)}</td>
-                    <td>${escapeHtml(p.responsavel_nome ?? "—")}</td>
-                    <td>${p.total_envolvidos}</td>
-                    <td>${escapeHtml(p.prazo_vencimento ?? "")}${
-                      p.prazo_dias_restantes !== null && p.prazo_dias_restantes < 0
-                        ? ` <strong class="vencido">(vencido)</strong>`
-                        : ""
+                    <td class="col-principal" title="${escapeHtml(p.rotulo)}">${escapeHtml(p.rotulo)}</td>
+                    <td class="col-curta">${escapeHtml(p.apuratorio_sigla)}</td>
+                    <td class="col-texto" title="${escapeHtml(p.unidade_origem)}">${escapeHtml(p.unidade_origem)}</td>
+                    <td class="col-texto" title="${escapeHtml(p.natureza_fato ?? "")}">${escapeHtml(p.natureza_fato ?? "—")}</td>
+                    <td class="col-curta">${escapeHtml(p.data_instauracao)}</td>
+                    <td class="col-texto" title="${escapeHtml(p.responsavel_nome ?? "")}">${escapeHtml(p.responsavel_nome ?? "—")}</td>
+                    <td class="col-numero">${p.total_envolvidos}</td>
+                    <td class="col-curta">${
+                      p.prazo_vencimento
+                        ? `${escapeHtml(p.prazo_vencimento)}${vencido ? ` <span class="badge badge--erro">vencido</span>` : ""}`
+                        : "—"
                     }</td>
-                    <td>${p.concluido ? "concluído" : "em andamento"}</td>
-                  </tr>`,
-                  )
+                    <td class="col-curta"><span class="badge ${p.concluido ? "badge--ok" : "badge--neutro"}">${p.concluido ? "concluído" : "em andamento"}</span></td>
+                  </tr>`;
+                  })
                   .join("")}
               </tbody></table></div>`
           : `<p class="empty">Nenhum processo encontrado.</p>`

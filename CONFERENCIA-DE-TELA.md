@@ -135,6 +135,50 @@ alimentados por um comando paginado que trava em 200, e com 235 militares os 35
 
 ---
 
+## e2) Os campos por apuratório, e a carta precatória que voltou
+
+A migration `0007` tornou condicionais os campos que antes apareciam nas dez espécies, e
+consertou o bloco de carta precatória, que **não renderizava havia dois ciclos**.
+
+### O que precisa aparecer, por espécie
+
+| Abra um… | Tem de mostrar | Não pode mostrar |
+|---|---|---|
+| **IPM** | Escrivão (designação) | Julgamento · Remessa à comissão · Penalidade |
+| **SR** ou **SV** | — | Julgamento · Remessa à comissão · Penalidade |
+| **PADS** | Julgamento · Penalidade (quando a solução decidida for de punição) | Remessa à comissão |
+| **PADE** | Julgamento · Penalidade | Remessa à comissão |
+| **CD**, **CJ** ou **PAD** | Julgamento · Remessa à comissão · Penalidade · **Escrivão de Processo** | — |
+| **CP** | **Deprecante e Unidade deprecada** | Julgamento · Remessa à comissão · Penalidade |
+
+- [ ] IPM — confere a linha da tabela
+- [ ] SR — confere a linha da tabela
+- [ ] PADS — confere a linha da tabela
+- [ ] CD — confere a linha da tabela, e o papel aparece como **Escrivão de Processo**
+- [ ] **CP — criar um processo de carta precatória de ponta a ponta e salvar.** É o teste
+      que importa: até agora o formulário não oferecia os campos e o backend recusava o
+      salvamento, então a espécie era impossível de cadastrar
+
+### O que não pode acontecer
+
+- [ ] Abrir um **PADS que já tem data de julgamento**, salvar sem tocar no campo, e
+      conferir que a data **continua lá**. Campo escondido não pode apagar fato gravado
+- [ ] Em *Catálogos → Apuratórios*, os três atributos novos aparecem e são editáveis:
+      "Permite julgamento", "Permite punição", "Permite remessa à comissão"
+
+### A reforma de tela
+
+- [ ] **Formulário** — os campos se distribuem em 2–3 colunas por bloco, e não numa
+      coluna só; o resumo ocupa a linha inteira
+- [ ] **Envolvidos e designações** — os campos de linhas diferentes **alinham** entre si,
+      e o botão Remover fica sempre no mesmo lugar
+- [ ] **Listagem** — colunas com largura estável, situação e "vencido" como etiqueta,
+      cabeçalho fixo ao rolar
+- [ ] **Janela estreita** — o formulário cai para 1–2 colunas e a tabela rola na
+      horizontal em vez de espremer as colunas; os botões não atravessam a tela
+
+---
+
 ## f) A amostra dos 6 processos
 
 O campo a campo já está feito e acusa **0 divergências em 377 comparações**,

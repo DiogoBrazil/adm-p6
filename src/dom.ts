@@ -61,7 +61,9 @@ export function tabela(colunas: string[], linhas: Linha[], vazio = "Nada a exibi
     const classe = Array.isArray(l) ? "" : (l.classe ?? "");
     return `<tr${classe ? ` class="${escapeHtml(classe)}"` : ""}>${celulas.map(celula).join("")}</tr>`;
   };
-  return `<div class="table-wrap"><table>
+  // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
+  // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
+  return `<div class="table-wrap"><table class="tabela-dados">
       <thead><tr>${colunas.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
       <tbody>${linhas.map(linha).join("")}</tbody>
     </table></div>`;

@@ -193,7 +193,63 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(n, 0, "catalogo operacional {vazio} nao deveria vir semeado");
     }
 
+    // A 0007 traz um bloco que SEPARA o escrivão do IPM do escrivão do
+    // processo, e para isso insere uma linha em `papeis_processo` — catálogo
+    // operacional, que a asserção acima exige VAZIO num banco novo.
+    //
+    // Os dois convivem porque o bloco é condicionado a haver o que separar: sem
+    // papel 'Escrivão' cadastrado, ele retorna sem tocar em nada. É uma
+    // migration de DADO, corretiva, para a instalação que já importou o legado;
+    // numa instalação nova quem cadastra os papéis é o administrador (§7.1).
+    //
+    // Esta asserção é o que impede alguém "melhorar" a 0007 tirando a condição:
+    // sem ela, todo banco novo nasceria com um papel que ninguém pediu.
+    let escrivaes: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM papeis_processo WHERE nome ILIKE 'escriv%'")
+            .fetch_one(&mut conn)
+            .await?;
+    assert_eq!(
+        escrivaes, 0,
+        "a separacao do escrivao da 0007 nao pode semear papel em banco novo"
+    );
+
     Ok(())
+}
+
+/// Os atributos que decidem quais campos o formulário de processo mostra.
+///
+/// Nascem **desligados**: o comportamento vem do dado, e quem o liga é o
+/// administrador, por apuratório. Antes da 0007 o formulário mostrava os mesmos
+/// campos para as dez espécies — data de julgamento num IPM, remessa à comissão
+/// numa sindicância.
+#[tokio::test]
+async fn atributos_de_comportamento_do_apuratorio_nascem_desligados() {
+    util::com_banco_descartavel("mig_atributos", |pool| async move {
+        for coluna in [
+            "permite_julgamento",
+            "permite_punicao",
+            "permite_remessa_comissao",
+        ] {
+            let (tipo, anulavel, padrao): (String, String, Option<String>) = sqlx::query_as(
+                "SELECT data_type, is_nullable, column_default
+                   FROM information_schema.columns
+                  WHERE table_name = 'apuratorios' AND column_name = $1",
+            )
+            .bind(coluna)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|_| panic!("coluna {coluna} nao existe em apuratorios"));
+
+            assert_eq!(tipo, "boolean", "{coluna} tem de ser booleana (§3.2)");
+            assert_eq!(anulavel, "NO", "{coluna} nao pode ser nula");
+            assert_eq!(
+                padrao.as_deref(),
+                Some("false"),
+                "{coluna} nasce desligada: quem liga e o administrador"
+            );
+        }
+    })
+    .await;
 }
 
 /// A view é contrato: quatro módulos leem dela. Uma coluna renomeada quebraria

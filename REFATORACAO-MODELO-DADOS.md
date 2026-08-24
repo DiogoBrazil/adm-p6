@@ -71,12 +71,12 @@
 
 | | |
 |---:|:---|
-| Migrations | 6 (eram 32) |
+| Migrations | 7 (eram 32) |
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 43 · 55 · 25 · 2 · 2 |
 | Catálogos administráveis | 25 |
 | Comandos Tauri | 76 (eram 146) |
 | Backend Rust | 7.002 linhas (eram 9.194) |
-| Testes de integração | **90** (eram 0) |
+| Testes de integração | **92** (eram 0) |
 | Frontend | 5.263 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Comandos registrados que nenhuma tela chama | 15 — capacidade sem entrada de UI, ver §9 |
@@ -143,6 +143,9 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 28 | Município × distrito | **`tipo` (texto livre) virou `e_distrito` (booleano)**, com CHECK: distrito exige o município a que pertence, município não pode ter pai. Era o último lugar do schema em que a natureza de um registro dependia de string digitada, e a regra só existiria no formulário. Os 112 registros já a satisfaziam — 60 distritos todos com pai, 52 municípios nenhum. |
 | 27 | A ordem hierárquica dos postos | **Removida**, por decisão do responsável, de olho na consequência: a relação de militares passa a sair em ordem **alfabética de nome**, e não mais de CEL para SD. Ordenava em `users::list_paginated`, `users::list_encarregados` e na listagem do próprio catálogo. `circulo_hierarquico_id` fica — agrupa Oficiais e Praças, e isso não é ordenação. Reverter exige migration nova **e redigitar os 13 valores**: o dado se perde, não só a coluna. |
 | 26 | O recorte do legado (`tests/fixtures/legado_amostra.sql`) traz os 236 militares com nome real. Versiona? | **Sim, como está.** O repositório é interno da Seção e o risco foi avaliado e aceito. Não é o mesmo caso do `adm-p6.sql`, que fica fora do git por ser o **dump inteiro** — 44 MB com oito anos de fato disciplinar. O recorte é 158 KB, sem senha, sem CPF, e sem ele os 3 testes de importação não rodariam em clone nenhum: a rede de proteção da §8.5 deixaria de existir fora desta máquina. |
+| 31 | Quais campos do formulário cada apuratório usa | **Atributo por apuratório, não sigla no código.** `permite_julgamento` e `permite_punicao` em CD, CJ, PAD, PADE e PADS; `permite_remessa_comissao` em CD, PAD e CJ. O dado do legado confirma: `data_julgamento` só aparece em CD, PAD e PADS, e em zero procedimento. A carga inicial da 0007 é por sigla — carga única de valor administrável, como `prazo_base_dias` (decisão 23); o que o princípio 2 proíbe é o **código** decidir por nome em tempo de execução. |
+| 32 | O escrivão do IPM e o escrivão de PAD/CD/CJ são o mesmo papel? | **Não, e voltaram a ser dois.** O legado já os separava em `escrivao_id` e `escrivao_processo_id`; a importação mapeou os dois para um só 'Escrivão' (`01_catalogos.sql`, `map_papeis`) — simplificação de script, não decisão de domínio. A 0007 recria "Escrivão de Processo" e migra as 4 designações de CD/CJ/PAD, deixando as 24 do IPM onde estavam. O corte é limpo no dump: nenhum processo usou as duas colunas. |
+| 33 | Listar todos os documentos iniciadores, independentemente do apuratório | **Não.** A FK composta `(apuratorio_id, documento_iniciador_id)` exige que o par esteja cadastrado, e hoje cada apuratório tem um só habilitado — oferecer os três faria o salvamento falhar com erro de FK. Quem precisar de outro documento o habilita em *Catálogos → Configuração de apuratórios*, que é onde essa decisão mora. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -232,6 +235,7 @@ da direita — foi medida contra o dump e conferida pelos scripts que rodaram.
 | `0004_view_processos_detalhados.sql` | 135 | `v_processos_detalhados`: catálogos resolvidos + as três derivações que o schema não guarda como coluna. Ver 8.4. |
 | `0005_prazo_intervalo_ocupacao.sql` | 31 | o intervalo de *ocupação* do prazo passou de `[]` para `[)`, para acomodar a prorrogação que começa no dia do vencimento anterior (decisão 17). Não mexe em `data_vencimento`. |
 | `0006_ajustes_catalogos_administraveis.sql` | 93 | quatro ajustes vindos da conferência das telas: `e_estatuto_militar`, `e_distrito` no lugar de `tipo`, e a remoção de `ordem_hierarquica` e das subdivisões (decisões 27 a 30). |
+| `0007_campos_por_apuratorio.sql` | 147 | os três atributos que decidem quais campos o formulário de processo mostra (`permite_julgamento`, `permite_punicao`, `permite_remessa_comissao`), e a separação do escrivão do IPM do escrivão do processo, que a importação havia fundido (decisões 31 e 32). |
 
 **Seed técnico:** `admin@sistema.com` / `123456` (bcrypt custo 12, hash verificado por teste).
 `policial_militar_id` é `NULL` — a conta técnica não inventa militar. **Trocar a senha em
@@ -286,7 +290,7 @@ Os atributos semânticos abaixo são o que substitui o hardcode:
 
 | Catálogo | Atributo semântico | Substitui |
 |---|---|---|
-| `apuratorios` | `prazo_base_dias`, `max_envolvidos`, `exige_natureza_fato`, `codigo_extensao` | `match tipo_detalhe`, `tipo_to_table()` |
+| `apuratorios` | `prazo_base_dias`, `max_envolvidos`, `exige_natureza_fato`, `codigo_extensao`, **`permite_julgamento`**, **`permite_punicao`**, **`permite_remessa_comissao`** | `match tipo_detalhe`, `tipo_to_table()`, e o formulário que mostrava os mesmos campos para as dez espécies |
 | `apuratorio_documentos_iniciadores` | `prazo_base_dias`, `padrao` | `if documento == "Feito Preliminar" { 15 }` |
 | `apuratorio_papeis` | `obrigatorio`, `max_ocupantes`, **`e_responsavel`** | `["PAD","CD","CJ"].contains(...)`, colunas fixas de papel |
 | `naturezas_fato` | `exige_condutor` | `natureza.includes('sinistro de trânsito')` |
@@ -507,6 +511,30 @@ Vale como argumento para não deixar a rede de proteção de lado.
    (`users_list`, com controle de página de verdade — que também não existia). O teste
    `lista_de_opcoes_de_militar_nao_pagina` monta **250 militares** justamente para passar
    do teto.
+
+9. **O formulário de carta precatória estava morto, e ninguém sabia.** A tela decidia o
+   bloco Deprecante/Unidade deprecada por
+   `apuratorio.extra.codigo_extensao === 'carta_precatoria'`, e `extra` vinha de
+   `legal_catalogs_list("apuratorios")` — que projeta **apenas as colunas declaradas no
+   registro de administração**. A decisão 29 (§8.7) tirou `codigo_extensao` do registro,
+   de propósito, para a pergunta sumir do cadastro do apuratório. Efeito colateral não
+   previsto: a tela de processo lia do mesmo lugar, `codigo_extensao` passou a chegar
+   `undefined`, e o bloco **nunca mais renderizou**.
+
+   O backend continuou exigindo deprecante (`proceedings/repository.rs`), então a espécie
+   ficou **impossível de cadastrar**: o formulário não oferecia os campos e o salvamento
+   era recusado. A §8.7 argumentava que esconder a coluna era seguro "porque o `UPDATE`
+   genérico só escreve o que está declarado" — verdade para a **escrita**; ninguém
+   verificou a **leitura**.
+
+   É exatamente o que o item (c) da §7.5 mandava conferir na tela — "criar um processo de
+   carta precatória e confirmar que ainda exige deprecante" —, e que continua pendente.
+   Vale como argumento para a conferência de tela: dois ciclos de teste automatizado não
+   alcançaram isto.
+
+   Corrigido pela separação que faltava: o **registro** governa o que o administrador
+   edita, e `apuratorio_config_get` entrega o que o **formulário precisa saber**. São
+   perguntas diferentes e não podiam depender da mesma lista.
 
 ---
 
@@ -1512,9 +1540,12 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
 | Supor que um conceito tem **uma** fonte no legado | O enquadramento tinha duas, que nunca se encontraram: `pm_envolvido_*` para procedimentos e o jsonb `transgressoes_ids` para PADS. A segunda tinha 73 vínculos e quase ficou de fora | Antes de dar um conceito por importado, contar **por espécie de apuratório**: um zero redondo numa espécie inteira é sinal de fonte paralela |
 | Cruzar `jsonb_array_elements` com cast no `WHERE` | `(item->>'id')::int` estoura nos itens cujo `id` é UUID, mesmo com `WHERE tipo='rdpm'` ao lado: o Postgres não garante a ordem de avaliação | Separar em duas consultas, uma por tipo — foi o que a conferência precisou fazer |
+| **Ler comportamento de `legal_catalogs_list`** | Aquele comando projeta só as colunas **declaradas no registro**. Tirar uma do registro (para sumir da tela do administrador) some com ela para **todo mundo que lê por ali** — foi assim que o bloco de carta precatória parou de renderizar, com o backend ainda exigindo os campos | Comportamento que a tela consulta vem de comando próprio. Para o apuratório é `apuratorio_config_get`, que entrega os atributos ao lado dos documentos e papéis |
 | **Comando paginado servindo de lista de opções** | `list_paginated` trava `per_page` em 200 e **corta em silêncio**: quem pede 500 recebe 200 sem erro, sem aviso e sem sinal de que faltou. Custou 35 militares invisíveis nos seletores do formulário de processo, por toda a migração | Lista de **opções** não pagina — comando próprio sem `LIMIT` (`users_list_ativos`, `list_encarregados`). Paginação é da **listagem de tela**, e aí precisa de controle de página, senão o resto fica inalcançável do mesmo jeito |
 | Teste de paginação que nunca passa do teto | A fixture tem 3 militares, e 3 < 200 para qualquer `per_page`: o teste passa e o clamp nunca é exercido | Teste de limite monta **mais que o limite**. `lista_de_opcoes_de_militar_nao_pagina` insere 250 |
 | Select cujo valor atual não está na lista de opções | A lista filtra `ativo`; um registro gravado antes da desativação aponta para quem não está lá, o `<select>` cai no vazio e a edição apaga o vínculo calado | `selectMilitares` acrescenta o valor atual como opção própria quando falta. É a mesma razão de `ProceedingListItem` devolver os ids ao lado dos rótulos |
+| Esconder campo lendo o formulário pelo DOM | `FormData.get` devolve `null` tanto para "o usuário apagou" quanto para "o campo nem foi renderizado". Tratar os dois igual **apaga fato já registrado** quando a configuração muda (princípio 5) | `dados.has(campo)` separa os dois. Ver `processo.ts::textoSePresente`; e o campo com valor gravado continua à vista, com nota, em vez de sumir |
+| `auto-fit` para alinhar linhas com número diferente de campos | Ele **colapsa** as trilhas vazias, então cada linha ganha a sua própria grade e nada alinha entre linhas | `auto-fill` mantém as trilhas. É a diferença entre os envolvidos alinharem "Situação" na mesma coluna ou não |
 | Busca incremental sem carimbo de sequência | Cada tecla dispara uma consulta, e a resposta atrasada de um termo antigo sobrescreve a lista do termo atual | Um contador local: descarte a resposta cuja sequência não é a última. O seletor de analogia já fazia; as três buscas de indícios, não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 
@@ -1554,6 +1585,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | por que lista de opções não pode paginar | §**8.9** e `users/repository.rs::list_ativos` |
 | como paginar uma listagem de tela | `dom.ts::paginacao` e `ligarPaginacao`, usados em `telas/usuarios.ts` |
 | como fazer backup, e como saber que ele presta | §**7.6** |
+| quais campos cada apuratório mostra, e por quê | decisões **31** a **33**, e `apuratorio_config/domain.rs::ApuratorioConfig` |
+| por que o comportamento não vem de `legal_catalogs_list` | o cabeçalho de `ApuratorioConfig`, e a §**6**, item 9 |
+| como esconder um campo sem apagar o que já foi gravado | `processo.ts::textoSePresente` e o princípio 5 |
+| como o formulário e a listagem se organizam na tela | o bloco "Listagem densa" e as regras de `.crud-form` em `src/styles.css` |
 | como rodar o app com a CSP de produção | §**7.5** (o aviso do topo) e §**8.9**, item 3 |
 | o que foi deliberadamente **não** planejado | §**8.8** |
 | como o recorte de teste da importação é gerado | `src-tauri/tests/fixtures/gerar_legado_amostra.sh` |
