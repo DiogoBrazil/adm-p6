@@ -9,19 +9,26 @@
 
 > ## ▶ POR ONDE RETOMAR
 >
-> **Estado:** as seções 8.1 a 8.6 estão concluídas. O banco novo tem os dados de produção
-> dentro — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
-> conferidos por 24 contagens e 17 invariantes, e travados por 88 testes. A higiene saiu.
+> **Estado:** as seções 8.1 a 8.7 estão concluídas. O banco tem os dados de produção dentro
+> — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
+> conferidos por 24 contagens, 17 invariantes e 377 comparações campo a campo, e travados
+> por 88 testes. As 6 migrations estão aplicadas.
 >
-> **O que resta é a validação humana, e só ela.**
+> **Tudo o que resta é conferência humana na tela.** Não há código pendente: nenhum item
+> abaixo pede que você escreva algo, só que olhe e decida. É deliberado — o que sobrou é
+> exatamente o que teste automatizado não alcança.
 >
 > ### Faça nesta ordem
 >
 > | # | O que | Onde está descrito | Bloqueia? |
 > |---|---|---|---|
-> | 1 | **Conferir a amostra na tela** — abrir os 6 processos e olhar rótulo e layout. O campo a campo já está feito: `98_amostra_lado_a_lado.sql` compara 377 campos contra o legado e acusa **0 divergências** | §8.5, "A pendência que sobra" | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco e ninguém deve usar o app para valer |
-> | 2 | **Remover o schema `legado`** — só depois da conferência | §8.5, passo 8 do roteiro | não |
-> | 3 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor novo | §8.5, "A pendência que sobra" | não |
+> | 1 | **Conferir a amostra na tela** — abrir os 6 processos e olhar rótulo e layout. O campo a campo já está feito e acusa **0 divergências em 377 comparações** | §8.5, "A pendência que sobra" | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco e ninguém deve usar o app para valer |
+> | 2 | **Percorrer as telas com o console aberto (F12)** — a CSP foi ligada e nunca foi exercida clicando. Violação aparece como `Refused to…` no console do WebView, não no log do processo | §7.5 | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
+> | 3 | **Remover o schema `legado`** — só depois de 1 e 2 | §8.5, passo 8 do roteiro | não |
+> | 4 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor novo | §8.5, "A pendência que sobra" | não |
+>
+> Feitos os quatro, **a migração está concluída** e o trabalho seguinte é manutenção
+> normal: §7.3 para mudar schema, §7.4 para acrescentar catálogo.
 >
 > ### Antes de tocar em qualquer coisa, leia
 >
@@ -51,14 +58,15 @@
 | | |
 |---:|:---|
 | Migrations | 6 (eram 32) |
-| Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 44 · 57 · 24 · 2 · 2 |
+| Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 43 · 55 · 25 · 2 · 2 |
+| Catálogos administráveis | 25 |
 | Comandos Tauri | 75 (eram 146) |
-| Backend Rust | 6.914 linhas (eram 9.194) |
+| Backend Rust | 7.002 linhas (eram 9.194) |
 | Testes de integração | **88** (eram 0) |
-| Frontend | 5.072 linhas em 16 arquivos (era 1 arquivo de 2.124) |
+| Frontend | 5.263 linhas em 16 arquivos (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
-| Scripts de importação | 10 arquivos, 1.417 linhas de SQL |
+| Scripts de importação | 10 arquivos, 1.428 linhas de SQL |
 | **Dados de produção no banco** | **128 processos · 193 envolvidos · 235 militares · 123 enquadramentos** |
 
 ---
@@ -337,17 +345,17 @@ justificar por que não cabe em constraint.
 ```
 src/
   api.ts            269   cliente tipado: mapa `Commands` com os 75 comandos
-  types.ts          859   interfaces derivadas de src-tauri/src/*/domain.rs
-  dom.ts            147   escape, tabela, exportação (CSV e impressão)
-  main.ts           272   shell, sessão, menu e roteamento — e nada mais
+  types.ts          863   interfaces derivadas de src-tauri/src/*/domain.rs
+  dom.ts            150   escape, tabela, entrega de arquivo (CSV, anexo, impressão)
+  main.ts           279   shell, sessão, menu e roteamento — e nada mais
   telas/
-    catalogos.ts    371   os 25 catálogos, gerada de legal_catalogs_definitions
-    apuratorio.ts   336   configuração de documentos iniciadores e papéis
-    processo.ts     919   lista, formulário completo e detalhe
-    indicios.ts     315   enquadramento por envolvido
+    processo.ts     921   lista, formulário completo e detalhe
+    indicios.ts     421   enquadramento por envolvido, com o seletor de analogia
+    catalogos.ts    417   os 25 catálogos, gerada de legal_catalogs_definitions
     usuarios.ts     356   lista, formulário (militar + conta) e detalhe
+    apuratorio.ts   336   configuração de documentos iniciadores e papéis
     mapas.ts        300   mapa do período e mapas salvos
-    estatisticas.ts 264   /estatisticas/processos e /stats/procedimentos
+    estatisticas.ts 287   /estatisticas/processos e /stats/procedimentos
     auditoria.ts    178   lista com filtros e o diff de `alteracoes`
     encarregados.ts 163   matriz militar × apuratório
     anual.ts        130   relatório anual, impresso pelo sistema
@@ -428,8 +436,8 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
 | `users_repository.rs` | **5 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina, busca e ordena pela hierarquia; as duas listas de processos do militar |
 | `proceedings_repository.rs` | **18 testes** — criação completa, prazo inicial vindo da configuração, edição, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
-| `apuratorio_config.rs` | 3 testes — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
-| `deadlines_repository.rs` | 3 testes — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
+| `apuratorio_config.rs` | **3 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes |
+| `deadlines_repository.rs` | **3 testes** — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
 | `maps_reports_repository.rs` | **10 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
 | `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
@@ -577,12 +585,82 @@ isso é um **atributo booleano** na tabela: foi assim que `permite_penalidade`,
 
 ---
 
+### 7.5 O roteiro de conferência de tela
+
+**É o que falta para dar a migração por concluída.** Nada aqui é automatizável: são as duas
+coisas que teste não alcança — a CSP, que só falha dentro do WebView, e o julgamento de
+quem conhece o domínio.
+
+Rode `npm run tauri dev`, entre com `admin@sistema.com` / `123456` e **deixe o console
+aberto (F12)**. Toda violação de CSP aparece lá como `Refused to…`, e em lugar nenhum mais:
+não no log do `cargo`, não numa mensagem de erro na tela. Uma tela pode ficar muda sem
+avisar.
+
+#### a) A CSP, tela por tela
+
+Percorra **todas**, porque a política é global e o que a quebra é sempre local: painel,
+processos (lista, formulário e detalhe), indícios, catálogos, configuração de apuratório,
+usuários, mapas, estatísticas (as duas), auditoria, encarregados, relatório anual, prazos.
+
+| Sintoma | Causa provável |
+|---|---|
+| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 75 comandos passam |
+| Uma tela abre **sem estilo** | `style-src`. Em produção o Vite emite `<link>`; em dev injeta `<style>`, e é por isso que existe `devCsp` |
+| As **barras** dos painéis de contagem aparecem sem largura | `aplicarBarras()` não rodou, ou voltou um `style=""` no markup (§10) |
+
+> A `csp` de produção **não é exercida por `tauri dev`**, que usa a `devCsp`. Para provar a
+> restritiva de verdade é preciso `npm run tauri build` e abrir o bundle. A diferença entre
+> as duas é só `style-src` e o WebSocket do HMR — mas é justamente onde mora o risco.
+
+#### b) Os dois caminhos que gravam arquivo
+
+São os que a mudança de capability (`dialog:default` → `dialog:allow-save`) poderia derrubar,
+e nenhum teste os cobre porque abrem diálogo nativo:
+
+- **exportar CSV** em Prazos;
+- **baixar o anexo** de 20 MB do IPM nº 1/P6/7ºBPM/2024 — este passou a usar o diálogo
+  nativo na §8.6.6, e antes disso provavelmente não funcionava.
+
+#### c) O que a rodada dos catálogos mudou (§8.7)
+
+- **Apuratórios** — sem a coluna "Código de extensão". E então o teste que importa: **criar
+  um processo de carta precatória e confirmar que ainda exige deprecante e unidade
+  deprecada.** É a prova de que esconder o código não desligou a extensão.
+- **Municípios e distritos** — marcar "É distrito" revela o select de município e o exige;
+  desmarcar limpa. Conferir que os 60 distritos existentes seguem com o município certo.
+- **Infrações do Estatuto** — sem o select de dispositivo legal. Cadastrar uma e conferir
+  **na tela de indícios** que o rótulo sai completo, com " - Estatuto dos Policiais
+  Militares": é lá que o dispositivo preenchido sozinho aparece.
+- **Postos e graduações** — sem "Ordem hierárquica". E em **Usuários**, confirmar que a
+  ordem alfabética é aceitável: é a mudança mais visível, e a única que não se desfaz sem
+  migration nova **e** redigitar os 13 valores (decisão 27).
+- **Catálogos** — "Subdivisões de textos normativos" sumiu do menu, e o formulário de
+  Infrações penais perdeu o campo "Subdivisão".
+
+#### d) O seletor de analogia (§8.6.1)
+
+Abrir os indícios de um envolvido, adicionar uma infração do Estatuto e conferir: a busca
+filtra a partir de 2 caracteres, o filtro por natureza funciona, `Esc` e o clique no fundo
+cancelam, e **cancelar não grava nada** — a analogia é `NOT NULL`, então meia escolha não
+pode virar registro.
+
+Os 3 casos pendentes de art. 29 (§8.5) são a validação real disto.
+
+#### e) A amostra dos 6 processos
+
+Descrita na §8.5, "A pendência que sobra". O campo a campo já está feito e acusa 0
+divergências; o que falta é o olho: rótulo, layout, o que a Seção reconhece.
+
+**Aceitou tudo?** Então rode o passo 8 do roteiro da §8.5 e remova o schema `legado`.
+
+---
+
 ## 8. O caminho percorrido, e o que falta
 
-As subseções estão na ordem em que foram executadas. **8.1 a 8.6 estão concluídas** e
+As subseções estão na ordem em que foram executadas. **8.1 a 8.7 estão concluídas** e
 ficam aqui porque registram *por que* cada coisa é como é — reabrir uma delas sem ler o
-registro costuma refazer trabalho já feito. O que falta é a **conferência humana da
-amostra**, descrita no fim da 8.5. **8.7 é o que foi deliberadamente descartado.**
+registro costuma refazer trabalho já feito. O que falta é **conferência de tela**: a
+amostra (fim da 8.5) e a CSP (§7.5). **8.8 é o que foi deliberadamente descartado.**
 
 | | | |
 |---|---|---|
@@ -592,7 +670,8 @@ amostra**, descrita no fim da 8.5. **8.7 é o que foi deliberadamente descartado
 | 8.4 | Views de conveniência | ✅ concluído |
 | 8.5 | Importação dos dados de produção | ✅ concluída — 1 pendência humana |
 | 8.6 | Higiene | ✅ concluída |
-| 8.7 | O que NÃO está planejado | — registro |
+| 8.7 | Ajustes nos catálogos administráveis | ✅ concluída |
+| 8.8 | O que NÃO está planejado | — registro |
 
 ### 8.1 ~~Terminar o frontend~~ — **CONCLUÍDO**
 
@@ -1110,7 +1189,73 @@ Os dois juntos são o que permitiu a CSP de produção ficar sem `'unsafe-inline
 
 ---
 
-### 8.7 O que NÃO está planejado, e por quê
+### 8.7 ~~Ajustes nos catálogos administráveis~~ — **CONCLUÍDA**
+
+Veio da conferência das telas com o app rodando — o primeiro uso de verdade depois que a
+importação fechou. Cinco campos que atrapalhavam mais do que ajudavam, e que só aparecem
+quando alguém senta para cadastrar.
+
+O achado que organiza a seção: **os cinco não eram o mesmo tipo de problema.** Três eram
+campo a menos na tela; dois eram modelo a corrigir. Levantar antes de mexer foi o que
+separou um do outro — e evitou remover uma coluna que quatro consultas usam.
+
+| Campo | O que o levantamento mostrou | O que foi feito |
+|---|---|---|
+| `apuratorios.codigo_extensao` | Carrega comportamento real, mas é **código técnico**: a §5.3 já dizia que acrescentar extensão é mudança de código | Saiu do registro. **Sem migration** |
+| `subdivisao_textos_normativos` | **Nunca usada**: 0 linhas, 0 no legado, `subdivisao_id` nulo nas 26 infrações penais, nenhuma consulta projetando | Removida por inteiro |
+| `infracoes_estatuto.dispositivo_legal_id` | Sempre o mesmo valor, **mas não é coluna morta**: monta o rótulo em 4 consultas | Saiu da tela, ficou no banco, resolvida por atributo |
+| `municipios_distritos.tipo` | Texto livre NOT NULL sem CHECK, e o pai opcional para todos | Virou `e_distrito` + CHECK |
+| `postos_graduacoes.ordem_hierarquica` | Ordena de fato em 3 lugares | Removida, com a consequência aceita (decisão 27) |
+
+As quatro decisões estão na §2 (27 a 30) e a migration é a `0006`.
+
+#### O que **não** foi feito, e por que importa saber
+
+`codigo_extensao` **continua no banco e continua dirigindo a carta precatória.** Só a
+pergunta saiu da tela. Isso é seguro por um detalhe do CRUD genérico que vale ter em mente
+(está na §10): o `UPDATE` monta o `SET` só com as colunas declaradas no registro, então
+editar um apuratório pela tela não toca o que não está lá. Conferido no banco depois de
+aplicar: `CP → carta_precatoria` intacto.
+
+O reverso é a armadilha: uma coluna **obrigatória** fora do registro faria o `INSERT`
+falhar, porque ninguém a preencheria. Foi por isso que o dispositivo do Estatuto precisou
+do recurso novo, em vez de simplesmente sair da lista.
+
+#### Dois recursos novos no registro genérico, não dois casos especiais
+
+Os dois pedidos mais delicados podiam ter virado `if catalogo == "municipios_distritos"` em
+`catalogos.ts`. Viraram declaração — e a tela continua sem **nenhuma** menção a nome de
+catálogo, que é a propriedade que a §5.6 protege.
+
+**`TipoColuna::ReferenciaFixa`** — a coluna existe no banco e não na tela. O `save` a
+preenche com `(SELECT id FROM <alvo> WHERE <marcador>)`, subconsulta montada do registro:
+não consome posição de parâmetro e **não recebe valor nenhum do frontend**. Foi preciso
+mudar a numeração dos placeholders, que antes vinha de `enumerate()` — uma coluna fixa no
+meio da lista deslocaria todas as seguintes.
+
+**`Coluna.visivel_se`** — nomeia a coluna booleana do mesmo catálogo que revela o campo. O
+formulário o esconde enquanto ela estiver desmarcada, **tira o `required` junto** (um campo
+escondido e obrigatório trava o envio sem dizer onde) e grava `null` ao desmarcar, que é o
+que o CHECK de município exige.
+
+Os dois estão descritos na §5.3 e apontados na §11.
+
+#### Como se soube que não quebrou
+
+A migration foi aplicada no banco de produção depois de `cargo test` verde, e conferida
+contra o estado anterior: **128 processos, 13 postos, 112 municípios, 60 distritos e 26
+infrações penais** atravessaram intactos, os 60 distritos com o município certo. Antes de
+aplicar, um `pg_dump --data-only` das cinco tabelas afetadas.
+
+Quatro asserções novas em `schema_integrity.sql` travam o que a migration passou a garantir:
+distrito sem pai é recusado, município com pai é recusado, distrito com pai é aceito, e um
+segundo dispositivo marcado como Estatuto é recusado. Mais um teste em
+`legal_catalogs_repository.rs` prova que a `ReferenciaFixa` sai do atributo **na gravação e
+na edição** — sem ele, uma edição que perdesse o dispositivo passaria calada.
+
+---
+
+### 8.8 O que NÃO está planejado, e por quê
 
 Registrado para que ninguém gaste tempo redescobrindo que a decisão já foi tomada.
 
@@ -1230,8 +1375,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | como esconder da tela uma coluna obrigatória no banco | `legal_catalogs/domain.rs::referencia_fixa` e `repository.rs::expressao` |
 | como um campo de catálogo aparece só quando outro está marcado | `legal_catalogs/domain.rs::referencia_condicional` e o `[data-visivel-se]` de `src/telas/catalogos.ts` |
 | como fazer uma mudança de schema agora que há dado real | §**7.3** |
-| o que falta fazer | a conferência de tela, no fim da §**8.5** — e o quadro no topo deste arquivo |
-| o que foi deliberadamente **não** planejado | §**8.7** |
+| o que falta fazer | §**7.5**, o roteiro de conferência de tela — e o quadro no topo deste arquivo |
+| o que foi deliberadamente **não** planejado | §**8.8** |
 | como o recorte de teste da importação é gerado | `src-tauri/tests/fixtures/gerar_legado_amostra.sh` |
 | como "escrivão só em IPM" virou configuração, sem lista de siglas | `src-tauri/importacao/02_config_apuratorio.sql` |
 | o que a importação garante, e como se conferiu | `src-tauri/importacao/99_conferencia.sql` e `src-tauri/tests/importacao.rs` |
