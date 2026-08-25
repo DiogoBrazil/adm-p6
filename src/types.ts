@@ -221,13 +221,22 @@ export interface CalculateDeadlineResult {
 /** `deadlines` */
 export interface AddExtensionRequest {
   processo_id: string;
-  dias: number;
+  /** Data final escolhida; o backend deriva os dias do vencimento vigente. */
+  nova_data_vencimento: string;
   motivo: string;
   documento_autorizador_id?: string | null;
   numero_documento?: string | null;
   data_documento?: string | null;
   /** Autoridade que concedeu a prorrogação, quando registrada. */
   autoridade_id?: string | null;
+}
+
+/** `deadlines` */
+export interface UpdateExtensionRequest {
+  processo_id: string;
+  prazo_id: string;
+  /** Nova data da última prorrogação; deve ser posterior ao prazo anterior. */
+  nova_data_vencimento: string;
 }
 
 /** `evidence` */

@@ -801,6 +801,13 @@ tr.inativo td:first-child {
   padding: 14px;
 }
 
+/* Formulários contextuais de edição usam `hidden`; a regra explícita evita
+   que o `display: flex` de `.linha-form` prevaleça sobre o atributo nativo. */
+.linha-form[hidden],
+.secao-ajuda[hidden] {
+  display: none;
+}
+
 .linha-form label {
   display: grid;
   font-size: 13px;
@@ -2060,6 +2067,18 @@ tr.atrasado {
 
 .campo {
   gap: 6px;
+}
+
+.campo-data-controle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.campo-data-limpar {
+  align-self: stretch;
+  min-width: 62px;
 }
 
 .campo-efeito,

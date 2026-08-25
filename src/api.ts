@@ -31,6 +31,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   AddExtensionRequest,
+  UpdateExtensionRequest,
   AddMovementRequest,
   AnexoItem,
   ApuratorioConfig,
@@ -180,6 +181,8 @@ export interface Commands {
   deadlines_calculate: { args: { apuratorioId: string, documentoIniciadorId: string, dataInicio: string, dias?: number | null }; result: CalculateDeadlineResult };
   deadlines_report: { args: { filter?: DeadlineReportFilter | null }; result: DeadlineReportItem[] };
   deadlines_add_extension: { args: { request: AddExtensionRequest }; result: string };
+  deadlines_update_extension: { args: { request: UpdateExtensionRequest }; result: boolean };
+  deadlines_delete_extension: { args: { processoId: string; prazoId: string }; result: boolean };
 
   // ── Andamentos ────────────────────────────────────────────────────
   movements_list: { args: { processoId: string }; result: MovementItem[] };

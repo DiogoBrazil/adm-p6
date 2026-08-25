@@ -479,6 +479,37 @@ pub async fn save(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
+    // A data anterior precisa ser lida antes do UPDATE para que a sincronização
+    // do prazo saiba distinguir uma edição comum de uma tentativa de reescrever
+    // uma cadeia que já possui prorrogações.
+    let data_recebimento_anterior: Option<Option<chrono::NaiveDate>> = if let Some(id) =
+        request.id.as_deref()
+    {
+        let (anterior, tem_prorrogacao): (Option<chrono::NaiveDate>, bool) = sqlx::query_as(
+            "SELECT p.data_recebimento,
+                        EXISTS (SELECT 1 FROM processo_prazos pr
+                                 WHERE pr.processo_id = p.id AND pr.ordem > 0)
+                   FROM processos_procedimentos p
+                  WHERE p.id = $1::uuid AND p.ativo",
+        )
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+
+        // A verificacao vem antes de qualquer UPDATE: assim nenhuma
+        // constraint atingida mais adiante mascara a regra com o fallback
+        // generico de banco de dados.
+        if tem_prorrogacao && anterior != request.data_recebimento {
+            return Err(AppError::Domain(
+                    "A data de recebimento não pode ser alterada porque este processo já possui prorrogação de prazo.".to_string(),
+                ));
+        }
+        Some(anterior)
+    } else {
+        None
+    };
+
     // Trocar o apuratório de um processo que já tem designações é impossível:
     // `processo_designacoes` amarra `(processo_id, apuratorio_id)` por FK
     // composta e as designações NUNCA são apagadas — são registro histórico de
@@ -576,16 +607,28 @@ pub async fn save(
     gravar_designacoes(tx, &id, request).await?;
     gravar_pessoas(tx, &id, request).await?;
 
-    // Prazo inicial só na criação, e só quando o encarregado já recebeu.
-    if request.id.is_none() {
-        if let Some(data_recebimento) = request.data_recebimento {
-            let (dias, _) = deadlines_repository::dias_base(
-                &mut **tx,
+    match data_recebimento_anterior {
+        Some(anterior) => {
+            deadlines_repository::sync_initial(
+                tx,
+                &id,
+                anterior,
+                request.data_recebimento,
                 &request.apuratorio_id,
                 &request.documento_iniciador_id,
             )
             .await?;
-            deadlines_repository::create_initial(tx, &id, data_recebimento, dias).await?;
+        }
+        None => {
+            if let Some(data_recebimento) = request.data_recebimento {
+                let (dias, _) = deadlines_repository::dias_base(
+                    &mut **tx,
+                    &request.apuratorio_id,
+                    &request.documento_iniciador_id,
+                )
+                .await?;
+                deadlines_repository::create_initial(tx, &id, data_recebimento, dias).await?;
+            }
         }
     }
 

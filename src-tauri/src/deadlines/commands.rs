@@ -6,7 +6,7 @@ use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::deadlines::domain::{
     AddExtensionRequest, CalculateDeadlineResult, DeadlineItem, DeadlineReportFilter,
-    DeadlineReportItem, DeadlineSummary,
+    DeadlineReportItem, DeadlineSummary, UpdateExtensionRequest,
 };
 use crate::deadlines::repository;
 use crate::error::AppError;
@@ -125,6 +125,61 @@ pub async fn deadlines_add_extension(
             .await?;
             tx.commit().await?;
             Ok(id)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn deadlines_update_extension(
+    state: State<'_, AppState>,
+    request: UpdateExtensionRequest,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            let alterado = repository::update_extension(&mut tx, &request).await?;
+            audit_repository::register_tx(
+                &mut tx,
+                "processo_prazos",
+                &request.prazo_id,
+                "UPDATE",
+                Some(&actor.id),
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(alterado)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn deadlines_delete_extension(
+    state: State<'_, AppState>,
+    processo_id: String,
+    prazo_id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            let removido = repository::delete_extension(&mut tx, &processo_id, &prazo_id).await?;
+            audit_repository::register_tx(
+                &mut tx,
+                "processo_prazos",
+                &prazo_id,
+                "DELETE",
+                Some(&actor.id),
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(removido)
         }
         .await,
     )

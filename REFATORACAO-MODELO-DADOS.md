@@ -9,13 +9,17 @@
 
 > ## ▶ POR ONDE RETOMAR
 >
-> **Estado:** as seções 8.1 a 8.10 estão concluídas. O banco tem os dados de produção
-> dentro — 128 processos, 235 militares, 141 prazos, 64 andamentos, 123 enquadramentos —
-> conferidos por 24 contagens, 17 invariantes e 377 comparações campo a campo, e travados
-> por **92 testes**. As **7 migrations** estão aplicadas.
+> **Estado em 25/08/2026:** as seções 8.1 a 8.13 estão concluídas. Os **130 registros
+> históricos/de teste da importação foram removidos com autorização** (§8.11) e, depois
+> disso, a conferência manual criou **2 processos/procedimentos ativos de teste**. O banco
+> conserva 235 militares, 7 usuários, 10 apuratórios, 11 unidades e todos os
+> catálogos/configurações. A rede de proteção tem **96 testes**, os **78 comandos Tauri**
+> estão no cliente tipado e as **7 migrations** estão aplicadas.
 >
-> **Não há tarefa de código pendente.** O que falta é **conferência humana na tela**, e a
-> lista para percorrê-la está em **`CONFERENCIA-DE-TELA.md`**, na raiz.
+> **Não há implementação conhecida pendente nesta rodada.** Não refaça as §8.11 a §8.13:
+> elas já estão no código e cobertas por teste. O próximo trabalho é validar pela tela os
+> últimos casos abaixo e continuar **`CONFERENCIA-DE-TELA.md`**. Se a tela divergir deste
+> documento, trate como defeito novo e preserve as regras registradas nas decisões 34–38.
 >
 > ⚠ **Esta frase já esteve aqui antes e era falsa duas vezes.** Nas duas rodadas em que
 > alguém sentou para conferir a tela, apareceu código quebrado que nenhum teste alcançava:
@@ -27,28 +31,33 @@
 >
 > | # | O que | Onde está descrito | Bloqueia? |
 > |---|---|---|---|
-> | 1 | **Percorrer as telas com o binário de produção e o console aberto (F12).** `npm run tauri build -- --no-bundle`, depois `./src-tauri/target/release/adm-p6-tauri`. `tauri dev` usa a `devCsp` e **não** exerce a CSP restritiva | `CONFERENCIA-DE-TELA.md`, seções (a) a (e2); §7.5 explica o porquê de cada item | **Sim** para usar o app para valer: uma tela pode estar muda sem avisar |
-> | 2 | **Criar uma carta precatória de ponta a ponta.** É o item que mais importa: até a §8.10 a espécie era **impossível de cadastrar**, e nenhum teste automatizado chegava lá | `CONFERENCIA-DE-TELA.md`, seção (e2); §8.10 e §6, item 9 | **Sim** — é a prova de que a correção pegou |
-> | 3 | **Conferir a amostra dos 6 processos na tela.** O campo a campo já está feito e acusa **0 divergências em 377 comparações**, rodado contra o banco de produção; falta o olho: rótulo, layout, o que a Seção reconhece | §8.5, "A pendência que sobra"; `CONFERENCIA-DE-TELA.md`, seção (f) | **Sim.** Enquanto não for aceita, o schema `legado` fica no banco |
-> | 4 | **Apagar o IPM de teste** `250d8ee1-c167-4604-8cdf-2bd5a62d8422` — criado ao conferir as telas, é o que faz o banco ter 129 processos e não 128. É também a única linha que `99_conferencia.sql` ainda acusa | §8.9, item 4 | não |
-> | 5 | **Remover o schema `legado`** — só depois de 1 a 4 | §8.5, passo 8 do roteiro | não |
-> | 6 | **Resolver os 3 enquadramentos de art. 29** (SR 2 e SR 5) pela tela, no seletor de analogia | §8.5, "A pendência que sobra" | não |
+> | 1 | **Retestar a mensagem ao alterar Recebimento depois de prorrogar.** O backend agora valida antes de qualquer escrita; deve aparecer a frase de domínio, nunca o fallback de banco | §8.11 e §8.13 | **Sim** para validar esta rodada |
+> | 2 | **Editar a última prorrogação pela tela.** Testar uma data anterior e outra posterior à atual, ambas depois do prazo precedente; o motivo deve permanecer igual | §8.13 | **Sim** |
+> | 3 | **Excluir prorrogações de trás para frente.** A anterior deve virar vigente; prazo inicial e prorrogação antiga não podem ser excluídos por chamada direta | §8.13 | **Sim** |
+> | 4 | **Confirmar os 2 registros atuais e decidir se continuam como massa de teste.** Não os apague por suposição | quadro abaixo | **Sim** antes de carga real |
+> | 5 | **Percorrer as telas com o binário de produção e o console aberto (F12).** `npm run tauri build -- --no-bundle`, depois `./src-tauri/target/release/adm-p6-tauri` | `CONFERENCIA-DE-TELA.md`; §7.5 | **Sim** antes do uso real |
+> | 6 | **Criar uma carta precatória de ponta a ponta** | `CONFERENCIA-DE-TELA.md`, seção (e2); §8.10 | **Sim** |
+> | 7 | Para repetir a conferência dos 6 processos históricos, **restaurar o backup em banco descartável** ou reimportar os dados | §8.5 e §7.6 | não |
+> | 8 | **Remover o schema `legado`** somente depois da conferência histórica que ainda se desejar fazer | §8.5, passo 8 | não |
 >
-> Feitos os seis, **a migração está concluída** e o trabalho seguinte é manutenção normal:
+> Feitos os oito, **a migração está concluída** e o trabalho seguinte é manutenção normal:
 > §7.3 para mudar schema, §7.4 para acrescentar catálogo.
 >
 > ### O estado do banco agora, para você reconhecer o que vê
 >
-> | | Esperado hoje | Depois do passo 4 |
-> |---|---:|---:|
-> | Processos | 129 | **128** |
-> | Envolvidos | 194 | **193** |
-> | Prazos | 142 | **141** |
-> | Designações | 180 | 178 |
-> | Papéis de processo | 5 | 5 |
+> | | Total |
+> |---|---:|
+> | Processos/procedimentos | **2 ativos · 0 inativos** |
+> | Envolvidos · prazos · designações | **3 · 2 · 2** |
+> | Pessoas · andamentos · anexos | **2 · 0 · 0** |
+> | Militares | **235** |
+> | Usuários | **7** |
+> | Apuratórios · unidades · tipos de documento | **10 · 11 · 3** |
+> | Auditorias | **22** — 15 preservadas + 4 de processos + 3 de prazos |
 >
-> A diferença é inteira do IPM de teste. `99_conferencia.sql` acusa exatamente **uma**
-> linha — "envolvido novo sem origem no legado | 1" — e some quando ele for apagado.
+> Essas contagens foram consultadas diretamente no PostgreSQL em 25/08/2026, somente com
+> `SELECT`. Os 2 prazos atuais são os iniciais; não havia prorrogação persistida no instante
+> da consulta, embora a auditoria registre as operações de teste feitas e depois desfeitas.
 >
 > ### Há backup, e ele foi testado
 >
@@ -59,7 +68,7 @@
 > Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão que
 > `adm-p6.sql` está no `.gitignore`.
 >
-> **Refaça o backup antes do passo 5.** Remover o `legado` é irreversível, e é o gabarito
+> **Refaça o backup antes do passo 8.** Remover o `legado` é irreversível, e é o gabarito
 > de tudo que a §8.5 conferiu.
 >
 > ### Antes de tocar em qualquer coisa, leia
@@ -77,9 +86,9 @@
 > conferência) está em **§8.5, "O roteiro, do zero"**. Ele foi testado de ponta a ponta e
 > não edita uma linha do dump.
 >
-> ⚠ **Aquele roteiro apaga o que foi digitado pelo app.** Enquanto só houver o IPM de
-> teste, não custa nada; assim que a Seção lançar processo de verdade, ele deixa de ser
-> uma opção e correção de importação passa a ser incremental.
+> ⚠ **Aquele roteiro apaga o que foi digitado pelo app.** Hoje há 2 registros de teste;
+> confirme a natureza deles antes de qualquer limpeza. Assim que a Seção lançar processo
+> de verdade, recriar o banco deixa de ser opção e toda correção passa a ser incremental.
 
 | | |
 |---|---|
@@ -96,16 +105,16 @@
 | Migrations | 7 (eram 32) |
 | Tabelas · FKs · CHECKs · EXCLUDEs · triggers | 43 · 55 · 25 · 2 · 2 |
 | Catálogos administráveis | 25 |
-| Comandos Tauri | 76 (eram 146) |
-| Backend Rust | 7.134 linhas (eram 9.194) |
-| Testes de integração | **92**, em 6.215 linhas (eram 0) |
-| Frontend | 5.484 linhas em 16 arquivos (era 1 arquivo de 2.124) |
+| Comandos Tauri | **78** (eram 146) |
+| Backend Rust | 7.463 linhas (eram 9.194) |
+| Testes de integração | **96** (eram 0) |
+| Frontend | 8.191 linhas em 17 arquivos TS/CSS (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Comandos registrados que nenhuma tela chama | 15 — capacidade sem entrada de UI, ver §9 |
 | Chamadas fora do cliente tipado | **0** (eram 118) |
 | Scripts de importação | 10 arquivos, 1.428 linhas de SQL |
-| **Dados de produção no banco** | **128 processos · 193 envolvidos · 235 militares · 123 enquadramentos** — o que a importação trouxe |
-| No banco **agora** | 129 processos · 194 envolvidos: há **um IPM de teste** a apagar (passo 4 do quadro acima) |
+| **Dados históricos conferidos** | 128 processos · 193 envolvidos · 123 enquadramentos — preservados no backup e reproduzíveis pela importação |
+| No banco **agora** | **2 processos ativos · 3 envolvidos · 2 prazos iniciais · 235 militares** — massa criada após a limpeza autorizada (§8.11) |
 
 ---
 
@@ -169,6 +178,11 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 31 | Quais campos do formulário cada apuratório usa | **Atributo por apuratório, não sigla no código.** `permite_julgamento` e `permite_punicao` em CD, CJ, PAD, PADE e PADS; `permite_remessa_comissao` em CD, PAD e CJ. O dado do legado confirma: `data_julgamento` só aparece em CD, PAD e PADS, e em zero procedimento. A carga inicial da 0007 é por sigla — carga única de valor administrável, como `prazo_base_dias` (decisão 23); o que o princípio 2 proíbe é o **código** decidir por nome em tempo de execução. |
 | 32 | O escrivão do IPM e o escrivão de PAD/CD/CJ são o mesmo papel? | **Não, e voltaram a ser dois.** O legado já os separava em `escrivao_id` e `escrivao_processo_id`; a importação mapeou os dois para um só 'Escrivão' (`01_catalogos.sql`, `map_papeis`) — simplificação de script, não decisão de domínio. A 0007 recria "Escrivão de Processo" e migra as 4 designações de CD/CJ/PAD, deixando as 24 do IPM onde estavam. O corte é limpo no dump: nenhum processo usou as duas colunas. |
 | 33 | Listar todos os documentos iniciadores, independentemente do apuratório | **Não.** A FK composta `(apuratorio_id, documento_iniciador_id)` exige que o par esteja cadastrado, e hoje cada apuratório tem um só habilitado — oferecer os três faria o salvamento falhar com erro de FK. Quem precisar de outro documento o habilita em *Catálogos → Configuração de apuratórios*, que é onde essa decisão mora. |
+| 34 | O usuário informa dias ou o novo vencimento ao prorrogar? | **O novo vencimento.** `dias` continua persistido porque alimenta a coluna gerada, mas é derivado no backend: `nova_data_vencimento - vencimento_atual`. A tela não faz essa aritmética. |
+| 35 | Alterar o Recebimento deve alterar o prazo inicial? | **Sim, enquanto não houver prorrogação.** `data_recebimento` e `processo_prazos.ordem = 0` representam o mesmo fato: criar, mudar ou limpar um sincroniza o outro. Depois da primeira prorrogação, a cadeia vira histórico e o Recebimento não pode mais mudar nem ser removido. |
+| 36 | Qual prorrogação pode ser corrigida? | **Somente a última.** Editar uma antiga reescreveria `data_inicio`/`dias` das posteriores. A última pode ser antecipada ou postergada, mas o novo vencimento deve continuar estritamente depois do prazo precedente. Só a data muda; motivo e autorização são preservados. |
+| 37 | Qual prorrogação pode ser excluída? | **Somente a última, por exclusão física auditada.** Para chegar a uma antiga, excluem-se as mais recentes de trás para frente. A maior `ordem` restante volta a ser vigente automaticamente; prazo inicial nunca é excluído por esse fluxo. |
+| 38 | Que erro de banco pode chegar à tela? | **Nenhum detalhe técnico.** Unicidades conhecidas têm mensagens específicas; todo erro SQL desconhecido recebe fallback seguro e é logado no backend. Regras previsíveis devem ser validadas antes da escrita para retornar mensagem de domínio, como no bloqueio do Recebimento após prorrogação. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -363,7 +377,7 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
 `commit`, não no `insert`.** São as únicas triggers do schema; acrescentar outra exige
 justificar por que não cabe em constraint.
 
-### 5.5 Backend Rust — 11 módulos, 76 comandos
+### 5.5 Backend Rust — 11 módulos, 78 comandos
 
 | Módulo | Papel |
 |---|---|
@@ -372,7 +386,7 @@ justificar por que não cabe em constraint.
 | `legal_catalogs` | **7 comandos genéricos** sobre o registro `domain::CATALOGOS` (25 catálogos). Nome de tabela/coluna vem sempre do registro, nunca da requisição |
 | `apuratorio_config` | 5 comandos que cadastram `apuratorio_documentos_iniciadores` e `apuratorio_papeis` — sem eles nenhum processo pode existir. `apuratorio_config_get` é também **a fonte dos atributos de comportamento** que o formulário de processo consulta, e não o registro de catálogos (§8.10) |
 | `proceedings` | uma tabela só; `tipo_to_table()` eliminado. Validações leem atributos semânticos |
-| `deadlines` | `ordem` (0 = inicial); dias vêm de `COALESCE(adi.prazo_base_dias, a.prazo_base_dias)` |
+| `deadlines` | `ordem` (0 = inicial); prazo base vem da configuração; adicionar/editar recebe vencimento e deriva `dias`; somente a última prorrogação pode ser editada/excluída |
 | `evidence` | 5 tabelas de enquadramento → 3; esfera penal escolhida no vínculo |
 | `movements` | tabela relacional com **autor** e tipo do catálogo; `cancelado_em` no lugar de booleano |
 | `audit` | `alteracoes JSONB` registra o *diff* das mudanças de configuração |
@@ -386,20 +400,20 @@ justificar por que não cabe em constraint.
 
 ```
 src/
-  api.ts            270   cliente tipado: mapa `Commands` com os 76 comandos
-  types.ts          882   interfaces derivadas de src-tauri/src/*/domain.rs
-  dom.ts            186   escape, tabela, paginação, entrega de arquivo
-  main.ts           279   shell, sessão, menu e roteamento — e nada mais
-  styles.css              a folha única; ver "Listagem densa" e `.crud-form`
+  api.ts            273   cliente tipado: mapa `Commands` com os 78 comandos
+  types.ts          891   interfaces derivadas de src-tauri/src/*/domain.rs
+  dom.ts            242   escape, tabela, paginação, entrega de arquivo
+  main.ts           356   shell, sessão, menu e roteamento — e nada mais
+  styles.css       2338   a folha única; ver "Listagem densa" e `.crud-form`
   telas/
-    processo.ts    1011   lista, formulário completo e detalhe — o maior do
+    processo.ts    1184   lista, formulário completo e detalhe — o maior do
                           frontend: os campos condicionais são oito blocos
-                          dirigidos pela configuração do apuratório (§8.10)
+                          dirigidos pela configuração; prazos ficam no detalhe
     indicios.ts     467   enquadramento por envolvido, com o seletor de analogia
-    catalogos.ts    417   os 25 catálogos, gerada de legal_catalogs_definitions
-    usuarios.ts     381   lista paginada, formulário (militar + conta) e detalhe
+    catalogos.ts    442   os 25 catálogos, gerada de legal_catalogs_definitions
+    usuarios.ts     403   lista paginada, formulário (militar + conta) e detalhe
     apuratorio.ts   336   configuração de documentos iniciadores e papéis
-    mapas.ts        300   mapa do período e mapas salvos
+    mapas.ts        304   mapa do período e mapas salvos
     estatisticas.ts 287   /estatisticas/processos e /stats/procedimentos
     auditoria.ts    182   lista com filtros e o diff de `alteracoes`
     encarregados.ts 163   matriz militar × apuratório
@@ -409,7 +423,7 @@ src/
 ```
 
 **Não sobrou chamada não tipada.** `grep -rn "invoke" src/ --include=*.ts` só
-acha `api.ts`. O `main.ts` caiu de 1.484 para 272 linhas: saíram o `call()`
+acha `api.ts`. O `main.ts` caiu de 1.484 para 356 linhas: saíram o `call()`
 legado, o renderizador genérico (`tableFrom`, `crudConfigs`, `renderCrudForm`,
 `renderDetail`, `exportBar`) e as sete telas que viviam ali.
 
@@ -433,7 +447,7 @@ catorze campos com sigla no nome no detalhe do usuário
 
 1. **As chaves de argumento do Tauri v2 são camelCase.** Um parâmetro
    `processo_id` no Rust chega como `processoId` no JS, salvo se o comando
-   declarar `rename_all = "snake_case"` — e nenhum dos 75 declara.
+   declarar `rename_all = "snake_case"` — e nenhum dos 78 declara.
    Atenção: isso vale para os **argumentos do comando**, não para os campos de
    um struct de request — dentro de `{ request: {...} }` os campos continuam em
    snake_case, porque ali quem desserializa é o serde.
@@ -492,7 +506,7 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 92 testes
+### 5.7 Rede de proteção — 96 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -502,16 +516,16 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `schema_integrity.sql` + `.rs` | 42 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
 | `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
-| `proceedings_repository.rs` | **18 testes** — criação completa, prazo inicial vindo da configuração, edição, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
+| `proceedings_repository.rs` | **20 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
 | `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
-| `deadlines_repository.rs` | **3 testes** — `dias_base` com e sem override; prorrogação encostando no vencimento; motivo obrigatório |
+| `deadlines_repository.rs` | **4 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação |
 | `maps_reports_repository.rs` | **10 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
 | `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
 | `audit_repository.rs` | **7 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
 | `legal_catalogs_repository.rs` | **10 testes** — os 25 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
-| `commands_ipc.rs` | **7 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, as duas convenções de argumento, o envelope `ApiResponse` e a lista de opções de militar |
-| `sql_prepare.rs` | **2 testes** — as 88 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
+| `commands_ipc.rs` | **8 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções e auditoria da edição/exclusão de prorrogação |
+| `sql_prepare.rs` | **2 testes** — as 92 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
 | `importacao.rs` | **3 testes** — as oito etapas de `importacao/` rodam de verdade, na ordem, sobre um recorte do dump (`tests/fixtures/legado_amostra.sql`, 26 dos 128 processos, as 10 espécies). As contagens são comparadas com o próprio recorte, não com número mágico; o que fica fixado são as **decisões** — o colapso das trocas do mesmo dia, o motivo suprido, a solução replicada e o art. 29 que fica de fora. O terceiro roda o relatório de conferência da amostra e cobra **0 divergências** |
 
 ---
@@ -597,7 +611,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 92 testes, bancos descartáveis
+cargo test                           # 96 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -737,7 +751,7 @@ usuários, mapas, estatísticas (as duas), auditoria, encarregados, relatório a
 
 | Sintoma | Causa provável |
 |---|---|
-| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 76 comandos passam |
+| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 78 comandos passam |
 | Uma tela abre **sem estilo** | `style-src`. Em produção o Vite emite `<link>`; em dev injeta `<style>`, e é por isso que existe `devCsp` |
 | As **barras** dos painéis de contagem aparecem sem largura | `aplicarBarras()` não rodou, ou voltou um `style=""` no markup (§10) |
 
@@ -879,14 +893,15 @@ docker compose exec -T postgres psql -U adm_p6_user -d postgres \
 
 ## 8. O caminho percorrido, e o que falta
 
-As subseções estão na ordem em que foram executadas. **8.1 a 8.10 estão concluídas** e
+As subseções estão na ordem em que foram executadas. **8.1 a 8.13 estão concluídas** e
 ficam aqui porque registram *por que* cada coisa é como é — reabrir uma delas sem ler o
 registro costuma refazer trabalho já feito. **8.8 é o que foi deliberadamente descartado.**
 
-O que falta é **conferência de tela**: a amostra (fim da 8.5), a CSP (§7.5) e os campos por
-apuratório (§8.10). As duas últimas rodadas — **8.9** e **8.10** — nasceram justamente
-dessa conferência, e cada uma achou código quebrado que nenhum teste alcançava. É o melhor
-argumento disponível para fazê-la antes de liberar o app.
+O que falta é **conferência de tela**: a amostra (fim da 8.5), a CSP (§7.5), os campos por
+apuratório (§8.10) e os últimos estados do CRUD de prazo (§8.13). As rodadas 8.9 a 8.13
+nasceram justamente de testes manuais e encontraram comportamento que a cobertura anterior
+não alcançava. É o melhor argumento disponível para fazer a conferência antes de liberar o
+app.
 
 | | | |
 |---|---|---|
@@ -900,6 +915,9 @@ argumento disponível para fazê-la antes de liberar o app.
 | 8.8 | O que NÃO está planejado | — registro |
 | 8.9 | O que a conferência de tela achou de código | ✅ concluída |
 | 8.10 | Campos por apuratório, e a reforma do formulário e da listagem | ✅ concluída |
+| 8.11 | Mensagens amigáveis, datas opcionais e sincronização do prazo inicial | ✅ concluída |
+| 8.12 | Prorrogação informada pela nova data de vencimento | ✅ concluída |
+| 8.13 | Edição/exclusão da última prorrogação e validação antecipada do Recebimento | ✅ concluída |
 
 ### 8.1 ~~Terminar o frontend~~ — **CONCLUÍDO**
 
@@ -937,17 +955,20 @@ roda com o default, sem erro nenhum —, enquanto **campo de request faltando vi
 IPC**, que no frontend cai no `catch` do `call()`. Por isso o primeiro tipo de defeito
 sobreviveu tanto tempo no `main.ts` legado.
 
-**Ainda sem teste:** `apuratorio_config` tem 3, `users` tem 1 e `auth` tem 1 — cobrem o
-caminho feliz, não os limites. E a cobertura de IPC é de amostra: seis comandos dos 75.
+**Estado atual:** todos os módulos de repositório têm integração sobre PostgreSQL
+descartável; os totais por arquivo estão na §5.7. A cobertura de IPC continua
+deliberadamente representativa, não exaustiva: 9 dos 78 comandos são chamados pelo nome e
+JSON reais para travar guards, camelCase/snake_case, envelope, formato de resposta e o
+fluxo transacional de prorrogação. Acrescentar comando de formato novo pede um caso aqui.
 
 ### 8.3 ~~`cargo sqlx prepare`~~ — **RESOLVIDO POR OUTRO CAMINHO**
 
 O objetivo era "erro de SQL aparece no build, e não em runtime". O caminho previsto —
 migrar as consultas estáticas para `sqlx::query!` — **não sobrevive ao código**: alcança
-**9 das 128 consultas**.
+**9 das 132 consultas**.
 
-O obstáculo não é o SQL dinâmico que este item antecipava. É o **tipo do parâmetro**: 79
-das 88 consultas literais ligam um id com `$n::uuid`, e a macro então exige `uuid::Uuid`
+O obstáculo não é o SQL dinâmico que este item antecipava. É o **tipo do parâmetro**: 83
+das 92 consultas literais ligam um id com `$n::uuid`, e a macro então exige `uuid::Uuid`
 onde a aplicação carrega `String`. Os ids chegam do frontend como texto JSON, atravessam os
 structs de request e as assinaturas dos repositórios assim, e as fixtures os escrevem como
 literal. Não há como contornar pelo SQL: `WHERE id::text = $1` perde o índice da chave
@@ -956,11 +977,11 @@ primária, e o sqlx não aceita anotação de tipo em parâmetro de entrada.
 Sem macros, `cargo sqlx prepare` responde `no queries found` e cria um `.sqlx/` vazio — não
 há o que versionar.
 
-**O que foi feito no lugar**, em `tests/sql_prepare.rs`, alcançando as 128:
+**O que foi feito no lugar**, em `tests/sql_prepare.rs`, alcançando as 132:
 
 | | |
 |---|---|
-| As **88 literais** | são extraídas do próprio código-fonte e submetidas ao `PREPARE` do PostgreSQL. É a mesma análise que a macro faria — coluna, tabela, tipo de parâmetro — no `cargo test` em vez de no `cargo build`. Erro aponta arquivo, linha e a mensagem do banco |
+| As **92 literais** | são extraídas do próprio código-fonte e submetidas ao `PREPARE` do PostgreSQL. É a mesma análise que a macro faria — coluna, tabela, tipo de parâmetro — no `cargo test` em vez de no `cargo build`. Erro aponta arquivo, linha e a mensagem do banco |
 | As **40 dinâmicas** | nem a macro nem o `PREPARE` alcançam: o SQL não existe até rodar. O teste cobra que cada uma tenha um arquivo de teste que a execute, e confere a lista **nos dois sentidos** contra o mesmo extrator |
 
 Isso achou sete lacunas reais, agora cobertas: mapas salvos e cinco leituras de `users`.
@@ -1361,7 +1382,7 @@ object-src 'none'; base-uri 'self'; frame-src 'none'; form-action 'none'
 ```
 
 **`connect-src` precisa de `ipc: http://ipc.localhost`.** É por aí que todo o IPC do Tauri
-v2 passa: sem isso não é uma tela que quebra, são os 76 comandos de uma vez.
+v2 passa: sem isso não é uma tela que quebra, são os 78 comandos de uma vez.
 
 **`devCsp` existe porque desenvolvimento e produção carregam o CSS de formas diferentes.**
 Em dev o Vite injeta o `styles.css` por `<style>` via JS (e o overlay de erro faz o mesmo),
@@ -1489,7 +1510,7 @@ Registrado para que ninguém gaste tempo redescobrindo que a decisão já foi to
 
 | Ideia | Por que não |
 |---|---|
-| Migrar os ids de `String` para `uuid::Uuid` e usar `sqlx::query!` | Ganha verificação em tempo de compilação; custa um refactor cruzado (structs de request, assinaturas de repositório, fixtures) e um tratamento novo para UUID malformado vindo da tela. O objetivo — "erro de SQL não chega em runtime" — **já está atendido** por `tests/sql_prepare.rs`, que alcança as 128 consultas contra as 9 que a macro alcançaria. Ver §8.3 |
+| Migrar os ids de `String` para `uuid::Uuid` e usar `sqlx::query!` | Ganha verificação em tempo de compilação; custa um refactor cruzado (structs de request, assinaturas de repositório, fixtures) e um tratamento novo para UUID malformado vindo da tela. O objetivo — "erro de SQL não chega em runtime" — **já está atendido** por `tests/sql_prepare.rs`, que alcança as 132 consultas contra as 9 que a macro alcançaria. Ver §8.3 |
 | Gerar PDF no Rust | O relatório anual é página HTML + impressão do sistema. Nenhum crate de PDF entrou de propósito: o layout fica no frontend, onde é fácil ajustar. Ver §8.1 |
 | Reimplementar os 9 comandos antigos de `/stats/procedimentos` | Traziam a sigla no SQL. Foram substituídos por painéis genéricos com filtro de ano + apuratórios. Ver §8.1 |
 | Um campo de "situação" editável no processo | Decisão 25: a situação é derivada do fato registrado. Um estado marcado à mão é um estado que alguém esquece de atualizar |
@@ -1775,6 +1796,230 @@ Depois, aplicada em produção pelo ciclo da §7.3, com `cargo test` verde antes
 
 ---
 
+### 8.11 ~~Mensagens, seletor de datas e sincronização do prazo~~ — **CONCLUÍDA**
+
+Rodada de manutenção feita depois dos primeiros testes manuais do CRUD:
+
+- erros de banco não atravessam mais o IPC com SQL, texto do PostgreSQL ou constraint
+  desconhecida. As duas unicidades de numeração têm mensagens próprias; os demais erros
+  recebem texto seguro, e o detalhe técnico fica no terminal do backend;
+- campos opcionais de data ganharam botão **Limpar**, e todo `input[type=date]` do
+  formulário perde o foco após a escolha para fechar o calendário nativo do WebView;
+- editar `data_recebimento` agora sincroniza o prazo inicial: cria quando a data passa a
+  existir, move a ordem zero preservando os dias concedidos, e remove quando a data é
+  limpa. A coluna gerada recalcula o vencimento;
+- depois de existir prorrogação, alterar ou remover o recebimento é bloqueado com mensagem
+  de domínio. A cadeia é histórico e não é deslocada pelo formulário do processo.
+
+#### Como os erros chegam ao usuário
+
+`AppError::Database` conserva o `sqlx::Error` completo somente no backend. `response.rs`
+escreve esse detalhe no terminal e entrega pelo `ApiResponse` apenas `AppError::message()`.
+O mapeamento público fica centralizado em `error.rs`:
+
+| Caso | Mensagem pública |
+|---|---|
+| `uq_processo_numero_documento` | “Já existe um processo ou procedimento ativo com este número de documento para a mesma unidade, ano, apuratório e documento iniciador.” |
+| `uq_processo_numero_controle` | “Já existe um processo ou procedimento ativo com este número de controle para a mesma unidade, ano e apuratório.” |
+| constraint/erro SQL ainda não mapeado | “Não foi possível concluir a operação no banco de dados. Tente novamente e, se o problema persistir, procure o suporte.” |
+| regra conhecida antes da escrita | texto específico de `AppError::Domain`, sem o prefixo técnico “Regra de negócio violada” |
+
+Ao acrescentar uma unicidade nova, há duas escolhas deliberadas: validar no domínio quando
+a regra depender do estado do fluxo, ou mapear o nome estável da constraint quando o banco
+for a proteção correta contra concorrência. Nunca usar `error.to_string()` como texto de
+tela.
+
+#### Comportamento dos campos de data
+
+`processo.ts::campoData` é o ponto comum das datas do formulário. Instauração continua
+obrigatória; Recebimento, remessas, Julgamento e Conclusão podem ser limpos quando a regra
+do apuratório permite o campo. O botão **Limpar** zera o `input`, dispara `input`/`change`
+e fica desabilitado quando já não há valor. Todo seletor nativo perde o foco no `change`,
+fechando o calendário no WebView sem exigir `Esc`. A mesma perda de foco é aplicada aos
+seletores usados para incluir e editar prorrogação.
+
+#### Uma fonte de verdade para Recebimento e prazo inicial
+
+`deadlines::repository::sync_initial` mantém `data_recebimento` e a linha de prazo de
+`ordem = 0` sincronizadas:
+
+| Estado anterior → novo | Efeito |
+|---|---|
+| sem Recebimento → com data | calcula o prazo base pela configuração e cria a ordem 0 |
+| data A → data B, sem prorrogação | preserva `dias`, move `data_inicio`; a coluna gerada move o vencimento |
+| com data → vazio, sem prorrogação | remove a ordem 0 |
+| qualquer mudança, com `ordem > 0` | recusa; a cadeia histórica permanece intacta |
+
+O bloqueio depois de prorrogar é verificado duas vezes: no início de
+`proceedings::repository::save`, antes de qualquer `UPDATE`, e novamente em `sync_initial`
+como defesa interna. A primeira verificação é essencial para que outra constraint não
+falhe antes e substitua a mensagem de domínio pelo fallback genérico.
+
+Dois testes novos elevaram a suíte de 92 para **94** e cobrem a sincronização completa e o
+bloqueio do histórico. O teste de numeração passou a exigir o texto público e a recusar
+qualquer vazamento de `duplicate` ou `uq_processo_*`.
+
+#### Limpeza autorizada do banco em 25/08/2026
+
+O responsável confirmou que os registros eram de teste e que havia backup. Foram removidos
+em uma transação: 130 processos/procedimentos, 196 envolvidos, 182 designações, 143 prazos,
+64 andamentos, 107 pessoas, 2 anexos e as 12 auditorias processuais. As quatro tabelas de
+enquadramento foram esvaziadas pelo `ON DELETE CASCADE`, e as 3 cartas precatórias pelo
+`CASCADE` do processo.
+
+Conferido depois do commit: todas as 13 contagens transacionais ficaram em zero, enquanto
+235 militares, 7 usuários, 10 apuratórios, 11 unidades, 3 tipos de documento e 15
+auditorias não processuais permaneceram exatamente como antes. Não houve migration nem
+mudança de schema; para recuperar os fatos removidos, restaurar o backup ou repetir a
+importação da §8.5.
+
+---
+
+### 8.12 ~~Prorrogação informada pelo novo vencimento~~ — **CONCLUÍDA**
+
+O formulário deixou de pedir uma quantidade abstrata de dias e passou a pedir a **nova
+data de vencimento**. O contrato `AddExtensionRequest` acompanha a intenção: recebe
+`nova_data_vencimento`, não `dias`.
+
+Contrato que atravessa o IPC (campos internos do request continuam em `snake_case`):
+
+| Campo | Regra |
+|---|---|
+| `processo_id` | processo/procedimento que receberá a prorrogação |
+| `nova_data_vencimento` | obrigatória, ISO `YYYY-MM-DD`, estritamente posterior ao vencimento vigente |
+| `motivo` | obrigatório e não pode conter apenas espaços |
+| `documento_autorizador_id`, `numero_documento`, `data_documento`, `autoridade_id` | metadados opcionais preservados pelo modelo, embora o formulário compacto atual envie só data e motivo |
+
+O schema não mudou. O repositório lê o vencimento vigente — que continua sendo também o
+início da nova prorrogação, pela decisão 17 — e deriva:
+
+```text
+dias = nova_data_vencimento - vencimento_atual
+```
+
+É esse número que entra em `processo_prazos.dias`; a coluna gerada
+`data_vencimento = data_inicio + dias` precisa então reproduzir exatamente o dia escolhido.
+A nova data deve ser estritamente posterior ao prazo vigente. Não precisa ser posterior a
+hoje: lançamento histórico continua permitido, como já era quando a tela recebia dias.
+
+A inclusão abre transação administrativa, bloqueia a linha vigente com `FOR UPDATE`, usa
+`ordem_atual + 1`, grava `data_inicio = vencimento_atual` e registra auditoria `CREATE` em
+`processo_prazos`. O bloqueio serializa duas tentativas concorrentes para que ambas não
+calculem a mesma ordem. O `EXCLUDE` do schema continua sendo a proteção final contra
+sobreposição.
+
+Na tela, o campo nativo de data usa como mínimo visual o dia seguinte ao vencimento atual,
+fecha depois da escolha e mostra a data vigente ao lado da regra. O motivo continua
+obrigatório, e a tabela histórica continua exibindo os dias derivados.
+
+Os testes dessa etapa em `deadlines_repository.rs` cobrem datas consecutivas, conversão exata
+em 15 e 10 dias, lançamento histórico, data igual/anterior recusada com mensagem legível,
+ausência de prazo inicial e motivo obrigatório.
+
+---
+
+### 8.13 ~~Edição e exclusão da última prorrogação~~ — **CONCLUÍDA**
+
+A cadeia de prazos agora pode ser corrigida de trás para frente. Somente a prorrogação
+vigente — a linha de maior `ordem`, nunca a inicial — pode ser editada ou excluída. Essa
+mesma regra existe na tela e no repositório; portanto, uma chamada IPC direta também não
+consegue reescrever o meio do histórico. Para alcançar uma prorrogação antiga é preciso
+excluir antes todas as mais recentes.
+
+Na edição, apenas o vencimento muda. `data_inicio`, motivo e documento autorizador são
+preservados, e `dias` volta a ser derivado da diferença entre o novo vencimento e o prazo
+anterior. A nova data pode antecipar ou postergar a que estava gravada, mas precisa ser
+estritamente posterior a `data_inicio`. Na exclusão, a vigência volta automaticamente para
+a maior ordem restante; não há coluna de estado nem renumeração a manter.
+
+#### Invariantes da cadeia
+
+| Operação | Permitido | Recusado |
+|---|---|---|
+| incluir | processo com prazo inicial; nova data depois do vencimento vigente | processo sem ordem 0, data igual/anterior, motivo vazio |
+| editar | somente maior `ordem`, desde que seja `> 0`; data depois de seu `data_inicio` | prazo inicial, prorrogação antiga, data igual/anterior ao prazo precedente |
+| excluir | somente maior `ordem`, desde que seja `> 0` | prazo inicial ou qualquer prorrogação com outra mais recente |
+
+Não se faz *cascade update* das prorrogações seguintes. Essa alternativa foi descartada
+porque mudaria silenciosamente a duração e o início de fatos históricos já concedidos. A
+regra “somente a última” torna a correção reversível e previsível: desfaça de trás para
+frente, corrija a linha alcançada e, se necessário, registre novamente as posteriores.
+
+Editar não significa “prorrogar de novo”. Por isso a comparação é com `data_inicio` da
+linha editada — o vencimento precedente —, não com o vencimento atualmente salvo. Isso
+permite corrigir 20/09 para 18/09 ou 25/09, desde que o prazo anterior tenha vencido antes
+da nova escolha.
+
+Os comandos `deadlines_update_extension` e `deadlines_delete_extension` exigem
+administrador, executam com bloqueio transacional da última linha e registram `UPDATE` e
+`DELETE` em `auditoria`. A tela concentra as duas ações na linha vigente, usa o mesmo
+seletor nativo de data e pede confirmação antes de excluir.
+
+#### Contratos e fluxo implementados
+
+| Camada | Inclusão | Edição | Exclusão |
+|---|---|---|---|
+| comando Tauri | `deadlines_add_extension` | `deadlines_update_extension` | `deadlines_delete_extension` |
+| argumentos externos | `{ request }` | `{ request }` | `{ processoId, prazoId }` — camelCase por serem argumentos do comando |
+| request interno | `AddExtensionRequest` | `UpdateExtensionRequest { processo_id, prazo_id, nova_data_vencimento }` | dois ids simples |
+| retorno | id `String` criado | `true` | `true` |
+| auditoria | `CREATE` | `UPDATE` | `DELETE` |
+
+Os três comandos exigem administrador e executam regra + auditoria na mesma transação. O
+repositório seleciona a maior ordem com `FOR UPDATE`; edição e exclusão comparam o `id`
+solicitado com essa linha bloqueada antes de escrever. Os ids do processo e do prazo são
+usados juntos no `UPDATE`/`DELETE`, impedindo operar uma linha que pertença a outro
+processo.
+
+No frontend, a tabela de prazos mostra a coluna **Ações** apenas para quem pode escrever.
+Somente a linha vigente que também seja prorrogação recebe **Editar data** e **Excluir**;
+as linhas antigas continuam visíveis, mas sem ação. **Editar data** esconde temporariamente
+o formulário de nova prorrogação e abre um formulário contextual preenchido com a data
+atual, `min = data_inicio + 1 dia`, ajuda textual e **Cancelar**. O motivo não aparece nesse
+formulário porque não faz parte da correção decidida. **Excluir** confirma ordem, data e o
+efeito de devolver a vigência ao prazo anterior. Depois do sucesso, o detalhe inteiro é
+recarregado, inclusive tabela e vencimento vigente.
+
+A validação que impede alterar `data_recebimento` depois da primeira prorrogação passou
+para antes de qualquer escrita do processo. Assim, outra constraint não pode mascará-la
+com o fallback genérico de banco; o usuário recebe diretamente: “A data de recebimento
+não pode ser alterada porque este processo já possui prorrogação de prazo.”
+
+Mensagens de domínio relevantes para chamadas fora da interface:
+
+- “Somente a última prorrogação pode ser editada.”
+- “Somente a última prorrogação pode ser excluída. Exclua primeiro as prorrogações mais
+  recentes.”
+- “O prazo inicial não pode ser editado/excluído como prorrogação.”
+- “A nova data de vencimento deve ser posterior ao prazo anterior (DD/MM/AAAA).”
+
+Essas mensagens são parte do comportamento público. Não trocar por erro genérico nem
+confiar apenas no `min` do HTML: a interface orienta, mas o repositório decide.
+
+Os testes cobrem antecipação/postergação, limite no prazo anterior, tentativa sobre linha
+antiga ou inicial, exclusão regressiva, retorno da vigência, contrato IPC e as duas
+operações de auditoria. Não houve mudança de schema nem migration.
+
+#### Cobertura e estado de validação
+
+- `deadlines_repository::somente_ultima_prorrogacao_pode_ser_editada_ou_excluida` cria duas
+  prorrogações, recusa a antiga, antecipa e posterga a última, confere `dias` e motivo,
+  recusa o limite e exclui de trás para frente até o prazo inicial.
+- `commands_ipc::editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria` chama os nomes e
+  formatos usados pelo frontend, confere o vencimento devolvido pela listagem e cobra as
+  auditorias `UPDATE` e `DELETE`.
+- `proceedings_repository::recebimento_nao_muda_depois_de_prorrogacao` provoca também uma
+  colisão de numeração. A mensagem de Recebimento precisa vencer essa colisão, provando que
+  a validação ocorre antes do `UPDATE` e não contém “banco de dados”.
+- Rodada automática final: **96 testes Rust aprovados**, `cargo fmt --check`,
+  `git diff --check` e `npm run build` aprovados. O único aviso é um `achar` não utilizado
+  já existente em `tests/users_repository.rs`; não afeta execução.
+- Inclusão pela nova data já foi confirmada manualmente pelo responsável. A edição,
+  exclusão e a nova precedência da mensagem de Recebimento ainda devem ser repetidas pela
+  tela conforme o quadro **POR ONDE RETOMAR**.
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**
@@ -1851,7 +2096,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (§5.3) |
-| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **76 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
+| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **78 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Largura calculada vai num `data-*` e é aplicada em JS. `aplicarBarras()` faz isso, chamada de `shell()` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver §8.6.2 |
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
@@ -1884,12 +2129,16 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 75 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 78 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
 | por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
 | como uma tela é montada de metadados | `src/telas/catalogos.ts` |
 | como os campos condicionais saem do dado | `src/telas/processo.ts` (cabeçalho do arquivo) |
+| como Recebimento cria/move/remove o prazo inicial | `deadlines/repository.rs::sync_initial` e `proceedings/repository.rs::save` |
+| como incluir, editar e excluir prorrogação | `deadlines/repository.rs::{add_extension, update_extension, delete_extension}`; decisões 34–37; §8.12–8.13 |
+| onde ficam as ações e os formulários de prazo | `src/telas/processo.ts::renderDetalheProcesso` |
+| como erro SQL vira mensagem pública segura | `src-tauri/src/error.rs::mensagem_banco` e `response.rs::ApiResponse::err` |
 | o roteiro da importação, etapa por etapa | seção **8.5** deste arquivo, e `src-tauri/importacao/` |
 | como cada catálogo operacional foi derivado do dump | `src-tauri/importacao/01_catalogos.sql` (comentado atributo por atributo) |
 | as duas fontes de enquadramento do legado, e por que 11 infrações estatutárias entram e 3 não | `src-tauri/importacao/08_enquadramentos_anexos.sql` (cabeçalho do bloco dos PADS) |

@@ -68,7 +68,9 @@ pub struct CalculateDeadlineResult {
 #[derive(Debug, Deserialize)]
 pub struct AddExtensionRequest {
     pub processo_id: String,
-    pub dias: i32,
+    /// Data final escolhida pelo usuário. O repositório deriva `dias` a partir
+    /// do vencimento vigente, que também é o início da nova prorrogação.
+    pub nova_data_vencimento: NaiveDate,
     pub motivo: String,
     pub documento_autorizador_id: Option<String>,
     pub numero_documento: Option<String>,
@@ -79,12 +81,18 @@ pub struct AddExtensionRequest {
 
 impl AddExtensionRequest {
     pub fn validate(&self) -> Result<(), String> {
-        if self.dias <= 0 {
-            return Err("dias de prorrogacao deve ser maior que zero".to_string());
-        }
         if self.motivo.trim().is_empty() {
             return Err("motivo e obrigatorio para prorrogacao".to_string());
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateExtensionRequest {
+    pub processo_id: String,
+    pub prazo_id: String,
+    /// Corrige o vencimento da ultima prorrogacao. O inicio permanece sendo o
+    /// vencimento anterior e `dias` e recalculado pelo repositorio.
+    pub nova_data_vencimento: NaiveDate,
 }

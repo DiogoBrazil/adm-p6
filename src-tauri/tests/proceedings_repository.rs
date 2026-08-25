@@ -9,6 +9,9 @@
 //! gerada), e as invariantes que o PostgreSQL garante — FK composta, índices
 //! únicos parciais, EXCLUDE de período e as duas constraint triggers.
 
+use adm_p6_tauri_lib::deadlines::{
+    domain::AddExtensionRequest, repository as deadlines_repository,
+};
 use adm_p6_tauri_lib::proceedings::domain::{
     CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest, PessoaRequest, ProceedingFilter,
     SaveProceedingRequest, UploadAttachmentRequest,
@@ -225,6 +228,7 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
             ordem: 1,
         }];
         req.resumo_fatos = Some("texto revisado".to_string());
+        req.data_recebimento = Some(data(2026, 1, 15));
         let mesmo = salvar(&pool, &req).await.expect("editar");
         assert_eq!(mesmo, id, "edicao preserva o id");
 
@@ -237,15 +241,106 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
             detalhe.cabecalho.resumo_fatos.as_deref(),
             Some("texto revisado")
         );
+        assert_eq!(detalhe.cabecalho.data_recebimento, Some(data(2026, 1, 15)));
 
-        // Prazo inicial é criado só na criação — reeditar não abre outro.
-        let prazos: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM processo_prazos WHERE processo_id = $1::uuid")
-                .bind(&id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
-        assert_eq!(prazos, 1);
+        // A edição move o prazo existente em vez de criar outro. Os dias
+        // originalmente concedidos permanecem, e a coluna gerada recalcula o
+        // vencimento a partir da nova data.
+        let prazos = deadlines_repository::list(&pool, &id).await.unwrap();
+        assert_eq!(prazos.len(), 1);
+        assert_eq!(prazos[0].data_inicio, data(2026, 1, 15));
+        assert_eq!(prazos[0].dias, PRAZO_APURATORIO);
+        assert_eq!(prazos[0].data_vencimento, data(2026, 2, 14));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn edicao_cria_remove_e_repara_o_prazo_inicial() {
+    util::com_banco_descartavel("proc_edita_prazo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        let id = salvar(&pool, &req).await.unwrap();
+        req.id = Some(id.clone());
+
+        // Preencher o recebimento depois do cadastro cria a ordem zero.
+        req.data_recebimento = Some(data(2026, 1, 12));
+        salvar(&pool, &req).await.expect("adicionar recebimento");
+        let prazos = deadlines_repository::list(&pool, &id).await.unwrap();
+        assert_eq!(prazos.len(), 1);
+        assert_eq!(prazos[0].data_inicio, data(2026, 1, 12));
+
+        // Mesmo com a data do cabeçalho preenchida, uma inconsistência antiga
+        // sem prazo é reparada na próxima edição.
+        sqlx::query("DELETE FROM processo_prazos WHERE processo_id = $1::uuid")
+            .bind(&id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        salvar(&pool, &req).await.expect("reparar prazo ausente");
+        assert_eq!(
+            deadlines_repository::list(&pool, &id).await.unwrap().len(),
+            1
+        );
+
+        // Limpar o recebimento remove também o prazo inicial.
+        req.data_recebimento = None;
+        salvar(&pool, &req).await.expect("limpar recebimento");
+        assert!(deadlines_repository::list(&pool, &id)
+            .await
+            .unwrap()
+            .is_empty());
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.cabecalho.data_recebimento, None);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn recebimento_nao_muda_depois_de_prorrogacao() {
+    util::com_banco_descartavel("proc_prazo_historico", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.data_recebimento = Some(data(2026, 1, 12));
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        deadlines_repository::add_extension(
+            &mut tx,
+            &AddExtensionRequest {
+                processo_id: id.clone(),
+                nova_data_vencimento: data(2026, 2, 21),
+                motivo: "diligências pendentes".to_string(),
+                documento_autorizador_id: None,
+                numero_documento: None,
+                data_documento: None,
+                autoridade_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        // Cria outro número para provar que a validação da data acontece antes
+        // do UPDATE e não é mascarada por uma constraint do banco.
+        let outro = base(&m, "002");
+        salvar(&pool, &outro).await.unwrap();
+
+        req.id = Some(id.clone());
+        req.numero_documento = "002".to_string();
+        req.data_recebimento = Some(data(2026, 1, 13));
+        let erro = salvar(&pool, &req)
+            .await
+            .expect_err("nao reescreve cadeia prorrogada");
+        assert!(erro.contains("já possui prorrogação"), "{erro}");
+        assert!(!erro.contains("banco de dados"), "{erro}");
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.cabecalho.data_recebimento, Some(data(2026, 1, 12)));
+        assert_eq!(
+            deadlines_repository::list(&pool, &id).await.unwrap().len(),
+            2
+        );
     })
     .await;
 }
@@ -503,9 +598,10 @@ async fn banco_recusa_papel_nao_previsto_para_o_apuratorio() {
         ];
         let erro = salvar(&pool, &req).await.expect_err("papel nao previsto");
         assert!(
-            erro.contains("fk_designacao_apuratorio_papel") || erro.contains("foreign key"),
-            "esperada violacao da FK composta: {erro}"
+            erro.contains("Não foi possível concluir a operação no banco de dados"),
+            "esperado erro seguro sem detalhes da FK: {erro}"
         );
+        assert!(!erro.contains("fk_designacao") && !erro.contains("foreign key"));
     })
     .await;
 }
@@ -519,10 +615,8 @@ async fn numeracao_e_unica_entre_processos_ativos() {
         let erro = salvar(&pool, &base(&m, "001"))
             .await
             .expect_err("numero repetido");
-        assert!(
-            erro.contains("uq_processo") || erro.contains("duplicate"),
-            "{erro}"
-        );
+        assert!(erro.contains("este número de documento"), "{erro}");
+        assert!(!erro.contains("uq_processo") && !erro.contains("duplicate"));
 
         // O índice é PARCIAL (`WHERE ativo`): depois do soft delete o número
         // volta a ficar livre.
@@ -546,10 +640,8 @@ async fn numeracao_e_unica_entre_processos_ativos() {
         let erro = salvar(&pool, &controle)
             .await
             .expect_err("controle colide com o numero de documento existente");
-        assert!(
-            erro.contains("uq_processo") || erro.contains("duplicate"),
-            "{erro}"
-        );
+        assert!(erro.contains("este número de controle"), "{erro}");
+        assert!(!erro.contains("uq_processo") && !erro.contains("duplicate"));
     })
     .await;
 }

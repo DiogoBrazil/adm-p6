@@ -18,6 +18,9 @@
 
 use adm_p6_tauri_lib::app_state::AppState;
 use adm_p6_tauri_lib::auth::domain::SessionUser;
+use adm_p6_tauri_lib::deadlines::domain::AddExtensionRequest;
+use adm_p6_tauri_lib::deadlines::repository as deadlines_repository;
+use chrono::NaiveDate;
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{mock_builder, mock_context, noop_assets, MockRuntime, INVOKE_KEY};
@@ -282,6 +285,106 @@ fn o_envelope_tem_ok_data_e_error() {
             json!({ "catalogo": "catalogo_que_nao_existe" }),
         );
         assert!(erro(&falha).contains("catalogo"), "{falha}");
+    });
+}
+
+#[test]
+fn editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria() {
+    com_app_e_banco("ipc_prazo_edicao", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        let (processo_id, prazo_id) = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            let inicio = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+            let processo_id: String = sqlx::query_scalar(
+                "INSERT INTO processos_procedimentos
+                     (apuratorio_id, documento_iniciador_id, numero_documento,
+                      unidade_origem_id, municipio_fato_id, natureza_fato_id,
+                      data_instauracao, data_recebimento)
+                 VALUES ((SELECT id FROM apuratorios ORDER BY id LIMIT 1),
+                         (SELECT tipo_documento_id FROM apuratorio_documentos_iniciadores ORDER BY tipo_documento_id LIMIT 1),
+                         'IPC-PRAZO-001',
+                         (SELECT id FROM unidades_pm ORDER BY id LIMIT 1),
+                         (SELECT id FROM municipios_distritos ORDER BY id LIMIT 1),
+                         (SELECT id FROM naturezas_fato ORDER BY id LIMIT 1),
+                         $1, $1)
+              RETURNING id::text",
+            )
+            .bind(inicio)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            let mut tx = pool.begin().await.unwrap();
+            deadlines_repository::create_initial(&mut tx, &processo_id, inicio, 30)
+                .await
+                .unwrap();
+            let prazo_id = deadlines_repository::add_extension(
+                &mut tx,
+                &AddExtensionRequest {
+                    processo_id: processo_id.clone(),
+                    nova_data_vencimento: NaiveDate::from_ymd_opt(2026, 2, 24).unwrap(),
+                    motivo: "teste do IPC".to_string(),
+                    documento_autorizador_id: None,
+                    numero_documento: None,
+                    data_documento: None,
+                    autoridade_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            (processo_id, prazo_id)
+        });
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "deadlines_update_extension",
+                json!({ "request": {
+                    "processo_id": processo_id,
+                    "prazo_id": prazo_id,
+                    "nova_data_vencimento": "2026-03-01"
+                } }),
+            )),
+            &json!(true)
+        );
+
+        let prazos = invocar(
+            &webview,
+            "deadlines_list",
+            json!({ "processoId": processo_id }),
+        );
+        let itens = ok(&prazos).as_array().unwrap();
+        assert_eq!(
+            itens.last().unwrap()["data_vencimento"],
+            json!("2026-03-01")
+        );
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "deadlines_delete_extension",
+                json!({ "processoId": processo_id, "prazoId": prazo_id }),
+            )),
+            &json!(true)
+        );
+
+        let operacoes: Vec<String> = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            sqlx::query_scalar(
+                "SELECT operacao FROM auditoria
+                  WHERE entidade = 'processo_prazos' AND registro_id = $1
+                  ORDER BY ocorrido_em",
+            )
+            .bind(&prazo_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        });
+        assert_eq!(operacoes, vec!["UPDATE", "DELETE"]);
     });
 }
 

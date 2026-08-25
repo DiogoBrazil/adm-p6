@@ -76,6 +76,8 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             deadlines::commands::deadlines_calculate,
             deadlines::commands::deadlines_report,
             deadlines::commands::deadlines_add_extension,
+            deadlines::commands::deadlines_update_extension,
+            deadlines::commands::deadlines_delete_extension,
             movements::commands::movements_list,
             movements::commands::movements_add,
             movements::commands::movements_remove,

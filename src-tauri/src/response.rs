@@ -25,6 +25,9 @@ where
     }
 
     pub fn err(error: AppError) -> Self {
+        if error.is_database() {
+            eprintln!("Erro interno de banco de dados: {error:?}");
+        }
         Self {
             ok: false,
             data: None,

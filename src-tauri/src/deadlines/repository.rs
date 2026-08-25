@@ -3,6 +3,7 @@ use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 
 use crate::deadlines::domain::{
     AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem, DeadlineSummary,
+    UpdateExtensionRequest,
 };
 use crate::error::AppError;
 
@@ -59,6 +60,80 @@ pub async fn create_initial(
     .await
 }
 
+/// Mantém a data de recebimento e o prazo inicial como um único fato.
+///
+/// Antes desta sincronização, a edição alterava apenas
+/// `processos_procedimentos.data_recebimento`; a linha de ordem zero continuava
+/// com a data antiga e todas as leituras de prazo exibiam o vencimento anterior.
+/// Os dias já concedidos são preservados quando só a data é corrigida. Depois
+/// que existe prorrogação, a cadeia é histórico e não pode ser reescrita pelo
+/// formulário do processo.
+pub async fn sync_initial(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    data_anterior: Option<NaiveDate>,
+    data_nova: Option<NaiveDate>,
+    apuratorio_id: &str,
+    documento_iniciador_id: &str,
+) -> Result<(), AppError> {
+    let tem_prorrogacao: bool = sqlx::query_scalar(
+        "SELECT EXISTS (
+             SELECT 1 FROM processo_prazos
+              WHERE processo_id = $1::uuid AND ordem > 0
+         )",
+    )
+    .bind(processo_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if tem_prorrogacao {
+        if data_anterior != data_nova {
+            return Err(AppError::Domain(
+                "A data de recebimento não pode ser alterada porque este processo já possui prorrogação de prazo.".to_string(),
+            ));
+        }
+        return Ok(());
+    }
+
+    let prazo_inicial: Option<NaiveDate> = sqlx::query_scalar(
+        "SELECT data_inicio FROM processo_prazos
+          WHERE processo_id = $1::uuid AND ordem = 0",
+    )
+    .bind(processo_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    match (prazo_inicial, data_nova) {
+        (Some(_), None) => {
+            sqlx::query(
+                "DELETE FROM processo_prazos
+                  WHERE processo_id = $1::uuid AND ordem = 0",
+            )
+            .bind(processo_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+        (Some(atual), Some(nova)) if atual != nova => {
+            sqlx::query(
+                "UPDATE processo_prazos
+                    SET data_inicio = $2, updated_at = now()
+                  WHERE processo_id = $1::uuid AND ordem = 0",
+            )
+            .bind(processo_id)
+            .bind(nova)
+            .execute(&mut **tx)
+            .await?;
+        }
+        (None, Some(nova)) => {
+            let (dias, _) = dias_base(&mut **tx, apuratorio_id, documento_iniciador_id).await?;
+            create_initial(tx, processo_id, nova, dias).await?;
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
 pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>, sqlx::Error> {
     sqlx::query_as::<_, DeadlineItem>(&format!(
         "SELECT p.id::text                      AS id,
@@ -93,14 +168,16 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
 /// como `[data_inicio, data_inicio + dias)`. `data_vencimento` continua sendo o
 /// último dia válido do prazo; o que o dia da troca não faz é ser ocupado duas
 /// vezes. Qualquer sobreposição real continua recusada pelo banco, então não é
-/// possível prorrogar duas vezes a partir do mesmo ponto.
+/// possível prorrogar duas vezes a partir do mesmo ponto. O usuário informa o
+/// novo vencimento; `dias` continua persistido como a diferença entre ele e o
+/// vencimento atual, preservando a coluna gerada como fonte da aritmética.
 pub async fn add_extension(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddExtensionRequest,
 ) -> Result<String, AppError> {
     let atual: Option<(i32, NaiveDate)> = sqlx::query_as(
         "SELECT ordem, data_vencimento FROM processo_prazos
-          WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1",
+          WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1 FOR UPDATE",
     )
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
@@ -108,6 +185,20 @@ pub async fn add_extension(
 
     let (ordem_atual, vencimento_atual) = atual.ok_or_else(|| {
         AppError::Domain("o processo ainda nao tem prazo inicial para prorrogar".to_string())
+    })?;
+
+    let dias = request
+        .nova_data_vencimento
+        .signed_duration_since(vencimento_atual)
+        .num_days();
+    if dias <= 0 {
+        return Err(AppError::Domain(format!(
+            "A nova data de vencimento deve ser posterior ao vencimento atual ({}).",
+            vencimento_atual.format("%d/%m/%Y")
+        )));
+    }
+    let dias = i32::try_from(dias).map_err(|_| {
+        AppError::Domain("O intervalo informado para a prorrogação é muito longo.".to_string())
     })?;
 
     sqlx::query_scalar(
@@ -120,7 +211,7 @@ pub async fn add_extension(
     .bind(&request.processo_id)
     .bind(ordem_atual + 1)
     .bind(vencimento_atual)
-    .bind(request.dias)
+    .bind(dias)
     .bind(request.motivo.trim())
     .bind(request.documento_autorizador_id.as_deref())
     .bind(request.numero_documento.as_deref())
@@ -129,6 +220,107 @@ pub async fn add_extension(
     .fetch_one(&mut **tx)
     .await
     .map_err(AppError::from)
+}
+
+/// Corrige somente a ultima prorrogacao. Como o seu `data_inicio` e o
+/// vencimento anterior, alterar `dias` preserva a cadeia e permite tanto
+/// antecipar quanto postergar o vencimento atual, sem alcancar o prazo
+/// anterior.
+pub async fn update_extension(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateExtensionRequest,
+) -> Result<bool, AppError> {
+    let atual: Option<(String, i32, NaiveDate)> = sqlx::query_as(
+        "SELECT id::text, ordem, data_inicio FROM processo_prazos
+          WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1 FOR UPDATE",
+    )
+    .bind(&request.processo_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (prazo_atual_id, ordem, data_inicio) = atual.ok_or_else(|| {
+        AppError::Domain("O processo ainda não possui prazo para editar.".to_string())
+    })?;
+    if ordem == 0 {
+        return Err(AppError::Domain(
+            "O prazo inicial não pode ser editado como prorrogação.".to_string(),
+        ));
+    }
+    if prazo_atual_id != request.prazo_id {
+        return Err(AppError::Domain(
+            "Somente a última prorrogação pode ser editada.".to_string(),
+        ));
+    }
+
+    let dias = request
+        .nova_data_vencimento
+        .signed_duration_since(data_inicio)
+        .num_days();
+    if dias <= 0 {
+        return Err(AppError::Domain(format!(
+            "A nova data de vencimento deve ser posterior ao prazo anterior ({}).",
+            data_inicio.format("%d/%m/%Y")
+        )));
+    }
+    let dias = i32::try_from(dias).map_err(|_| {
+        AppError::Domain("O intervalo informado para a prorrogação é muito longo.".to_string())
+    })?;
+
+    let alteradas = sqlx::query(
+        "UPDATE processo_prazos
+            SET dias = $3, updated_at = now()
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(&request.prazo_id)
+    .bind(&request.processo_id)
+    .bind(dias)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+
+    Ok(alteradas == 1)
+}
+
+/// Remove somente a ultima prorrogacao. A vigencia e derivada da maior ordem,
+/// portanto o registro anterior volta a ser vigente sem atualizacao adicional.
+pub async fn delete_extension(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    prazo_id: &str,
+) -> Result<bool, AppError> {
+    let atual: Option<(String, i32)> = sqlx::query_as(
+        "SELECT id::text, ordem FROM processo_prazos
+          WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1 FOR UPDATE",
+    )
+    .bind(processo_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let (prazo_atual_id, ordem) = atual.ok_or_else(|| {
+        AppError::Domain("O processo ainda não possui prazo para excluir.".to_string())
+    })?;
+    if ordem == 0 {
+        return Err(AppError::Domain(
+            "O prazo inicial não pode ser excluído como prorrogação.".to_string(),
+        ));
+    }
+    if prazo_atual_id != prazo_id {
+        return Err(AppError::Domain(
+            "Somente a última prorrogação pode ser excluída. Exclua primeiro as prorrogações mais recentes.".to_string(),
+        ));
+    }
+
+    let removidas = sqlx::query(
+        "DELETE FROM processo_prazos
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(prazo_id)
+    .bind(processo_id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+
+    Ok(removidas == 1)
 }
 
 /// Panorama dos prazos vigentes dos processos em andamento.

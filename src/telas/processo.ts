@@ -253,6 +253,28 @@ function selectOpcoes(nome: string, opcoes: Opcao[], atual: string, obrigatorio 
   </select>`;
 }
 
+function campoData(
+  nome: string,
+  rotulo: string,
+  valor: string | null | undefined,
+  opcoes: { obrigatorio?: boolean; ajuda?: string } = {},
+): string {
+  const obrigatorio = opcoes.obrigatorio === true;
+  const id = `campo-${nome}`;
+  return `<div class="campo">
+    <label for="${id}">${escapeHtml(rotulo)}</label>
+    <div class="campo-data-controle">
+      <input id="${id}" name="${escapeHtml(nome)}" type="date" value="${escapeHtml(valor ?? "")}"${obrigatorio ? " required" : ""} />
+      ${
+        obrigatorio
+          ? ""
+          : `<button type="button" class="ghost small campo-data-limpar" data-limpar-data="${escapeHtml(nome)}"${valor ? "" : " disabled"}>Limpar</button>`
+      }
+    </div>
+    ${opcoes.ajuda ? `<small class="campo-efeito">${escapeHtml(opcoes.ajuda)}</small>` : ""}
+  </div>`;
+}
+
 export async function renderFormularioProcesso(
   ctx: ContextoTela,
   id: string | null,
@@ -436,24 +458,34 @@ export async function renderFormularioProcesso(
 
         <fieldset>
           <legend>Datas</legend>
-          <div class="campo"><label>Instauração<input name="data_instauracao" type="date" value="${escapeHtml(r.data_instauracao)}" required /></label></div>
-          <div class="campo"><label>Recebimento<input name="data_recebimento" type="date" value="${escapeHtml(r.data_recebimento ?? "")}" />
-            <small class="campo-efeito">Dispara o prazo inicial: sem ela, nenhum prazo nasce.</small></label></div>
-          <div class="campo"><label>Remessa do encarregado<input name="data_remessa_encarregado" type="date" value="${escapeHtml(r.data_remessa_encarregado ?? "")}" /></label></div>
+          ${campoData("data_instauracao", "Instauração", r.data_instauracao, { obrigatorio: true })}
+          ${campoData("data_recebimento", "Recebimento", r.data_recebimento, {
+            ajuda: "Dispara o prazo inicial: sem ela, nenhum prazo nasce.",
+          })}
+          ${campoData("data_remessa_encarregado", "Remessa do encarregado", r.data_remessa_encarregado)}
           ${
             mostraRemessaComissao
-              ? `<div class="campo"><label>Remessa à comissão<input name="data_remessa_comissao" type="date" value="${escapeHtml(r.data_remessa_comissao ?? "")}" />
-                   ${config?.permite_remessa_comissao === false ? `<small class="campo-efeito">Esta espécie não prevê comissão; o campo aparece porque já há data registrada.</small>` : ""}</label></div>`
+              ? campoData("data_remessa_comissao", "Remessa à comissão", r.data_remessa_comissao, {
+                  ajuda:
+                    config?.permite_remessa_comissao === false
+                      ? "Esta espécie não prevê comissão; o campo aparece porque já há data registrada."
+                      : undefined,
+                })
               : ""
           }
           ${
             mostraJulgamento
-              ? `<div class="campo"><label>Julgamento<input name="data_julgamento" type="date" value="${escapeHtml(r.data_julgamento ?? "")}" />
-                   ${config?.permite_julgamento === false ? `<small class="campo-efeito">Esta espécie não é julgada; o campo aparece porque já há data registrada.</small>` : ""}</label></div>`
+              ? campoData("data_julgamento", "Julgamento", r.data_julgamento, {
+                  ajuda:
+                    config?.permite_julgamento === false
+                      ? "Esta espécie não é julgada; o campo aparece porque já há data registrada."
+                      : undefined,
+                })
               : ""
           }
-          <div class="campo"><label>Conclusão<input name="data_conclusao" type="date" value="${escapeHtml(r.data_conclusao ?? "")}" />
-            <small class="campo-efeito">Preenchida = processo concluído.</small></label></div>
+          ${campoData("data_conclusao", "Conclusão", r.data_conclusao, {
+            ajuda: "Preenchida = processo concluído.",
+          })}
         </fieldset>
 
         <fieldset>
@@ -542,6 +574,32 @@ export async function renderFormularioProcesso(
 
   const form = document.querySelector<HTMLFormElement>("#form-processo")!;
   protegerFormulario(form);
+
+  // O seletor nativo do WebView permanece aberto depois da escolha em algumas
+  // plataformas. Tirar o foco no quadro seguinte fecha o popover sem substituir
+  // o controle nativo nem introduzir uma dependência de calendário.
+  form.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const limpar = form.querySelector<HTMLButtonElement>(
+        `[data-limpar-data="${input.name}"]`,
+      );
+      if (limpar) limpar.disabled = input.value === "";
+      window.requestAnimationFrame(() => input.blur());
+    });
+  });
+
+  form.querySelectorAll<HTMLButtonElement>("[data-limpar-data]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      const nome = botao.dataset.limparData;
+      if (!nome) return;
+      const input = form.elements.namedItem(nome);
+      if (!(input instanceof HTMLInputElement)) return;
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+
   const rerender = (mutar: () => void) => {
     absorverFormulario(r, form);
     mutar();
@@ -764,6 +822,18 @@ async function baixarAnexo(anexoId: string): Promise<void> {
   await baixarArquivoBase64(r.data.nome_arquivo, r.data.conteudo);
 }
 
+/** Soma dias a uma data ISO sem depender do fuso horário local. */
+function somarDiasIso(dataIso: string, dias: number): string {
+  const [ano, mes, dia] = dataIso.split("-").map(Number);
+  const data = new Date(Date.UTC(ano!, mes! - 1, dia! + dias));
+  return data.toISOString().slice(0, 10);
+}
+
+function dataParaExibicao(dataIso: string): string {
+  const [ano, mes, dia] = dataIso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
 export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
   const [detalheResp, prazos, andamentos, tiposAndamento] = await Promise.all([
     call("proceedings_get", { id }),
@@ -779,6 +849,8 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   }
 
   const podeEscrever = ctx.podeEscrever();
+  const prazoVigente = prazos.find((prazo) => prazo.vigente) ?? null;
+  const ultimaProrrogacao = prazos.find((prazo) => prazo.vigente && prazo.ordem > 0) ?? null;
   const linha = (rotulo: string, valor: unknown) =>
     valor === null || valor === undefined || valor === ""
       ? ""
@@ -866,7 +938,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ${
         prazos.length
           ? `<div class="table-wrap"><table class="tabela-dados">
-              <thead><tr><th>Ordem</th><th>Início</th><th>Dias</th><th>Vencimento</th><th>Motivo</th></tr></thead>
+              <thead><tr><th>Ordem</th><th>Início</th><th>Dias</th><th>Vencimento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${prazos
                 .map(
                   (p) => `<tr${p.vigente ? ' class="vigente"' : ""}>
@@ -875,19 +947,43 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${p.dias}</td>
                     <td>${escapeHtml(p.data_vencimento)}</td>
                     <td>${escapeHtml(p.motivo ?? "")}</td>
+                    ${
+                      podeEscrever
+                        ? `<td class="row-actions">${
+                            p.vigente && p.ordem > 0
+                              ? `<button class="secondary small" data-editar-prorrogacao="${escapeHtml(p.id)}">Editar data</button>
+                                 <button class="danger small" data-excluir-prorrogacao="${escapeHtml(p.id)}">Excluir</button>`
+                              : ""
+                          }</td>`
+                        : ""
+                    }
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>`
           : `<p class="empty">Sem prazo. O prazo inicial nasce da data de recebimento.</p>`
       }
       ${
-        podeEscrever && prazos.length
+        podeEscrever && prazoVigente
           ? `<form id="form-prorrogacao" class="linha-form">
-               <label>Prorrogar (dias)<input name="dias" type="number" min="1" required /></label>
+               <label>Novo vencimento<input name="nova_data_vencimento" type="date" min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
                <label>Motivo<input name="motivo" required /></label>
                <button type="submit">Prorrogar</button>
              </form>
-             <p class="secao-ajuda">A prorrogação começa no dia seguinte ao vencimento atual.</p>`
+             <p class="secao-ajuda">Vencimento atual: <strong>${escapeHtml(dataParaExibicao(prazoVigente.data_vencimento))}</strong>. A nova data deve ser posterior; a prorrogação começa no vencimento atual.</p>`
+          : ""
+      }
+      ${
+        podeEscrever && ultimaProrrogacao
+          ? `<form id="form-editar-prorrogacao" class="linha-form" hidden>
+               <label>Corrigir vencimento
+                 <input name="nova_data_vencimento" type="date"
+                   min="${somarDiasIso(ultimaProrrogacao.data_inicio, 1)}"
+                   value="${escapeHtml(ultimaProrrogacao.data_vencimento)}" required />
+               </label>
+               <button type="submit">Salvar alteração</button>
+               <button type="button" class="secondary" id="cancelar-edicao-prorrogacao">Cancelar</button>
+             </form>
+             <p id="ajuda-edicao-prorrogacao" class="secao-ajuda" hidden>A data deve ser posterior ao prazo anterior, vencido em <strong>${escapeHtml(dataParaExibicao(ultimaProrrogacao.data_inicio))}</strong>. O motivo da prorrogação será preservado.</p>`
           : ""
       }
 
@@ -974,15 +1070,64 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
   if (!podeEscrever) return;
 
-  document.querySelector<HTMLFormElement>("#form-prorrogacao")?.addEventListener("submit", async (e) => {
+  const formProrrogacao = document.querySelector<HTMLFormElement>("#form-prorrogacao");
+  formProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
+    const input = e.currentTarget as HTMLInputElement;
+    window.requestAnimationFrame(() => input.blur());
+  });
+  formProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
     const r = await call("deadlines_add_extension", {
       request: {
         processo_id: id,
-        dias: Number(form.get("dias")),
+        nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
         motivo: String(form.get("motivo") ?? ""),
       },
+    });
+    reportar(r.ok, r.error);
+  });
+
+  const formEditarProrrogacao = document.querySelector<HTMLFormElement>("#form-editar-prorrogacao");
+  const ajudaEditarProrrogacao = document.querySelector<HTMLElement>("#ajuda-edicao-prorrogacao");
+  const alternarEdicaoProrrogacao = (editando: boolean) => {
+    if (formEditarProrrogacao) formEditarProrrogacao.hidden = !editando;
+    if (ajudaEditarProrrogacao) ajudaEditarProrrogacao.hidden = !editando;
+    if (formProrrogacao) formProrrogacao.hidden = editando;
+  };
+
+  document.querySelector<HTMLButtonElement>("[data-editar-prorrogacao]")?.addEventListener("click", () => {
+    alternarEdicaoProrrogacao(true);
+    formEditarProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.focus();
+  });
+  document.querySelector<HTMLButtonElement>("#cancelar-edicao-prorrogacao")?.addEventListener("click", () => {
+    alternarEdicaoProrrogacao(false);
+  });
+  formEditarProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
+    const input = e.currentTarget as HTMLInputElement;
+    window.requestAnimationFrame(() => input.blur());
+  });
+  formEditarProrrogacao?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!ultimaProrrogacao) return;
+    const form = new FormData(e.currentTarget as HTMLFormElement);
+    const r = await call("deadlines_update_extension", {
+      request: {
+        processo_id: id,
+        prazo_id: ultimaProrrogacao.id,
+        nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
+      },
+    });
+    reportar(r.ok, r.error);
+  });
+
+  document.querySelector<HTMLButtonElement>("[data-excluir-prorrogacao]")?.addEventListener("click", async () => {
+    if (!ultimaProrrogacao) return;
+    const vencimento = dataParaExibicao(ultimaProrrogacao.data_vencimento);
+    if (!confirm(`Excluir a ${ultimaProrrogacao.ordem}ª prorrogação, com vencimento em ${vencimento}? O prazo anterior voltará a ser o vigente.`)) return;
+    const r = await call("deadlines_delete_extension", {
+      processoId: id,
+      prazoId: ultimaProrrogacao.id,
     });
     reportar(r.ok, r.error);
   });
