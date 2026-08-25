@@ -20,7 +20,7 @@ import {
   type SelecaoInfracaoEstatuto,
   type SelecaoInfracaoPenal,
 } from "../api";
-import { escapeHtml, option } from "../dom";
+import { escapeHtml, notificar, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 type Selecao = {
@@ -331,7 +331,7 @@ export async function renderIndicios(
         },
       });
       if (!r.ok) {
-        alert(r.error ?? "Falha ao salvar.");
+        notificar(r.error ?? "Falha ao salvar.", "erro");
         return;
       }
       voltar();

@@ -1,6 +1,6 @@
 import "./styles.css";
 import { call, type SessionUser } from "./api";
-import { escapeHtml } from "./dom";
+import { escapeHtml, formularioTemPendencia, podeDescartarFormulario } from "./dom";
 import {
   carregarDefinicoes,
   chaveDaRota,
@@ -35,6 +35,8 @@ import {
   renderEstatisticasProcedimentos,
   renderEstatisticasProcessos,
 } from "./telas/estatisticas";
+
+const brasaoUrl = new URL("../src-tauri/icons/icon.png", import.meta.url).href;
 
 // Shell da aplicação: sessão, menu e roteamento. Nada mais.
 //
@@ -88,6 +90,13 @@ const DASHBOARD: Route = { path: ROTA_DASHBOARD, label: "Painel", group: "Geral"
 let session: SessionUser | null = null;
 let activePath = "/dashboard";
 const app = document.querySelector<HTMLDivElement>("#app")!;
+let sidebarRecolhida = localStorage.getItem("adm-p6:sidebar-recolhida") === "true";
+const gruposAbertos = new Set<string>(["Geral", "Procedimentos"]);
+
+window.addEventListener("beforeunload", (evento) => {
+  if (!formularioTemPendencia()) return;
+  evento.preventDefault();
+});
 
 function canWrite() {
   return session?.is_admin === true;
@@ -129,37 +138,61 @@ function groupedRoutes() {
 }
 
 function shell(content: string) {
+  const grupoAtivo = routes.find((route) => route.path === activePath)?.group ?? "Geral";
+  gruposAbertos.add(grupoAtivo);
   const nav = Object.entries(groupedRoutes())
-    .map(([group, items]) => `
-      <section class="nav-group">
-        <h2>${escapeHtml(group)}</h2>
-        ${items.map((route) => `
-          <button class="nav-item ${route.path === activePath ? "active" : ""}" data-route="${escapeHtml(route.path)}">
-            <span>${escapeHtml(route.label)}</span>
-            ${route.adminOnly ? "<small>admin</small>" : ""}
-          </button>
-        `).join("")}
+    .map(([group, items]) => {
+      const aberto = gruposAbertos.has(group);
+      return `
+      <section class="nav-group${aberto ? " is-open" : ""}">
+        <button class="nav-group-toggle" type="button" data-nav-group="${escapeHtml(group)}"
+                aria-expanded="${aberto}" title="${escapeHtml(group)}">
+          <span class="nav-group-mark" aria-hidden="true">${escapeHtml(group.slice(0, 1))}</span>
+          <span class="nav-group-label">${escapeHtml(group)}</span>
+          <span class="nav-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="nav-group-items"${aberto ? "" : " hidden"}>
+          ${items.map((route) => `
+            <button class="nav-item ${route.path === activePath ? "active" : ""}" data-route="${escapeHtml(route.path)}"
+                    title="${escapeHtml(route.label)}">
+              <span>${escapeHtml(route.label)}</span>
+              ${route.adminOnly ? "<small>admin</small>" : ""}
+            </button>
+          `).join("")}
+        </div>
       </section>
-    `).join("");
+    `;
+    }).join("");
 
   app.innerHTML = `
-    <aside class="sidebar">
+    <div class="app-shell${sidebarRecolhida ? " sidebar-is-collapsed" : ""}">
+    <aside class="sidebar" aria-label="Navegação principal">
       <div class="brand">
-        <strong>ADM P6</strong>
-        <span>Rust/Tauri</span>
+        <img src="${brasaoUrl}" alt="" />
+        <div><strong>ADM-P6</strong><span>Justiça e Disciplina</span></div>
       </div>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button"
+              aria-label="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}"
+              title="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}">
+        <span aria-hidden="true">${sidebarRecolhida ? "›" : "‹"}</span>
+      </button>
       ${nav}
     </aside>
     <main class="main">
       <header class="topbar">
-        <div>
+        <div class="session-info">
+          <span class="session-avatar" aria-hidden="true">${escapeHtml((session?.nome ?? "A").slice(0, 1).toUpperCase())}</span>
+          <div>
           <strong>${escapeHtml(session?.nome ?? "Sessão não autenticada")}</strong>
           <span>${escapeHtml(session?.perfil ?? "offline")}</span>
+          </div>
         </div>
-        <button class="secondary" id="logout">Sair</button>
+        <button class="ghost small" id="logout">Sair</button>
       </header>
-      ${content}
+      <div class="content-area">${content}</div>
     </main>
+    </div>
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
   `;
 
   // As barras proporcionais dos painéis de contagem: a largura é calculada e
@@ -170,12 +203,52 @@ function shell(content: string) {
 
   document.querySelectorAll<HTMLButtonElement>("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!podeDescartarFormulario()) return;
       activePath = button.dataset.route ?? "/dashboard";
       void renderRoute();
     });
   });
 
+  document.querySelector<HTMLButtonElement>("#sidebar-toggle")?.addEventListener("click", () => {
+    sidebarRecolhida = !sidebarRecolhida;
+    localStorage.setItem("adm-p6:sidebar-recolhida", String(sidebarRecolhida));
+    document.querySelector(".app-shell")?.classList.toggle("sidebar-is-collapsed", sidebarRecolhida);
+    const botao = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+    if (botao) {
+      const rotulo = sidebarRecolhida ? "Expandir menu" : "Recolher menu";
+      botao.setAttribute("aria-label", rotulo);
+      botao.title = rotulo;
+      const simbolo = botao.querySelector("span");
+      if (simbolo) simbolo.textContent = sidebarRecolhida ? "›" : "‹";
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-nav-group]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const grupo = button.dataset.navGroup!;
+      if (sidebarRecolhida) {
+        sidebarRecolhida = false;
+        document.querySelector(".app-shell")?.classList.remove("sidebar-is-collapsed");
+        const recolher = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+        if (recolher) {
+          recolher.setAttribute("aria-label", "Recolher menu");
+          recolher.title = "Recolher menu";
+          const simbolo = recolher.querySelector("span");
+          if (simbolo) simbolo.textContent = "‹";
+        }
+      }
+      const abrir = !gruposAbertos.has(grupo);
+      if (abrir) gruposAbertos.add(grupo);
+      else gruposAbertos.delete(grupo);
+      localStorage.setItem("adm-p6:sidebar-recolhida", String(sidebarRecolhida));
+      button.setAttribute("aria-expanded", String(abrir));
+      button.closest(".nav-group")?.classList.toggle("is-open", abrir);
+      button.parentElement?.querySelector<HTMLElement>(".nav-group-items")?.toggleAttribute("hidden", !abrir);
+    });
+  });
+
   document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", async () => {
+    if (!podeDescartarFormulario()) return;
     await call("auth_logout");
     session = null;
     esquecerDefinicoes();
@@ -187,11 +260,15 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <main class="login-screen">
       <form id="login-form" class="login-panel">
-        <h1>ADM P6</h1>
-        <label>Email<input name="email" type="email" autocomplete="username" required /></label>
-        <label>Senha<input name="senha" type="password" autocomplete="current-password" required /></label>
-        ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
-        <button type="submit">Entrar</button>
+        <div class="login-brand">
+          <img src="${brasaoUrl}" alt="" />
+          <div><span>Sistema administrativo</span><h1>ADM-P6</h1><p>Seção de Justiça e Disciplina</p></div>
+        </div>
+        <div class="login-copy"><strong>Acesso ao sistema</strong><span>Use suas credenciais para continuar.</span></div>
+        <label>E-mail<input name="email" type="email" autocomplete="username" placeholder="nome@dominio.com" required /></label>
+        <label>Senha<input name="senha" type="password" autocomplete="current-password" placeholder="Digite sua senha" required /></label>
+        ${error ? `<p class="feedback feedback--error" role="alert">${escapeHtml(error)}</p>` : ""}
+        <button type="submit">Entrar no ADM-P6</button>
       </form>
     </main>
   `;

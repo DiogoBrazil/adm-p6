@@ -25,8 +25,12 @@ import {
   escapeHtml,
   ligarExportacao,
   ligarPaginacao,
+  limparFormularioPendente,
+  notificar,
   option,
   paginacao,
+  podeDescartarFormulario,
+  protegerFormulario,
   tabela,
 } from "../dom";
 import { painelContagem } from "./estatisticas";
@@ -54,6 +58,7 @@ const nomeCompleto = (u: UserListItem) => `${u.posto_graduacao} ${u.matricula} $
 // ── Lista ─────────────────────────────────────────────────────────────
 
 export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
+  limparFormularioPendente();
   if (detalheAberto) return renderDetalheUsuario(ctx, detalheAberto);
 
   const resposta = await call("users_list", {
@@ -66,7 +71,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
   // `tr.inativo` já esmaece a linha inteira — o CSS espera a classe no `<tr>`.
   const linhas = itens.map((u) => ({
-    classe: `clicavel${u.ativo ? "" : " inativo"}`,
+    classe: u.ativo ? "" : "inativo",
     celulas: [
       u.posto_graduacao,
       u.matricula,
@@ -75,6 +80,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
       u.conta_email ?? "sem conta",
       u.conta_perfil ?? "—",
       u.ativo ? "ativo" : "inativo",
+      { texto: "", acao: { rotulo: "Abrir", id: u.id } },
     ],
   }));
 
@@ -99,9 +105,10 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
       ${
         resposta.ok
           ? tabela(
-              ["Posto", "Matrícula", "Nome", "Encarregado", "Conta", "Perfil", "Situação"],
+              ["Posto", "Matrícula", "Nome", "Encarregado", "Conta", "Perfil", "Situação", "Ações"],
               linhas,
               "Nenhum militar cadastrado.",
+              { viewport: true, larga: true },
             )
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
@@ -131,9 +138,9 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     void renderFormularioUsuario(ctx, null);
   });
 
-  document.querySelectorAll<HTMLTableRowElement>("tr.clicavel").forEach((linha, indice) => {
-    linha.addEventListener("click", () => {
-      detalheAberto = itens[indice]?.id ?? null;
+  document.querySelectorAll<HTMLButtonElement>("[data-tabela-acao]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      detalheAberto = botao.dataset.tabelaAcao ?? null;
       void renderListaUsuarios(ctx);
     });
   });
@@ -178,27 +185,29 @@ export async function renderFormularioUsuario(
     <section class="panel">
       <div class="page-head">
         <div><h1>${usuario ? "Editar" : "Novo"} militar</h1></div>
-        <div class="page-head-right"><button id="btn-cancelar" class="secondary small">Cancelar</button></div>
       </div>
       ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
 
       <form id="form-usuario" class="crud-form">
-        <label>Posto / Graduação
-          <select name="posto_graduacao_id" required>
-            <option value="">Selecione…</option>
-            ${postos.map((p) => option(p.id, p.rotulo, p.id === usuario?.posto_graduacao_id)).join("")}
-          </select>
-        </label>
-        <label>Nome
-          <input name="nome" type="text" required value="${escapeHtml(usuario?.nome ?? "")}" />
-        </label>
-        <label>Matrícula
-          <input name="matricula" type="text" required value="${escapeHtml(usuario?.matricula ?? "")}" />
-        </label>
-        <label class="checkbox-inline">
-          <input name="is_encarregado" type="checkbox" ${usuario?.is_encarregado ? "checked" : ""} />
-          Pode ser designado
-        </label>
+        <fieldset>
+          <legend>Dados do militar</legend>
+          <label>Posto / Graduação
+            <select name="posto_graduacao_id" required>
+              <option value="">Selecione…</option>
+              ${postos.map((p) => option(p.id, p.rotulo, p.id === usuario?.posto_graduacao_id)).join("")}
+            </select>
+          </label>
+          <label>Nome
+            <input name="nome" type="text" required value="${escapeHtml(usuario?.nome ?? "")}" />
+          </label>
+          <label>Matrícula
+            <input name="matricula" type="text" required value="${escapeHtml(usuario?.matricula ?? "")}" />
+          </label>
+          <label class="checkbox-inline">
+            <input name="is_encarregado" type="checkbox" ${usuario?.is_encarregado ? "checked" : ""} />
+            Pode ser designado
+          </label>
+        </fieldset>
 
         <fieldset class="conta-fieldset">
           <legend>
@@ -228,7 +237,10 @@ export async function renderFormularioUsuario(
           </p>
         </fieldset>
 
-        <div class="form-actions"><button type="submit">Salvar</button></div>
+        <div class="form-actions">
+          <button type="button" id="btn-cancelar" class="secondary">Cancelar</button>
+          <button type="submit">Salvar</button>
+        </div>
       </form>
     </section>
   `);
@@ -240,11 +252,17 @@ export async function renderFormularioUsuario(
   document.querySelector<HTMLInputElement>("#tem-conta")?.addEventListener("change", alternarConta);
 
   document.querySelector<HTMLButtonElement>("#btn-cancelar")?.addEventListener("click", () => {
+    if (!podeDescartarFormulario()) return;
     void renderListaUsuarios(ctx);
   });
 
-  document.querySelector<HTMLFormElement>("#form-usuario")?.addEventListener("submit", async (e) => {
+  const formulario = document.querySelector<HTMLFormElement>("#form-usuario")!;
+  protegerFormulario(formulario);
+  formulario.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const salvar = formulario.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    salvar.disabled = true;
+    salvar.textContent = "Salvando…";
     const f = new FormData(e.currentTarget as HTMLFormElement);
     const senha = String(f.get("senha") ?? "");
 
@@ -269,11 +287,15 @@ export async function renderFormularioUsuario(
     });
 
     if (!resposta.ok) {
-      void renderFormularioUsuario(ctx, usuario, resposta.error ?? "Falha ao salvar.");
+      notificar(resposta.error ?? "Falha ao salvar.", "erro");
+      salvar.disabled = false;
+      salvar.textContent = "Salvar";
       return;
     }
+    limparFormularioPendente();
     detalheAberto = null;
-    void renderListaUsuarios(ctx);
+    await renderListaUsuarios(ctx);
+    notificar("Militar salvo com sucesso.", "sucesso");
   });
 }
 
@@ -371,7 +393,7 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
     if (!confirm("Reativar este militar?")) return;
     const resposta = await call("users_reactivate", { id });
     if (!resposta.ok) {
-      alert(resposta.error ?? "Falha ao reativar.");
+      notificar(resposta.error ?? "Falha ao reativar.", "erro");
       return;
     }
     void renderDetalheUsuario(ctx, id);

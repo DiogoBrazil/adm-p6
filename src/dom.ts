@@ -34,10 +34,58 @@ export function option(valor: string, rotulo: string, selecionado: boolean): str
   return `<option value="${escapeHtml(valor)}"${selecionado ? " selected" : ""}>${escapeHtml(rotulo)}</option>`;
 }
 
+// ── Estado de formulários e feedback ─────────────────────────────────
+
+let formularioPendente = false;
+
+/** Marca um formulário de edição para proteger mudanças ainda não salvas. */
+export function protegerFormulario(form: HTMLFormElement): void {
+  const marcar = () => {
+    formularioPendente = true;
+  };
+  form.addEventListener("input", marcar);
+  form.addEventListener("change", marcar);
+}
+
+/** Limpa a proteção depois de salvar ou descartar de forma consciente. */
+export function limparFormularioPendente(): void {
+  formularioPendente = false;
+}
+
+export function formularioTemPendencia(): boolean {
+  return formularioPendente;
+}
+
+/** Confirma a saída de qualquer formulário longo que tenha sido modificado. */
+export function podeDescartarFormulario(): boolean {
+  if (!formularioPendente) return true;
+  const descartar = confirm("Há alterações não salvas. Deseja descartá-las?");
+  if (descartar) formularioPendente = false;
+  return descartar;
+}
+
+export type TipoFeedback = "sucesso" | "erro" | "info";
+
+/** Mensagem não bloqueante, anunciada também por leitor de tela. */
+export function notificar(mensagem: string, tipo: TipoFeedback = "info"): void {
+  const regiao = document.querySelector<HTMLElement>("#toast-region");
+  if (!regiao) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast--${tipo}`;
+  toast.textContent = mensagem;
+  regiao.append(toast);
+  window.setTimeout(() => toast.remove(), 4200);
+}
+
 // ── Tabelas ───────────────────────────────────────────────────────────
 
 /** Célula de tabela: o texto já sai escapado, o alinhamento é opcional. */
-export type Celula = string | { texto: string; numerica?: boolean; classe?: string };
+export type Celula = string | {
+  texto: string;
+  numerica?: boolean;
+  classe?: string;
+  acao?: { rotulo: string; id: string };
+};
 
 /** Linha: só as células, ou as células com uma classe no `<tr>` (`atrasado`). */
 export type Linha = Celula[] | { celulas: Celula[]; classe?: string };
@@ -49,11 +97,19 @@ export type Linha = Celula[] | { celulas: Celula[]; classe?: string };
  * interpolava o **nome da coluna** cru — e os nomes de coluna vinham das
  * chaves do JSON do backend.
  */
-export function tabela(colunas: string[], linhas: Linha[], vazio = "Nada a exibir."): string {
+export function tabela(
+  colunas: string[],
+  linhas: Linha[],
+  vazio = "Nada a exibir.",
+  opcoes: { viewport?: boolean; larga?: boolean } = {},
+): string {
   if (!linhas.length) return `<p class="empty">${escapeHtml(vazio)}</p>`;
   const celula = (c: Celula) => {
     if (typeof c === "string") return `<td>${escapeHtml(c)}</td>`;
     const classes = [c.numerica ? "num" : "", c.classe ?? ""].filter(Boolean).join(" ");
+    if (c.acao) {
+      return `<td class="row-actions"><button type="button" class="outline small" data-tabela-acao="${escapeHtml(c.acao.id)}">${escapeHtml(c.acao.rotulo)}</button></td>`;
+    }
     return `<td${classes ? ` class="${escapeHtml(classes)}"` : ""}>${escapeHtml(c.texto)}</td>`;
   };
   const linha = (l: Linha) => {
@@ -63,7 +119,7 @@ export function tabela(colunas: string[], linhas: Linha[], vazio = "Nada a exibi
   };
   // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
   // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
-  return `<div class="table-wrap"><table class="tabela-dados">
+  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${opcoes.larga ? " tabela-dados--larga" : ""}">
       <thead><tr>${colunas.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
       <tbody>${linhas.map(linha).join("")}</tbody>
     </table></div>`;
@@ -90,7 +146,7 @@ export async function baixarArquivoBase64(
     request: { nome_sugerido: nomeArquivo, conteudo_base64: conteudoBase64 },
   });
   if (!resposta.ok) {
-    alert(resposta.error ?? "Falha ao gravar o arquivo.");
+    notificar(resposta.error ?? "Falha ao gravar o arquivo.", "erro");
     return null;
   }
   return resposta.data;

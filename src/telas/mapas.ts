@@ -20,6 +20,7 @@ import {
   baixarCsvBase64,
   escapeHtml,
   ligarExportacao,
+  notificar,
   option,
   tabela,
 } from "../dom";
@@ -161,7 +162,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       request: { periodo_inicio: inicio, periodo_fim: fim, apuratorio_ids: apuratoriosSelecionados },
     });
     if (!resposta.ok) {
-      alert(resposta.error ?? "Falha ao gerar o mapa.");
+      notificar(resposta.error ?? "Falha ao gerar o mapa.", "erro");
       return;
     }
     linhasGeradas = resposta.data ?? [];
@@ -186,7 +187,10 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
         dados_mapa: linhasGeradas,
       },
     });
-    alert(resposta.ok ? "Mapa salvo." : (resposta.error ?? "Falha ao salvar."));
+    notificar(
+      resposta.ok ? "Mapa salvo." : (resposta.error ?? "Falha ao salvar."),
+      resposta.ok ? "sucesso" : "erro",
+    );
   });
 
   ligarExportacao(async () => {
@@ -195,7 +199,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       request: { periodo_inicio: inicio, periodo_fim: fim, apuratorio_ids: apuratoriosSelecionados },
     });
     if (!resposta.ok || !resposta.data) {
-      alert(resposta.error ?? "Falha ao exportar.");
+      notificar(resposta.error ?? "Falha ao exportar.", "erro");
       return;
     }
     return baixarCsvBase64(resposta.data.nome_arquivo, resposta.data.conteudo);
@@ -289,7 +293,7 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
     if (!confirm("Excluir este mapa salvo?")) return;
     const resposta = await call("reports_delete_saved_map", { id });
     if (!resposta.ok) {
-      alert(resposta.error ?? "Falha ao excluir.");
+      notificar(resposta.error ?? "Falha ao excluir.", "erro");
       return;
     }
     mapaAberto = null;

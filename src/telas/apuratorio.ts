@@ -11,7 +11,7 @@
 // composta, sem `id` e sem `nome`, e o CRUD genérico pressupõe os dois.
 
 import { call, type ApuratorioConfig } from "../api";
-import { escapeHtml, option } from "../dom";
+import { escapeHtml, notificar, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/configuracao/apuratorios";
@@ -104,7 +104,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       </p>
       ${
         config.documentos.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
                <thead><tr>
                  <th>Documento</th><th>Prazo próprio</th><th>Prazo efetivo</th>
                  <th>Padrão</th><th>Situação</th><th>Em uso</th>
@@ -119,7 +119,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                      <td>${d.prazo_base_dias ?? "—"}</td>
                      <td>${d.prazo_efetivo_dias} dias</td>
                      <td>${d.padrao ? "sim" : ""}</td>
-                     <td>${d.ativo ? "ativo" : "inativo"}</td>
+                     <td><span class="badge ${d.ativo ? "badge--ok" : "badge--neutro"}">${d.ativo ? "ativo" : "inativo"}</span></td>
                      <td>${d.em_uso ? "sim" : ""}</td>
                      ${
                        podeEscrever
@@ -164,7 +164,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       </p>
       ${
         config.papeis.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
                <thead><tr>
                  <th>Papel</th><th>Obrigatório</th><th>Máx. ocupantes</th>
                  <th>Responsável</th><th>Situação</th><th>Em uso</th>
@@ -179,7 +179,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                      <td>${p.obrigatorio ? "sim" : ""}</td>
                      <td>${p.max_ocupantes}</td>
                      <td>${p.e_responsavel ? "sim" : ""}</td>
-                     <td>${p.ativo ? "ativo" : "inativo"}</td>
+                     <td><span class="badge ${p.ativo ? "badge--ok" : "badge--neutro"}">${p.ativo ? "ativo" : "inativo"}</span></td>
                      <td>${p.em_uso ? "sim" : ""}</td>
                      ${
                        podeEscrever
@@ -228,7 +228,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
   if (!podeEscrever) return;
 
   const reportar = (ok: boolean, erro: string | null) => {
-    if (!ok) alert(erro ?? "Falha ao salvar.");
+    if (!ok) notificar(erro ?? "Falha ao salvar.", "erro");
     recarregar();
   };
 

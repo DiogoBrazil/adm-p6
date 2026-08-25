@@ -10,7 +10,15 @@
 // aparecer sozinha, sem tocar em nada aqui.
 
 import { call, type Catalogo, type Coluna } from "../api";
-import { cellDisplay, escapeHtml, option } from "../dom";
+import {
+  cellDisplay,
+  escapeHtml,
+  limparFormularioPendente,
+  notificar,
+  option,
+  podeDescartarFormulario,
+  protegerFormulario,
+} from "../dom";
 
 /** O que a tela precisa do shell da aplicação, sem importar `main.ts` de volta. */
 export type ContextoTela = {
@@ -205,6 +213,7 @@ type Estado = { incluirInativos: boolean; busca: string };
 const estado: Estado = { incluirInativos: false, busca: "" };
 
 export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<void> {
+  limparFormularioPendente();
   const definicoes = await carregarDefinicoes();
   const cat = definicoes.find((d) => d.chave === chave);
   if (!cat) {
@@ -240,7 +249,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
   const corpo = linhas.length
     ? `
       <div class="table-wrap">
-        <table>
+        <table class="tabela-dados">
           <thead>
             <tr>
               ${colunasVisiveis(cat).map((c) => `<th>${escapeHtml(c.rotulo)}</th>`).join("")}
@@ -261,7 +270,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
                       )}</td>`,
                   )
                   .join("")}
-                <td>${linha.ativo ? "ativo" : "inativo"}</td>
+                <td><span class="badge ${linha.ativo ? "badge--ok" : "badge--neutro"}">${linha.ativo ? "ativo" : "inativo"}</span></td>
                 ${
                   podeEscrever
                     ? `<td class="row-actions">
@@ -335,7 +344,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
       const id = botao.dataset.desativar!;
       if (!confirm(`Desativar este item de "${cat.rotulo}"?`)) return;
       const r = await call("legal_catalogs_deactivate", { catalogo: cat.chave, id });
-      if (!r.ok) alert(r.error ?? "Falha ao desativar.");
+      if (!r.ok) notificar(r.error ?? "Falha ao desativar.", "erro");
       recarregar();
     });
   });
@@ -346,7 +355,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
         catalogo: cat.chave,
         id: botao.dataset.reativar!,
       });
-      if (!r.ok) alert(r.error ?? "Falha ao reativar.");
+      if (!r.ok) notificar(r.error ?? "Falha ao reativar.", "erro");
       recarregar();
     });
   });
@@ -365,19 +374,28 @@ async function renderFormulario(
     <section class="panel">
       <div class="page-head">
         <div><h1>${linha ? "Editar" : "Novo"} — ${escapeHtml(cat.rotulo)}</h1></div>
-        <button class="secondary" id="cancelar">Cancelar</button>
       </div>
       <form id="form-catalogo" class="crud-form">
-        ${colunasVisiveis(cat).map((c) => campo(c, linha, referencias)).join("")}
+        <fieldset>
+          <legend>Dados do registro</legend>
+          ${colunasVisiveis(cat).map((c) => campo(c, linha, referencias)).join("")}
+        </fieldset>
         ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
-        <div class="form-actions"><button type="submit">Salvar</button></div>
+        <div class="form-actions">
+          <button type="button" class="secondary" id="cancelar">Cancelar</button>
+          <button type="submit">Salvar</button>
+        </div>
       </form>
     </section>
   `);
 
   document.querySelector<HTMLButtonElement>("#cancelar")?.addEventListener("click", () => {
+    if (!podeDescartarFormulario()) return;
     void renderCatalogo(cat.chave, ctx);
   });
+
+  const formulario = document.querySelector<HTMLFormElement>("#form-catalogo")!;
+  protegerFormulario(formulario);
 
   // Cada campo condicional acompanha o seu booleano-porta. Guiado pelo
   // registro: nenhum nome de catálogo ou de coluna aparece aqui.
@@ -398,8 +416,11 @@ async function renderFormulario(
     sincronizar();
   }
 
-  document.querySelector<HTMLFormElement>("#form-catalogo")?.addEventListener("submit", async (evento) => {
+  formulario.addEventListener("submit", async (evento) => {
     evento.preventDefault();
+    const salvar = formulario.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    salvar.disabled = true;
+    salvar.textContent = "Salvando…";
     const form = new FormData(evento.currentTarget as HTMLFormElement);
     const resposta = await call("legal_catalogs_save", {
       request: {
@@ -409,9 +430,13 @@ async function renderFormulario(
       },
     });
     if (!resposta.ok) {
-      void renderFormulario(cat, linha, ctx, resposta.error ?? "Falha ao salvar.");
+      notificar(resposta.error ?? "Falha ao salvar.", "erro");
+      salvar.disabled = false;
+      salvar.textContent = "Salvar";
       return;
     }
-    void renderCatalogo(cat.chave, ctx);
+    limparFormularioPendente();
+    await renderCatalogo(cat.chave, ctx);
+    notificar("Registro salvo com sucesso.", "sucesso");
   });
 }

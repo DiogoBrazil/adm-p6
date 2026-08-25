@@ -29,7 +29,17 @@ import {
   type SaveProceedingRequest,
   type UserListItem,
 } from "../api";
-import { baixarArquivoBase64, escapeHtml, ligarPaginacao, option, paginacao } from "../dom";
+import {
+  baixarArquivoBase64,
+  escapeHtml,
+  ligarPaginacao,
+  limparFormularioPendente,
+  notificar,
+  option,
+  paginacao,
+  podeDescartarFormulario,
+  protegerFormulario,
+} from "../dom";
 import type { ContextoTela } from "./catalogos";
 import { renderIndicios } from "./indicios";
 
@@ -249,6 +259,7 @@ export async function renderFormularioProcesso(
   erro = "",
   rascunhoAtual?: Rascunho,
 ): Promise<void> {
+  if (!rascunhoAtual) limparFormularioPendente();
   const cats = await carregarCatalogos();
   let rascunho = rascunhoAtual;
 
@@ -385,7 +396,6 @@ export async function renderFormularioProcesso(
           <h1>${id ? "Editar" : "Novo"} processo</h1>
           <p>${escapeHtml(apuratorio?.rotulo ?? "")}</p>
         </div>
-        <button class="secondary" id="cancelar">Cancelar</button>
       </div>
 
       ${documentos.length === 0 ? `<p class="aviso">Este apuratório não tem documento iniciador habilitado. Configure em <strong>Catálogos → Configuração de apuratórios</strong>.</p>` : ""}
@@ -454,13 +464,15 @@ export async function renderFormularioProcesso(
             .map(
               (d, i) => `
             <div class="linha-colecao">
+              <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
+                <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
+              </div>
               <label>Papel<select name="des_${i}_papel" required>
                 <option value=""></option>
                 ${papeis.map((p) => option(p.papel_id, p.papel + (p.obrigatorio ? " *" : ""), p.papel_id === d.papel_id)).join("")}
               </select></label>
               <label>Militar${selectMilitares(`des_${i}_pm`, cats.militares, d.policial_militar_id)}</label>
               <label>Início<input name="des_${i}_inicio" type="date" value="${escapeHtml(d.data_inicio)}" required /></label>
-              <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
             </div>`,
             )
             .join("")}
@@ -475,6 +487,9 @@ export async function renderFormularioProcesso(
             .map(
               (e, i) => `
             <div class="linha-colecao">
+              <div class="linha-colecao-head"><strong>Envolvido ${i + 1}</strong>
+                <button type="button" class="danger small" data-remover-env="${i}">Remover</button>
+              </div>
               <label>Militar${selectMilitares(`env_${i}_pm`, cats.militares, e.policial_militar_id)}</label>
               <label>Situação${selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true)}</label>
               ${exigeCondutor ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor ? " checked" : ""} /> Condutor</label>` : ""}
@@ -488,7 +503,6 @@ export async function renderFormularioProcesso(
                      ${usaDias(e.penalidade_tipo_id) ? `<label>Dias<input name="env_${i}_dias" type="number" min="1" value="${e.penalidade_dias ?? ""}" /></label>` : ""}`
                   : ""
               }
-              <button type="button" class="danger small" data-remover-env="${i}">Remover</button>
             </div>`,
             )
             .join("")}
@@ -501,9 +515,11 @@ export async function renderFormularioProcesso(
             .map(
               (p, i) => `
             <div class="linha-colecao">
+              <div class="linha-colecao-head"><strong>Pessoa ${i + 1}</strong>
+                <button type="button" class="danger small" data-remover-pes="${i}">Remover</button>
+              </div>
               <label>Papel${selectOpcoes(`pes_${i}_papel`, cats.papeisPessoa, p.papel_pessoa_id, true)}</label>
               <label>Nome<input name="pes_${i}_nome" value="${escapeHtml(p.nome)}" required /></label>
-              <button type="button" class="danger small" data-remover-pes="${i}">Remover</button>
             </div>`,
             )
             .join("")}
@@ -516,12 +532,16 @@ export async function renderFormularioProcesso(
         </fieldset>
 
         ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
-        <div class="form-actions"><button type="submit">Salvar</button></div>
+        <div class="form-actions">
+          <button type="button" class="secondary" id="cancelar">Cancelar</button>
+          <button type="submit">Salvar</button>
+        </div>
       </form>
     </section>
   `);
 
   const form = document.querySelector<HTMLFormElement>("#form-processo")!;
+  protegerFormulario(form);
   const rerender = (mutar: () => void) => {
     absorverFormulario(r, form);
     mutar();
@@ -529,6 +549,7 @@ export async function renderFormularioProcesso(
   };
 
   document.querySelector<HTMLButtonElement>("#cancelar")?.addEventListener("click", () => {
+    if (!podeDescartarFormulario()) return;
     void renderListaProcessos(ctx);
   });
 
@@ -584,13 +605,18 @@ export async function renderFormularioProcesso(
 
   form.addEventListener("submit", async (evento) => {
     evento.preventDefault();
+    const salvar = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    salvar.disabled = true;
+    salvar.textContent = "Salvando…";
     absorverFormulario(r, form);
     const resposta = await call("proceedings_save", { request: r });
     if (!resposta.ok) {
       void renderFormularioProcesso(ctx, id, resposta.error ?? "Falha ao salvar.", r);
       return;
     }
-    void renderListaProcessos(ctx);
+    limparFormularioPendente();
+    await renderListaProcessos(ctx);
+    notificar("Processo salvo com sucesso.", "sucesso");
   });
 }
 
@@ -603,6 +629,7 @@ const POR_PAGINA = 50;
 let pagina = 1;
 
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
+  limparFormularioPendente();
   const resposta = await call("proceedings_list", {
     filter: {
       busca: filtro.busca || null,
@@ -636,7 +663,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
       </div>
       ${
         items.length
-          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--larga">
+          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--larga">
               <thead><tr>
                 <th>Rótulo</th>
                 <th class="col-curta">Espécie</th>
@@ -647,13 +674,14 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                 <th class="col-numero">Envolv.</th>
                 <th class="col-curta">Vencimento</th>
                 <th class="col-curta">Situação</th>
+                <th class="col-curta">Ações</th>
               </tr></thead>
               <tbody>
                 ${items
                   .map((p) => {
                     const vencido = p.prazo_dias_restantes !== null && p.prazo_dias_restantes < 0;
                     return `
-                  <tr data-processo="${escapeHtml(p.id)}">
+                  <tr>
                     <td class="col-principal" title="${escapeHtml(p.rotulo)}">${escapeHtml(p.rotulo)}</td>
                     <td class="col-curta">${escapeHtml(p.apuratorio_sigla)}</td>
                     <td class="col-texto" title="${escapeHtml(p.unidade_origem)}">${escapeHtml(p.unidade_origem)}</td>
@@ -667,6 +695,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                         : "—"
                     }</td>
                     <td class="col-curta"><span class="badge ${p.concluido ? "badge--ok" : "badge--neutro"}">${p.concluido ? "concluído" : "em andamento"}</span></td>
+                    <td class="row-actions"><button type="button" class="outline small" data-processo="${escapeHtml(p.id)}">Abrir</button></td>
                   </tr>`;
                   })
                   .join("")}
@@ -703,9 +732,8 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
     void renderFormularioProcesso(ctx, null);
   });
 
-  document.querySelectorAll<HTMLTableRowElement>("[data-processo]").forEach((tr) => {
-    tr.style.cursor = "pointer";
-    tr.addEventListener("click", () => void renderDetalheProcesso(ctx, tr.dataset.processo!));
+  document.querySelectorAll<HTMLButtonElement>("[data-processo]").forEach((botao) => {
+    botao.addEventListener("click", () => void renderDetalheProcesso(ctx, botao.dataset.processo!));
   });
 }
 
@@ -730,7 +758,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
 async function baixarAnexo(anexoId: string): Promise<void> {
   const r = await call("proceedings_get_attachment", { anexoId });
   if (!r.ok || !r.data) {
-    alert(r.error ?? "Falha ao obter o anexo.");
+    notificar(r.error ?? "Falha ao obter o anexo.", "erro");
     return;
   }
   await baixarArquivoBase64(r.data.nome_arquivo, r.data.conteudo);
@@ -794,7 +822,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Envolvidos</h2>
       ${
         d.envolvidos.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
               <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
                 <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Indícios</th></tr></thead>
               <tbody>${d.envolvidos
@@ -817,7 +845,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Designações</h2>
       ${
         d.designacoes.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
               <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Motivo</th></tr></thead>
               <tbody>${d.designacoes
                 .map(
@@ -837,7 +865,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Prazos</h2>
       ${
         prazos.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
               <thead><tr><th>Ordem</th><th>Início</th><th>Dias</th><th>Vencimento</th><th>Motivo</th></tr></thead>
               <tbody>${prazos
                 .map(
@@ -897,7 +925,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Anexos</h2>
       ${
         d.anexos.length
-          ? `<div class="table-wrap"><table>
+          ? `<div class="table-wrap"><table class="tabela-dados">
               <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Enviado por</th><th>Ações</th></tr></thead>
               <tbody>${d.anexos
                 .map(
@@ -920,7 +948,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
   const recarregar = () => void renderDetalheProcesso(ctx, id);
   const reportar = (ok: boolean, erro: string | null) => {
-    if (!ok) alert(erro ?? "Falha na operação.");
+    if (!ok) notificar(erro ?? "Falha na operação.", "erro");
     recarregar();
   };
 
