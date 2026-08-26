@@ -1988,6 +1988,162 @@ tr.atrasado {
   min-width: 1060px;
 }
 
+/* A listagem principal privilegia leitura horizontal: os campos de pessoas e
+   SEI não são comprimidos para caber numa janela estreita; o contêiner rola. */
+.tabela-processos {
+  min-width: 1400px;
+  table-layout: fixed;
+}
+
+.tabela-processos col.col-layout-tipo,
+.tabela-processos col.col-layout-ano {
+  width: 70px;
+}
+
+.tabela-processos col.col-layout-numero {
+  width: 180px;
+}
+
+.tabela-processos col.col-layout-origem {
+  width: 100px;
+}
+
+.tabela-processos col.col-layout-sei {
+  width: 190px;
+}
+
+.tabela-processos col.col-layout-pessoa {
+  width: 270px;
+}
+
+.tabela-processos col.col-layout-status {
+  width: 170px;
+}
+
+.tabela-processos col.col-layout-acao {
+  width: 90px;
+}
+
+.tabela-processos th,
+.tabela-processos td {
+  height: 48px;
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+
+.tabela-processos :is(th, td).col-tipo,
+.tabela-processos :is(th, td).col-ano,
+.tabela-processos :is(th, td).col-numero-processo,
+.tabela-processos :is(th, td).col-origem,
+.tabela-processos :is(th, td).col-status-prazo,
+.tabela-processos :is(th, td).col-acao {
+  text-align: center;
+}
+
+.tabela-processos :is(th, td).col-sei,
+.tabela-processos :is(th, td).col-pessoa {
+  text-align: left;
+}
+
+.tabela-processos .col-tipo,
+.tabela-processos .col-ano,
+.tabela-processos .col-numero-processo,
+.tabela-processos .col-origem,
+.tabela-processos .col-status-prazo,
+.tabela-processos .col-acao {
+  white-space: nowrap;
+}
+
+.tabela-processos td.col-tipo {
+  font-weight: 750;
+  color: var(--brand-700);
+}
+
+.tabela-processos .col-ano {
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-processos td.col-numero-processo {
+  font-weight: 650;
+  color: #163a52;
+}
+
+.tabela-processos .col-sei {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-processos td.col-numero-processo,
+.tabela-processos td.col-origem,
+.tabela-processos td.col-sei {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabela-processos .col-status-prazo,
+.tabela-processos .col-acao {
+  overflow: visible;
+}
+
+.tabela-processos .row-actions {
+  justify-content: center;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.tabela-processos .row-actions button {
+  min-width: 64px;
+  white-space: nowrap;
+}
+
+.celula-reticencias,
+.pessoas-resumo,
+.pessoas-resumo__texto {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.celula-reticencias,
+.pessoas-resumo__texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pessoas-resumo {
+  border-radius: var(--radius-sm);
+  cursor: help;
+}
+
+.pessoas-resumo:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.tooltip-pessoas {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid #30475d;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: #182536;
+  box-shadow: var(--shadow-md);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.tooltip-pessoas > div + div {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgb(255 255 255 / 16%);
+}
+
 .tabela-dados .col-principal {
   color: #163a52;
 }
@@ -2025,6 +2181,30 @@ tr.atrasado {
   color: #536477;
   background: #eef2f5;
   border-color: #d9e1e7;
+}
+
+.badge--info {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: #bfd8ee;
+}
+
+.status-prazo {
+  justify-content: center;
+  gap: 6px;
+  min-width: max-content;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-prazo__ponto {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .paginacao {

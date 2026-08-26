@@ -31,6 +31,7 @@ const COLUNAS_LISTA: &str = r#"
     v.documento_iniciador,
     v.numero_documento,
     v.numero_controle,
+    v.processo_sei,
     v.rotulo,
     v.unidade_origem_id::text      AS unidade_origem_id,
     v.unidade_origem,
@@ -44,10 +45,36 @@ const COLUNAS_LISTA: &str = r#"
     v.concluido,
     v.resumo_fatos,
     v.responsavel_nome,
+    responsavel_pm.matricula        AS responsavel_matricula,
+    responsavel_posto.sigla         AS responsavel_posto_graduacao,
     v.responsavel_papel,
     v.total_envolvidos,
+    COALESCE(envolvidos.lista, '[]'::jsonb) AS envolvidos_resumo,
     v.prazo_vencimento,
     v.prazo_dias_restantes
+"#;
+
+/// Dados complementares usados somente pelo CRUD de processos. Permanecem
+/// fora da view comum para não obrigar mapas e relatórios a agregarem a lista
+/// completa de envolvidos quando não precisam dela.
+const JOINS_LISTA: &str = r#"
+    LEFT JOIN policiais_militares responsavel_pm
+           ON responsavel_pm.id = v.responsavel_id::uuid
+    LEFT JOIN postos_graduacoes responsavel_posto
+           ON responsavel_posto.id = responsavel_pm.posto_graduacao_id
+    LEFT JOIN LATERAL (
+        SELECT jsonb_agg(
+                   jsonb_build_object(
+                       'posto_graduacao', pg.sigla,
+                       'matricula', pm.matricula,
+                       'nome', pm.nome
+                   ) ORDER BY e.ordem
+               ) AS lista
+          FROM processo_envolvidos e
+          JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+          JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+         WHERE e.processo_id = v.id
+    ) envolvidos ON true
 "#;
 
 /// Fonte da CONTAGEM da listagem — deliberadamente as tabelas base, e não a
@@ -139,7 +166,7 @@ pub async fn list(
 
     let items = bind_filtro(
         sqlx::query_as::<_, ProceedingListItem>(&format!(
-            "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {FILTRO}
+            "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA} {FILTRO}
              ORDER BY v.data_instauracao DESC, v.numero_documento
              LIMIT $9 OFFSET $10"
         )),
@@ -161,7 +188,8 @@ pub async fn list(
 
 pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sqlx::Error> {
     let cabecalho = sqlx::query_as::<_, ProceedingListItem>(&format!(
-        "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v WHERE v.id = $1::uuid"
+        "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA}
+          WHERE v.id = $1::uuid"
     ))
     .bind(id)
     .fetch_optional(pool)
@@ -173,12 +201,11 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
 
     let extras: (
         Option<String>,
-        Option<String>,
         Option<chrono::NaiveDate>,
         Option<chrono::NaiveDate>,
         Option<chrono::NaiveDate>,
     ) = sqlx::query_as(
-        "SELECT processo_sei, numero_rgf, data_remessa_encarregado,
+        "SELECT numero_rgf, data_remessa_encarregado,
                     data_remessa_comissao, data_julgamento
                FROM processos_procedimentos WHERE id = $1::uuid",
     )
@@ -188,11 +215,10 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
 
     Ok(Some(ProceedingDetail {
         cabecalho,
-        processo_sei: extras.0,
-        numero_rgf: extras.1,
-        data_remessa_encarregado: extras.2,
-        data_remessa_comissao: extras.3,
-        data_julgamento: extras.4,
+        numero_rgf: extras.0,
+        data_remessa_encarregado: extras.1,
+        data_remessa_comissao: extras.2,
+        data_julgamento: extras.3,
         envolvidos: list_envolvidos(pool, id).await?,
         designacoes: list_designacoes(pool, id).await?,
         pessoas: list_pessoas(pool, id).await?,

@@ -1014,3 +1014,48 @@ async fn processo_antigo_continua_exibindo_catalogo_desativado() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn listagem_traz_qualificacoes_sei_e_envolvidos_na_ordem() {
+    util::com_banco_descartavel("proc_lista_qualificada", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let mut req = base(&m, "001/2026/PM-7BPMP6");
+        req.apuratorio_id = m.apuratorio_livre.clone();
+        req.natureza_fato_id = None;
+        req.numero_controle = Some("30/2026/PM-7BPMP6".to_string());
+        req.processo_sei = Some("0021.050546/2026-19".to_string());
+        req.envolvidos = vec![envolvido(&m, &m.pm_tres, 2), envolvido(&m, &m.pm_dois, 1)];
+        let id = salvar(&pool, &req)
+            .await
+            .expect("criar processo para a lista");
+
+        // O rótulo do papel é apresentação. Em CD/PAD/CJ ele pode ser
+        // "Presidente"; quem resolve o responsável continua sendo a flag.
+        sqlx::query("UPDATE papeis_processo SET nome = 'Presidente Teste' WHERE id = $1::uuid")
+            .bind(&m.papel_encarregado)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let lista = repository::list(&pool, &ProceedingFilter::default())
+            .await
+            .unwrap();
+        let item = lista.items.iter().find(|item| item.id == id).unwrap();
+
+        assert_eq!(item.numero_controle, "30/2026/PM-7BPMP6");
+        assert_eq!(item.processo_sei.as_deref(), Some("0021.050546/2026-19"));
+        assert_eq!(item.responsavel_nome.as_deref(), Some("PM UM"));
+        assert_eq!(item.responsavel_matricula.as_deref(), Some("100000001"));
+        assert_eq!(item.responsavel_posto_graduacao.as_deref(), Some("TST PM"));
+        assert_eq!(item.responsavel_papel.as_deref(), Some("Presidente Teste"));
+
+        let envolvidos = &item.envolvidos_resumo.0;
+        assert_eq!(envolvidos.len(), 2);
+        assert_eq!(envolvidos[0].nome, "PM DOIS");
+        assert_eq!(envolvidos[0].matricula, "100000002");
+        assert_eq!(envolvidos[0].posto_graduacao, "TST PM");
+        assert_eq!(envolvidos[1].nome, "PM TRES");
+    })
+    .await;
+}

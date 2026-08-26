@@ -1,6 +1,13 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct MilitarQualificado {
+    pub posto_graduacao: String,
+    pub matricula: String,
+    pub nome: String,
+}
+
 /// Único código técnico do sistema. Identifica que um apuratório usa a tabela de
 /// extensão `carta_precatoria_detalhes`. Vive em `apuratorios.codigo_extensao`,
 /// separado de `sigla` e `nome`, que o administrador renomeia à vontade.
@@ -18,6 +25,7 @@ pub struct ProceedingListItem {
     pub numero_documento: String,
     /// Número de controle efetivo: o informado ou, quando ausente, o do documento.
     pub numero_controle: String,
+    pub processo_sei: Option<String>,
     /// Rótulo montado a partir do dado, no formato usado pela Seção:
     /// `SIGLA nº CONTROLE/UNIDADE/ANO`.
     pub rotulo: String,
@@ -39,8 +47,13 @@ pub struct ProceedingListItem {
     pub resumo_fatos: Option<String>,
     /// Quem ocupa, neste apuratório, o papel configurado como responsável.
     pub responsavel_nome: Option<String>,
+    pub responsavel_matricula: Option<String>,
+    pub responsavel_posto_graduacao: Option<String>,
     pub responsavel_papel: Option<String>,
     pub total_envolvidos: i64,
+    /// Qualificação resumida dos envolvidos, na ordem definida no processo.
+    /// O detalhe continua expondo `envolvidos` com o contrato completo.
+    pub envolvidos_resumo: sqlx::types::Json<Vec<MilitarQualificado>>,
     pub prazo_vencimento: Option<NaiveDate>,
     pub prazo_dias_restantes: Option<i32>,
 }
@@ -112,7 +125,6 @@ pub struct CartaPrecatoriaDetalhes {
 pub struct ProceedingDetail {
     #[serde(flatten)]
     pub cabecalho: ProceedingListItem,
-    pub processo_sei: Option<String>,
     pub numero_rgf: Option<String>,
     pub data_remessa_encarregado: Option<NaiveDate>,
     pub data_remessa_comissao: Option<NaiveDate>,

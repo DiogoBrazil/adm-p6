@@ -562,6 +562,13 @@ export interface AddMovementRequest {
 }
 
 /** `proceedings` */
+export interface MilitarQualificado {
+  posto_graduacao: string;
+  matricula: string;
+  nome: string;
+}
+
+/** `proceedings` */
 export interface ProceedingListItem {
   id: string;
   apuratorio_id: string;
@@ -573,6 +580,7 @@ export interface ProceedingListItem {
   numero_documento: string;
   /** Número de controle efetivo: o informado ou, quando ausente, o do documento. */
   numero_controle: string;
+  processo_sei: string | null;
   /** Rótulo montado a partir do dado, no formato usado pela Seção: */
   /** `SIGLA nº CONTROLE/UNIDADE/ANO`. */
   rotulo: string;
@@ -594,8 +602,12 @@ export interface ProceedingListItem {
   resumo_fatos: string | null;
   /** Quem ocupa, neste apuratório, o papel configurado como responsável. */
   responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
   responsavel_papel: string | null;
   total_envolvidos: number;
+  /** Qualificação resumida dos envolvidos, na ordem definida no processo. */
+  envolvidos_resumo: MilitarQualificado[];
   prazo_vencimento: string | null;
   prazo_dias_restantes: number | null;
 }
@@ -665,7 +677,6 @@ export interface CartaPrecatoriaDetalhes {
 
 /** `proceedings` */
 export interface ProceedingDetail extends ProceedingListItem {
-  processo_sei: string | null;
   numero_rgf: string | null;
   data_remessa_encarregado: string | null;
   data_remessa_comissao: string | null;

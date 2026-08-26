@@ -25,6 +25,7 @@ import {
   type CartaPrecatoriaRequest,
   type DesignacaoRequest,
   type EnvolvidoRequest,
+  type MilitarQualificado,
   type PessoaRequest,
   type SaveProceedingRequest,
   type UserListItem,
@@ -686,7 +687,127 @@ const filtro = { busca: "", concluido: null as boolean | null, ano: null as numb
 const POR_PAGINA = 50;
 let pagina = 1;
 
+type StatusPrazo = {
+  classe: "badge--info" | "badge--neutro" | "badge--ok" | "badge--warn" | "badge--erro";
+  texto: string;
+};
+
+function qualificacaoMilitar(militar: MilitarQualificado): string {
+  return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
+}
+
+function qualificacaoResponsavel(
+  posto: string | null,
+  matricula: string | null,
+  nome: string | null,
+): string {
+  return [posto, matricula, nome].filter((parte): parte is string => Boolean(parte)).join(" ") || "—";
+}
+
+function statusPrazo(concluido: boolean, diasRestantes: number | null): StatusPrazo {
+  if (concluido) return { classe: "badge--info", texto: "Concluído" };
+  if (diasRestantes === null) return { classe: "badge--neutro", texto: "Sem prazo" };
+  if (diasRestantes < 0) {
+    const dias = Math.abs(diasRestantes);
+    return { classe: "badge--erro", texto: `Vencido há ${dias} ${dias === 1 ? "dia" : "dias"}` };
+  }
+  if (diasRestantes === 0) return { classe: "badge--warn", texto: "Vence hoje" };
+  return {
+    classe: diasRestantes <= 5 ? "badge--warn" : "badge--ok",
+    texto: `Vence em ${diasRestantes} ${diasRestantes === 1 ? "dia" : "dias"}`,
+  };
+}
+
+function badgeStatusPrazo(concluido: boolean, diasRestantes: number | null): string {
+  const status = statusPrazo(concluido, diasRestantes);
+  return `<span class="badge status-prazo ${status.classe}"><span class="status-prazo__ponto" aria-hidden="true"></span>${escapeHtml(status.texto)}</span>`;
+}
+
+function resumoEnvolvidos(processoId: string, envolvidos: MilitarQualificado[]): string {
+  if (envolvidos.length === 0) return "—";
+  const qualificacoes = envolvidos.map(qualificacaoMilitar);
+  if (qualificacoes.length === 1) {
+    return `<span class="pessoas-resumo__texto" title="${escapeHtml(qualificacoes[0]!)}">${escapeHtml(qualificacoes[0]!)}</span>`;
+  }
+
+  const rotulo = `${qualificacoes[0]} e outros`;
+  return `<span class="pessoas-resumo" tabindex="0"
+    data-tooltip-pessoas="${escapeHtml(JSON.stringify(qualificacoes))}"
+    aria-label="${escapeHtml(`${rotulo}. Lista completa: ${qualificacoes.join("; ")}`)}"
+    data-processo-tooltip="${escapeHtml(processoId)}">
+      <span class="pessoas-resumo__texto">${escapeHtml(rotulo)}</span>
+    </span>`;
+}
+
+let tooltipPessoasAberto: HTMLDivElement | null = null;
+let alvoTooltipPessoas: HTMLElement | null = null;
+
+function fecharTooltipPessoas(): void {
+  tooltipPessoasAberto?.remove();
+  alvoTooltipPessoas?.removeAttribute("aria-describedby");
+  tooltipPessoasAberto = null;
+  alvoTooltipPessoas = null;
+}
+
+function abrirTooltipPessoas(alvo: HTMLElement): void {
+  fecharTooltipPessoas();
+  const bruto = alvo.dataset.tooltipPessoas;
+  if (!bruto) return;
+
+  let qualificacoes: string[];
+  try {
+    qualificacoes = JSON.parse(bruto) as string[];
+  } catch {
+    return;
+  }
+
+  const tooltip = document.createElement("div");
+  tooltip.className = "tooltip-pessoas";
+  tooltip.id = `tooltip-pessoas-${alvo.dataset.processoTooltip ?? "lista"}`;
+  tooltip.setAttribute("role", "tooltip");
+  for (const qualificacao of qualificacoes) {
+    const linha = document.createElement("div");
+    linha.textContent = qualificacao;
+    tooltip.append(linha);
+  }
+  document.body.append(tooltip);
+
+  const margem = 12;
+  const espaco = 8;
+  const alvoRect = alvo.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const esquerda = Math.min(
+    Math.max(margem, alvoRect.left),
+    window.innerWidth - tooltipRect.width - margem,
+  );
+  const abaixo = alvoRect.bottom + espaco;
+  const topo = abaixo + tooltipRect.height <= window.innerHeight - margem
+    ? abaixo
+    : Math.max(margem, alvoRect.top - tooltipRect.height - espaco);
+  tooltip.style.left = `${esquerda}px`;
+  tooltip.style.top = `${topo}px`;
+  alvo.setAttribute("aria-describedby", tooltip.id);
+  tooltipPessoasAberto = tooltip;
+  alvoTooltipPessoas = alvo;
+}
+
+function ligarTooltipsPessoas(): void {
+  document.querySelectorAll<HTMLElement>("[data-tooltip-pessoas]").forEach((alvo) => {
+    alvo.addEventListener("mouseenter", () => abrirTooltipPessoas(alvo));
+    alvo.addEventListener("mouseleave", fecharTooltipPessoas);
+    alvo.addEventListener("focus", () => abrirTooltipPessoas(alvo));
+    alvo.addEventListener("blur", fecharTooltipPessoas);
+    alvo.addEventListener("keydown", (evento) => {
+      if (evento.key === "Escape") {
+        fecharTooltipPessoas();
+        alvo.blur();
+      }
+    });
+  });
+}
+
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
+  fecharTooltipPessoas();
   limparFormularioPendente();
   const resposta = await call("proceedings_list", {
     filter: {
@@ -712,7 +833,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
         ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
       </div>
       <div class="filtros">
-        <input id="busca" type="search" placeholder="Número, resumo…" value="${escapeHtml(filtro.busca)}" />
+        <input id="busca" type="search" placeholder="Número, SEI, resumo…" value="${escapeHtml(filtro.busca)}" />
         <label>Situação <select id="concluido">
           <option value="">todas</option>
           <option value="false"${filtro.concluido === false ? " selected" : ""}>em andamento</option>
@@ -721,39 +842,48 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
       </div>
       ${
         items.length
-          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--larga">
+          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--larga tabela-processos">
+              <colgroup>
+                <col class="col-layout-tipo" />
+                <col class="col-layout-ano" />
+                <col class="col-layout-numero" />
+                <col class="col-layout-origem" />
+                <col class="col-layout-sei" />
+                <col class="col-layout-pessoa" />
+                <col class="col-layout-pessoa" />
+                <col class="col-layout-status" />
+                <col class="col-layout-acao" />
+              </colgroup>
               <thead><tr>
-                <th>Rótulo</th>
-                <th class="col-curta">Espécie</th>
-                <th class="col-texto">Unidade</th>
-                <th class="col-texto">Natureza</th>
-                <th class="col-curta">Instauração</th>
-                <th class="col-texto">Responsável</th>
-                <th class="col-numero">Envolv.</th>
-                <th class="col-curta">Vencimento</th>
-                <th class="col-curta">Situação</th>
-                <th class="col-curta">Ações</th>
+                <th class="col-tipo">Tipo</th>
+                <th class="col-ano">Ano</th>
+                <th class="col-numero-processo">Número</th>
+                <th class="col-origem">Origem</th>
+                <th class="col-sei">SEI</th>
+                <th class="col-pessoa">Encarregado</th>
+                <th class="col-pessoa">PM envolvido</th>
+                <th class="col-status-prazo">Status prazo</th>
+                <th class="col-acao">Abrir</th>
               </tr></thead>
               <tbody>
                 ${items
                   .map((p) => {
-                    const vencido = p.prazo_dias_restantes !== null && p.prazo_dias_restantes < 0;
+                    const encarregado = qualificacaoResponsavel(
+                      p.responsavel_posto_graduacao,
+                      p.responsavel_matricula,
+                      p.responsavel_nome,
+                    );
                     return `
                   <tr>
-                    <td class="col-principal" title="${escapeHtml(p.rotulo)}">${escapeHtml(p.rotulo)}</td>
-                    <td class="col-curta">${escapeHtml(p.apuratorio_sigla)}</td>
-                    <td class="col-texto" title="${escapeHtml(p.unidade_origem)}">${escapeHtml(p.unidade_origem)}</td>
-                    <td class="col-texto" title="${escapeHtml(p.natureza_fato ?? "")}">${escapeHtml(p.natureza_fato ?? "—")}</td>
-                    <td class="col-curta">${escapeHtml(p.data_instauracao)}</td>
-                    <td class="col-texto" title="${escapeHtml(p.responsavel_nome ?? "")}">${escapeHtml(p.responsavel_nome ?? "—")}</td>
-                    <td class="col-numero">${p.total_envolvidos}</td>
-                    <td class="col-curta">${
-                      p.prazo_vencimento
-                        ? `${escapeHtml(p.prazo_vencimento)}${vencido ? ` <span class="badge badge--erro">vencido</span>` : ""}`
-                        : "—"
-                    }</td>
-                    <td class="col-curta"><span class="badge ${p.concluido ? "badge--ok" : "badge--neutro"}">${p.concluido ? "concluído" : "em andamento"}</span></td>
-                    <td class="row-actions"><button type="button" class="outline small" data-processo="${escapeHtml(p.id)}">Abrir</button></td>
+                    <td class="col-tipo">${escapeHtml(p.apuratorio_sigla)}</td>
+                    <td class="col-ano">${escapeHtml(p.data_instauracao.slice(0, 4))}</td>
+                    <td class="col-numero-processo" title="${escapeHtml(p.numero_controle)}">${escapeHtml(p.numero_controle)}</td>
+                    <td class="col-origem" title="${escapeHtml(p.unidade_origem)}">${escapeHtml(p.unidade_origem)}</td>
+                    <td class="col-sei" title="${escapeHtml(p.processo_sei ?? "")}">${escapeHtml(p.processo_sei ?? "—")}</td>
+                    <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
+                    <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
+                    <td class="col-status-prazo">${badgeStatusPrazo(p.concluido, p.prazo_dias_restantes)}</td>
+                    <td class="col-acao"><div class="row-actions"><button type="button" class="outline small" data-processo="${escapeHtml(p.id)}">Abrir</button></div></td>
                   </tr>`;
                   })
                   .join("")}
@@ -768,6 +898,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
     pagina = nova;
     void renderListaProcessos(ctx);
   });
+  ligarTooltipsPessoas();
 
   // Mudar filtro volta para a primeira página: seguir na 3ª de um resultado
   // que agora tem 1 mostraria tela vazia sem dizer por quê.
