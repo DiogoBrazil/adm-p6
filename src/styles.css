@@ -1952,7 +1952,7 @@ table {
   color: var(--text);
 }
 
-.table-wrap > table:not(.detail-table):not(.ficha) {
+.table-wrap > table:not(.detail-table):not(.ficha):not(.tabela-processos) {
   min-width: 680px;
 }
 
@@ -2015,46 +2015,52 @@ tr.atrasado {
   min-width: 1060px;
 }
 
-/* A listagem principal privilegia leitura horizontal: os campos de pessoas e
-   SEI não são comprimidos para caber numa janela estreita; o contêiner rola. */
+/* As nove colunas dividem exatamente 100% da área disponível. O layout fixo
+   impede que um nome longo redimensione a tabela inteira; as células textuais
+   entregam o restante no tooltip. A rolagem horizontal fica restrita ao
+   fallback abaixo de 900px, declarado depois deste bloco. */
 .tabela-processos {
-  min-width: 1400px;
+  width: 100%;
+  min-width: 0;
   table-layout: fixed;
 }
 
-.tabela-processos col.col-layout-tipo,
+.tabela-processos col.col-layout-tipo {
+  width: 5.5%;
+}
+
 .tabela-processos col.col-layout-ano {
-  width: 70px;
+  width: 5.5%;
 }
 
 .tabela-processos col.col-layout-numero {
-  width: 180px;
+  width: 8%;
 }
 
 .tabela-processos col.col-layout-origem {
-  width: 100px;
+  width: 7.5%;
 }
 
 .tabela-processos col.col-layout-sei {
-  width: 190px;
+  width: 15.5%;
 }
 
 .tabela-processos col.col-layout-pessoa {
-  width: 270px;
+  width: 20%;
 }
 
 .tabela-processos col.col-layout-status {
-  width: 170px;
+  width: 12.5%;
 }
 
 .tabela-processos col.col-layout-acao {
-  width: 90px;
+  width: 5.5%;
 }
 
 .tabela-processos th,
 .tabela-processos td {
-  height: 48px;
-  padding: 10px 12px;
+  height: 46px;
+  padding: 9px 8px;
   vertical-align: middle;
 }
 
@@ -2097,6 +2103,7 @@ tr.atrasado {
 
 .tabela-processos .col-sei {
   font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2110,7 +2117,7 @@ tr.atrasado {
 
 .tabela-processos .col-status-prazo,
 .tabela-processos .col-acao {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .tabela-processos .row-actions {
@@ -2120,8 +2127,21 @@ tr.atrasado {
 }
 
 .tabela-processos .row-actions button {
-  min-width: 64px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 4px;
+  font-size: 0.72rem;
   white-space: nowrap;
+}
+
+.tabela-processos :is(th, td).col-acao {
+  padding-inline: 5px;
+}
+
+@media (max-width: 899px) {
+  .tabela-processos {
+    min-width: 900px;
+  }
 }
 
 .celula-reticencias,
@@ -2218,18 +2238,21 @@ tr.atrasado {
 
 .status-prazo {
   justify-content: center;
-  gap: 6px;
-  min-width: max-content;
-  padding: 4px 10px;
-  font-size: 0.75rem;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  font-size: 0.7rem;
   font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .status-prazo__ponto {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
   border-radius: 50%;
   background: currentColor;
 }

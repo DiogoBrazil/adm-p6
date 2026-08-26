@@ -720,7 +720,7 @@ function statusPrazo(concluido: boolean, diasRestantes: number | null): StatusPr
 
 function badgeStatusPrazo(concluido: boolean, diasRestantes: number | null): string {
   const status = statusPrazo(concluido, diasRestantes);
-  return `<span class="badge status-prazo ${status.classe}"><span class="status-prazo__ponto" aria-hidden="true"></span>${escapeHtml(status.texto)}</span>`;
+  return `<span class="badge status-prazo ${status.classe}" title="${escapeHtml(status.texto)}"><span class="status-prazo__ponto" aria-hidden="true"></span>${escapeHtml(status.texto)}</span>`;
 }
 
 function resumoEnvolvidos(processoId: string, envolvidos: MilitarQualificado[]): string {
