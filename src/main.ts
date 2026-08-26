@@ -90,8 +90,59 @@ const DASHBOARD: Route = { path: ROTA_DASHBOARD, label: "Painel", group: "Geral"
 let session: SessionUser | null = null;
 let activePath = "/dashboard";
 const app = document.querySelector<HTMLDivElement>("#app")!;
-let sidebarRecolhida = localStorage.getItem("adm-p6:sidebar-recolhida") === "true";
-const gruposAbertos = new Set<string>(["Geral", "Procedimentos"]);
+const CHAVE_SIDEBAR_RECOLHIDA = "adm-p6:sidebar-recolhida";
+const CHAVE_GRUPOS_ABERTOS = "adm-p6:grupos-abertos";
+let sidebarRecolhida = localStorage.getItem(CHAVE_SIDEBAR_RECOLHIDA) === "true";
+
+function carregarGruposAbertos(): Set<string> {
+  try {
+    const salvos = JSON.parse(localStorage.getItem(CHAVE_GRUPOS_ABERTOS) ?? "null") as unknown;
+    if (Array.isArray(salvos) && salvos.every((grupo) => typeof grupo === "string")) {
+      return new Set(salvos);
+    }
+  } catch {
+    // Estado visual corrompido não pode impedir a aplicação de abrir.
+  }
+  return new Set(["Geral", "Procedimentos"]);
+}
+
+const gruposAbertos = carregarGruposAbertos();
+
+function salvarGruposAbertos(): void {
+  localStorage.setItem(CHAVE_GRUPOS_ABERTOS, JSON.stringify([...gruposAbertos]));
+}
+
+function definirSidebarRecolhida(recolhida: boolean): void {
+  sidebarRecolhida = recolhida;
+  localStorage.setItem(CHAVE_SIDEBAR_RECOLHIDA, String(recolhida));
+  document.querySelector(".app-shell")?.classList.toggle("sidebar-is-collapsed", recolhida);
+
+  const botao = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+  if (!botao) return;
+  const rotulo = recolhida ? "Expandir menu" : "Recolher menu";
+  botao.setAttribute("aria-label", rotulo);
+  botao.title = rotulo;
+  const simbolo = botao.querySelector("span");
+  if (simbolo) simbolo.textContent = recolhida ? "›" : "‹";
+}
+
+function definirGrupoAberto(grupo: string, aberto: boolean): void {
+  if (aberto) gruposAbertos.add(grupo);
+  else gruposAbertos.delete(grupo);
+  salvarGruposAbertos();
+
+  const botao = [...document.querySelectorAll<HTMLButtonElement>("[data-nav-group]")]
+    .find((item) => item.dataset.navGroup === grupo);
+  if (!botao) return;
+  botao.setAttribute("aria-expanded", String(aberto));
+  const secao = botao.closest<HTMLElement>(".nav-group");
+  secao?.classList.toggle("is-open", aberto);
+  const painel = secao?.querySelector<HTMLElement>(".nav-group-panel");
+  if (painel) {
+    painel.setAttribute("aria-hidden", String(!aberto));
+    painel.inert = !aberto;
+  }
+}
 
 window.addEventListener("beforeunload", (evento) => {
   if (!formularioTemPendencia()) return;
@@ -140,25 +191,29 @@ function groupedRoutes() {
 function shell(content: string) {
   const grupoAtivo = routes.find((route) => route.path === activePath)?.group ?? "Geral";
   gruposAbertos.add(grupoAtivo);
+  salvarGruposAbertos();
   const nav = Object.entries(groupedRoutes())
-    .map(([group, items]) => {
+    .map(([group, items], indice) => {
       const aberto = gruposAbertos.has(group);
+      const painelId = `nav-group-panel-${indice}`;
       return `
       <section class="nav-group${aberto ? " is-open" : ""}">
         <button class="nav-group-toggle" type="button" data-nav-group="${escapeHtml(group)}"
-                aria-expanded="${aberto}" title="${escapeHtml(group)}">
+                aria-controls="${painelId}" aria-expanded="${aberto}" title="${escapeHtml(group)}">
           <span class="nav-group-mark" aria-hidden="true">${escapeHtml(group.slice(0, 1))}</span>
           <span class="nav-group-label">${escapeHtml(group)}</span>
           <span class="nav-chevron" aria-hidden="true">⌄</span>
         </button>
-        <div class="nav-group-items"${aberto ? "" : " hidden"}>
-          ${items.map((route) => `
-            <button class="nav-item ${route.path === activePath ? "active" : ""}" data-route="${escapeHtml(route.path)}"
-                    title="${escapeHtml(route.label)}">
-              <span>${escapeHtml(route.label)}</span>
-              ${route.adminOnly ? "<small>admin</small>" : ""}
-            </button>
-          `).join("")}
+        <div class="nav-group-panel" id="${painelId}" aria-hidden="${String(!aberto)}"${aberto ? "" : " inert"}>
+          <div class="nav-group-items">
+            ${items.map((route) => `
+              <button class="nav-item ${route.path === activePath ? "active" : ""}" data-route="${escapeHtml(route.path)}"
+                      title="${escapeHtml(route.label)}"${route.path === activePath ? ' aria-current="page"' : ""}>
+                <span>${escapeHtml(route.label)}</span>
+                ${route.adminOnly ? "<small>admin</small>" : ""}
+              </button>
+            `).join("")}
+          </div>
         </div>
       </section>
     `;
@@ -210,40 +265,18 @@ function shell(content: string) {
   });
 
   document.querySelector<HTMLButtonElement>("#sidebar-toggle")?.addEventListener("click", () => {
-    sidebarRecolhida = !sidebarRecolhida;
-    localStorage.setItem("adm-p6:sidebar-recolhida", String(sidebarRecolhida));
-    document.querySelector(".app-shell")?.classList.toggle("sidebar-is-collapsed", sidebarRecolhida);
-    const botao = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-    if (botao) {
-      const rotulo = sidebarRecolhida ? "Expandir menu" : "Recolher menu";
-      botao.setAttribute("aria-label", rotulo);
-      botao.title = rotulo;
-      const simbolo = botao.querySelector("span");
-      if (simbolo) simbolo.textContent = sidebarRecolhida ? "›" : "‹";
-    }
+    definirSidebarRecolhida(!sidebarRecolhida);
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-nav-group]").forEach((button) => {
     button.addEventListener("click", () => {
       const grupo = button.dataset.navGroup!;
       if (sidebarRecolhida) {
-        sidebarRecolhida = false;
-        document.querySelector(".app-shell")?.classList.remove("sidebar-is-collapsed");
-        const recolher = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-        if (recolher) {
-          recolher.setAttribute("aria-label", "Recolher menu");
-          recolher.title = "Recolher menu";
-          const simbolo = recolher.querySelector("span");
-          if (simbolo) simbolo.textContent = "‹";
-        }
+        definirSidebarRecolhida(false);
+        definirGrupoAberto(grupo, true);
+        return;
       }
-      const abrir = !gruposAbertos.has(grupo);
-      if (abrir) gruposAbertos.add(grupo);
-      else gruposAbertos.delete(grupo);
-      localStorage.setItem("adm-p6:sidebar-recolhida", String(sidebarRecolhida));
-      button.setAttribute("aria-expanded", String(abrir));
-      button.closest(".nav-group")?.classList.toggle("is-open", abrir);
-      button.parentElement?.querySelector<HTMLElement>(".nav-group-items")?.toggleAttribute("hidden", !abrir);
+      definirGrupoAberto(grupo, !gruposAbertos.has(grupo));
     });
   });
 

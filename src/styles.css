@@ -1385,7 +1385,7 @@ label .campo-efeito,
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
-  transition: grid-template-columns 180ms ease;
+  transition: grid-template-columns 260ms ease-in-out;
 }
 
 .app-shell.sidebar-is-collapsed {
@@ -1407,6 +1407,7 @@ label .campo-efeito,
   overflow-x: hidden;
   overflow-y: auto;
   z-index: 6;
+  transition: padding 260ms ease-in-out;
 }
 
 .brand {
@@ -1507,17 +1508,38 @@ label .campo-efeito,
 .nav-chevron {
   justify-self: end;
   font-size: 1rem;
-  transition: transform 140ms ease;
+  transition: transform 200ms ease-in-out;
 }
 
 .nav-group.is-open .nav-chevron {
   transform: rotate(180deg);
 }
 
+.nav-group-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 220ms ease-in-out,
+    opacity 160ms ease,
+    visibility 0s linear 220ms;
+}
+
+.nav-group.is-open .nav-group-panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
 .nav-group-items {
+  min-height: 0;
   display: grid;
   gap: 2px;
   padding: 2px 0 5px 34px;
+  overflow: hidden;
 }
 
 .nav-item {
@@ -1557,7 +1579,7 @@ label .campo-efeito,
 .sidebar-is-collapsed .brand div,
 .sidebar-is-collapsed .nav-group-label,
 .sidebar-is-collapsed .nav-chevron,
-.sidebar-is-collapsed .nav-group-items {
+.sidebar-is-collapsed .nav-group-panel {
   display: none;
 }
 
@@ -1570,6 +1592,11 @@ label .campo-efeito,
 .sidebar-is-collapsed .nav-group-mark {
   width: 32px;
   height: 32px;
+}
+
+.sidebar-is-collapsed .brand img {
+  width: 28px;
+  height: 38px;
 }
 
 .sidebar-is-collapsed .nav-group.is-open .nav-group-mark {
@@ -2457,8 +2484,30 @@ tr.atrasado {
     display: grid;
   }
 
-  .sidebar-is-collapsed .nav-group-items {
+  .sidebar-is-collapsed .nav-group-panel {
     display: grid;
+  }
+
+  .sidebar-is-collapsed .brand {
+    justify-content: flex-start;
+    margin-inline: 4px;
+  }
+
+  .sidebar-is-collapsed .brand img {
+    width: 36px;
+    height: 44px;
+  }
+
+  .sidebar-is-collapsed .nav-group-toggle {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) 18px;
+    justify-content: initial;
+    padding: 6px 8px;
+  }
+
+  .sidebar-is-collapsed .nav-group-mark {
+    width: 24px;
+    height: 24px;
   }
 
   .sidebar-toggle {
