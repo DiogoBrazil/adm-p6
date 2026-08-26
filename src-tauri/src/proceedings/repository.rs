@@ -1,6 +1,7 @@
 use base64::Engine;
 use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 
+use crate::db::paginacao::{PADRAO, TETO};
 use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
 use crate::proceedings::domain::{
@@ -150,7 +151,7 @@ pub async fn list(
     filtro: &ProceedingFilter,
 ) -> Result<ProceedingListResult, sqlx::Error> {
     let page = filtro.page.unwrap_or(1).max(1);
-    let per_page = filtro.per_page.unwrap_or(25).clamp(1, 200);
+    let per_page = filtro.per_page.unwrap_or(PADRAO).clamp(1, TETO);
     let busca = filtro
         .busca
         .as_deref()

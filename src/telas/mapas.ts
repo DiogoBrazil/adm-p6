@@ -19,10 +19,15 @@ import {
   barraDeExportacao,
   baixarCsvBase64,
   escapeHtml,
+  ITENS_POR_PAGINA,
   ligarExportacao,
+  ligarPaginacao,
   notificar,
   option,
+  paginacao,
+  paginaValida,
   tabela,
+  type Coluna,
 } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
@@ -60,6 +65,9 @@ function tituloDoMapa(apuratorios: Apuratorio[]): string {
   return `Mapa de ${MESES[mesSelecionado - 1]}/${anoSelecionado} — ${escopo}`;
 }
 
+// Dez colunas de conteúdo imprevisível: o mapa é o documento emitido, e
+// espremer coluna aqui é pior que rolar. Por isso `larga: true` nas três
+// chamadas abaixo, e nenhuma largura declarada — ver o cabeçalho de `Coluna`.
 const COLUNAS_MAPA = [
   "Apuratório", "Identificação", "Unidade", "Natureza", "Instauração",
   "Conclusão", "Responsável", "Envolvidos", "Vencimento", "Último andamento",
@@ -105,7 +113,9 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
           ${ctx.podeEscrever() ? `<button id="btn-salvar-mapa" class="small">Salvar este mapa</button>` : ""}
         </div>
       </div>
-      ${tabela(COLUNAS_MAPA, linhasGeradas.map(linhaMapa), "Nada em mãos neste período.")}`;
+      ${tabela(COLUNAS_MAPA, linhasGeradas.map(linhaMapa), "Nada em mãos neste período.", {
+        larga: true,
+      })}`;
 
   ctx.shell(`
     <section class="panel">
@@ -209,38 +219,73 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
 // ── Mapas salvos ──────────────────────────────────────────────────────
 
 let mapaAberto: string | null = null;
+let paginaSalvos = 1;
+
+/** As oito colunas dividem 100% da largura. As contagens não quebram linha. */
+const COLUNAS_SALVOS: Coluna[] = [
+  { rotulo: "Título", largura: 26, truncar: true },
+  { rotulo: "Apuratório", largura: 11, alinhamento: "centro", nowrap: true },
+  { rotulo: "Período", largura: 19, alinhamento: "centro", nowrap: true },
+  { rotulo: "Total", largura: 7, alinhamento: "direita", nowrap: true },
+  { rotulo: "Em andamento", largura: 10, alinhamento: "direita", nowrap: true },
+  { rotulo: "Concluídos", largura: 9, alinhamento: "direita", nowrap: true },
+  { rotulo: "Gerado por", largura: 12, truncar: true },
+  { rotulo: "Em", largura: 6, alinhamento: "centro", nowrap: true },
+];
 
 export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
   if (mapaAberto) return renderMapaSalvo(ctx, mapaAberto);
 
-  const mapas = (await call("reports_saved_maps")).data ?? [];
-  const linhas = mapas.map((m: SavedMapListItem) => [
-    m.titulo,
-    m.apuratorio_sigla ?? "todos",
-    `${m.periodo_inicio} a ${m.periodo_fim}`,
-    { texto: String(m.total_processos), numerica: true },
-    { texto: String(m.total_andamento), numerica: true },
-    { texto: String(m.total_concluidos), numerica: true },
-    m.gerado_por ?? "—",
-    m.created_at.slice(0, 10),
-  ]);
+  const resposta = await call("reports_saved_maps", {
+    page: paginaSalvos,
+    perPage: ITENS_POR_PAGINA,
+  });
+  const mapas = resposta.data?.items ?? [];
+  const total = resposta.data?.total ?? 0;
+
+  // Excluir o único mapa da última página deixaria a tela vazia sem dizer por quê.
+  const corrigida = paginaValida(paginaSalvos, ITENS_POR_PAGINA, total);
+  if (corrigida !== paginaSalvos) {
+    paginaSalvos = corrigida;
+    return renderMapasSalvos(ctx);
+  }
+
+  // O `id` na linha é o que o clique casa. Por posição, paginar abriria o mapa
+  // errado — e um mapa salvo parece com o outro na tabela.
+  const linhas = mapas.map((m: SavedMapListItem) => ({
+    classe: "clicavel",
+    id: m.id,
+    celulas: [
+      m.titulo,
+      m.apuratorio_sigla ?? "todos",
+      `${m.periodo_inicio} a ${m.periodo_fim}`,
+      { texto: String(m.total_processos), numerica: true },
+      { texto: String(m.total_andamento), numerica: true },
+      { texto: String(m.total_concluidos), numerica: true },
+      m.gerado_por ?? "—",
+      m.created_at.slice(0, 10),
+    ],
+  }));
 
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Mapas Salvos</h1><p>Cada mapa é o registro do que foi emitido, não um recálculo.</p></div>
+        <div><h1>Mapas Salvos <span class="badge">${total}</span></h1>
+          <p>Cada mapa é o registro do que foi emitido, não um recálculo.</p></div>
       </div>
-      ${tabela(
-        ["Título", "Apuratório", "Período", "Total", "Em andamento", "Concluídos", "Gerado por", "Em"],
-        linhas.map((celulas) => ({ celulas, classe: "clicavel" })),
-        "Nenhum mapa salvo.",
-      )}
+      ${tabela(COLUNAS_SALVOS, linhas, "Nenhum mapa salvo.")}
+      ${paginacao("mapas-salvos", paginaSalvos, ITENS_POR_PAGINA, total)}
     </section>
   `);
 
-  document.querySelectorAll<HTMLTableRowElement>("tr.clicavel").forEach((linha, indice) => {
+  ligarPaginacao("mapas-salvos", paginaSalvos, (nova) => {
+    paginaSalvos = nova;
+    void renderMapasSalvos(ctx);
+  });
+
+  document.querySelectorAll<HTMLTableRowElement>("tr[data-linha]").forEach((linha) => {
     linha.addEventListener("click", () => {
-      mapaAberto = mapas[indice]?.id ?? null;
+      mapaAberto = linha.dataset.linha ?? null;
       void renderMapasSalvos(ctx);
     });
   });
@@ -278,7 +323,7 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
       </div>
       ${
         linhas
-          ? tabela(COLUNAS_MAPA, linhas.map(linhaMapa), "O mapa foi salvo vazio.")
+          ? tabela(COLUNAS_MAPA, linhas.map(linhaMapa), "O mapa foi salvo vazio.", { larga: true })
           : `<pre>${escapeHtml(JSON.stringify(mapa.dados_mapa, null, 2))}</pre>`
       }
     </section>

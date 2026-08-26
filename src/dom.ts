@@ -79,6 +79,30 @@ export function notificar(mensagem: string, tipo: TipoFeedback = "info"): void {
 
 // ── Tabelas ───────────────────────────────────────────────────────────
 
+/**
+ * Uma coluna da listagem: rótulo, quanto ocupa e como o texto se comporta.
+ *
+ * Existe porque o padrão visual fechado na listagem de processos vivia num
+ * arquivo só — `colgroup` com largura percentual, `table-layout: fixed`,
+ * reticências com `title` — e as outras onze telas caíram nas classes
+ * genéricas ou em nenhuma. Aqui ele é declarado uma vez e cada tela diz só o
+ * que é seu: quanto cada coluna ocupa.
+ *
+ * `largura` é **percentual da tabela**, não pixel. Foi assim que a listagem de
+ * processos resolveu o problema de a primeira coluna sem restrição ficar com
+ * toda a sobra e as demais encolherem até "7º Batalhã…".
+ */
+export type Coluna = {
+  rotulo: string;
+  /** Percentual da largura da tabela. Sem ela, o navegador dimensiona pelo conteúdo. */
+  largura?: number;
+  alinhamento?: "centro" | "direita";
+  /** Corta com reticências e entrega o conteúdo inteiro no `title`. */
+  truncar?: boolean;
+  /** Impede a quebra em duas linhas: data, contagem, etiqueta, botão. */
+  nowrap?: boolean;
+};
+
 /** Célula de tabela: o texto já sai escapado, o alinhamento é opcional. */
 export type Celula = string | {
   texto: string;
@@ -87,8 +111,18 @@ export type Celula = string | {
   acao?: { rotulo: string; id: string };
 };
 
-/** Linha: só as células, ou as células com uma classe no `<tr>` (`atrasado`). */
-export type Linha = Celula[] | { celulas: Celula[]; classe?: string };
+/**
+ * Linha: só as células, ou as células com uma classe no `<tr>` (`atrasado`).
+ *
+ * `id` sai como `data-linha` e é o que o clique da tela deve casar. Existe
+ * porque duas telas mapeavam a linha clicada **por posição** no array — e aí
+ * qualquer coisa que mude a ordem (filtrar, paginar, recarregar) abre o
+ * registro errado, sem errar visivelmente: uma linha de auditoria parece com a
+ * outra.
+ */
+export type Linha =
+  | Celula[]
+  | { celulas: Celula[]; classe?: string; id?: string };
 
 /**
  * Tabela escapada, com o invólucro de rolagem horizontal que o CSS espera.
@@ -98,31 +132,85 @@ export type Linha = Celula[] | { celulas: Celula[]; classe?: string };
  * chaves do JSON do backend.
  */
 export function tabela(
-  colunas: string[],
+  colunas: (string | Coluna)[],
   linhas: Linha[],
   vazio = "Nada a exibir.",
   opcoes: { viewport?: boolean; larga?: boolean } = {},
 ): string {
   if (!linhas.length) return `<p class="empty">${escapeHtml(vazio)}</p>`;
-  const celula = (c: Celula) => {
-    if (typeof c === "string") return `<td>${escapeHtml(c)}</td>`;
-    const classes = [c.numerica ? "num" : "", c.classe ?? ""].filter(Boolean).join(" ");
-    if (c.acao) {
-      return `<td class="row-actions"><button type="button" class="outline small" data-tabela-acao="${escapeHtml(c.acao.id)}">${escapeHtml(c.acao.rotulo)}</button></td>`;
+
+  const definicoes: Coluna[] = colunas.map((c) => (typeof c === "string" ? { rotulo: c } : c));
+  // Só vira tabela de layout fixo quem declarou largura. Uma tela de relatório
+  // que passou apenas rótulos continua exatamente como era.
+  const fixa = definicoes.some((c) => c.largura !== undefined);
+
+  const classeDaColuna = (c: Coluna) =>
+    [
+      c.alinhamento === "centro" ? "col--centro" : "",
+      c.alinhamento === "direita" ? "col--direita" : "",
+      c.truncar ? "col--trunc" : "",
+      c.nowrap ? "col--nowrap" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  const celula = (c: Celula, indice: number) => {
+    const definicao = definicoes[indice] ?? { rotulo: "" };
+    if (c && typeof c === "object" && c.acao) {
+      return `<td class="row-actions ${escapeHtml(classeDaColuna(definicao))}"><button type="button" class="outline small" data-tabela-acao="${escapeHtml(c.acao.id)}">${escapeHtml(c.acao.rotulo)}</button></td>`;
     }
-    return `<td${classes ? ` class="${escapeHtml(classes)}"` : ""}>${escapeHtml(c.texto)}</td>`;
+    const texto = typeof c === "string" ? c : c.texto;
+    const extra = typeof c === "string" ? "" : [c.numerica ? "num" : "", c.classe ?? ""].join(" ");
+    const classes = [classeDaColuna(definicao), extra].join(" ").trim().replace(/\s+/g, " ");
+    // O `title` só existe onde a coluna trunca: num texto que cabe inteiro ele
+    // é ruído, e o navegador ainda o mostra em cima do conteúdo já visível.
+    const title = definicao.truncar && texto ? ` title="${escapeHtml(texto)}"` : "";
+    return `<td${classes ? ` class="${escapeHtml(classes)}"` : ""}${title}>${escapeHtml(texto)}</td>`;
   };
+
   const linha = (l: Linha) => {
     const celulas = Array.isArray(l) ? l : l.celulas;
     const classe = Array.isArray(l) ? "" : (l.classe ?? "");
-    return `<tr${classe ? ` class="${escapeHtml(classe)}"` : ""}>${celulas.map(celula).join("")}</tr>`;
+    const id = Array.isArray(l) ? undefined : l.id;
+    return `<tr${classe ? ` class="${escapeHtml(classe)}"` : ""}${id === undefined ? "" : ` data-linha="${escapeHtml(id)}"`}>${celulas.map(celula).join("")}</tr>`;
   };
+
+  // A largura sai em `data-largura` e é aplicada pela CSSOM em
+  // `aplicarLarguras`. `style=""` interpolado no markup — inclusive num
+  // `<col>` — é recusado pela CSP, e o elemento aparece sem estilo **sem erro
+  // de build**. É a mesma via das barras dos painéis de contagem.
+  const colgroup = fixa
+    ? `<colgroup>${definicoes
+        .map((c) => `<col${c.largura === undefined ? "" : ` data-largura="${c.largura}"`} />`)
+        .join("")}</colgroup>`
+    : "";
+
   // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
   // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
-  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${opcoes.larga ? " tabela-dados--larga" : ""}">
-      <thead><tr>${colunas.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>
+  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}">
+      ${colgroup}
+      <thead><tr>${definicoes
+        .map((c) => {
+          const classe = classeDaColuna(c);
+          return `<th${classe ? ` class="${escapeHtml(classe)}"` : ""}>${escapeHtml(c.rotulo)}</th>`;
+        })
+        .join("")}</tr></thead>
       <tbody>${linhas.map(linha).join("")}</tbody>
     </table></div>`;
+}
+
+/**
+ * Aplica as larguras declaradas em `Coluna.largura`.
+ *
+ * Gêmea de `aplicarBarras`, e pela mesma razão: a CSP recusa `style=""` no
+ * markup, e a CSSOM é a única via que ela não alcança. Chamada de
+ * `main.ts::shell()` depois de cada render, para que nenhuma tela possa
+ * esquecer — se ela não rodar, as colunas ficam sem largura e **nada acusa**.
+ */
+export function aplicarLarguras(raiz: ParentNode = document): void {
+  raiz.querySelectorAll<HTMLElement>("col[data-largura]").forEach((col) => {
+    col.style.width = `${col.dataset.largura}%`;
+  });
 }
 
 // ── Exportação ────────────────────────────────────────────────────────
@@ -188,6 +276,16 @@ export function barraDeExportacao(opcoes: { imprimir?: boolean; csv?: boolean })
 }
 
 /**
+ * Itens por página de toda listagem operacional.
+ *
+ * Um número só, aqui, porque eram cinco espalhados — 50 em processos, 50 em
+ * usuários, 200 na auditoria, e catálogos e mapas salvos sem nenhum. O backend
+ * usa o mesmo padrão (`db::paginacao::PADRAO`), para que chamar sem tamanho
+ * explícito devolva o que a tela desenharia de qualquer jeito.
+ */
+export const ITENS_POR_PAGINA = 10;
+
+/**
  * Controle de página para as listagens paginadas.
  *
  * Existe porque as duas telas de lista pediam uma página grande e paravam por
@@ -196,35 +294,154 @@ export function barraDeExportacao(opcoes: { imprimir?: boolean; csv?: boolean })
  * caminho nenhum — não havia próxima página, e a contagem no cabeçalho dizia
  * um número maior que o de linhas na tela.
  *
+ * A `chave` distingue dois paginadores na mesma tela: Prazos tem "Vencidos" e
+ * "Vencendo em até X dias" lado a lado, e com um id fixo o segundo bloco
+ * herdaria os botões do primeiro — os dois andariam juntos.
+ *
  * Devolve string vazia quando tudo cabe numa página, para não poluir a tela.
  */
-export function paginacao(pagina: number, porPagina: number, total: number): string {
+export function paginacao(
+  chave: string,
+  pagina: number,
+  porPagina: number,
+  total: number,
+): string {
   const paginas = Math.max(1, Math.ceil(total / porPagina));
   if (paginas <= 1) return "";
   const primeiro = (pagina - 1) * porPagina + 1;
   const ultimo = Math.min(pagina * porPagina, total);
+  const id = (lado: string) => `btn-pagina-${lado}-${chave}`;
   return `<div class="paginacao">
-    <button class="outline small" id="btn-pagina-anterior"${pagina <= 1 ? " disabled" : ""}>Anterior</button>
+    <button class="outline small" id="${escapeHtml(id("anterior"))}"${pagina <= 1 ? " disabled" : ""}>Anterior</button>
     <span>${primeiro}–${ultimo} de ${total} (página ${pagina} de ${paginas})</span>
-    <button class="outline small" id="btn-pagina-proxima"${pagina >= paginas ? " disabled" : ""}>Próxima</button>
+    <button class="outline small" id="${escapeHtml(id("proxima"))}"${pagina >= paginas ? " disabled" : ""}>Próxima</button>
   </div>`;
 }
 
 /** Liga os botões de `paginacao`. `aoMudar` recebe a página escolhida. */
-export function ligarPaginacao(pagina: number, aoMudar: (pagina: number) => void): void {
+export function ligarPaginacao(
+  chave: string,
+  pagina: number,
+  aoMudar: (pagina: number) => void,
+): void {
   document
-    .querySelector<HTMLButtonElement>("#btn-pagina-anterior")
+    .querySelector<HTMLButtonElement>(`#btn-pagina-anterior-${CSS.escape(chave)}`)
     ?.addEventListener("click", () => aoMudar(pagina - 1));
   document
-    .querySelector<HTMLButtonElement>("#btn-pagina-proxima")
+    .querySelector<HTMLButtonElement>(`#btn-pagina-proxima-${CSS.escape(chave)}`)
     ?.addEventListener("click", () => aoMudar(pagina + 1));
 }
 
-/** Liga os botões de `barraDeExportacao`. `aoExportar` pode ser assíncrono. */
-export function ligarExportacao(aoExportar?: () => unknown | Promise<unknown>): void {
-  document
-    .querySelector<HTMLButtonElement>("#btn-imprimir")
-    ?.addEventListener("click", () => window.print());
+/**
+ * A maior página que ainda existe no total corrente.
+ *
+ * Excluir o único item da última página, ou estreitar o filtro, deixaria a tela
+ * numa página vazia sem dizer por quê — a listagem some e o rodapé some junto,
+ * porque `paginacao` se apaga quando só há uma página. Quem chama compara com a
+ * página corrente e recarrega se mudou.
+ */
+export function paginaValida(pagina: number, porPagina: number, total: number): number {
+  return Math.min(Math.max(1, pagina), Math.max(1, Math.ceil(total / porPagina)));
+}
+
+/** Lote de cada chamada ao percorrer um filtro inteiro. É o teto do backend. */
+const LOTE = 200;
+
+/**
+ * Teto do que sai num CSV ou numa impressão.
+ *
+ * A auditoria cresce sem limite, e "todos os registros do filtro" pode ser
+ * dezenas de milhares — uma espera longa e um PDF que ninguém lê. O teto
+ * existe, mas **quem chama tem de avisar**: cortar calado é a armadilha que
+ * escondeu 35 militares por toda a migração.
+ */
+export const TETO_EXPORTACAO = 5000;
+
+/**
+ * Percorre um comando paginado até esgotar o filtro.
+ *
+ * O CSV e a impressão levam o que o filtro alcança, não os dez da tela — foi
+ * por isso que a exportação de usuários saía com uma página e o operador só
+ * descobria abrindo a planilha.
+ */
+export async function carregarTudo<T>(
+  pagina: (page: number, porPagina: number) => Promise<{ items: T[]; total: number } | null>,
+): Promise<{ itens: T[]; cortado: boolean }> {
+  const itens: T[] = [];
+  let page = 1;
+  let total = Infinity;
+
+  while (itens.length < total && itens.length < TETO_EXPORTACAO) {
+    const resposta = await pagina(page, LOTE);
+    if (!resposta) break;
+    total = resposta.total;
+    if (!resposta.items.length) break;
+    itens.push(...resposta.items);
+    page += 1;
+  }
+
+  return { itens: itens.slice(0, TETO_EXPORTACAO), cortado: total > TETO_EXPORTACAO };
+}
+
+/** Avisa quando a exportação bateu no teto. Silencioso quando coube inteira. */
+export function avisarSeCortado(cortado: boolean): void {
+  if (cortado) {
+    notificar(
+      `Saíram os ${TETO_EXPORTACAO.toLocaleString("pt-BR")} registros mais recentes do filtro. Estreite o filtro para levar o resto.`,
+      "info",
+    );
+  }
+}
+
+/**
+ * Liga os botões de `barraDeExportacao`. `aoExportar` pode ser assíncrono.
+ *
+ * `aoImprimir` é opcional e existe para as listagens paginadas: sem ele o papel
+ * sairia com os dez itens da tela, que não é o que ninguém quer imprimir. Quem
+ * o passa devolve o HTML do conjunto completo; a tabela da tela é escondida da
+ * impressão, o bloco completo entra no lugar, e tudo é desfeito depois —
+ * inclusive se a impressão for cancelada.
+ */
+export function ligarExportacao(
+  aoExportar?: () => unknown | Promise<unknown>,
+  aoImprimir?: () => Promise<string>,
+): void {
+  const imprimir = document.querySelector<HTMLButtonElement>("#btn-imprimir");
+  if (imprimir && aoImprimir) {
+    imprimir.addEventListener("click", async () => {
+      imprimir.disabled = true;
+      const rotulo = imprimir.textContent;
+      imprimir.textContent = "Preparando…";
+      const bloco = document.createElement("div");
+      bloco.className = "bloco-impressao";
+      const naTela = document.querySelectorAll<HTMLElement>(".table-wrap, .paginacao");
+      try {
+        bloco.innerHTML = await aoImprimir();
+        aplicarLarguras(bloco);
+        const destino = document.querySelector("main");
+        // Só esconde a tabela da tela depois de o bloco completo estar no
+        // documento: falhar entre uma coisa e outra imprimiria a folha em branco.
+        if (!destino) throw new Error("sem área principal para imprimir");
+        destino.append(bloco);
+        naTela.forEach((elemento) => elemento.classList.add("ocultar-na-impressao"));
+        window.print();
+      } catch (erro) {
+        // Sem isto a falha vira rejeição não tratada: o botão volta ao normal e
+        // nada explica por que o diálogo de impressão não abriu.
+        notificar(
+          erro instanceof Error ? erro.message : "Falha ao preparar a impressão.",
+          "erro",
+        );
+      } finally {
+        bloco.remove();
+        naTela.forEach((elemento) => elemento.classList.remove("ocultar-na-impressao"));
+        imprimir.disabled = false;
+        imprimir.textContent = rotulo;
+      }
+    });
+  } else {
+    imprimir?.addEventListener("click", () => window.print());
+  }
 
   const botao = document.querySelector<HTMLButtonElement>("#btn-csv");
   if (!botao || !aoExportar) return;

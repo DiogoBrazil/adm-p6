@@ -1,9 +1,10 @@
 use chrono::NaiveDate;
 use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 
+use crate::db::paginacao::Recorte;
 use crate::deadlines::domain::{
-    AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem, DeadlineSummary,
-    UpdateExtensionRequest,
+    AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem,
+    DeadlineReportResult, DeadlineSummary, UpdateExtensionRequest,
 };
 use crate::error::AppError;
 
@@ -339,28 +340,19 @@ pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummar
     .await
 }
 
-/// Relatório de prazos. O escopo de apuratórios vem por parâmetro — antes era um
-/// `IN ('IPM','SR','SV')` escrito no SQL.
+/// Filtro do relatório de prazos, escrito uma vez para a contagem e a página.
 ///
-/// Sai de `v_processos_detalhados`: o prazo vigente e o responsável já são
-/// derivações da view. Antes esta função repetia as duas — e derivava a
-/// vigência por `DISTINCT ON`, enquanto o resto do código usava `LATERAL`.
-pub async fn report(
-    pool: &PgPool,
-    filter: &DeadlineReportFilter,
-) -> Result<Vec<DeadlineReportItem>, sqlx::Error> {
-    sqlx::query_as::<_, DeadlineReportItem>(
-        r#"
-        SELECT v.id::text            AS processo_id,
-               v.apuratorio_sigla    AS apuratorio_sigla,
-               v.numero_controle     AS numero_controle,
-               v.unidade_origem      AS unidade_origem,
-               v.responsavel_nome    AS responsavel_nome,
-               v.prazo_vencimento    AS data_vencimento,
-               v.prazo_dias_restantes AS dias_restantes,
-               v.prazo_ordem         AS ordem
-          FROM v_processos_detalhados v
-         WHERE v.ativo
+/// **Os dois blocos da tela são exclusivos, e é aqui que isso se decide.**
+/// A condição da janela era `prazo_vencimento <= CURRENT_DATE + $4`, **sem
+/// piso**: quem pedia "vencendo em até 14 dias" recebia junto tudo que já
+/// tinha vencido, e o mesmo processo aparecia nas duas tabelas da tela de
+/// Prazos. Pior: o `dashboard()` logo acima sempre contou com o piso
+/// (`>= CURRENT_DATE`), então o cartão de contagem e a tabela abaixo dele
+/// discordavam na mesma tela.
+///
+/// Com o piso, "vencido" é estritamente antes de hoje e "vencendo" vai de hoje
+/// até o fim da janela — sem interseção, e batendo com as contagens.
+const FILTRO_REPORT: &str = "WHERE v.ativo
            AND v.data_conclusao IS NULL
            AND v.prazo_vencimento IS NOT NULL
            AND ($1::uuid[] IS NULL OR v.apuratorio_id = ANY($1::uuid[]))
@@ -369,18 +361,68 @@ pub async fn report(
                     WHERE d.processo_id = v.id AND d.data_fim IS NULL
                       AND d.policial_militar_id = $2::uuid))
            AND (NOT $3 OR v.prazo_vencimento < CURRENT_DATE)
-           AND ($4::int IS NULL OR v.prazo_vencimento <= CURRENT_DATE + $4)
-           AND ($5::int IS NULL OR EXTRACT(YEAR FROM v.data_instauracao)::int = $5)
-         ORDER BY v.prazo_vencimento
-         LIMIT $6
-        "#,
-    )
+           AND ($4::int IS NULL OR (v.prazo_vencimento >= CURRENT_DATE
+                                AND v.prazo_vencimento <= CURRENT_DATE + $4))
+           AND ($5::int IS NULL OR EXTRACT(YEAR FROM v.data_instauracao)::int = $5)";
+
+/// Relatório de prazos. O escopo de apuratórios vem por parâmetro — antes era um
+/// `IN ('IPM','SR','SV')` escrito no SQL.
+///
+/// Sai de `v_processos_detalhados`: o prazo vigente e o responsável já são
+/// derivações da view. Antes esta função repetia as duas — e derivava a
+/// vigência por `DISTINCT ON`, enquanto o resto do código usava `LATERAL`.
+///
+/// Pagina como as demais listagens de tela: o `limit` solto que existia aqui
+/// saiu, porque duas formas de recortar a mesma lista é ambiguidade que o
+/// modelo evita — quem quer só os N primeiros pede a página 1 com `per_page` N.
+pub async fn report(
+    pool: &PgPool,
+    filter: &DeadlineReportFilter,
+) -> Result<DeadlineReportResult, sqlx::Error> {
+    let recorte = Recorte::novo(filter.page, filter.per_page);
+
+    let total: i64 = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM v_processos_detalhados v {FILTRO_REPORT}"
+    ))
     .bind(filter.apuratorio_ids.as_deref())
     .bind(filter.responsavel_id.as_deref())
     .bind(filter.apenas_vencidos.unwrap_or(false))
     .bind(filter.dias_ate_vencer)
     .bind(filter.ano)
-    .bind(filter.limit.unwrap_or(200).clamp(1, 500))
+    .fetch_one(pool)
+    .await?;
+
+    // `id` desempata: dois processos vencendo no mesmo dia trocariam de lugar
+    // entre uma página e outra, e a linha da fronteira apareceria duas vezes ou
+    // nenhuma.
+    let items = sqlx::query_as::<_, DeadlineReportItem>(&format!(
+        "SELECT v.id::text            AS processo_id,
+               v.apuratorio_sigla    AS apuratorio_sigla,
+               v.numero_controle     AS numero_controle,
+               v.unidade_origem      AS unidade_origem,
+               v.responsavel_nome    AS responsavel_nome,
+               v.prazo_vencimento    AS data_vencimento,
+               v.prazo_dias_restantes AS dias_restantes,
+               v.prazo_ordem         AS ordem
+          FROM v_processos_detalhados v
+         {FILTRO_REPORT}
+         ORDER BY v.prazo_vencimento, v.id
+         LIMIT $6 OFFSET $7"
+    ))
+    .bind(filter.apuratorio_ids.as_deref())
+    .bind(filter.responsavel_id.as_deref())
+    .bind(filter.apenas_vencidos.unwrap_or(false))
+    .bind(filter.dias_ate_vencer)
+    .bind(filter.ano)
+    .bind(recorte.per_page)
+    .bind(recorte.offset)
     .fetch_all(pool)
-    .await
+    .await?;
+
+    Ok(DeadlineReportResult {
+        items,
+        total,
+        page: recorte.page,
+        per_page: recorte.per_page,
+    })
 }

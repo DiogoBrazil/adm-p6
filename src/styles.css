@@ -252,96 +252,14 @@ textarea {
   color: #dc3545;
 }
 
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th,
-td {
-  border-bottom: 1px solid #e5e7eb;
-  padding: 10px;
-  text-align: left;
-  vertical-align: middle;
-}
-
-th {
-  color: #64748b;
-  font-size: 13px;
-  text-transform: uppercase;
-}
-
-/* ── Listagem densa ──────────────────────────────────────────────────────
-   A lista de processos tem nove colunas. Sem largura declarada, o navegador
-   as dimensiona pelo conteúdo: um resumo longo espremia data e situação até
-   quebrarem em três linhas, e a tabela ficava impossível de varrer. As regras
-   abaixo dão ritmo à leitura sem fixar pixel em coluna nenhuma. */
-
-/* Cabeçalho acompanha a rolagem: com 50 linhas por página, saber que coluna
-   se está lendo importa mais que os 36px que ele ocupa. */
-.tabela-dados thead th {
-  background: #fff;
-  border-bottom: 1px solid #d1d5db;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-/* Tabela de muitas colunas: abaixo desta largura, `.table-wrap` rola em vez de
-   espremer. Sem o mínimo, as colunas percentuais encolhem até "7…" e "C…", que
-   é pior que rolar. Só as listagens largas levam o modificador — uma tabela de
-   três colunas não deve exigir rolagem. */
-.tabela-dados--larga {
-  min-width: 940px;
-}
-
-.tabela-dados tbody tr:nth-child(even) {
-  background: #fafafa;
-}
-
-.tabela-dados tbody tr:hover {
-  background: #f1f5f9;
-}
-
-/* Coluna estreita, de conteúdo previsível: data, contagem, situação. */
-.tabela-dados .col-curta {
-  white-space: nowrap;
-  width: 1%;
-}
-
-.tabela-dados .col-numero {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-  width: 1%;
-}
-
-/* Texto que pode ser longo: corta com reticências em vez de empurrar o resto
-   da tabela. O `title` no markup entrega o conteúdo inteiro.
-
-   A largura em porcentagem é o que reparte o espaço com justiça. Sem ela, a
-   primeira coluna sem restrição fica com toda a sobra e as demais encolhem até
-   virar "7º Batalhã…" — foi o que a primeira versão destas regras produziu. */
-.tabela-dados .col-texto,
-.tabela-dados .col-principal {
-  max-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tabela-dados .col-principal {
-  font-weight: 600;
-  width: 20%;
-}
-
-.tabela-dados .col-texto {
-  width: 16%;
-}
+/* As regras de tabela vivem todas no bloco "Listagem" do sistema visual, mais
+   abaixo. Havia aqui uma segunda geração delas — `.table-wrap`, `table`,
+   `th`/`td`, zebra, `.tabela-dados--larga` com outro `min-width` — e qual
+   vencia dependia da ordem no arquivo, não da intenção: `.tabela-dados thead th`
+   era mais específica que `th` e mantinha o cabeçalho branco só nas listagens.
+   As classes de coluna daqui (`.col-curta`, `.col-numero`, `.col-texto`,
+   `.col-principal`) não eram usadas por tela nenhuma; quem declara largura
+   agora é `dom.ts::Coluna`. */
 
 pre {
   background: #f8fafc;
@@ -557,12 +475,25 @@ button.outline:hover {
 }
 
 /* Controle de página das listagens. Ver `dom.ts::paginacao`. */
+/* Controle de página das listagens. Ver `dom.ts::paginacao`.
+
+   `justify-content` era declarado duas vezes no arquivo, `center` aqui e
+   `space-between` no bloco de 2026: valia o segundo, e o primeiro só confundia
+   quem fosse ajustar. Ficou o `space-between`, que joga "Anterior" e "Próxima"
+   para as pontas e deixa o intervalo no meio. */
 .paginacao {
-  align-items: center;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  justify-content: center;
   margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* Dois paginadores na mesma tela (Prazos) não podem encostar um no outro. */
+.paginacao + h2 {
+  margin-top: 28px;
 }
 
 .paginacao span {
@@ -1019,7 +950,36 @@ tr.atrasado {
   margin-bottom: 24px;
 }
 
+/* O conjunto completo, montado só na hora de imprimir. Ver
+   `dom.ts::ligarExportacao`: a tela mostra dez itens, e o papel leva o filtro
+   inteiro — imprimir a página visível não serve para conferir prazo nenhum. */
+.bloco-impressao {
+  display: none;
+}
+
 @media print {
+  .bloco-impressao {
+    display: block;
+  }
+
+  /* A tabela paginada sai do papel quando o bloco completo entra no lugar
+     dela, senão os dez itens sairiam impressos duas vezes. */
+  .ocultar-na-impressao {
+    display: none !important;
+  }
+
+  /* Rolagem não existe no papel: a tabela inteira tem de caber e quebrar entre
+     páginas, em vez de ficar recortada na largura da tela. */
+  .bloco-impressao .table-wrap {
+    max-height: none;
+    overflow: visible;
+    border: 0;
+  }
+
+  .bloco-impressao table {
+    min-width: 0 !important;
+  }
+
   .sidebar,
   .topbar,
   .page-head button,
@@ -1952,7 +1912,13 @@ table {
   color: var(--text);
 }
 
-.table-wrap > table:not(.detail-table):not(.ficha):not(.tabela-processos) {
+/* Piso para a tabela que NÃO declara largura de coluna: sem ele, uma tabela de
+   conteúdo largo se espreme até ficar ilegível. Quem declara largura
+   (`.tabela-dados--fixa`) fica de fora de propósito — ela reparte 100% da área
+   e só passa a exigir rolagem abaixo de 900px, pela media query lá embaixo.
+   Enquanto esta regra a alcançava, toda listagem operacional rolava na
+   horizontal já em 1600px, que é o oposto do pretendido. */
+.table-wrap > table:not(.detail-table):not(.ficha):not(.tabela-dados--fixa) {
   min-width: 680px;
 }
 
@@ -1980,6 +1946,16 @@ th {
 
 tbody tr:last-child td {
   border-bottom: 0;
+}
+
+/* Cabeçalho de LISTAGEM é branco; o das tabelas de detalhe (`.detail-table`,
+   `.ficha`) fica no cinza do `th` acima. A distinção já existia na tela, mas
+   por acidente: uma regra `.tabela-dados thead th` sobrevivente de outra
+   geração era mais específica que `th` e vencia por estar antes no arquivo.
+   Agora está escrita, e é a razão de a listagem parecer mais leve que a ficha. */
+.tabela-dados thead th {
+  background: #fff;
+  border-bottom: 1px solid #d1d5db;
 }
 
 .tabela-dados tbody tr:nth-child(even),
@@ -2015,16 +1991,82 @@ tr.atrasado {
   min-width: 1060px;
 }
 
-/* As nove colunas dividem exatamente 100% da área disponível. O layout fixo
-   impede que um nome longo redimensione a tabela inteira; as células textuais
-   entregam o restante no tooltip. A rolagem horizontal fica restrita ao
-   fallback abaixo de 900px, declarado depois deste bloco. */
-.tabela-processos {
+/* ── Listagem de largura declarada ────────────────────────────────────────
+   O padrão que a listagem de processos fixou, disponível para toda tela.
+
+   As colunas dividem exatamente 100% da área, em percentual: sem isso a
+   primeira coluna sem restrição fica com toda a sobra e as demais encolhem até
+   "7º Batalhã…". O layout fixo impede que um nome longo redimensione a tabela
+   inteira, e as células textuais entregam o resto no `title`.
+
+   A largura de cada `<col>` NÃO está aqui: vem de `dom.ts::Coluna.largura`,
+   sai no markup como `data-largura` e é aplicada pela CSSOM em
+   `aplicarLarguras()`. `style=""` interpolado — inclusive num `<col>` — é
+   recusado pela CSP, e o elemento aparece sem estilo sem erro de build. */
+.tabela-dados--fixa {
   width: 100%;
   min-width: 0;
   table-layout: fixed;
 }
 
+.tabela-dados--fixa th,
+.tabela-dados--fixa td {
+  height: 46px;
+  padding: 9px 8px;
+  vertical-align: middle;
+}
+
+/* Modificadores que `Coluna` emite. Valem no `th` e no `td` da mesma coluna,
+   para que o rótulo acompanhe o alinhamento do conteúdo. */
+:is(th, td).col--centro {
+  text-align: center;
+}
+
+:is(th, td).col--direita {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(th, td).col--nowrap {
+  white-space: nowrap;
+}
+
+/* Trunca em vez de empurrar o resto da tabela. `max-width: 0` é o que faz o
+   `text-overflow` valer numa célula de tabela: sem ele a célula cresce com o
+   conteúdo e as reticências nunca aparecem. */
+.tabela-dados--fixa td.col--trunc {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabela-dados--fixa .row-actions {
+  justify-content: center;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.tabela-dados--fixa .row-actions button {
+  min-width: 0;
+  padding: 5px 6px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Acima de 900px a listagem operacional cabe inteira e não rola na horizontal;
+   abaixo disso, rolar é melhor que espremer as colunas até "7…" e "C…". */
+@media (max-width: 899px) {
+  .tabela-dados--fixa {
+    min-width: 900px;
+  }
+}
+
+/* ── A listagem de processos ──────────────────────────────────────────────
+   O que sobra aqui é só o que é dela: as larguras das nove colunas — que
+   antecedem `Coluna` e seguem em classe, porque esta tela mantém markup
+   próprio — e a tipografia de tipo, número e SEI. Layout fixo, alturas,
+   truncamento e a rolagem abaixo de 900px vêm de `.tabela-dados--fixa`. */
 .tabela-processos col.col-layout-tipo {
   width: 5.5%;
 }
@@ -2055,13 +2097,6 @@ tr.atrasado {
 
 .tabela-processos col.col-layout-acao {
   width: 5.5%;
-}
-
-.tabela-processos th,
-.tabela-processos td {
-  height: 46px;
-  padding: 9px 8px;
-  vertical-align: middle;
 }
 
 .tabela-processos :is(th, td).col-tipo,
@@ -2120,28 +2155,14 @@ tr.atrasado {
   overflow: hidden;
 }
 
-.tabela-processos .row-actions {
-  justify-content: center;
-  min-width: 0;
-  flex-wrap: nowrap;
-}
-
+/* O botão "Abrir" ocupa a coluna inteira: ela tem 5,5% e o rótulo é curto. */
 .tabela-processos .row-actions button {
   width: 100%;
-  min-width: 0;
   padding: 5px 4px;
-  font-size: 0.72rem;
-  white-space: nowrap;
 }
 
 .tabela-processos :is(th, td).col-acao {
   padding-inline: 5px;
-}
-
-@media (max-width: 899px) {
-  .tabela-processos {
-    min-width: 900px;
-  }
 }
 
 .celula-reticencias,
@@ -2189,10 +2210,6 @@ tr.atrasado {
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid rgb(255 255 255 / 16%);
-}
-
-.tabela-dados .col-principal {
-  color: #163a52;
 }
 
 .badge {
@@ -2255,12 +2272,6 @@ tr.atrasado {
   flex: 0 0 6px;
   border-radius: 50%;
   background: currentColor;
-}
-
-.paginacao {
-  justify-content: space-between;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
 }
 
 /* Formulários */

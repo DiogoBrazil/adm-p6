@@ -20,18 +20,23 @@
 
 import { call, type UserListItem, type UserProcessItem } from "../api";
 import {
+  avisarSeCortado,
   barraDeExportacao,
   baixarCsv,
+  carregarTudo,
   escapeHtml,
+  ITENS_POR_PAGINA,
   ligarExportacao,
   ligarPaginacao,
   limparFormularioPendente,
   notificar,
   option,
   paginacao,
+  paginaValida,
   podeDescartarFormulario,
   protegerFormulario,
   tabela,
+  type Coluna,
 } from "../dom";
 import { painelContagem } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
@@ -42,7 +47,57 @@ export const ROTA_NOVO = "/usuarios/novo";
 type Opcao = { id: string; rotulo: string };
 
 /** Tamanho da página da listagem. O backend trava `per_page` em 200. */
-const POR_PAGINA = 50;
+const POR_PAGINA = ITENS_POR_PAGINA;
+
+/**
+ * As oito colunas dividem 100% da largura, como na listagem de processos.
+ *
+ * O nome leva a maior fatia porque é o que se procura na tela; posto, situação
+ * e ações são de conteúdo previsível e não podem quebrar em duas linhas. Sem
+ * largura declarada o navegador dimensiona pelo conteúdo, e um nome longo
+ * espremia "Encarregado" e "Perfil" até quebrarem.
+ */
+const COLUNAS: Coluna[] = [
+  { rotulo: "Posto", largura: 8, alinhamento: "centro", nowrap: true },
+  { rotulo: "Matrícula", largura: 10, alinhamento: "centro", nowrap: true },
+  { rotulo: "Nome", largura: 30, truncar: true },
+  { rotulo: "Encarregado", largura: 9, alinhamento: "centro", nowrap: true },
+  { rotulo: "Conta", largura: 20, truncar: true },
+  { rotulo: "Perfil", largura: 11, truncar: true },
+  { rotulo: "Situação", largura: 8, alinhamento: "centro", nowrap: true },
+  { rotulo: "Ações", largura: 4, alinhamento: "centro", nowrap: true },
+];
+
+/**
+ * As colunas do papel: as mesmas, **menos "Ações"**.
+ *
+ * A regra de impressão esconde `.row-actions`, e numa tabela de layout fixo
+ * isso colapsaria a célula do botão: o corpo ficaria com sete colunas e o
+ * cabeçalho com oito, desalinhando a linha inteira. Botão não se imprime; a
+ * coluna também não.
+ */
+const COLUNAS_IMPRESSAO = COLUNAS.slice(0, -1);
+
+/** As colunas do CSV — sem "Ações", que é botão, e sem acento no cabeçalho. */
+const COLUNAS_CSV = [
+  "Posto",
+  "Matricula",
+  "Nome",
+  "Encarregado",
+  "Conta",
+  "Perfil",
+  "Situacao",
+];
+
+const linhaCsv = (u: UserListItem) => [
+  u.posto_graduacao,
+  u.matricula,
+  u.nome,
+  u.is_encarregado ? "sim" : "nao",
+  u.conta_email ?? "",
+  u.conta_perfil ?? "",
+  u.ativo ? "ativo" : "inativo",
+];
 
 let busca = "";
 let pagina = 1;
@@ -52,6 +107,22 @@ async function opcoes(catalogo: string, campo: string): Promise<Opcao[]> {
   const linhas = (await call("legal_catalogs_list", { catalogo })).data ?? [];
   return linhas.map((l) => ({ id: String(l.id), rotulo: String(l[campo] ?? l.id) }));
 }
+
+/** Uma linha da tabela. Serve a tela e o bloco completo da impressão. */
+// `tr.inativo` já esmaece a linha inteira — o CSS espera a classe no `<tr>`.
+const linhaDaTabela = (u: UserListItem) => ({
+  classe: u.ativo ? "" : "inativo",
+  celulas: [
+    u.posto_graduacao,
+    u.matricula,
+    u.nome,
+    u.is_encarregado ? "sim" : "—",
+    u.conta_email ?? "sem conta",
+    u.conta_perfil ?? "—",
+    u.ativo ? "ativo" : "inativo",
+    { texto: "", acao: { rotulo: "Abrir", id: u.id } },
+  ],
+});
 
 const nomeCompleto = (u: UserListItem) => `${u.posto_graduacao} ${u.matricula} ${u.nome}`;
 
@@ -69,20 +140,15 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
   const itens = resposta.data?.items ?? [];
   const total = resposta.data?.total ?? 0;
 
-  // `tr.inativo` já esmaece a linha inteira — o CSS espera a classe no `<tr>`.
-  const linhas = itens.map((u) => ({
-    classe: u.ativo ? "" : "inativo",
-    celulas: [
-      u.posto_graduacao,
-      u.matricula,
-      u.nome,
-      u.is_encarregado ? "sim" : "—",
-      u.conta_email ?? "sem conta",
-      u.conta_perfil ?? "—",
-      u.ativo ? "ativo" : "inativo",
-      { texto: "", acao: { rotulo: "Abrir", id: u.id } },
-    ],
-  }));
+  // Desativar o único militar da última página deixaria a tela vazia sem dizer
+  // por quê — o rodapé some junto, porque `paginacao` se apaga com uma página só.
+  const corrigida = paginaValida(pagina, POR_PAGINA, total);
+  if (corrigida !== pagina) {
+    pagina = corrigida;
+    return renderListaUsuarios(ctx);
+  }
+
+  const linhas = itens.map(linhaDaTabela);
 
   ctx.shell(`
     <section class="panel">
@@ -104,19 +170,14 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
       ${
         resposta.ok
-          ? tabela(
-              ["Posto", "Matrícula", "Nome", "Encarregado", "Conta", "Perfil", "Situação", "Ações"],
-              linhas,
-              "Nenhum militar cadastrado.",
-              { viewport: true, larga: true },
-            )
+          ? tabela(COLUNAS, linhas, "Nenhum militar cadastrado.", { viewport: true })
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
-      ${paginacao(pagina, POR_PAGINA, total)}
+      ${paginacao("usuarios", pagina, POR_PAGINA, total)}
     </section>
   `);
 
-  ligarPaginacao(pagina, (nova) => {
+  ligarPaginacao("usuarios", pagina, (nova) => {
     pagina = nova;
     void renderListaUsuarios(ctx);
   });
@@ -145,20 +206,37 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     });
   });
 
-  ligarExportacao(() =>
-    baixarCsv(
-      `usuarios-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Posto", "Matricula", "Nome", "Encarregado", "Conta", "Perfil", "Situacao"],
-      itens.map((u) => [
-        u.posto_graduacao,
-        u.matricula,
-        u.nome,
-        u.is_encarregado ? "sim" : "nao",
-        u.conta_email ?? "",
-        u.conta_perfil ?? "",
-        u.ativo ? "ativo" : "inativo",
-      ]),
-    ),
+  // CSV e impressão levam o que a **busca** alcança, não os dez da tela: com
+  // 235 militares, exportar a página era exportar 4% do efetivo, e a planilha
+  // não dizia que estava incompleta.
+  const todosDoFiltro = () =>
+    carregarTudo<UserListItem>(async (page, perPage) => {
+      const r = await call("users_list", { search: busca || null, page, perPage });
+      return r.data ?? null;
+    });
+
+  ligarExportacao(
+    async () => {
+      const { itens: todos, cortado } = await todosDoFiltro();
+      avisarSeCortado(cortado);
+      return baixarCsv(
+        `usuarios-${new Date().toISOString().slice(0, 10)}.csv`,
+        COLUNAS_CSV,
+        todos.map(linhaCsv),
+      );
+    },
+    async () => {
+      const { itens: todos, cortado } = await todosDoFiltro();
+      avisarSeCortado(cortado);
+      return tabela(
+        COLUNAS_IMPRESSAO,
+        todos.map((u) => {
+          const linha = linhaDaTabela(u);
+          return { ...linha, celulas: linha.celulas.slice(0, -1) };
+        }),
+        "Nenhum militar cadastrado.",
+      );
+    },
   );
 }
 
@@ -303,7 +381,13 @@ export async function renderFormularioUsuario(
 
 function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel" | "status_envolvido") {
   return tabela(
-    ["Processo", "Apuratório", coluna, "Instauração", "Situação"],
+    [
+      { rotulo: "Processo", largura: 22, truncar: true },
+      { rotulo: "Apuratório", largura: 24, truncar: true },
+      { rotulo: coluna, largura: 24, truncar: true },
+      { rotulo: "Instauração", largura: 15, alinhamento: "centro", nowrap: true },
+      { rotulo: "Situação", largura: 15, alinhamento: "centro", nowrap: true },
+    ],
     itens.map((p) => [
       `${p.apuratorio_sigla} nº ${p.numero_controle}`,
       p.apuratorio_nome,

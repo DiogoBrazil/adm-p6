@@ -6,7 +6,7 @@ use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::deadlines::domain::{
     AddExtensionRequest, CalculateDeadlineResult, DeadlineItem, DeadlineReportFilter,
-    DeadlineReportItem, DeadlineSummary, UpdateExtensionRequest,
+    DeadlineReportResult, DeadlineSummary, UpdateExtensionRequest,
 };
 use crate::deadlines::repository;
 use crate::error::AppError;
@@ -91,7 +91,7 @@ pub async fn deadlines_calculate(
 pub async fn deadlines_report(
     state: State<'_, AppState>,
     filter: Option<DeadlineReportFilter>,
-) -> Result<ApiResponse<Vec<DeadlineReportItem>>, String> {
+) -> Result<ApiResponse<DeadlineReportResult>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;

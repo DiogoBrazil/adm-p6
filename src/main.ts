@@ -1,6 +1,11 @@
 import "./styles.css";
 import { call, type SessionUser } from "./api";
-import { escapeHtml, formularioTemPendencia, podeDescartarFormulario } from "./dom";
+import {
+  aplicarLarguras,
+  escapeHtml,
+  formularioTemPendencia,
+  podeDescartarFormulario,
+} from "./dom";
 import {
   carregarDefinicoes,
   chaveDaRota,
@@ -255,6 +260,10 @@ function shell(content: string) {
   // no markup. Aplicá-la aqui — o único ponto que escreve em `#app` — evita que
   // uma tela nova esqueça de fazê-lo.
   aplicarBarras(document);
+  // Gêmea da anterior, e pela mesma razão: a largura de coluna declarada em
+  // `Coluna.largura` sai num `data-largura` e só a CSSOM pode aplicá-la. Mora
+  // aqui para que nenhuma tela possa esquecer de chamá-la.
+  aplicarLarguras(document);
 
   document.querySelectorAll<HTMLButtonElement>("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {

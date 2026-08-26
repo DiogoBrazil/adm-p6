@@ -179,6 +179,73 @@ consertou o bloco de carta precatória, que **não renderizava havia dois ciclos
 
 ---
 
+## g) As listagens padronizadas (§8.14)
+
+Seis listagens passaram a dez itens por página, com o desenho da listagem de
+processos. Três defeitos foram corrigidos junto, e cada um só se confirma na tela.
+
+### O que a paginação tem de fazer
+
+- [ ] **Usuários** — dez linhas; o rodapé diz "1–10 de 235"; "Próxima" avança até
+      a última página, e "Anterior" volta
+- [ ] **Procedimentos**, **Auditoria**, **Mapas Salvos** e **Catálogos** — idem,
+      cada um com o seu total
+- [ ] **Auditoria** — o cabeçalho **não** diz mais "últimos 200 registros": diz o
+      total real do escopo, e o 201º é alcançável
+- [ ] Buscar ou trocar filtro **volta para a página 1** (não deixa tela vazia)
+- [ ] **Catálogos** — trocar de catálogo pelo menu volta para a página 1. Ir para
+      a 4ª página de Municípios e clicar em "Postos e graduações" não pode abrir
+      o vazio
+- [ ] **Catálogos** — desativar um item da 3ª página **mantém** a 3ª página; se
+      aquela página deixar de existir, recua uma
+- [ ] Desativar/excluir o único item da última página recua sozinho
+
+### Prazos: os dois blocos não podem se sobrepor
+
+É o defeito mais visível desta rodada. Antes, um prazo vencido aparecia em
+**Vencidos** e outra vez em **Vencendo em até X dias**.
+
+- [ ] Um processo com prazo **vencido** aparece só em "Vencidos"
+- [ ] Um processo vencendo **hoje** aparece só em "Vencendo em até X dias"
+- [ ] Os três **cartões de contagem** batem com os totais das duas tabelas —
+      antes discordavam, porque o cartão usava a regra certa e a tabela não
+- [ ] Os **dois paginadores são independentes**: avançar em "Vencidos" não mexe
+      em "Vencendo"
+- [ ] Trocar a **janela** (7/14/30/60) reinicia os dois
+
+### CSV e impressão levam o filtro, não a página
+
+- [ ] **Usuários** — buscar algo que dê mais de 10 resultados, exportar CSV, e
+      conferir que a planilha traz **todos** os do filtro, não os 10 da tela
+- [ ] **Auditoria** — idem, com filtro de entidade aplicado
+- [ ] **Prazos** — o CSV traz os dois blocos inteiros, com a coluna "Situacao"
+      dizendo de qual bloco veio cada linha
+- [ ] **Imprimir / PDF** nas três: o papel sai com o conjunto completo, e a
+      tabela de dez **não** sai impressa junto (duplicada)
+- [ ] Se algum filtro passar de 5.000 registros, aparece o aviso dizendo que
+      saíram os 5.000 mais recentes. **Não pode cortar calado**
+
+### O desenho, e o que a CSP recusaria
+
+- [ ] **Procedimentos** — lado a lado com uma captura de antes: tem de estar
+      **idêntica**. Foi medida propriedade a propriedade, mas o olho é o juiz
+- [ ] **Larguras de coluna aparecem** em todas as listagens. Se
+      `aplicarLarguras()` não rodar, as colunas voltam a se dimensionar pelo
+      conteúdo e **nada acusa** — é o mesmo sintoma das barras dos painéis
+- [ ] Console **sem `Refused to`** nas seis listagens. É o que pegaria uma
+      largura que tenha escapado para um `style=""`
+- [ ] Texto longo (nome, unidade, descrição de infração) corta com **reticências**
+      e entrega o inteiro no **tooltip**
+- [ ] **Estatísticas de Procedimentos** — a descrição das infrações não está mais
+      cortada em 90 caracteres com "…" no meio do texto: corta por largura e o
+      tooltip traz o texto legal inteiro
+- [ ] Em **1600, 1366, 1100 e 900px** nenhuma listagem operacional rola na
+      horizontal; em **899px** rola, em vez de espremer as colunas
+- [ ] **Designações por Militar** e **Mapa do Período** continuam rolando na
+      horizontal e mostrando o conjunto completo — são matrizes, não listagens
+
+---
+
 ## f) A amostra dos 6 processos
 
 O campo a campo já está feito e acusa **0 divergências em 377 comparações**,

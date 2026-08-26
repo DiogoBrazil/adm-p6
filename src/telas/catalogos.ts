@@ -13,9 +13,13 @@ import { call, type Catalogo, type Coluna } from "../api";
 import {
   cellDisplay,
   escapeHtml,
+  ITENS_POR_PAGINA,
+  ligarPaginacao,
   limparFormularioPendente,
   notificar,
   option,
+  paginacao,
+  paginaValida,
   podeDescartarFormulario,
   protegerFormulario,
 } from "../dom";
@@ -209,8 +213,17 @@ function montarValores(cat: Catalogo, form: FormData): Record<string, unknown> {
 
 // ── telas ───────────────────────────────────────────────────────────────────
 
-type Estado = { incluirInativos: boolean; busca: string };
-const estado: Estado = { incluirInativos: false, busca: "" };
+type Estado = { incluirInativos: boolean; busca: string; pagina: number; catalogo: string };
+
+/**
+ * O estado é da tela, e a tela é uma só para os 25 catálogos.
+ *
+ * `catalogo` fica guardado junto porque o menu troca de catálogo sem passar por
+ * lugar nenhum que pudesse reiniciar a página: ir para a 4ª página de Municípios
+ * e clicar em "Postos e graduações" abriria a 4ª página de 13 registros, ou
+ * seja, o vazio.
+ */
+const estado: Estado = { incluirInativos: false, busca: "", pagina: 1, catalogo: "" };
 
 export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<void> {
   limparFormularioPendente();
@@ -219,6 +232,11 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
   if (!cat) {
     ctx.shell(`<section class="panel"><p class="error">Catálogo desconhecido: ${escapeHtml(chave)}</p></section>`);
     return;
+  }
+
+  if (estado.catalogo !== chave) {
+    estado.catalogo = chave;
+    estado.pagina = 1;
   }
 
   const resposta = await call("legal_catalogs_list", {
@@ -240,40 +258,72 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
     );
   }
 
+  // O recorte é **no cliente**, e de propósito: `legal_catalogs_list` continua
+  // trazendo o catálogo inteiro porque a mesma resposta alimenta os selects de
+  // referência de outras telas — paginar no backend truncaria lista de opções,
+  // que é justamente o que não pode acontecer (§8.9).
+  const total = linhas.length;
+  const corrigida = paginaValida(estado.pagina, ITENS_POR_PAGINA, total);
+  if (corrigida !== estado.pagina) {
+    estado.pagina = corrigida;
+    return renderCatalogo(chave, ctx);
+  }
+  const inicio = (estado.pagina - 1) * ITENS_POR_PAGINA;
+  const daPagina = linhas.slice(inicio, inicio + ITENS_POR_PAGINA);
+
   const rotuloReferencia = (coluna: Coluna, valor: unknown) =>
     referencias[coluna.alvo ?? ""]?.find((o) => o.value === String(valor))?.label ??
     (valor === null || valor === undefined ? "" : String(valor));
 
   const podeEscrever = ctx.podeEscrever();
 
-  const corpo = linhas.length
+  // As colunas de dado repartem o que sobra em partes iguais: o catálogo é
+  // genérico e nenhuma tela sabe de antemão quais colunas ele tem. O que se
+  // sabe é que Situação e Ações são estreitas e de conteúdo previsível.
+  const larguraSituacao = 10;
+  const larguraAcoes = podeEscrever ? 16 : 0;
+  const larguraDado = (100 - larguraSituacao - larguraAcoes) / colunasVisiveis(cat).length;
+
+  const corpo = daPagina.length
     ? `
       <div class="table-wrap">
-        <table class="tabela-dados">
+        <table class="tabela-dados tabela-dados--fixa">
+          <colgroup>
+            ${colunasVisiveis(cat)
+              .map(() => `<col data-largura="${larguraDado.toFixed(2)}" />`)
+              .join("")}
+            <col data-largura="${larguraSituacao}" />
+            ${podeEscrever ? `<col data-largura="${larguraAcoes}" />` : ""}
+          </colgroup>
           <thead>
             <tr>
-              ${colunasVisiveis(cat).map((c) => `<th>${escapeHtml(c.rotulo)}</th>`).join("")}
-              <th>Situação</th>
-              ${podeEscrever ? "<th>Ações</th>" : ""}
+              ${colunasVisiveis(cat)
+                .map((c) => `<th class="col--trunc">${escapeHtml(c.rotulo)}</th>`)
+                .join("")}
+              <th class="col--centro col--nowrap">Situação</th>
+              ${podeEscrever ? `<th class="col--centro col--nowrap">Ações</th>` : ""}
             </tr>
           </thead>
           <tbody>
-            ${linhas
+            ${daPagina
               .map(
                 (linha) => `
               <tr${linha.ativo ? "" : ' class="inativo"'}>
                 ${colunasVisiveis(cat)
                   .map(
                     (c) =>
-                      `<td>${escapeHtml(
-                        ehReferencia(c) ? rotuloReferencia(c, linha[c.nome]) : cellDisplay(linha[c.nome]),
-                      )}</td>`,
+                      ((texto) =>
+                        `<td class="col--trunc" title="${escapeHtml(texto)}">${escapeHtml(texto)}</td>`)(
+                        ehReferencia(c)
+                          ? rotuloReferencia(c, linha[c.nome])
+                          : cellDisplay(linha[c.nome]),
+                      ),
                   )
                   .join("")}
-                <td><span class="badge ${linha.ativo ? "badge--ok" : "badge--neutro"}">${linha.ativo ? "ativo" : "inativo"}</span></td>
+                <td class="col--centro col--nowrap"><span class="badge ${linha.ativo ? "badge--ok" : "badge--neutro"}">${linha.ativo ? "ativo" : "inativo"}</span></td>
                 ${
                   podeEscrever
-                    ? `<td class="row-actions">
+                    ? `<td class="row-actions col--centro col--nowrap">
                          <button class="secondary small" data-editar="${escapeHtml(linha.id)}">Editar</button>
                          ${
                            linha.ativo
@@ -296,7 +346,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
       <div class="page-head">
         <div>
           <h1>${escapeHtml(cat.rotulo)}</h1>
-          <p>${linhas.length} registro(s)</p>
+          <p>${total} registro(s)</p>
         </div>
         ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
       </div>
@@ -309,19 +359,36 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
       </div>
       ${podeEscrever ? "" : `<p class="readonly">Perfil somente leitura.</p>`}
       ${corpo}
+      ${paginacao("catalogo", estado.pagina, ITENS_POR_PAGINA, total)}
     </section>
   `);
 
+  ligarPaginacao("catalogo", estado.pagina, (nova) => {
+    estado.pagina = nova;
+    void renderCatalogo(chave, ctx);
+  });
+
+  // Buscar e mostrar inativos **redefinem o escopo**: seguir na 4ª página de um
+  // resultado que agora tem 3 linhas mostraria tela vazia sem dizer por quê.
+  const filtrar = () => {
+    estado.pagina = 1;
+    void renderCatalogo(chave, ctx);
+  };
+
+  // Desativar e reativar **não** redefinem o escopo, e por isso mantêm a página:
+  // quem desativou o terceiro item da 4ª página quer continuar ali, não voltar
+  // ao começo. Se aquela página tiver deixado de existir, o clamp lá em cima
+  // recua uma; é o bastante.
   const recarregar = () => void renderCatalogo(chave, ctx);
 
   const busca = document.querySelector<HTMLInputElement>("#busca");
   busca?.addEventListener("change", () => {
     estado.busca = busca.value.trim();
-    recarregar();
+    filtrar();
   });
   document.querySelector<HTMLInputElement>("#inativos")?.addEventListener("change", (e) => {
     estado.incluirInativos = (e.currentTarget as HTMLInputElement).checked;
-    recarregar();
+    filtrar();
   });
 
   if (!podeEscrever) return;

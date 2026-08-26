@@ -1,11 +1,12 @@
 use base64::Engine;
 use sqlx::{PgPool, Postgres, Transaction};
 
+use crate::db::paginacao::Recorte;
 use crate::error::AppError;
 use crate::maps_reports::domain::{
     ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
     EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
-    SavedMapListItem, SolucoesResumo, StatusPorApuratorio,
+    SavedMapListItem, SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
 };
 
 /// Lista de escopo vazia significa "todos", não "nenhum".
@@ -121,13 +122,36 @@ pub async fn save_map(
     .await
 }
 
-pub async fn list_saved_maps(pool: &PgPool) -> Result<Vec<SavedMapListItem>, sqlx::Error> {
-    sqlx::query_as::<_, SavedMapListItem>(&format!(
+/// Uma página de mapas salvos, do mais recente para o mais antigo.
+///
+/// Continua filtrando `m.ativo`, e a contagem filtra igual: um mapa excluído
+/// não pode inflar o total de um escopo em que ele não aparece.
+pub async fn list_saved_maps(
+    pool: &PgPool,
+    recorte: Recorte,
+) -> Result<SavedMapListResult, sqlx::Error> {
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM mapas_salvos m WHERE m.ativo")
+        .fetch_one(pool)
+        .await?;
+
+    // `id` desempata dois mapas salvos no mesmo instante, para que a fronteira
+    // entre páginas não oscile.
+    let items = sqlx::query_as::<_, SavedMapListItem>(&format!(
         "SELECT {SAVED_MAP_COLS} {SAVED_MAP_JOINS}
-          WHERE m.ativo ORDER BY m.created_at DESC"
+          WHERE m.ativo ORDER BY m.created_at DESC, m.id DESC
+          LIMIT $1 OFFSET $2"
     ))
+    .bind(recorte.per_page)
+    .bind(recorte.offset)
     .fetch_all(pool)
-    .await
+    .await?;
+
+    Ok(SavedMapListResult {
+        items,
+        total,
+        page: recorte.page,
+        per_page: recorte.per_page,
+    })
 }
 
 /// Leitura por id **não filtra `ativo`** — e isso é deliberado, não esquecimento.

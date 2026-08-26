@@ -3,10 +3,11 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
+use crate::db::paginacao::Recorte;
 use crate::maps_reports::domain::{
     ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
     EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
-    SavedMapListItem, SolucoesResumo, StatusPorApuratorio,
+    SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
 };
 use crate::maps_reports::repository;
 use crate::response::{from_result, ApiResponse};
@@ -51,12 +52,14 @@ pub async fn reports_save_map(
 #[tauri::command]
 pub async fn reports_saved_maps(
     state: State<'_, AppState>,
-) -> Result<ApiResponse<Vec<SavedMapListItem>>, String> {
+    page: Option<i64>,
+    per_page: Option<i64>,
+) -> Result<ApiResponse<SavedMapListResult>, String> {
     Ok(from_result(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            Ok(repository::list_saved_maps(&pool).await?)
+            Ok(repository::list_saved_maps(&pool, Recorte::novo(page, per_page)).await?)
         }
         .await,
     )

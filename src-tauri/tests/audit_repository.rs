@@ -9,6 +9,7 @@
 
 use adm_p6_tauri_lib::audit::domain::AuditStatisticsFilter;
 use adm_p6_tauri_lib::audit::repository;
+use adm_p6_tauri_lib::db::paginacao::Recorte;
 use chrono::NaiveDate;
 use serde_json::json;
 use sqlx::PgPool;
@@ -52,9 +53,10 @@ async fn o_autor_e_a_conta_e_a_conta_tecnica_nao_inventa_militar() {
         let autor = conta_admin(&pool).await;
         registrar(&pool, "apuratorios", "reg-1", "UPDATE", Some(&autor), 0).await;
 
-        let itens = repository::list(&pool, 50, 0, None, None, None)
+        let itens = repository::list(&pool, Recorte::novo(None, Some(50)), None, None, None)
             .await
-            .unwrap();
+            .unwrap()
+            .items;
         assert_eq!(itens.len(), 1);
         assert_eq!(itens[0].usuario_id.as_deref(), Some(autor.as_str()));
         assert_eq!(
@@ -100,9 +102,10 @@ async fn autor_com_militar_vinculado_traz_nome_e_posto() {
         )
         .await;
 
-        let itens = repository::list(&pool, 50, 0, None, None, None)
+        let itens = repository::list(&pool, Recorte::novo(None, Some(50)), None, None, None)
             .await
-            .unwrap();
+            .unwrap()
+            .items;
         assert_eq!(itens[0].usuario_nome.as_deref(), Some("PM UM"));
         assert_eq!(itens[0].usuario_posto.as_deref(), Some("TST PM"));
     })
@@ -130,9 +133,10 @@ async fn o_diff_registra_o_que_mudou_na_configuracao() {
         .unwrap();
         tx.commit().await.unwrap();
 
-        let itens = repository::list(&pool, 50, 0, None, None, None)
+        let itens = repository::list(&pool, Recorte::novo(None, Some(50)), None, None, None)
             .await
-            .unwrap();
+            .unwrap()
+            .items;
         assert_eq!(itens[0].alteracoes.as_ref(), Some(&diff));
 
         let detalhe = repository::get_by_id(&pool, &itens[0].id).await.unwrap();
@@ -171,10 +175,17 @@ async fn a_listagem_aplica_cada_filtro() {
         let contar = |entidade, operacao, usuario| {
             let pool = pool.clone();
             async move {
-                repository::list(&pool, 50, 0, entidade, operacao, usuario)
-                    .await
-                    .unwrap()
-                    .len()
+                repository::list(
+                    &pool,
+                    Recorte::novo(None, Some(50)),
+                    entidade,
+                    operacao,
+                    usuario,
+                )
+                .await
+                .unwrap()
+                .items
+                .len()
             }
         };
 
@@ -207,11 +218,15 @@ async fn por_usuario_devolve_pagina_e_total() {
             .await;
         }
 
-        let pagina = repository::list_by_user(&pool, &autor, 2, 0).await.unwrap();
+        let pagina = repository::list_by_user(&pool, &autor, Recorte::novo(Some(1), Some(2)))
+            .await
+            .unwrap();
         assert_eq!(pagina.items.len(), 2);
         assert_eq!(pagina.total, 5, "o total e do escopo, nao da pagina");
 
-        let segunda = repository::list_by_user(&pool, &autor, 2, 2).await.unwrap();
+        let segunda = repository::list_by_user(&pool, &autor, Recorte::novo(Some(2), Some(2)))
+            .await
+            .unwrap();
         assert_eq!(segunda.items.len(), 2);
         assert_ne!(segunda.items[0].id, pagina.items[0].id);
 
@@ -313,6 +328,87 @@ async fn estatisticas_agrupam_e_respeitam_o_periodo() {
         .unwrap();
         assert_eq!(vazio.total, 0);
         assert!(vazio.por_operacao.is_empty());
+    })
+    .await;
+}
+
+/// A listagem principal pagina, preserva os filtros e não repete linha.
+///
+/// Antes ela recebia `limit`/`offset` **sem teto** e devolvia um `Vec` sem
+/// total: a tela anunciava "últimos 200 registros" porque era tudo que podia
+/// saber — não havia como descobrir que existia um 201º nem como alcançá-lo.
+/// Monta mais registros que o teto de propósito: com a fixture crua o clamp
+/// nunca é exercido e o teste passaria sem provar nada.
+#[tokio::test]
+async fn lista_pagina_preservando_filtros() {
+    util::com_banco_descartavel("aud_lista_pagina", |pool| async move {
+        let autor = conta_admin(&pool).await;
+        const QUANTOS: i64 = 205;
+
+        for i in 0..QUANTOS {
+            // Metade em cada entidade, para que o filtro recorte de verdade.
+            let entidade = if i % 2 == 0 {
+                "apuratorios"
+            } else {
+                "processos_procedimentos"
+            };
+            registrar(
+                &pool,
+                entidade,
+                &format!("r-{i}"),
+                "UPDATE",
+                Some(&autor),
+                i,
+            )
+            .await;
+        }
+
+        // Acima do teto o pedido é corrigido, e o envelope conta que foi.
+        let demais = repository::list(&pool, Recorte::novo(Some(1), Some(500)), None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(demais.items.len(), 200, "o teto corta");
+        assert_eq!(demais.per_page, 200, "e o envelope conta que cortou");
+        assert_eq!(demais.total, QUANTOS, "o total e do escopo, nao da pagina");
+
+        // O total acompanha o filtro: senão o rodapé conta um escopo que a
+        // tabela não mostra, e ninguem percebe.
+        let filtrada = repository::list(
+            &pool,
+            Recorte::novo(Some(1), Some(10)),
+            Some("apuratorios"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(filtrada.total, QUANTOS / 2 + QUANTOS % 2);
+        assert!(filtrada.items.iter().all(|i| i.entidade == "apuratorios"));
+
+        let primeira = repository::list(&pool, Recorte::novo(Some(1), Some(3)), None, None, None)
+            .await
+            .unwrap();
+        let segunda = repository::list(&pool, Recorte::novo(Some(2), Some(3)), None, None, None)
+            .await
+            .unwrap();
+        assert_eq!(segunda.page, 2);
+        for item in &primeira.items {
+            assert!(
+                !segunda.items.iter().any(|s| s.id == item.id),
+                "a mesma linha caiu em duas paginas"
+            );
+        }
+
+        // Mais recente primeiro, e a ordem é estável entre as páginas.
+        assert_eq!(primeira.items[0].registro_id, "r-0");
+        assert!(primeira.items.last().unwrap().ocorrido_em >= segunda.items[0].ocorrido_em);
+
+        // Página além do fim é vazia, não erro.
+        let longe = repository::list(&pool, Recorte::novo(Some(999), Some(10)), None, None, None)
+            .await
+            .unwrap();
+        assert!(longe.items.is_empty());
+        assert_eq!(longe.total, QUANTOS);
     })
     .await;
 }

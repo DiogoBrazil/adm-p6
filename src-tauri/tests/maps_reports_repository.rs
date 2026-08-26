@@ -7,6 +7,7 @@
 //! consultas que traziam a sigla escrita no SQL; se o escopo voltar a ser
 //! literal, estes testes deixam de passar.
 
+use adm_p6_tauri_lib::db::paginacao::Recorte;
 use adm_p6_tauri_lib::maps_reports::domain::{
     DesignacaoMatrizFiltro, MapPeriodRequest, ReportFilter,
 };
@@ -513,7 +514,10 @@ async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
         .unwrap();
         tx.commit().await.unwrap();
 
-        let lista = repository::list_saved_maps(&pool).await.unwrap();
+        let lista = repository::list_saved_maps(&pool, Recorte::default())
+            .await
+            .unwrap()
+            .items;
         assert_eq!(lista.len(), 1);
         assert_eq!(lista[0].id, id);
         assert_eq!(lista[0].titulo, "Mapa de Março/2026");
@@ -573,7 +577,10 @@ async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
         .unwrap();
         tx.commit().await.unwrap();
 
-        let lista = repository::list_saved_maps(&pool).await.unwrap();
+        let lista = repository::list_saved_maps(&pool, Recorte::default())
+            .await
+            .unwrap()
+            .items;
         assert!(lista[0].apuratorio_id.is_none());
         assert!(
             lista[0].apuratorio_sigla.is_none(),
@@ -584,7 +591,11 @@ async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
         let mut tx = pool.begin().await.unwrap();
         repository::delete_saved_map(&mut tx, &id).await.unwrap();
         tx.commit().await.unwrap();
-        assert!(repository::list_saved_maps(&pool).await.unwrap().is_empty());
+        assert!(repository::list_saved_maps(&pool, Recorte::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty());
 
         // E `get_saved_map` NÃO filtra `ativo`, então ainda alcança o excluído
         // por id. A §9 do guia deixava a assimetria em aberto; foi decidida
@@ -606,6 +617,88 @@ async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
             .await
             .expect_err("id inexistente");
         assert!(erro.message().contains("nao encontrado"), "{erro}");
+    })
+    .await;
+}
+
+/// A lista de mapas salvos pagina, do mais recente para o mais antigo, e o
+/// total conta só o que a lista mostra.
+///
+/// O mapa excluído é exclusão **lógica** (princípio 6): ele sai da lista sem
+/// sumir do banco. Se a contagem não filtrasse `ativo` igual à página, o
+/// rodapé prometeria uma página que não existe.
+#[tokio::test]
+async fn mapas_salvos_paginam_do_mais_recente() {
+    util::com_banco_descartavel("mapas_pagina", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let autor = conta_admin(&pool).await;
+        const QUANTOS: i32 = 25;
+
+        let mut ids = Vec::new();
+        for n in 0..QUANTOS {
+            let mut tx = pool.begin().await.unwrap();
+            let id = repository::save_map(
+                &mut tx,
+                &SaveMapRequest {
+                    titulo: format!("Mapa {n:02}"),
+                    apuratorio_id: Some(m.apuratorio.clone()),
+                    periodo_inicio: data(2026, 3, 1),
+                    periodo_fim: data(2026, 3, 31),
+                    total_processos: 0,
+                    total_concluidos: 0,
+                    total_andamento: 0,
+                    dados_mapa: json!([]),
+                },
+                &autor,
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            ids.push(id);
+        }
+
+        // O mais recente encabeça: é o último salvo.
+        let primeira = repository::list_saved_maps(&pool, Recorte::novo(Some(1), Some(10)))
+            .await
+            .unwrap();
+        assert_eq!(primeira.items.len(), 10);
+        assert_eq!(primeira.total, QUANTOS as i64);
+        assert_eq!(primeira.per_page, 10);
+        assert_eq!(primeira.items[0].id, *ids.last().unwrap());
+
+        let segunda = repository::list_saved_maps(&pool, Recorte::novo(Some(2), Some(10)))
+            .await
+            .unwrap();
+        assert_eq!(segunda.page, 2);
+        for item in &primeira.items {
+            assert!(
+                !segunda.items.iter().any(|s| s.id == item.id),
+                "a mesma linha caiu em duas paginas"
+            );
+        }
+
+        // Excluir tira da página **e** do total, nos dois na mesma medida.
+        let mut tx = pool.begin().await.unwrap();
+        repository::delete_saved_map(&mut tx, ids.last().unwrap())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let depois = repository::list_saved_maps(&pool, Recorte::novo(Some(1), Some(10)))
+            .await
+            .unwrap();
+        assert_eq!(depois.total, QUANTOS as i64 - 1, "o excluido sai do total");
+        assert!(
+            !depois.items.iter().any(|i| i.id == *ids.last().unwrap()),
+            "e sai da pagina"
+        );
+
+        // Página além do fim é vazia, não erro.
+        let longe = repository::list_saved_maps(&pool, Recorte::novo(Some(99), Some(10)))
+            .await
+            .unwrap();
+        assert!(longe.items.is_empty());
+        assert_eq!(longe.total, QUANTOS as i64 - 1);
     })
     .await;
 }

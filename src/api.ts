@@ -60,6 +60,7 @@ import type {
   DesignacaoItem,
   DesignacaoRequest,
   DocumentoIniciadorItem,
+  DeadlineReportResult,
   DriverRankingItem,
   EnquadramentoContagem,
   EnvolvidoComIndicios,
@@ -94,6 +95,7 @@ import type {
   SaveUserResult,
   SavedMapFull,
   SavedMapListItem,
+  SavedMapListResult,
   SelecaoInfracaoEstatuto,
   SelecaoInfracaoPenal,
   SessionUser,
@@ -179,7 +181,7 @@ export interface Commands {
   deadlines_dashboard: { args: { diasJanela?: number | null }; result: DeadlineSummary };
   deadlines_list: { args: { processoId: string }; result: DeadlineItem[] };
   deadlines_calculate: { args: { apuratorioId: string, documentoIniciadorId: string, dataInicio: string, dias?: number | null }; result: CalculateDeadlineResult };
-  deadlines_report: { args: { filter?: DeadlineReportFilter | null }; result: DeadlineReportItem[] };
+  deadlines_report: { args: { filter?: DeadlineReportFilter | null }; result: DeadlineReportResult };
   deadlines_add_extension: { args: { request: AddExtensionRequest }; result: string };
   deadlines_update_extension: { args: { request: UpdateExtensionRequest }; result: boolean };
   deadlines_delete_extension: { args: { processoId: string; prazoId: string }; result: boolean };
@@ -201,7 +203,7 @@ export interface Commands {
   // ── Mapas e relatórios ────────────────────────────────────────────
   reports_map_rows: { args: { request: MapPeriodRequest }; result: MapRow[] };
   reports_save_map: { args: { request: SaveMapRequest }; result: string };
-  reports_saved_maps: { args: Record<string, never>; result: SavedMapListItem[] };
+  reports_saved_maps: { args: { page?: number | null, perPage?: number | null }; result: SavedMapListResult };
   reports_get_saved_map: { args: { id: string }; result: SavedMapFull | null };
   reports_delete_saved_map: { args: { id: string }; result: boolean };
   reports_by_responsible: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
@@ -222,7 +224,7 @@ export interface Commands {
   files_save_download: { args: { request: SaveFileRequest }; result: string | null };
 
   // ── Auditoria ─────────────────────────────────────────────────────
-  audit_list: { args: { limit?: number | null, offset?: number | null, entidade?: string | null, operacao?: string | null, usuarioId?: string | null }; result: AuditDetailItem[] };
+  audit_list: { args: { page?: number | null, perPage?: number | null, entidade?: string | null, operacao?: string | null, usuarioId?: string | null }; result: AuditPageResult };
   audit_get: { args: { id: string }; result: AuditDetailItem | null };
   audit_by_record: { args: { entidade: string, registroId: string }; result: AuditDetailItem[] };
   audit_by_user: { args: { usuarioId: string, page?: number | null, perPage?: number | null }; result: AuditPageResult };

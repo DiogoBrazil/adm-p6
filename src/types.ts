@@ -123,7 +123,13 @@ export interface AuditStatistics {
 /** `audit` */
 export interface AuditPageResult {
   items: AuditDetailItem[];
+  /** Total do escopo filtrado, não da página. */
   total: number;
+  /** A página **servida**, que pode não ser a pedida: o backend corrige. */
+  page: number;
+  /** O tamanho **servido**. Pedir acima do teto devolve o teto, e é aqui que */
+  /** a tela descobre isso em vez de desenhar um controle de página mentiroso. */
+  per_page: number;
 }
 
 /** `audit` */
@@ -202,11 +208,22 @@ export interface DeadlineReportFilter {
   /** de siglas que existiam escritos no SQL. */
   apuratorio_ids?: string[] | null;
   responsavel_id?: string | null;
+  /** Só o que venceu **antes de hoje**. */
   apenas_vencidos?: boolean | null;
-  /** Janela em dias a partir de hoje. Negativo não é aceito. */
+  /** Janela em dias: de hoje até hoje + N. **Não alcança o que já venceu.** */
   dias_ate_vencer?: number | null;
   ano?: number | null;
-  limit?: number | null;
+  page?: number | null;
+  per_page?: number | null;
+}
+
+/** `deadlines` */
+export interface DeadlineReportResult {
+  items: DeadlineReportItem[];
+  /** Total do escopo filtrado, não da página. */
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 /** `deadlines` */
@@ -391,6 +408,15 @@ export interface SavedMapListItem {
   total_andamento: number;
   gerado_por: string | null;
   created_at: string;
+}
+
+/** `maps_reports` */
+export interface SavedMapListResult {
+  items: SavedMapListItem[];
+  /** Total do escopo ativo, não da página. */
+  total: number;
+  page: number;
+  per_page: number;
 }
 
 /** `maps_reports` */

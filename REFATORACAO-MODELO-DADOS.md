@@ -13,7 +13,7 @@
 > históricos/de teste da importação foram removidos com autorização** (§8.11) e, depois
 > disso, a conferência manual criou **2 processos/procedimentos ativos de teste**. O banco
 > conserva 235 militares, 7 usuários, 10 apuratórios, 11 unidades e todos os
-> catálogos/configurações. A rede de proteção tem **96 testes**, os **78 comandos Tauri**
+> catálogos/configurações. A rede de proteção tem **102 testes**, os **78 comandos Tauri**
 > estão no cliente tipado e as **7 migrations** estão aplicadas.
 >
 > **Não há implementação conhecida pendente nesta rodada.** Não refaça as §8.11 a §8.13:
@@ -107,7 +107,7 @@
 | Catálogos administráveis | 25 |
 | Comandos Tauri | **78** (eram 146) |
 | Backend Rust | 7.463 linhas (eram 9.194) |
-| Testes de integração | **96** (eram 0) |
+| Testes de integração | **102** (eram 0) |
 | Frontend | 8.191 linhas em 17 arquivos TS/CSS (era 1 arquivo de 2.124) |
 | Comandos que o frontend invoca e não existem | **0** (eram 87) |
 | Comandos registrados que nenhuma tela chama | 15 — capacidade sem entrada de UI, ver §9 |
@@ -506,7 +506,7 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 96 testes
+### 5.7 Rede de proteção — 102 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -518,13 +518,13 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
 | `proceedings_repository.rs` | **20 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
 | `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
-| `deadlines_repository.rs` | **4 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação |
-| `maps_reports_repository.rs` | **10 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
+| `deadlines_repository.rs` | **6 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação |
+| `maps_reports_repository.rs` | **11 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
 | `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
-| `audit_repository.rs` | **7 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
+| `audit_repository.rs` | **8 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas |
 | `legal_catalogs_repository.rs` | **10 testes** — os 25 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
-| `commands_ipc.rs` | **8 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções e auditoria da edição/exclusão de prorrogação |
+| `commands_ipc.rs` | **9 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções e auditoria da edição/exclusão de prorrogação |
 | `sql_prepare.rs` | **2 testes** — as 92 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
 | `importacao.rs` | **3 testes** — as oito etapas de `importacao/` rodam de verdade, na ordem, sobre um recorte do dump (`tests/fixtures/legado_amostra.sql`, 26 dos 128 processos, as 10 espécies). As contagens são comparadas com o próprio recorte, não com número mágico; o que fica fixado são as **decisões** — o colapso das trocas do mesmo dia, o motivo suprido, a solução replicada e o art. 29 que fica de fora. O terceiro roda o relatório de conferência da amostra e cobra **0 divergências** |
 
@@ -611,7 +611,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 96 testes, bancos descartáveis
+cargo test                           # 102 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -2020,6 +2020,121 @@ operações de auditoria. Não houve mudança de schema nem migration.
 
 ---
 
+### 8.14 ~~Padronização das listagens e paginação em dez itens~~ — **CONCLUÍDA**
+
+Pedido do responsável depois de percorrer as telas: **cada listagem havia sido migrada por
+conta própria e nenhuma se parecia com a outra.** O commit `13dd217` fechou o desenho da
+listagem de processos — `colgroup` percentual, `table-layout: fixed`, reticências com
+`title`, etiquetas, cabeçalho fixo — e aquele desenho existia num arquivo só.
+
+Junto vieram quatro defeitos que a padronização expôs. Três eram do tipo que a §8.9 já
+havia catalogado: **corte silencioso**.
+
+#### 1. Prazos mostrava o mesmo processo duas vezes
+
+O mais grave, porque contradizia a própria tela. O bloco "vencendo em até X dias" filtrava
+`prazo_vencimento <= CURRENT_DATE + X`, **sem piso**, então continha todo o vencido. O
+`deadlines_dashboard` imediatamente acima sempre usou `>= CURRENT_DATE`:
+
+| | vencidos | vencendo |
+|---|---|---|
+| `dashboard()` (os três cartões) | `< CURRENT_DATE` | `>= CURRENT_DATE AND <= +N` |
+| `report()` (as duas tabelas) | `< CURRENT_DATE` | `<= +N` ← **sem piso** |
+
+Os cartões e as tabelas da mesma tela discordavam, e um prazo vencido aparecia nas duas
+listas. Corrigido com o piso, e travado por `blocos_de_prazo_sao_exclusivos`, que monta
+prazo vencido ontem, vencendo hoje, dentro e fora da janela, e cobra interseção vazia **e**
+as contagens batendo com `dashboard`. `report()` **não tinha teste nenhum** até esta rodada
+— era a única consulta grande do módulo sem cobertura, e foi exatamente ali que o defeito
+estava.
+
+#### 2. A auditoria parava no 200º registro
+
+`audit_list` recebia `limit`/`offset` **sem teto**, devolvia um `Vec` **sem total** e a
+tela anunciava "Últimos 200 registros" porque era tudo que podia saber. Não havia como
+descobrir que existia um 201º nem como alcançá-lo. Hoje devolve `AuditPageResult` completo,
+com controle de página.
+
+#### 3. O CSV exportava a página, não o filtro
+
+Usuários exportava os itens carregados. Com 235 militares e página de 50, a planilha saía
+com 21% do efetivo e não dizia. Agora CSV e impressão percorrem o filtro inteiro em lotes
+de 200, com teto de 5.000 — e o teto **avisa** (`avisarSeCortado`), porque cortar calado é
+o defeito que se está corrigindo, não a solução.
+
+#### 4. Duas gerações de CSS de tabela, e quem vencia era a ordem do arquivo
+
+`styles.css` tinha dois `.table-wrap`, dois `table {}`, dois `.paginacao` e dois
+`.tabela-dados--larga` (940px e 1060px). Pior: `.tabela-dados thead th`, sobrevivente da
+primeira geração, era **mais específica** que o `th` da segunda e mantinha o cabeçalho das
+listagens branco enquanto o das fichas ficava cinza. A distinção é boa; acontecia por
+acidente. Ficou escrita.
+
+E uma regra genérica, `.table-wrap > table:not(...) { min-width: 680px }`, alcançava as
+listagens novas e as fazia rolar na horizontal **já em 1600px** — o oposto do pretendido.
+
+#### O que passou a existir
+
+| | Onde |
+|---|---|
+| Metadados de coluna: largura, alinhamento, truncamento, `nowrap` | `dom.ts::Coluna`, consumido por `tabela()` |
+| `ITENS_POR_PAGINA = 10`, um número para todas | `dom.ts`; o backend usa o mesmo em `db::paginacao::PADRAO` |
+| Paginação **por chave**, para dois paginadores na mesma tela | `dom.ts::paginacao`/`ligarPaginacao`; Prazos tem "vencidos" e "proximos" |
+| Recuo automático para a última página válida | `dom.ts::paginaValida`, chamado antes de desenhar |
+| Carga completa em lotes para CSV e impressão | `dom.ts::carregarTudo` + `TETO_EXPORTACAO` + `avisarSeCortado` |
+| Impressão do conjunto completo, não da página | `dom.ts::ligarExportacao`, 2º argumento |
+| Recorte único do backend, com teto e padrão num lugar só | `src-tauri/src/db/paginacao.rs::Recorte` |
+| Envelope `{items,total,page,per_page}` nos três comandos que faltavam | `audit_list`, `deadlines_report`, `reports_saved_maps` |
+
+**`page` e `per_page` voltam no envelope**, e isso não é enfeite: o backend **corrige** o
+pedido, e sem receber de volta o que foi servido a tela desenha um controle de página
+mentiroso. Pedir 5.000 por página devolve 200, e agora o envelope conta.
+
+**O `limit` solto de `deadlines_report` saiu.** Duas formas de recortar a mesma lista é
+ambiguidade; o painel, que queria os 8 mais antigos, pede `page: 1, per_page: 8`.
+
+#### Onde a paginação **não** entrou, e por quê
+
+`legal_catalogs_list` continua trazendo o catálogo inteiro: a mesma resposta alimenta os
+selects de referência de outras telas, e paginar ali truncaria **lista de opções** — o
+defeito da §8.9. Catálogos recorta **no cliente**, depois da busca e do filtro de inativos.
+Relatórios, painéis, matrizes e tabelas de detalhe receberam o desenho e seguem mostrando
+o conjunto inteiro. Designações por Militar e Mapa do Período mantêm rolagem horizontal:
+quantas colunas existem depende do dado, então largura percentual não se aplica.
+
+#### Como se soube que a listagem de processos não mudou
+
+Ela é a referência aprovada, e a decisão foi **não tocar na aparência dela** — mas as
+regras dela subiram para `.tabela-dados--fixa`, o que é mexer. A conferência foi feita
+medindo, não olhando: 17 elementos da tabela (cabeçalhos, cada tipo de célula, badge,
+botão, invólucro, paginação) tiveram **35 propriedades computadas e o retângulo**
+comparados antes e depois, num navegador, sobre o CSS já compilado.
+
+Resultado: **as 17 iguais**, larguras ao pixel inclusive. A única diferença é
+`z-index: 1 → 2` nos `<th>`, que não é visível — nada dentro da tabela disputa
+empilhamento com o cabeçalho.
+
+A mesma medição provou o caminho novo: as oito colunas de Usuários chegam a 8/10/30/9/20/
+11/8/4% exatos, o nome longo trunca com o inteiro no `title`, e o `min-width` é `0` em
+1600/1366/1100/950px e `900px` em 899px — que é a regra pedida.
+
+**Testes novos (96 → 102):**
+
+| Teste | O que trava |
+|---|---|
+| `deadlines::blocos_de_prazo_sao_exclusivos` | nenhum prazo nos dois blocos, e os cartões batendo com as tabelas |
+| `deadlines::report_pagina_e_ordena` | 205 processos: o teto corta, `per_page` conta que cortou, páginas disjuntas, ordem estável |
+| `audit::lista_pagina_preservando_filtros` | 205 registros: total acompanha o filtro, páginas disjuntas, página além do fim vazia |
+| `maps_reports::mapas_salvos_paginam_do_mais_recente` | o mapa excluído sai da página **e** do total |
+| `commands_ipc::listagens_paginadas_falam_a_mesma_lingua_pelo_ipc` | `perPage` camelCase no comando, `per_page` snake_case dentro do `filter`, padrão 10 e o teto contado |
+
+Os três testes de paginação montam **mais linhas que o teto que exercitam** (205 contra
+200). Com a fixture crua o clamp nunca seria alcançado e o teste passaria sem provar nada
+— é a armadilha registrada na §10, e `lista_de_opcoes_de_militar_nao_pagina` já existia
+por causa dela.
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**
@@ -2097,6 +2212,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (§5.3) |
 | CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **78 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
+| **Largura de coluna num `<col style="">`** | É `style` como qualquer outro, e a CSP recusa igual: o `<col>` fica sem largura e a tabela volta a se dimensionar pelo conteúdo, **sem erro de build e sem erro de console que aponte a tabela** | A largura sai em `data-largura` e é aplicada pela CSSOM em `dom.ts::aplicarLarguras`, chamada de `main.ts::shell()` — do lado de `aplicarBarras`, e pela mesma razão |
+| **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a §8.14 provou que a listagem de processos não mudou |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Largura calculada vai num `data-*` e é aplicada em JS. `aplicarBarras()` faz isso, chamada de `shell()` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver §8.6.2 |
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
@@ -2149,7 +2266,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | como fazer uma mudança de schema agora que há dado real | §**7.3** |
 | o que falta fazer | `CONFERENCIA-DE-TELA.md` (a lista para marcar), §**7.5** (o porquê) e o quadro no topo |
 | por que lista de opções não pode paginar | §**8.9** e `users/repository.rs::list_ativos` |
-| como paginar uma listagem de tela | `dom.ts::paginacao` e `ligarPaginacao`, usados em `telas/usuarios.ts` |
+| como paginar uma listagem de tela | `dom.ts::paginacao`/`ligarPaginacao`/`paginaValida` e `src-tauri/src/db/paginacao.rs::Recorte`; §**8.14** |
+| como declarar largura, alinhamento e truncamento de coluna | `dom.ts::Coluna` e o bloco "Listagem de largura declarada" em `src/styles.css` |
+| por que CSV e impressão não saem com dez linhas | `dom.ts::carregarTudo` e `ligarExportacao`; §**8.14** |
+| por que os dois blocos de Prazos não se sobrepõem | `deadlines/repository.rs::FILTRO_REPORT` e o teste `blocos_de_prazo_sao_exclusivos` |
 | como fazer backup, e como saber que ele presta | §**7.6** |
 | quais campos cada apuratório mostra, e por quê | decisões **31** a **33**, e `apuratorio_config/domain.rs::ApuratorioConfig` |
 | por que o comportamento não vem de `legal_catalogs_list` | o cabeçalho de `ApuratorioConfig`, e a §**6**, item 9 |

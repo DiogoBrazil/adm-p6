@@ -18,9 +18,11 @@ const VENCIDOS_NO_PAINEL = 8;
 export async function renderDashboard(ctx: ContextoTela): Promise<void> {
   const [resumo, vencidos] = await Promise.all([
     call("dashboard_summary").then((r) => r.data),
-    call("deadlines_report", { filter: { apenas_vencidos: true, limit: VENCIDOS_NO_PAINEL } }).then(
-      (r) => r.data ?? [],
-    ),
+    // O `limit` solto saiu do filtro: quem quer só os N primeiros pede a
+    // página 1 com `per_page` N, que é uma forma só de recortar a mesma lista.
+    call("deadlines_report", {
+      filter: { apenas_vencidos: true, page: 1, per_page: VENCIDOS_NO_PAINEL },
+    }).then((r) => r.data?.items ?? []),
   ]);
 
   if (!resumo) {
@@ -65,7 +67,12 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
             : ""
         }
         ${tabela(
-          ["Processo", "Responsável", "Venceu em", "Atraso"],
+          [
+            { rotulo: "Processo", largura: 26, truncar: true },
+            { rotulo: "Responsável", largura: 40, truncar: true },
+            { rotulo: "Venceu em", largura: 17, alinhamento: "centro", nowrap: true },
+            { rotulo: "Atraso", largura: 17, alinhamento: "direita", nowrap: true },
+          ],
           vencidos.map((i) => ({ celulas: linhaVencido(i), classe: "atrasado" })),
           "Nenhum prazo vencido.",
         )}

@@ -17,6 +17,16 @@ pub struct SavedMapListItem {
     pub created_at: DateTime<Utc>,
 }
 
+/// Envelope da lista de mapas salvos. Mesmo contrato de `UserListResult`.
+#[derive(Debug, Serialize)]
+pub struct SavedMapListResult {
+    pub items: Vec<SavedMapListItem>,
+    /// Total do **escopo ativo**, não da página.
+    pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct SavedMapFull {
     #[sqlx(flatten)]

@@ -26,7 +26,12 @@ const somar = (linhas: StatusPorApuratorio[], campo: "em_andamento" | "concluido
 
 function tabelaPorTipo(linhas: StatusPorApuratorio[]): string {
   return tabela(
-    ["Apuratório", "Total", "Em andamento", "Concluídos"],
+    [
+      { rotulo: "Apuratório", largura: 46, truncar: true },
+      { rotulo: "Total", largura: 18, alinhamento: "direita", nowrap: true },
+      { rotulo: "Em andamento", largura: 18, alinhamento: "direita", nowrap: true },
+      { rotulo: "Concluídos", largura: 18, alinhamento: "direita", nowrap: true },
+    ],
     linhas.map((l) => [
       `${l.sigla} — ${l.nome}`,
       { texto: String(l.total), numerica: true },

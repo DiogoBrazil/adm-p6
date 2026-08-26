@@ -6,10 +6,12 @@
 //! período, que exige que a prorrogação comece no dia do vencimento
 //! anterior — regra que só aparece em runtime.
 
-use adm_p6_tauri_lib::deadlines::domain::{AddExtensionRequest, UpdateExtensionRequest};
+use adm_p6_tauri_lib::deadlines::domain::{
+    AddExtensionRequest, DeadlineReportFilter, UpdateExtensionRequest,
+};
 use adm_p6_tauri_lib::deadlines::repository;
 use chrono::NaiveDate;
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool};
 
 mod util;
 use util::fixtures::{self, Mundo, PRAZO_APURATORIO, PRAZO_DOCUMENTO_CURTO};
@@ -338,6 +340,178 @@ async fn somente_ultima_prorrogacao_pode_ser_editada_ou_excluida() {
             .await
             .expect_err("prazo inicial nao e prorrogacao");
         assert!(erro.message().contains("prazo inicial"));
+    })
+    .await;
+}
+
+// ── O relatório de prazos ───────────────────────────────────────────────────
+//
+// `report` era a única consulta grande do módulo **sem teste nenhum**, e foi
+// exatamente ali que a tela de Prazos mostrava o mesmo processo duas vezes.
+
+/// Um processo em andamento cujo prazo vigente vence no dia pedido.
+///
+/// O vencimento é coluna gerada (`data_inicio + dias`), então o que se escolhe
+/// aqui é o início — contado de trás para frente a partir do alvo. As datas
+/// são relativas a `CURRENT_DATE` de propósito: é o que a consulta compara.
+async fn processo_vencendo_em(pool: &PgPool, m: &Mundo, numero: i32, dias_ate: i64) -> String {
+    let id: String = sqlx::query_scalar(
+        "INSERT INTO processos_procedimentos
+             (apuratorio_id, documento_iniciador_id, numero_documento,
+              unidade_origem_id, municipio_fato_id, natureza_fato_id,
+              data_instauracao, data_recebimento)
+         VALUES ($1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6::uuid,
+                 CURRENT_DATE + $7 - $8, CURRENT_DATE + $7 - $8)
+      RETURNING id::text",
+    )
+    .bind(&m.apuratorio)
+    .bind(&m.documento)
+    .bind(numero.to_string())
+    .bind(&m.unidade)
+    .bind(&m.municipio)
+    .bind(&m.natureza)
+    .bind(dias_ate as i32)
+    .bind(PRAZO_APURATORIO)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+
+    pool.execute(
+        sqlx::query(
+            "INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+             VALUES ($1::uuid, 0, CURRENT_DATE + $2 - $3, $3)",
+        )
+        .bind(&id)
+        .bind(dias_ate as i32)
+        .bind(PRAZO_APURATORIO),
+    )
+    .await
+    .unwrap();
+
+    id
+}
+
+fn ids(resultado: &adm_p6_tauri_lib::deadlines::domain::DeadlineReportResult) -> Vec<String> {
+    resultado
+        .items
+        .iter()
+        .map(|i| i.processo_id.clone())
+        .collect()
+}
+
+/// Os dois blocos da tela de Prazos não podem mostrar o mesmo processo.
+///
+/// A condição da janela era `prazo_vencimento <= CURRENT_DATE + N`, **sem
+/// piso**: "vencendo em até 14 dias" trazia junto tudo que já havia vencido, e
+/// cada processo vencido aparecia nas duas tabelas. O `dashboard` ao lado
+/// sempre contou com o piso, então os cartões e as tabelas discordavam na
+/// mesma tela — é esse par que este teste amarra.
+#[tokio::test]
+async fn blocos_de_prazo_sao_exclusivos() {
+    util::com_banco_descartavel("prazo_blocos", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let ontem = processo_vencendo_em(&pool, &m, 1, -1).await;
+        let hoje = processo_vencendo_em(&pool, &m, 2, 0).await;
+        let dentro = processo_vencendo_em(&pool, &m, 3, 5).await;
+        let fora = processo_vencendo_em(&pool, &m, 4, 30).await;
+
+        let vencidos = repository::report(
+            &pool,
+            &DeadlineReportFilter {
+                apenas_vencidos: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let proximos = repository::report(
+            &pool,
+            &DeadlineReportFilter {
+                dias_ate_vencer: Some(14),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            ids(&vencidos),
+            vec![ontem.clone()],
+            "vencido e so o de ontem"
+        );
+        assert_eq!(
+            ids(&proximos),
+            vec![hoje.clone(), dentro.clone()],
+            "a janela vai de hoje ate hoje + 14, em ordem de vencimento"
+        );
+
+        // A interseção é o defeito: se um id estiver nos dois, a tela repete.
+        for id in ids(&vencidos) {
+            assert!(
+                !ids(&proximos).contains(&id),
+                "o processo {id} apareceu nos dois blocos"
+            );
+        }
+        assert!(!ids(&proximos).contains(&fora), "fora da janela nao entra");
+
+        // E os cartões de contagem da mesma tela têm de bater com as tabelas.
+        let resumo = repository::dashboard(&pool, 14).await.unwrap();
+        assert_eq!(resumo.vencidos, vencidos.total);
+        assert_eq!(resumo.proximos, proximos.total);
+        assert_eq!(resumo.total, 4, "os quatro tem prazo vigente");
+    })
+    .await;
+}
+
+/// Paginação do relatório: total do escopo, páginas disjuntas, e o teto que
+/// corta.
+///
+/// Monta **mais processos que o teto** de propósito. Um teste de limite
+/// montado sobre a fixture (3 militares, 1 processo) nunca exercita o clamp e
+/// passa por acidente — foi assim que os seletores truncados em 200
+/// atravessaram a migração inteira.
+#[tokio::test]
+async fn report_pagina_e_ordena() {
+    util::com_banco_descartavel("prazo_pagina", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        const QUANTOS: i32 = 205;
+
+        for n in 0..QUANTOS {
+            processo_vencendo_em(&pool, &m, n, n as i64 + 1).await;
+        }
+
+        let filtro = |page, per_page| DeadlineReportFilter {
+            page: Some(page),
+            per_page: Some(per_page),
+            ..Default::default()
+        };
+
+        // Acima do teto o pedido é corrigido, e `per_page` volta dizendo isso —
+        // é o que impede a tela de desenhar um controle de página mentiroso.
+        let demais = repository::report(&pool, &filtro(1, 500)).await.unwrap();
+        assert_eq!(demais.items.len(), 200, "o teto corta");
+        assert_eq!(demais.per_page, 200, "e o envelope conta que cortou");
+        assert_eq!(demais.total, QUANTOS as i64, "o total e do escopo");
+
+        let primeira = repository::report(&pool, &filtro(1, 3)).await.unwrap();
+        let segunda = repository::report(&pool, &filtro(2, 3)).await.unwrap();
+        assert_eq!(primeira.items.len(), 3);
+        assert_eq!(primeira.total, QUANTOS as i64);
+        assert_eq!(segunda.page, 2);
+        for id in ids(&primeira) {
+            assert!(!ids(&segunda).contains(&id), "paginas se repetiram");
+        }
+
+        // Ordem por vencimento: a segunda página continua de onde a primeira
+        // parou, sem voltar no tempo.
+        assert!(primeira.items.last().unwrap().data_vencimento <= segunda.items[0].data_vencimento);
+
+        // Página além do fim é vazia, não erro — a tela recua sozinha.
+        let longe = repository::report(&pool, &filtro(999, 10)).await.unwrap();
+        assert!(longe.items.is_empty());
+        assert_eq!(longe.total, QUANTOS as i64);
     })
     .await;
 }

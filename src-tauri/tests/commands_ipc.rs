@@ -438,3 +438,77 @@ fn lista_de_opcoes_de_militar_responde_pelo_ipc() {
         }
     });
 }
+
+/// As três listagens paginadas, pelo IPC de verdade.
+///
+/// Duas convenções se cruzam aqui, e errar qualquer uma **falha em silêncio**:
+///
+///   - o argumento do comando é **camelCase** (`perPage`). Em snake_case o
+///     Tauri simplesmente ignora, o `Option` vira `None` e a tela recebe o
+///     padrão achando que mandou o que pediu;
+///   - os campos **dentro** do envelope e do `filter` seguem **snake_case**,
+///     porque ali quem desserializa é o serde.
+///
+/// Cada um dos três já apareceu quebrado na tela por causa disso: a paginação
+/// de usuários mandava `per_page` e nunca paginou (§5.6), e os três filtros da
+/// auditoria mandavam nomes que o comando não recebe.
+#[test]
+fn listagens_paginadas_falam_a_mesma_lingua_pelo_ipc() {
+    com_app_e_banco("ipc_paginacao", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        // Auditoria: `page`/`perPage` como argumentos de comando.
+        let dados = ok(&invocar(
+            &webview,
+            "audit_list",
+            json!({ "page": 1, "perPage": 5 }),
+        ))
+        .clone();
+        for campo in ["items", "total", "page", "per_page"] {
+            assert!(
+                dados.get(campo).is_some(),
+                "AuditPageResult sem '{campo}' — o rodape da tela monta o intervalo com ele"
+            );
+        }
+        assert_eq!(dados["page"], json!(1));
+        assert_eq!(dados["per_page"], json!(5));
+
+        // Prazos: aqui a paginação vai **dentro** do `filter`, então volta a
+        // ser snake_case. É a metade da armadilha que mais confunde.
+        let dados = ok(&invocar(
+            &webview,
+            "deadlines_report",
+            json!({ "filter": { "apenas_vencidos": true, "page": 1, "per_page": 5 } }),
+        ))
+        .clone();
+        assert!(dados["items"].is_array());
+        assert_eq!(dados["per_page"], json!(5));
+
+        // Mapas salvos: argumento de comando outra vez.
+        let dados = ok(&invocar(
+            &webview,
+            "reports_saved_maps",
+            json!({ "page": 1, "perPage": 5 }),
+        ))
+        .clone();
+        assert!(dados["items"].is_array());
+        assert_eq!(dados["per_page"], json!(5));
+
+        // Sem tamanho explícito, o padrão é o mesmo das telas: dez.
+        let dados = ok(&invocar(&webview, "audit_list", json!({}))).clone();
+        assert_eq!(
+            dados["per_page"],
+            json!(10),
+            "o padrao do backend acompanha o da tela"
+        );
+
+        // E o teto corta o pedido em vez de servi-lo — mas conta que cortou.
+        let dados = ok(&invocar(
+            &webview,
+            "audit_list",
+            json!({ "page": 1, "perPage": 5000 }),
+        ))
+        .clone();
+        assert_eq!(dados["per_page"], json!(200), "o envelope conta o teto");
+    });
+}

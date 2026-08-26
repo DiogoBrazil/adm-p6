@@ -34,7 +34,14 @@ export function painelContagem(
     { texto: String(i.total), numerica: true },
     { texto: "", classe: "barra" },
   ]);
-  const html = tabela([rotuloColuna, "Quantidade", ""], linhas);
+  const html = tabela(
+    [
+      { rotulo: rotuloColuna, largura: 46, truncar: true },
+      { rotulo: "Quantidade", largura: 14, alinhamento: "direita", nowrap: true },
+      { rotulo: "", largura: 40 },
+    ],
+    linhas,
+  );
   // A barra entra depois, porque `tabela()` escapa todo conteúdo — e aqui o
   // conteúdo é marcação, não dado.
   //
@@ -180,14 +187,23 @@ function painelEnquadramento(
   const linhas = itens.map((i) => [
     i.rotulo,
     i.classificacao ?? "—",
-    // O texto legal é longo; a coluna fica legível com o corte, e o título
-    // do `tabela()` não comporta tooltip — quem precisa do inteiro abre o
-    // catálogo.
-    i.descricao.length > 90 ? `${i.descricao.slice(0, 90)}…` : i.descricao,
+    // O corte manual em 90 caracteres saiu daqui: o `tabela()` agora trunca por
+    // CSS e entrega o texto legal inteiro no `title`. Cortar na string perdia o
+    // resto de vez, e a coluna que exige mais contexto era justamente esta.
+    i.descricao,
     { texto: String(i.total), numerica: true },
   ]);
   return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>
-    ${tabela([rotuloColuna, "Classificação", "Descrição", "Qtd."], linhas, "Nada registrado neste escopo.")}
+    ${tabela(
+      [
+        { rotulo: rotuloColuna, largura: 18, truncar: true },
+        { rotulo: "Classificação", largura: 16, truncar: true },
+        { rotulo: "Descrição", largura: 58, truncar: true },
+        { rotulo: "Qtd.", largura: 8, alinhamento: "direita", nowrap: true },
+      ],
+      linhas,
+      "Nada registrado neste escopo.",
+    )}
   </section>`;
 }
 
@@ -249,7 +265,13 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
       <section class="stat-panel">
         <h2>Situação por apuratório</h2>
         ${tabela(
-          ["Apuratório", "Tipo", "Em andamento", "Concluídos", "Total"],
+          [
+            { rotulo: "Apuratório", largura: 34, truncar: true },
+            { rotulo: "Tipo", largura: 26, truncar: true },
+            { rotulo: "Em andamento", largura: 14, alinhamento: "direita", nowrap: true },
+            { rotulo: "Concluídos", largura: 13, alinhamento: "direita", nowrap: true },
+            { rotulo: "Total", largura: 13, alinhamento: "direita", nowrap: true },
+          ],
           situacaoLinhas,
           "Nenhum processo neste escopo.",
         )}
@@ -265,7 +287,14 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
       <section class="stat-panel">
         <h2>Condutores em sinistro</h2>
         <p class="hint">Alcança os processos cuja natureza do fato exige condutor.</p>
-        ${tabela(["Militar", "Ocorrências"], condutoresLinhas, "Nenhum condutor registrado neste escopo.")}
+        ${tabela(
+          [
+            { rotulo: "Militar", largura: 80, truncar: true },
+            { rotulo: "Ocorrências", largura: 20, alinhamento: "direita", nowrap: true },
+          ],
+          condutoresLinhas,
+          "Nenhum condutor registrado neste escopo.",
+        )}
       </section>
 
       ${painelEnquadramento("Transgressões do RDPM", transgressoes, "Artigo / inciso")}

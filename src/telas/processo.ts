@@ -37,6 +37,7 @@ import {
   limparFormularioPendente,
   notificar,
   option,
+  ITENS_POR_PAGINA,
   paginacao,
   podeDescartarFormulario,
   protegerFormulario,
@@ -683,8 +684,8 @@ export async function renderFormularioProcesso(
 
 const filtro = { busca: "", concluido: null as boolean | null, ano: null as number | null };
 
-/** Tamanho da página da listagem. O backend trava `per_page` em 200. */
-const POR_PAGINA = 50;
+// O tamanho da página é o mesmo de toda listagem operacional.
+const POR_PAGINA = ITENS_POR_PAGINA;
 let pagina = 1;
 
 type StatusPrazo = {
@@ -842,7 +843,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
       </div>
       ${
         items.length
-          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--larga tabela-processos">
+          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--fixa tabela-dados--larga tabela-processos">
               <colgroup>
                 <col class="col-layout-tipo" />
                 <col class="col-layout-ano" />
@@ -890,11 +891,11 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
               </tbody></table></div>`
           : `<p class="empty">Nenhum processo encontrado.</p>`
       }
-      ${paginacao(pagina, POR_PAGINA, total)}
+      ${paginacao("processos", pagina, POR_PAGINA, total)}
     </section>
   `);
 
-  ligarPaginacao(pagina, (nova) => {
+  ligarPaginacao("processos", pagina, (nova) => {
     pagina = nova;
     void renderListaProcessos(ctx);
   });

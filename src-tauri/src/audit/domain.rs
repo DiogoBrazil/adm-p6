@@ -36,10 +36,19 @@ pub struct AuditStatistics {
     pub por_entidade: Vec<AuditTableStat>,
 }
 
+/// Envelope das listagens paginadas de auditoria.
+///
+/// `page` e `per_page` voltam junto porque o backend os corrige: pedir a página
+/// 0 ou 3.000 por página não é erro, é pedido ajustado — e a tela precisa saber
+/// o que de fato foi servido para desenhar o controle de página. É o mesmo
+/// contrato de `UserListResult` e `ProceedingListResult`.
 #[derive(Debug, Serialize)]
 pub struct AuditPageResult {
     pub items: Vec<AuditDetailItem>,
+    /// Total do **escopo filtrado**, não da página.
     pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
 }
 
 #[derive(Debug, Deserialize, Default)]

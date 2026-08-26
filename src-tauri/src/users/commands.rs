@@ -3,6 +3,7 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
+use crate::db::paginacao::PADRAO;
 use crate::error::AppError;
 use crate::response::{from_result, ApiResponse};
 use crate::users::domain::{
@@ -26,7 +27,7 @@ pub async fn users_list(
                 &pool,
                 search.as_deref(),
                 page.unwrap_or(1),
-                per_page.unwrap_or(50),
+                per_page.unwrap_or(PADRAO),
             )
             .await?)
         }

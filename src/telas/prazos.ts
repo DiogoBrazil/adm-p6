@@ -11,8 +11,21 @@
 // listagem de vencidos e existia só pela exportação CSV. Duas telas para o
 // mesmo dado divergem; o CSV é um botão.
 
-import { call, type DeadlineReportItem } from "../api";
-import { barraDeExportacao, baixarCsv, escapeHtml, ligarExportacao, tabela } from "../dom";
+import { call, type DeadlineReportFilter, type DeadlineReportItem } from "../api";
+import {
+  avisarSeCortado,
+  barraDeExportacao,
+  baixarCsv,
+  carregarTudo,
+  escapeHtml,
+  ITENS_POR_PAGINA,
+  ligarExportacao,
+  ligarPaginacao,
+  paginacao,
+  paginaValida,
+  tabela,
+  type Coluna,
+} from "../dom";
 import type { Linha } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
@@ -20,7 +33,39 @@ export const ROTA = "/prazos";
 
 let janelaDias = 14;
 
-const COLUNAS = ["Processo", "Unidade", "Responsável", "Vencimento", "Dias", "Prazo"];
+/**
+ * Os dois blocos paginam **em separado**, e cada um guarda a sua página.
+ *
+ * Com um estado só, avançar em "Vencidos" arrastaria "Vencendo" junto — os
+ * dois têm totais diferentes e não andam no mesmo passo. As chaves também
+ * separam os ids dos botões: sem elas, o segundo paginador herdaria os do
+ * primeiro e os dois responderiam ao mesmo clique.
+ */
+const paginas = { vencidos: 1, proximos: 1 };
+
+/** As seis colunas dividem 100% da largura. */
+const COLUNAS: Coluna[] = [
+  { rotulo: "Processo", largura: 18, truncar: true },
+  { rotulo: "Unidade", largura: 22, truncar: true },
+  { rotulo: "Responsável", largura: 26, truncar: true },
+  { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
+  { rotulo: "Dias", largura: 12, alinhamento: "direita", nowrap: true },
+  { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
+];
+
+/** Os rótulos do CSV, sem acento no cabeçalho. */
+const COLUNAS_CSV = ["Processo", "Unidade", "Responsavel", "Vencimento"];
+
+/**
+ * Os dois recortes da tela, e a razão de serem **exclusivos**.
+ *
+ * "Vencido" é estritamente antes de hoje; "vencendo" vai de hoje até o fim da
+ * janela. Até esta rodada o segundo não tinha piso e engolia o primeiro: o
+ * mesmo processo aparecia nas duas tabelas, enquanto os cartões de contagem
+ * logo acima — que sempre usaram o piso — diziam outra coisa.
+ */
+const FILTRO_VENCIDOS: DeadlineReportFilter = { apenas_vencidos: true };
+const filtroProximos = (): DeadlineReportFilter => ({ dias_ate_vencer: janelaDias });
 
 const identificacao = (i: DeadlineReportItem) => `${i.apuratorio_sigla} nº ${i.numero_controle}`;
 
@@ -46,13 +91,31 @@ function linhas(itens: DeadlineReportItem[]): Linha[] {
 }
 
 export async function renderPrazos(ctx: ContextoTela): Promise<void> {
+  const pagina = (filtro: DeadlineReportFilter, page: number, perPage = ITENS_POR_PAGINA) =>
+    call("deadlines_report", { filter: { ...filtro, page, per_page: perPage } });
+
   const [resumo, aVencer, vencidos] = await Promise.all([
     call("deadlines_dashboard", { diasJanela: janelaDias }).then((r) => r.data),
-    call("deadlines_report", {
-      filter: { dias_ate_vencer: janelaDias, apenas_vencidos: false },
-    }).then((r) => r.data ?? []),
-    call("deadlines_report", { filter: { apenas_vencidos: true } }).then((r) => r.data ?? []),
+    pagina(filtroProximos(), paginas.proximos).then((r) => r.data),
+    pagina(FILTRO_VENCIDOS, paginas.vencidos).then((r) => r.data),
   ]);
+
+  const itensVencidos = vencidos?.items ?? [];
+  const itensAVencer = aVencer?.items ?? [];
+  const totalVencidos = vencidos?.total ?? 0;
+  const totalAVencer = aVencer?.total ?? 0;
+
+  // Um prazo prorrogado sai do bloco de vencidos e a página em que se estava
+  // pode não existir mais. Corrige antes de desenhar, não depois.
+  const corrigidas = {
+    vencidos: paginaValida(paginas.vencidos, ITENS_POR_PAGINA, totalVencidos),
+    proximos: paginaValida(paginas.proximos, ITENS_POR_PAGINA, totalAVencer),
+  };
+  if (corrigidas.vencidos !== paginas.vencidos || corrigidas.proximos !== paginas.proximos) {
+    paginas.vencidos = corrigidas.vencidos;
+    paginas.proximos = corrigidas.proximos;
+    return renderPrazos(ctx);
+  }
 
   ctx.shell(`
     <section class="panel">
@@ -76,38 +139,82 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         <div class="stat-card"><span class="stat-value">${resumo?.proximos ?? 0}</span><span>vencem em ${janelaDias} dias</span></div>
       </div>
 
-      <h2>Vencidos</h2>
-      ${tabela(COLUNAS, linhas(vencidos), "Nenhum prazo vencido.")}
+      <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
+      ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.")}
+      ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
 
-      <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
-      ${tabela(COLUNAS, linhas(aVencer), "Nenhum prazo na janela.")}
+      <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
+        <span class="badge badge--warn">${totalAVencer}</span></h2>
+      ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.")}
+      ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
     </section>
   `);
 
-  document.querySelector<HTMLSelectElement>("#janela")?.addEventListener("change", (e) => {
-    janelaDias = Number((e.currentTarget as HTMLSelectElement).value);
+  ligarPaginacao("vencidos", paginas.vencidos, (nova) => {
+    paginas.vencidos = nova;
+    void renderPrazos(ctx);
+  });
+  ligarPaginacao("proximos", paginas.proximos, (nova) => {
+    paginas.proximos = nova;
     void renderPrazos(ctx);
   });
 
-  // O CSV sai do dado já carregado: uma coluna a mais diz de qual bloco cada
-  // linha veio, para a planilha não perder essa distinção.
-  ligarExportacao(() => {
-    const linha = (i: DeadlineReportItem, bloco: string) => [
-      bloco,
-      identificacao(i),
-      i.unidade_origem,
-      i.responsavel_nome ?? "",
-      i.data_vencimento,
-      i.dias_restantes,
-      vigencia(i),
-    ];
-    return baixarCsv(
-      `prazos-${new Date().toISOString().slice(0, 10)}.csv`,
-      ["Situacao", ...COLUNAS.slice(0, 4), "Dias restantes", "Prazo"],
-      [
-        ...vencidos.map((i) => linha(i, "Vencido")),
-        ...aVencer.map((i) => linha(i, `Vence em ate ${janelaDias} dias`)),
-      ],
-    );
+  document.querySelector<HTMLSelectElement>("#janela")?.addEventListener("change", (e) => {
+    janelaDias = Number((e.currentTarget as HTMLSelectElement).value);
+    // A janela redefine o escopo dos dois blocos: o de vencidos não muda de
+    // conteúdo, mas ficar na 3ª página enquanto o outro volta à 1ª confunde.
+    paginas.vencidos = 1;
+    paginas.proximos = 1;
+    void renderPrazos(ctx);
   });
+
+  // O CSV e o papel levam os **dois blocos inteiros**, não as dez linhas de
+  // cada um que estão na tela: um relatório de prazos pela metade não serve
+  // para cobrar prazo nenhum.
+  const blocoInteiro = (filtro: DeadlineReportFilter) =>
+    carregarTudo<DeadlineReportItem>(async (page, perPage) => {
+      const r = await pagina(filtro, page, perPage);
+      return r.data ?? null;
+    });
+
+  const carregarOsDois = async () => {
+    const [todosVencidos, todosAVencer] = await Promise.all([
+      blocoInteiro(FILTRO_VENCIDOS),
+      blocoInteiro(filtroProximos()),
+    ]);
+    avisarSeCortado(todosVencidos.cortado || todosAVencer.cortado);
+    return { vencidos: todosVencidos.itens, aVencer: todosAVencer.itens };
+  };
+
+  ligarExportacao(
+    async () => {
+      const todos = await carregarOsDois();
+      // Uma coluna a mais diz de qual bloco cada linha veio, para a planilha
+      // não perder a distinção que a tela faz com dois títulos.
+      const linha = (i: DeadlineReportItem, bloco: string) => [
+        bloco,
+        identificacao(i),
+        i.unidade_origem,
+        i.responsavel_nome ?? "",
+        i.data_vencimento,
+        i.dias_restantes,
+        vigencia(i),
+      ];
+      return baixarCsv(
+        `prazos-${new Date().toISOString().slice(0, 10)}.csv`,
+        ["Situacao", ...COLUNAS_CSV, "Dias restantes", "Prazo"],
+        [
+          ...todos.vencidos.map((i) => linha(i, "Vencido")),
+          ...todos.aVencer.map((i) => linha(i, `Vence em ate ${janelaDias} dias`)),
+        ],
+      );
+    },
+    async () => {
+      const todos = await carregarOsDois();
+      return `<h2>Vencidos</h2>
+        ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.")}
+        <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
+        ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.")}`;
+    },
+  );
 }

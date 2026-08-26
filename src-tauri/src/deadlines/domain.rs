@@ -49,11 +49,24 @@ pub struct DeadlineReportFilter {
     /// de siglas que existiam escritos no SQL.
     pub apuratorio_ids: Option<Vec<String>>,
     pub responsavel_id: Option<String>,
+    /// Só o que venceu **antes de hoje**.
     pub apenas_vencidos: Option<bool>,
-    /// Janela em dias a partir de hoje. Negativo não é aceito.
+    /// Janela em dias: de hoje até hoje + N. **Não alcança o que já venceu** —
+    /// ver o cabeçalho de `repository::report`.
     pub dias_ate_vencer: Option<i32>,
     pub ano: Option<i32>,
-    pub limit: Option<i64>,
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+/// Envelope da listagem de prazos. Mesmo contrato de `UserListResult`.
+#[derive(Debug, Serialize)]
+pub struct DeadlineReportResult {
+    pub items: Vec<DeadlineReportItem>,
+    /// Total do **escopo filtrado**, não da página.
+    pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
 }
 
 #[derive(Debug, Serialize)]

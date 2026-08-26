@@ -129,11 +129,25 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
         <div class="stat-card"><span class="stat-value">${escapeHtml(linhas[0]?.nome ?? "—")}</span><span>mais designado</span></div>
       </div>
 
-      ${tabela(
-        ["Militar", ...colunasComDado.map((a) => a.rotulo), "Total"],
-        [...corpo, ...rodape.map((celulas) => ({ celulas, classe: "linha-total" }))],
-        "Nenhuma designação neste escopo.",
-      )}
+      ${
+        // Matriz de coluna dinâmica: quantas colunas existem depende do dado,
+        // então largura percentual não se aplica. Rola na horizontal, que é o
+        // que uma matriz pede.
+        tabela(
+          [
+            { rotulo: "Militar", truncar: true },
+            ...colunasComDado.map((a) => ({
+              rotulo: a.rotulo,
+              alinhamento: "direita" as const,
+              nowrap: true,
+            })),
+            { rotulo: "Total", alinhamento: "direita" as const, nowrap: true },
+          ],
+          [...corpo, ...rodape.map((celulas) => ({ celulas, classe: "linha-total" }))],
+          "Nenhuma designação neste escopo.",
+          { larga: true },
+        )
+      }
     </section>
   `);
 
