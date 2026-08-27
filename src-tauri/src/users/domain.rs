@@ -19,6 +19,7 @@ pub struct UserListItem {
     pub matricula: String,
     pub posto_graduacao_id: String,
     pub posto_graduacao: String,
+    pub posto_graduacao_sigla: String,
     pub circulo_hierarquico: String,
     pub is_encarregado: bool,
     pub ativo: bool,

@@ -693,8 +693,16 @@ fn lista_de_opcoes_de_militar_responde_pelo_ipc() {
         let itens = dados.as_array().expect("lista de militares");
         assert_eq!(itens.len(), 3, "os 3 da fixture, sem paginação no caminho");
 
-        // Os campos que `selectMilitares` monta em `src/telas/processo.ts`.
-        for campo in ["id", "nome", "matricula", "posto_graduacao", "ativo"] {
+        // O nome completo alimenta os seletores; a sigla fica disponível para
+        // o título compacto do detalhe do usuário.
+        for campo in [
+            "id",
+            "nome",
+            "matricula",
+            "posto_graduacao",
+            "posto_graduacao_sigla",
+            "ativo",
+        ] {
             assert!(
                 itens[0].get(campo).is_some(),
                 "UserListItem sem '{campo}' — o seletor monta o rótulo com ele"

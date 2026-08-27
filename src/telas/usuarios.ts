@@ -136,7 +136,8 @@ const linhaDaTabela = (u: UserListItem) => ({
   ],
 });
 
-const nomeCompleto = (u: UserListItem) => `${u.posto_graduacao} ${u.matricula} ${u.nome}`;
+const nomeCompleto = (u: UserListItem) =>
+  `${u.posto_graduacao_sigla} ${u.matricula} ${u.nome}`;
 
 // ── Lista ─────────────────────────────────────────────────────────────
 
@@ -395,12 +396,18 @@ export async function renderFormularioUsuario(
 
 // ── Detalhe ───────────────────────────────────────────────────────────
 
+const OPCOES_CONTAGEM_USUARIO = {
+  mostrarBarra: false,
+  listagem: true,
+  centralizar: true,
+} as const;
+
 function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel" | "status_envolvido") {
   return tabela(
     [
-      { rotulo: "Processo", largura: 22, truncar: true },
-      { rotulo: "Apuratório", largura: 24, truncar: true },
-      { rotulo: coluna, largura: 24, truncar: true },
+      { rotulo: "Processo", largura: 22, truncar: true, alinhamento: "centro" },
+      { rotulo: "Apuratório", largura: 24, truncar: true, alinhamento: "centro" },
+      { rotulo: coluna, largura: 24, truncar: true, alinhamento: "centro" },
       { rotulo: "Instauração", largura: 15, alinhamento: "centro", nowrap: true },
       { rotulo: "Situação", largura: 15, alinhamento: "centro", nowrap: true },
     ],
@@ -412,6 +419,7 @@ function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel
       p.data_conclusao ? `concluído em ${p.data_conclusao}` : "em andamento",
     ]),
     "Nenhum.",
+    { listagem: true },
   );
 }
 
@@ -458,9 +466,9 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
       </div>
 
       <div class="stat-grid">
-        ${painelContagem("Designações por papel", estatisticas?.designacoes_por_papel ?? [], "Papel")}
-        ${painelContagem("Designações por apuratório", estatisticas?.designacoes_por_apuratorio ?? [], "Apuratório")}
-        ${painelContagem("Envolvimentos por status", estatisticas?.envolvimentos_por_status ?? [], "Status")}
+        ${painelContagem("Designações por papel", estatisticas?.designacoes_por_papel ?? [], "Papel", OPCOES_CONTAGEM_USUARIO)}
+        ${painelContagem("Designações por apuratório", estatisticas?.designacoes_por_apuratorio ?? [], "Apuratório", OPCOES_CONTAGEM_USUARIO)}
+        ${painelContagem("Envolvimentos por status", estatisticas?.envolvimentos_por_status ?? [], "Status", OPCOES_CONTAGEM_USUARIO)}
       </div>
 
       <div class="detail-section">

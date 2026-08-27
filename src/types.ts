@@ -883,6 +883,7 @@ export interface UserListItem {
   matricula: string;
   posto_graduacao_id: string;
   posto_graduacao: string;
+  posto_graduacao_sigla: string;
   circulo_hierarquico: string;
   is_encarregado: boolean;
   ativo: boolean;

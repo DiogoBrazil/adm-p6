@@ -409,6 +409,7 @@ async fn detalhe_traz_militar_com_e_sem_conta() {
             sem_conta.posto_graduacao, "Posto Teste PM",
             "vem o nome, nao a sigla"
         );
+        assert_eq!(sem_conta.posto_graduacao_sigla, "TST PM");
         assert!(
             sem_conta.conta_id.is_none(),
             "militar da fixture nao tem conta"

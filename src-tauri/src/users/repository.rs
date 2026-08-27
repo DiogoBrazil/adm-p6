@@ -14,6 +14,7 @@ const SELECT_PM: &str = r#"
            pm.matricula                 AS matricula,
            pg.id::text                  AS posto_graduacao_id,
            pg.nome                      AS posto_graduacao,
+           pg.sigla                     AS posto_graduacao_sigla,
            ch.nome                      AS circulo_hierarquico,
            pm.is_encarregado            AS is_encarregado,
            pm.ativo                     AS ativo,
