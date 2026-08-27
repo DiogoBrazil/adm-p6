@@ -15,6 +15,12 @@ export const ROTA = "/dashboard";
 /** Quantos vencidos cabem no painel antes de ele virar a tela de prazos. */
 const VENCIDOS_NO_PAINEL = 8;
 
+const OPCOES_CONTAGEM_PAINEL = {
+  mostrarBarra: false,
+  listagem: true,
+  centralizar: true,
+} as const;
+
 export async function renderDashboard(ctx: ContextoTela): Promise<void> {
   const [resumo, vencidos] = await Promise.all([
     call("dashboard_summary").then((r) => r.data),
@@ -68,19 +74,20 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
         }
         ${tabela(
           [
-            { rotulo: "Processo", largura: 26, truncar: true },
-            { rotulo: "Responsável", largura: 40, truncar: true },
+            { rotulo: "Processo", largura: 26, truncar: true, alinhamento: "centro" },
+            { rotulo: "Responsável", largura: 40, truncar: true, alinhamento: "centro" },
             { rotulo: "Venceu em", largura: 17, alinhamento: "centro", nowrap: true },
-            { rotulo: "Atraso", largura: 17, alinhamento: "direita", nowrap: true },
+            { rotulo: "Atraso", largura: 17, alinhamento: "centro", nowrap: true },
           ],
           vencidos.map((i) => ({ celulas: linhaVencido(i), classe: "atrasado" })),
           "Nenhum prazo vencido.",
+          { listagem: true },
         )}
       </section>
 
       <div class="stat-grid">
-        ${painelContagem("Por apuratório", resumo.por_apuratorio, "Apuratório")}
-        ${painelContagem("Por ano de instauração", resumo.por_ano, "Ano")}
+        ${painelContagem("Por apuratório", resumo.por_apuratorio, "Apuratório", OPCOES_CONTAGEM_PAINEL)}
+        ${painelContagem("Por ano de instauração", resumo.por_ano, "Ano", OPCOES_CONTAGEM_PAINEL)}
       </div>
     </section>
   `);
