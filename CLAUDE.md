@@ -4,9 +4,9 @@ App de desktop **Rust + Tauri 2**, frontend TypeScript sem framework,
 PostgreSQL 16. Sistema da Seção de Justiça e Disciplina do 7º BPM (PMRO).
 Migrado de Python/Eel; o banco tem os dados reais de 2018 em diante.
 
-**Antes de propor qualquer coisa, leia `REFATORACAO-MODELO-DADOS.md`** — é a
+**Antes de propor qualquer coisa, leia `GUIA.md`** — é a
 fonte de verdade declarada do projeto: o modelo, as decisões de negócio já
-tomadas (com o porquê), as armadilhas e o que falta. A §11 é um índice de "quero
+tomadas (com o porquê), as armadilhas e o que falta. A seção 9 é um índice de "quero
 entender X → olhe em Y".
 
 ## Nunca
@@ -15,10 +15,10 @@ entender X → olhe em Y".
   volume apaga oito anos de registro.
 - **Editar migration já aplicada.** `sqlx` guarda checksum por versão e o
   startup seguinte quebra com `VersionMismatch`. Mudança de schema é migration
-  nova (`0008`…).
+  nova (`0013`…).
 - **Tocar em `adm-p6.sql`.** Dump de produção, 44 MB, somente leitura, fora do
-  git — e com dados pessoais de 236 militares.
-- **Reabrir uma decisão da §2 sem motivo novo.** São 33, todas decididas pelo
+  git — e com dados pessoais de 235 militares.
+- **Reabrir uma decisão da seção 3 sem motivo novo.** São 47, todas decididas pelo
   responsável e implementadas.
 
 ## Princípios do modelo, que valem para toda mudança
@@ -53,16 +53,16 @@ entender X → olhe em Y".
 | Comando paginado servindo de lista de **opções** | O teto de 200 **corta em silêncio**. Lista de opções não pagina (`users_list_ativos`); paginação é da listagem de tela, e precisa de controle de página |
 | Listagem de tela nova | o recorte é `db::paginacao::Recorte` (padrão 10, teto 200), e o envelope devolve `page`/`per_page` — sem isso a tela desenha um controle de página com o que **pediu**, não com o que foi servido |
 | Largura de coluna | vem de `dom.ts::Coluna.largura`, sai em `data-largura` e é aplicada por `aplicarLarguras` (chamada de `shell()`). Num `<col style="">` a CSP recusa igual, e a tabela volta a se dimensionar pelo conteúdo sem avisar |
-| Mexer em regra de CSS que já existe duplicada no arquivo | qual vence é a ordem, não a intenção. Medir o computado antes e depois num navegador — foi como a §8.14 provou que a listagem de processos não mudou |
+| Mexer em regra de CSS que já existe duplicada no arquivo | qual vence é a ordem, não a intenção. Medir o computado antes e depois num navegador — foi como a rodada 14 provou que a listagem de processos não mudou |
 | Teste de limite que não passa do limite | a fixture tem 3 militares: o clamp de 200 nunca é exercido e o teste passa. Teste de limite monta **mais que o limite** |
 | Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build -- --no-bundle` |
 
-A §10 do guia tem a lista completa, com o que cada uma já custou.
+A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 102 testes
+cd src-tauri && cargo fmt --check && cargo test   # 137 testes
 cd .. && npm run typecheck
 ```
 

@@ -47,12 +47,12 @@ quebra o startup seguinte com `VersionMismatch`.
 
 ## Onde está o resto
 
-**[`REFATORACAO-MODELO-DADOS.md`](REFATORACAO-MODELO-DADOS.md) é a fonte de
-verdade** deste projeto e o lugar por onde começar. Ele traz o modelo de dados e
-o porquê de cada decisão, as decisões de negócio já tomadas, o roteiro da
-importação dos dados de produção, as armadilhas conhecidas e o que ainda falta.
+**[`GUIA.md`](GUIA.md) é a fonte de verdade** deste projeto e o lugar por onde
+começar. Ele traz o estado atual, o modelo de dados e o porquê de cada decisão,
+as 47 decisões de negócio já tomadas, as receitas para mexer sem quebrar, o
+roteiro da importação, as armadilhas conhecidas e a lista do que ainda falta
+conferir na tela.
 
-- `ANALISE-MIGRACAO.md` — diagnóstico do estado anterior à refatoração, datado.
 - `src-tauri/migrations/0001_schema.sql` — o schema, comentado seção por seção.
 - `src-tauri/importacao/` — a importação do banco legado, etapa por etapa.
 

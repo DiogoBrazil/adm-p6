@@ -7,7 +7,7 @@
 -- dump. Nenhuma sigla é escrita à mão, com três exceções justificadas:
 --
 --   1. `apuratorios.codigo_extensao` — é CÓDIGO TÉCNICO, o único do schema
---      (ver §5.3 do REFATORACAO-MODELO-DADOS.md). Acrescentar uma extensão de
+--      (ver a seção 4 do GUIA.md). Acrescentar uma extensão de
 --      formulário é mudança de código, então a ligação sigla -> extensão tem
 --      de ser afirmada uma vez, aqui.
 --   2. `legado.map_papeis` — o dump guarda o papel em NOME DE COLUNA
