@@ -14,8 +14,10 @@
 --      (responsavel_id, escrivao_id...), não em texto. A tradução coluna ->
 --      papel é declarada uma vez e reusada pelas etapas 02 e 06. Mora dentro
 --      do schema `legado` de propósito: some junto com ele no fim.
---   3. `papeis_pessoa` — vítima e inquirido estão em colunas distintas do
---      legado (`nome_vitima`, `pessoas_inquiridas`), sem rótulo nenhum.
+--   3. `papeis_pessoa` — o inquirido está numa coluna do legado
+--      (`pessoas_inquiridas`), sem rótulo nenhum. A vítima NÃO passa por aqui:
+--      desde a 0012 ela é `processo_vitimas`, relação própria do procedimento,
+--      sem papel de catálogo.
 --
 -- Roda em transação única.
 -- =============================================================================
@@ -216,14 +218,12 @@ SELECT DISTINCT papel FROM legado.v_ocupacoes
 ON CONFLICT DO NOTHING;
 
 -- ------------------------------------------------------------ papeis_pessoa --
--- Exceção 3: o legado não rotula. Vítima vem de `nome_vitima`, inquirido de
--- `pessoas_inquiridas` — só entra o papel que tem dado.
+-- Exceção 3: o legado não rotula. O inquirido vem de `pessoas_inquiridas` — e
+-- só entra se houver dado. A vítima não aparece mais aqui: a etapa 05 a grava
+-- em `processo_vitimas`, que não tem papel (migration 0012).
 INSERT INTO papeis_pessoa (nome)
-SELECT p.nome FROM (VALUES ('Vítima'), ('Pessoa Inquirida')) AS p(nome)
- WHERE (p.nome = 'Vítima'
-        AND EXISTS (SELECT 1 FROM legado.processos_procedimentos WHERE nome_vitima IS NOT NULL))
-    OR (p.nome = 'Pessoa Inquirida'
-        AND EXISTS (SELECT 1 FROM legado.processos_procedimentos WHERE pessoas_inquiridas IS NOT NULL))
+SELECT 'Pessoa Inquirida'
+ WHERE EXISTS (SELECT 1 FROM legado.processos_procedimentos WHERE pessoas_inquiridas IS NOT NULL)
 ON CONFLICT DO NOTHING;
 
 -- ------------------------------------------------------- categorias_indicio --

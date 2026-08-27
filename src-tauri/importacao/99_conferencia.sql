@@ -26,7 +26,11 @@ SELECT k AS item, v AS obtido, esperado,
     ('andamentos',               (SELECT count(*) FROM processo_andamentos),            64::bigint),
     ('policiais militares',      (SELECT count(*) FROM policiais_militares),           235::bigint),
     ('contas de acesso',         (SELECT count(*) FROM usuarios),                        7::bigint),
-    ('pessoas citadas',          (SELECT count(*) FROM processo_pessoas),              105::bigint),
+    -- 105 pessoas citadas, que a 0012 separou em duas tabelas: 102 ofendidos e
+    -- 3 inquiridos. Os dois numeros saem de `99_conferencia` rodado depois da
+    -- importacao — nao sao estimativa.
+    ('ofendidos/vitimas',        (SELECT count(*) FROM processo_vitimas),              102::bigint),
+    ('pessoas inquiridas',       (SELECT count(*) FROM processo_pessoas),                3::bigint),
     ('categorias de indicio',    (SELECT count(*) FROM envolvido_categorias_indicio),   27::bigint),
     ('infracoes penais',         (SELECT count(*) FROM envolvido_infracoes_penais),     12::bigint),
     ('transgressoes RDPM',       (SELECT count(*) FROM envolvido_transgressoes),        73::bigint),

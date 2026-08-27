@@ -136,6 +136,21 @@ VALUES
 INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
 VALUES ('aaaaaaaa-0000-0000-0000-000000000002', 0, DATE '2026-01-10', 30);
 
+-- Processo dedicado a UMA asserção: o DELETE barrado pela vítima. Precisa ser
+-- um processo SEM envolvido, prazo ou designação — senão a recusa vem da
+-- primeira FK que o PostgreSQL alcançar, e o caso passaria provando outra
+-- coisa. Foi o que aconteceu na primeira escrita deste bloco.
+INSERT INTO processos_procedimentos
+    (id, apuratorio_id, documento_iniciador_id, numero_documento, unidade_origem_id,
+     municipio_fato_id, data_instauracao)
+VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000003', '44444444-0000-0000-0000-000000000003',
+     '55555555-0000-0000-0000-000000000001', '901', '33333333-0000-0000-0000-000000000002',
+     '33333333-0000-0000-0000-000000000001', DATE '2026-01-10');
+
+INSERT INTO processo_vitimas (processo_id, nome, ordem)
+VALUES ('aaaaaaaa-0000-0000-0000-000000000003', 'OFENDIDO UNICO', 1);
+
 -- ------------------------------------------------------------------ casos ---
 CREATE TEMP TABLE resultado_integridade (ordem serial, linha text);
 
@@ -348,6 +363,30 @@ INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('substitui
 
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('catalogo desativado continua referenciado', $$
   UPDATE status_envolvido SET ativo=false WHERE id='77777777-0000-0000-0000-000000000001'$$);
+
+
+-- ---------------------------------------------------- ofendido/vitima (0012) ---
+-- O ofendido nao passa por catalogo nenhum: e a tabela que garante o formato.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('vitima com nome em branco', $$
+  INSERT INTO processo_vitimas (processo_id, nome, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','   ',9)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('vitima com ordem zero', $$
+  INSERT INTO processo_vitimas (processo_id, nome, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','FULANO',0)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('duas vitimas no mesmo processo', $$
+  INSERT INTO processo_vitimas (processo_id, nome, ordem) VALUES
+    ('aaaaaaaa-0000-0000-0000-000000000001','FULANO DE TAL',1),
+    ('aaaaaaaa-0000-0000-0000-000000000001','ADMINISTRACAO PUBLICA',2)$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('duas vitimas na mesma ordem', $$
+  INSERT INTO processo_vitimas (processo_id, nome, ordem)
+  VALUES ('aaaaaaaa-0000-0000-0000-000000000001','BELTRANA',1)$$);
+
+-- Processo com vitima nao se apaga: o fato registrado tem de ser tirado antes.
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('DELETE de processo que tem vitima', $$
+  DELETE FROM processos_procedimentos WHERE id='aaaaaaaa-0000-0000-0000-000000000003'$$);
 
 
 -- data_inicio 2026-01-10 + 30 dias = 2026-02-09. Regra unica, no schema.

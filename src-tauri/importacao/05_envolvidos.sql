@@ -68,14 +68,16 @@ SELECT fonte.id::uuid,
        ON lower(tp.nome) = lower(replace(l.penalidade_tipo, '_', ' '))
 ON CONFLICT DO NOTHING;
 
--- ------------------------------------------------------- processo_pessoas ----
+-- ------------------------------------------------------ processo_vitimas ----
 -- Vítimas. `nome_vitima` é array JSON em 71 dos 87 preenchidos e texto simples
 -- nos outros 16 — daí a ramificação. Não referencia policiais de propósito:
 -- vítima pode ser "ADMINISTRAÇÃO PÚBLICA".
-INSERT INTO processo_pessoas (processo_id, papel_pessoa_id, nome, ordem)
-SELECT l.id::uuid, pp.id, btrim(v.nome), v.ordem
+--
+-- Sem JOIN em `papeis_pessoa`: desde a 0012 o ofendido é relação própria do
+-- procedimento, e não uma pessoa citada com papel de catálogo.
+INSERT INTO processo_vitimas (processo_id, nome, ordem)
+SELECT l.id::uuid, btrim(v.nome), v.ordem
   FROM legado.processos_procedimentos l
-  JOIN papeis_pessoa pp ON lower(pp.nome) = 'vítima'
   CROSS JOIN LATERAL (
       SELECT nome, ordem FROM (
           SELECT elem AS nome, ord AS ordem
@@ -91,6 +93,7 @@ SELECT l.id::uuid, pp.id, btrim(v.nome), v.ordem
  WHERE l.nome_vitima IS NOT NULL AND btrim(v.nome) <> ''
 ON CONFLICT DO NOTHING;
 
+-- ------------------------------------------------------- processo_pessoas ----
 -- Pessoas a inquirir: 3 registros, JSON dentro de coluna TEXT.
 INSERT INTO processo_pessoas (processo_id, papel_pessoa_id, nome, ordem)
 SELECT l.id::uuid, pp.id, btrim(q.elem), q.ord

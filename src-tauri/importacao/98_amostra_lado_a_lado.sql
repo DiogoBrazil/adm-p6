@@ -218,6 +218,8 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
       ) AS c(campo, leg, nov)
 
 -- ── 5. Vítimas e pessoas inquiridas ─────────────────────────────────────────
+-- Duas tabelas desde a 0012: o ofendido é `processo_vitimas`, relação própria
+-- do procedimento; o inquirido continua em `processo_pessoas`, com papel.
     UNION ALL
     -- No legado, array JSON dentro de coluna TEXT (e texto simples em 16).
     SELECT a.ord, a.apelido, '5 pessoas', 'vitimas',
@@ -227,20 +229,18 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
              WHERE btrim(v) <> '')
            + CASE WHEN btrim(coalesce(l.nome_vitima,'')) <> ''
                    AND btrim(l.nome_vitima) NOT LIKE '[%' THEN 1 ELSE 0 END)::text,
-           (SELECT count(*) FROM processo_pessoas pe
-              JOIN papeis_pessoa pp ON pp.id = pe.papel_pessoa_id
-             WHERE pe.processo_id = a.id::uuid AND lower(pp.nome) = 'vítima')::text
+           (SELECT count(*) FROM processo_vitimas pv
+             WHERE pv.processo_id = a.id::uuid)::text
       FROM amostra a
       JOIN legado.processos_procedimentos l ON l.id = a.id
 
     UNION ALL
-    SELECT a.ord, a.apelido, '5 pessoas', 'vitima: ' || pe.nome, pe.nome::text,
-           CASE WHEN position(upper(btrim(pe.nome)) in upper(coalesce(l.nome_vitima,''))) > 0
-                THEN pe.nome::text ELSE '(nao encontrada no legado)' END
+    SELECT a.ord, a.apelido, '5 pessoas', 'vitima: ' || pv.nome, pv.nome::text,
+           CASE WHEN position(upper(btrim(pv.nome)) in upper(coalesce(l.nome_vitima,''))) > 0
+                THEN pv.nome::text ELSE '(nao encontrada no legado)' END
       FROM amostra a
       JOIN legado.processos_procedimentos l ON l.id = a.id
-      JOIN processo_pessoas pe ON pe.processo_id = a.id::uuid
-      JOIN papeis_pessoa pp ON pp.id = pe.papel_pessoa_id AND lower(pp.nome) = 'vítima'
+      JOIN processo_vitimas pv ON pv.processo_id = a.id::uuid
 
     UNION ALL
     SELECT a.ord, a.apelido, '5 pessoas', 'pessoas inquiridas',
