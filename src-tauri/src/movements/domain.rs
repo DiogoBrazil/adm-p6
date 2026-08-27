@@ -27,7 +27,7 @@ pub struct AddMovementRequest {
 impl AddMovementRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.descricao.trim().is_empty() {
-            return Err("descricao do andamento e obrigatoria".to_string());
+            return Err("Descreva o andamento antes de registrar.".to_string());
         }
         Ok(())
     }

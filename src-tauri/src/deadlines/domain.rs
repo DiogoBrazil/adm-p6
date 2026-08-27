@@ -97,7 +97,7 @@ pub struct AddExtensionRequest {
 impl AddExtensionRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.motivo.trim().is_empty() {
-            return Err("motivo e obrigatorio para prorrogacao".to_string());
+            return Err("Informe o motivo da prorrogação.".to_string());
         }
         Ok(())
     }

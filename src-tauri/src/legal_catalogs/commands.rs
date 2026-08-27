@@ -12,7 +12,11 @@ use crate::legal_catalogs::repository;
 use crate::response::{from_result, ApiResponse};
 
 fn resolver(chave: &str) -> Result<&'static Catalogo, AppError> {
-    catalogo(chave).ok_or_else(|| AppError::Domain(format!("catalogo desconhecido: {chave}")))
+    catalogo(chave).ok_or_else(|| {
+        AppError::Domain(format!(
+            "O catálogo '{chave}' não existe. Recarregue a página e escolha um da lista."
+        ))
+    })
 }
 
 /// Descreve todos os catálogos administráveis e seus campos.
@@ -233,7 +237,9 @@ async fn garantir_administracao_possivel(
     .await?;
     if restantes == 0 {
         return Err(AppError::Domain(
-            "este e o unico perfil que permite administrar o sistema".to_string(),
+            "Este é o único perfil que permite administrar o sistema. Crie outro perfil \
+             administrador antes de desativar este."
+                .to_string(),
         ));
     }
     Ok(())

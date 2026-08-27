@@ -362,7 +362,10 @@ async fn ausencia_de_indicios_nao_convive_com_outra_categoria() {
         )
         .await
         .expect_err("a combinacao tem de ser recusada");
-        assert!(erro.message().contains("ausencia"), "erro legivel: {erro}");
+        assert!(
+            erro.message().contains("ausência de indícios"),
+            "erro legivel: {erro}"
+        );
         drop(tx);
 
         // Renomear a categoria não muda nada: quem manda é o atributo.

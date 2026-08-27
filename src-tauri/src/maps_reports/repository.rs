@@ -188,7 +188,9 @@ pub async fn delete_saved_map(
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("mapa nao encontrado".to_string()));
+        return Err(AppError::Domain(
+            "Este mapa não existe mais. Recarregue a lista de mapas salvos.".to_string(),
+        ));
     }
     Ok(())
 }

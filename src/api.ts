@@ -102,6 +102,7 @@ import type {
   StatusPorApuratorio,
   SolucoesResumo,
   SubstituirDesignacaoRequest,
+  AtualizarSubstituicaoRequest,
   TipoColuna,
   TransgressaoItem,
   UploadAttachmentRequest,
@@ -171,6 +172,8 @@ export interface Commands {
   proceedings_delete: { args: { id: string }; result: boolean };
   proceedings_reopen: { args: { id: string }; result: boolean };
   proceedings_substitute_designation: { args: { request: SubstituirDesignacaoRequest }; result: string };
+  proceedings_update_substitution: { args: { request: AtualizarSubstituicaoRequest }; result: boolean };
+  proceedings_delete_substitution: { args: { processoId: string, designacaoId: string }; result: boolean };
   proceedings_list_attachments: { args: { processoId: string }; result: AnexoItem[] };
   proceedings_upload_attachment: { args: { request: UploadAttachmentRequest }; result: string };
   proceedings_get_attachment: { args: { anexoId: string }; result: AttachmentContent | null };
@@ -254,7 +257,20 @@ export async function call<K extends CommandName>(
       args as Record<string, unknown>,
     );
   } catch (error) {
-    return { ok: false, data: null, error: String(error) };
+    // O `catch` aqui é a falha do próprio IPC — a ponte com o backend não
+    // respondeu —, não uma regra de negócio. `String(error)` traz o texto cru
+    // do Tauri ("invalid args `processoId`...", nome de comando, tipo de
+    // desserialização): informação de implementação na cara de quem usa o
+    // sistema, e sem nenhuma ação possível. O detalhe fica no console, onde
+    // serve para diagnóstico; a tela recebe o que dá para fazer.
+    console.error(`[adm-p6] falha de IPC em ${command}:`, error);
+    return {
+      ok: false,
+      data: null,
+      error:
+        "A comunicação com o ADM-P6 falhou e nada foi salvo. Feche e abra o programa; " +
+        "se continuar, procure o suporte.",
+    };
   }
 }
 

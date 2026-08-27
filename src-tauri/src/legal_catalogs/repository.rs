@@ -178,7 +178,7 @@ pub async fn save(
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .ok_or_else(|| {
-                        AppError::Domain(format!("campo '{}' e obrigatorio", coluna.rotulo))
+                        AppError::Domain(format!("Preencha o campo {}.", coluna.rotulo))
                     })?;
                 query.bind(v)
             }
@@ -191,7 +191,7 @@ pub async fn save(
             TipoColuna::Booleano => query.bind(valor.and_then(|v| v.as_bool()).unwrap_or(false)),
             TipoColuna::Inteiro => {
                 let v = valor.and_then(|v| v.as_i64()).ok_or_else(|| {
-                    AppError::Domain(format!("campo '{}' deve ser numerico", coluna.rotulo))
+                    AppError::Domain(format!("O campo {} aceita apenas números.", coluna.rotulo))
                 })?;
                 query.bind(v as i32)
             }
@@ -248,7 +248,8 @@ pub async fn delete(
         }
         Ok(_) => Ok(()),
         Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => Err(AppError::Domain(
-            "este item ja foi usado e nao pode ser excluido; desative-o".to_string(),
+            "Este item já foi usado em algum registro e não pode ser excluído. Desative-o."
+                .to_string(),
         )),
         Err(e) => Err(e.into()),
     }
@@ -263,10 +264,9 @@ pub async fn search<'e, E: PgExecutor<'e>>(
     limite: i64,
 ) -> Result<Vec<Map<String, Value>>, AppError> {
     if !cat.colunas.iter().any(|c| c.nome == campo) {
-        return Err(AppError::Domain(format!(
-            "campo '{campo}' nao pertence ao catalogo '{}'",
-            cat.chave
-        )));
+        return Err(AppError::Domain(
+            "A busca usou um campo que não existe neste catálogo. Recarregue a página.".to_string(),
+        ));
     }
     let sql = format!(
         "SELECT {} FROM {} WHERE ativo AND lower({campo}) LIKE $1 ORDER BY {} LIMIT $2",

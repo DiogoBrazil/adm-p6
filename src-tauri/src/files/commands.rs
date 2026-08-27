@@ -39,7 +39,7 @@ pub async fn files_save_download<R: Runtime>(
 
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(request.conteudo_base64.as_bytes())
-                .map_err(|_| AppError::Domain("conteudo do arquivo invalido".into()))?;
+                .map_err(|erro| AppError::Interno(format!("base64 invalido: {erro}")))?;
 
             let extensao = request
                 .nome_sugerido
@@ -63,9 +63,9 @@ pub async fn files_save_download<R: Runtime>(
 
             let caminho = destino
                 .into_path()
-                .map_err(|e| AppError::Domain(format!("caminho invalido: {e}")))?;
+                .map_err(|erro| AppError::Arquivo(format!("caminho invalido: {erro}")))?;
             std::fs::write(&caminho, &bytes)
-                .map_err(|e| AppError::Domain(format!("falha ao gravar o arquivo: {e}")))?;
+                .map_err(|erro| AppError::Arquivo(format!("{}: {erro}", caminho.display())))?;
 
             Ok(Some(caminho.to_string_lossy().into_owned()))
         }

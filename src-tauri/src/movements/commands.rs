@@ -64,7 +64,9 @@ pub async fn movements_remove(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             if repository::cancel(&mut tx, &processo_id, &andamento_id).await? == 0 {
-                return Err(AppError::Domain("andamento nao encontrado".to_string()));
+                return Err(AppError::Domain(
+                    "Este andamento não existe mais. Recarregue a página.".to_string(),
+                ));
             }
             audit_repository::register_tx(
                 &mut tx,

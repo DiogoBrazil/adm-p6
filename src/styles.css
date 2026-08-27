@@ -2048,9 +2048,22 @@ tr.atrasado {
   min-width: 1080px !important;
 }
 
-.tabela-detalhe-processo--designacoes,
 .tabela-detalhe-processo--prazos {
   min-width: 760px !important;
+}
+
+/* Sete colunas — papel, militar qualificado, início, fim, documento, motivo e
+   ações — contra as cinco de antes. O piso acompanha; abaixo dele quem adapta é
+   o scroll horizontal do `.table-wrap`, não a compressão das células. */
+.tabela-detalhe-processo--designacoes {
+  min-width: 1080px !important;
+}
+
+/* Motivo e documento são as duas colunas de texto livre da tabela: elas é que
+   ganham a folga, para que as de data não quebrem em duas linhas. */
+.tabela-detalhe-processo--designacoes td:nth-child(5),
+.tabela-detalhe-processo--designacoes td:nth-child(6) {
+  min-width: 150px;
 }
 
 .tabela-detalhe-processo--andamentos {
@@ -2623,6 +2636,56 @@ tr.atrasado {
   .linha-form > * {
     flex: 1 1 220px;
   }
+}
+
+/* ── Substituição de designação ─────────────────────────────────────────────
+   O formulário segue o padrão dos Prazos (`.linha-form`), com dois acréscimos
+   que só ele tem: um resumo do que está sendo substituído, que precisa ocupar a
+   linha inteira acima dos campos, e a validação junto de cada campo — pedida
+   por ser o único formulário da tela onde cinco campos se validam entre si. */
+.linha-form--bloco {
+  align-items: flex-start;
+}
+
+.linha-form__resumo {
+  flex: 1 0 100%;
+  /* `.secao-ajuda` limita a 70ch, que é o certo para texto corrido e o errado
+     aqui: este parágrafo é a faixa que identifica o alvo da substituição e
+     precisa da linha inteira, senão os campos sobem para o lado dele. Medido
+     no navegador — o `flex-basis: 100%` sozinho ficava em 574px. */
+  max-width: none;
+  margin: 0;
+}
+
+/* O `<label>` vira coluna para que o aviso caiba embaixo do campo, e não ao
+   lado dele empurrando a grade. */
+.linha-form--bloco > label {
+  display: flex;
+  flex: 1 1 190px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo-erro {
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* `hidden` precisa vencer o `display` que a regra acima dá ao elemento. */
+.campo-erro[hidden] {
+  display: none;
+}
+
+/* A designação que já tem substituição é leitura no cadastro: a borda muda de
+   cor para dizer isso antes de o texto explicar. */
+.linha-colecao--travada {
+  border-left-color: #b8a980;
+}
+
+.linha-colecao--travada p {
+  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

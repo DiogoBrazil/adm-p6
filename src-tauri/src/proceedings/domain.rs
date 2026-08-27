@@ -87,12 +87,31 @@ pub struct DesignacaoItem {
     pub policial_militar_id: String,
     pub nome: String,
     pub posto_graduacao: String,
+    /// A qualificação completa do militar é posto, matrícula e nome. A matrícula
+    /// vinha faltando aqui, e só aqui: a listagem e os relatórios já a trazem.
+    pub matricula: String,
     pub data_inicio: NaiveDate,
     /// Exclusiva: é o dia em que o sucessor assume. Nula = designação vigente.
     pub data_fim: Option<NaiveDate>,
+    /// Acompanha o rótulo pelo mesmo motivo dos ids de `ProceedingListItem`: o
+    /// formulário de substituição repopula o select, e resolver por nome
+    /// perderia o vínculo com um tipo de documento desativado depois.
+    pub documento_autorizador_id: Option<String>,
     pub documento_autorizador: Option<String>,
     pub numero_documento: Option<String>,
     pub motivo: Option<String>,
+    /// A designação que esta sucedeu. Nula = designação inicial, ainda sem
+    /// histórico — é a única que o cadastro do processo pode alterar ou remover.
+    ///
+    /// Combinada com `data_fim`, resolve as três situações da tela sem que
+    /// nenhuma delas precise olhar para o processo inteiro:
+    ///
+    /// | `data_fim` | `designacao_anterior_id` | o que é |
+    /// |---|---|---|
+    /// | nula | nula | designação inicial vigente — editável no cadastro |
+    /// | nula | preenchida | **última substituição da cadeia** — pode corrigir e desfazer |
+    /// | preenchida | qualquer | histórico encerrado — só leitura |
+    pub designacao_anterior_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -151,15 +170,31 @@ pub struct EnvolvidoRequest {
     pub penalidade_dias: Option<i32>,
 }
 
+/// Uma designação **inicial**, lançada no cadastro do processo.
+///
+/// Carrega só o que o usuário escolhe. Início, documento autorizador, número e
+/// motivo não estão aqui porque não são digitados: a designação inicial começa
+/// na instauração e é autorizada pelo próprio documento que instaurou o
+/// processo. Derivar em vez de repetir mantém a fonte de verdade única
+/// (princípio 4) — e evita o modo de falha que apareceria se o formulário
+/// mandasse `null` nesses campos a cada edição, apagando a portaria já
+/// registrada. Documento e motivo próprios existem na SUBSTITUIÇÃO, que é onde
+/// o usuário de fato os informa.
+///
+/// `id` presente = linha que já existe no banco e deve ser atualizada;
+/// ausente = designação nova. É o que torna o cadastro capaz de **editar** uma
+/// designação em vez de só acrescentar.
 #[derive(Debug, Deserialize)]
 pub struct DesignacaoRequest {
+    pub id: Option<String>,
     pub policial_militar_id: String,
     pub papel_id: String,
-    pub data_inicio: NaiveDate,
-    pub documento_autorizador_id: Option<String>,
-    pub numero_documento: Option<String>,
-    pub motivo: Option<String>,
 }
+
+/// Motivo gravado na designação inicial. É texto de apresentação, não regra:
+/// nenhum código pergunta por ele para decidir coisa alguma — quem distingue a
+/// inicial da substituição é `designacao_anterior_id`, não esta frase.
+pub const MOTIVO_DESIGNACAO_INICIAL: &str = "Designação inicial";
 
 #[derive(Debug, Deserialize)]
 pub struct PessoaRequest {
@@ -174,17 +209,93 @@ pub struct CartaPrecatoriaRequest {
     pub unidade_deprecada_id: String,
 }
 
+/// Troca o ocupante de UMA designação vigente.
+///
+/// O alvo é `designacao_id`, não o papel. A diferença aparece assim que um papel
+/// admite mais de um ocupante — a configuração de Escrivão prevê dois —, porque
+/// aí "a designação vigente deste papel" é ambígua e a versão anterior encerrava
+/// **todas** com um `UPDATE ... WHERE papel_id = $2 AND data_fim IS NULL`.
 #[derive(Debug, Deserialize)]
 pub struct SubstituirDesignacaoRequest {
     pub processo_id: String,
-    pub papel_id: String,
+    /// A designação vigente que será encerrada.
+    pub designacao_id: String,
     pub sucessor_id: String,
     /// Dia em que o sucessor assume. É também o fim (exclusivo) da designação
     /// anterior, então não há sobreposição nem lacuna.
     pub data_troca: NaiveDate,
-    pub motivo: Option<String>,
+    pub motivo: String,
     pub documento_autorizador_id: Option<String>,
     pub numero_documento: Option<String>,
+}
+
+/// Corrige a última substituição de uma cadeia: sucessor, data, motivo e
+/// documento. O papel não entra — trocar a função não é corrigir uma
+/// substituição, é outra designação.
+#[derive(Debug, Deserialize)]
+pub struct AtualizarSubstituicaoRequest {
+    pub processo_id: String,
+    /// A designação criada pela substituição que se quer corrigir.
+    pub designacao_id: String,
+    pub sucessor_id: String,
+    pub data_troca: NaiveDate,
+    pub motivo: String,
+    pub documento_autorizador_id: Option<String>,
+    pub numero_documento: Option<String>,
+}
+
+/// As regras que valem para criar e para corrigir uma substituição, escritas uma
+/// vez. Só as que não dependem do banco: quem depende (a designação existe? está
+/// vigente? o sucessor está ativo?) fica no repositório, com as linhas travadas.
+fn validar_substituicao(
+    data_troca: NaiveDate,
+    motivo: &str,
+    documento_autorizador_id: Option<&str>,
+    numero_documento: Option<&str>,
+) -> Result<(), String> {
+    if motivo.trim().is_empty() {
+        return Err("Informe o motivo da substituição.".to_string());
+    }
+    if data_troca > Utc::now().date_naive() {
+        return Err("A data da substituição não pode ser futura.".to_string());
+    }
+
+    // Documento e número são um par: um documento autorizador sem número não
+    // identifica o ato, e um número solto não diz de que documento é. Opcionais
+    // juntos, obrigatórios juntos.
+    let tem_documento = documento_autorizador_id.is_some_and(|d| !d.trim().is_empty());
+    let tem_numero = numero_documento.is_some_and(|n| !n.trim().is_empty());
+    match (tem_documento, tem_numero) {
+        (true, false) => {
+            Err("Informe o número do documento que autorizou a substituição.".to_string())
+        }
+        (false, true) => {
+            Err("Escolha o tipo de documento que autorizou a substituição.".to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
+impl SubstituirDesignacaoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validar_substituicao(
+            self.data_troca,
+            &self.motivo,
+            self.documento_autorizador_id.as_deref(),
+            self.numero_documento.as_deref(),
+        )
+    }
+}
+
+impl AtualizarSubstituicaoRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validar_substituicao(
+            self.data_troca,
+            &self.motivo,
+            self.documento_autorizador_id.as_deref(),
+            self.numero_documento.as_deref(),
+        )
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,30 +335,53 @@ impl SaveProceedingRequest {
     pub fn validate(&self) -> Result<(), String> {
         let hoje = Utc::now().date_naive();
         if self.numero_documento.trim().is_empty() {
-            return Err("numero do documento e obrigatorio".to_string());
+            return Err("Informe o número do documento que instaurou o processo.".to_string());
         }
         if self.data_instauracao > hoje {
-            return Err("data de instauracao nao pode ser futura".to_string());
+            return Err("A data de instauração não pode ser futura.".to_string());
         }
         if self.data_conclusao.is_some_and(|d| d > hoje) {
-            return Err("data de conclusao nao pode ser futura".to_string());
+            return Err("A data de conclusão não pode ser futura.".to_string());
         }
         if self.data_recebimento.is_some_and(|d| d > hoje) {
-            return Err("data de recebimento nao pode ser futura".to_string());
+            return Err("A data de recebimento não pode ser futura.".to_string());
+        }
+        if self
+            .data_conclusao
+            .is_some_and(|d| d < self.data_instauracao)
+        {
+            return Err("A data de conclusão não pode ser anterior à instauração.".to_string());
         }
 
         let mut ordens: Vec<i32> = self.envolvidos.iter().map(|e| e.ordem).collect();
         ordens.sort_unstable();
         ordens.dedup();
         if ordens.len() != self.envolvidos.len() {
-            return Err("a ordem dos envolvidos nao pode se repetir".to_string());
+            return Err("Cada envolvido precisa de uma ordem diferente.".to_string());
         }
         if self.envolvidos.iter().filter(|e| e.e_condutor).count() > 1 {
-            return Err("so pode haver um condutor por processo".to_string());
+            return Err("Só pode haver um condutor por processo.".to_string());
         }
         for pessoa in &self.pessoas {
             if pessoa.nome.trim().is_empty() {
-                return Err("nome de pessoa nao pode ficar em branco".to_string());
+                return Err("Informe o nome da pessoa, ou remova a linha.".to_string());
+            }
+        }
+
+        // A mesma pessoa duas vezes no mesmo papel. O EXCLUDE do schema também
+        // recusaria, mas com o texto cru do PostgreSQL: aqui a aplicação sabe
+        // qual linha está errada e diz isso. O teto de ocupantes por papel
+        // depende do cadastro e é checado no repositório, que o consulta.
+        for (i, designacao) in self.designacoes.iter().enumerate() {
+            let repetida = self.designacoes[..i].iter().any(|anterior| {
+                anterior.papel_id == designacao.papel_id
+                    && anterior.policial_militar_id == designacao.policial_militar_id
+            });
+            if repetida {
+                return Err(
+                    "O mesmo militar aparece duas vezes na mesma função. Remova a linha repetida."
+                        .to_string(),
+                );
             }
         }
         Ok(())

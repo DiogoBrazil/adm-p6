@@ -342,7 +342,7 @@ async fn campo_obrigatorio_e_recusado_com_mensagem_legivel() {
         )
         .await
         .expect_err("prazo textual tem de ser recusado");
-        assert!(erro.message().contains("numerico"), "{erro}");
+        assert!(erro.message().contains("aceita apenas números"), "{erro}");
     })
     .await;
 }
@@ -403,7 +403,7 @@ async fn item_em_uso_nao_e_apagado_e_a_mensagem_orienta() {
             .await
             .expect_err("item em uso nao pode sumir");
         assert!(
-            erro.message().contains("desative-o"),
+            erro.message().contains("Desative-o"),
             "a mensagem orienta em vez de vazar a FK: {erro}"
         );
         drop(tx);
@@ -496,7 +496,11 @@ async fn busca_recusa_campo_fora_do_registro() {
             let erro = repository::search(&pool, cat, campo, "x", 10)
                 .await
                 .expect_err("campo fora do registro tem de ser recusado");
-            assert!(erro.message().contains("nao pertence"), "{erro}");
+            assert!(
+                erro.message()
+                    .contains("campo que não existe neste catálogo"),
+                "{erro}"
+            );
         }
 
         // A tabela continua de pé.

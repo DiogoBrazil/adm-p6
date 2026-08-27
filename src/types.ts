@@ -671,12 +671,25 @@ export interface DesignacaoItem {
   policial_militar_id: string;
   nome: string;
   posto_graduacao: string;
+  matricula: string;
   data_inicio: string;
   /** Exclusiva: é o dia em que o sucessor assume. Nula = designação vigente. */
   data_fim: string | null;
+  documento_autorizador_id: string | null;
   documento_autorizador: string | null;
   numero_documento: string | null;
   motivo: string | null;
+  /**
+   * A designação que esta sucedeu. Combinada com `data_fim`, decide sozinha o
+   * que a tela oferece em cada linha:
+   *
+   * | `data_fim` | `designacao_anterior_id` | linha |
+   * |---|---|---|
+   * | nula | nula | inicial vigente — Substituir, e editável no cadastro |
+   * | nula | preenchida | última da cadeia — Substituir, Editar e Remover |
+   * | preenchida | qualquer | histórico — só leitura |
+   */
+  designacao_anterior_id: string | null;
 }
 
 /** `proceedings` */
@@ -732,12 +745,10 @@ export interface EnvolvidoRequest {
 
 /** `proceedings` */
 export interface DesignacaoRequest {
+  /** Presente = atualiza a linha existente; ausente = designação nova. */
+  id?: string | null;
   policial_militar_id: string;
   papel_id: string;
-  data_inicio: string;
-  documento_autorizador_id?: string | null;
-  numero_documento?: string | null;
-  motivo?: string | null;
 }
 
 /** `proceedings` */
@@ -756,12 +767,25 @@ export interface CartaPrecatoriaRequest {
 /** `proceedings` */
 export interface SubstituirDesignacaoRequest {
   processo_id: string;
-  papel_id: string;
+  /** A designação vigente que será encerrada — não o papel. */
+  designacao_id: string;
   sucessor_id: string;
   /** Dia em que o sucessor assume. É também o fim (exclusivo) da designação */
   /** anterior, então não há sobreposição nem lacuna. */
   data_troca: string;
-  motivo?: string | null;
+  motivo: string;
+  documento_autorizador_id?: string | null;
+  numero_documento?: string | null;
+}
+
+/** `proceedings` */
+export interface AtualizarSubstituicaoRequest {
+  processo_id: string;
+  /** A designação criada pela substituição que se quer corrigir. */
+  designacao_id: string;
+  sucessor_id: string;
+  data_troca: string;
+  motivo: string;
   documento_autorizador_id?: string | null;
   numero_documento?: string | null;
 }

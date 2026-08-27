@@ -145,7 +145,7 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
             let envelope = invocar(&webview, comando, args);
             let mensagem = erro(&envelope);
             assert!(
-                mensagem.to_lowercase().contains("sessao"),
+                mensagem.to_lowercase().contains("sessão"),
                 "{comando}: {mensagem}"
             );
         }
@@ -233,7 +233,7 @@ fn campo_de_request_e_snake_case() {
             json!({ "request": { "catalogo": "tipos_documento", "id": null,
                                  "valores": { "nome": "  " } } }),
         ));
-        assert!(mensagem.contains("obrigatorio"), "{mensagem}");
+        assert!(mensagem.contains("Preencha o campo Nome"), "{mensagem}");
 
         // Campo do request faltando é erro de DESSERIALIZAÇÃO, e o Tauri o
         // devolve como Err do IPC — não como envelope. Vale registrar a
@@ -385,6 +385,183 @@ fn editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria() {
             .unwrap()
         });
         assert_eq!(operacoes, vec!["UPDATE", "DELETE"]);
+    });
+}
+
+/// O ciclo inteiro da substituição pelo IPC: criar, corrigir, desfazer — e a
+/// trilha de auditoria das DUAS designações que cada operação mexe.
+///
+/// Trava de uma vez as duas convenções que o `main.ts` errava: argumento de
+/// comando em camelCase (`processoId`, `designacaoId`) e campo de request em
+/// snake_case dentro de `{ request: {...} }`.
+#[test]
+fn substituicao_de_designacao_passa_pelo_ipc_e_auditoria() {
+    com_app_e_banco("ipc_substituicao", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        let (processo_id, inicial_id) = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            let processo_id: String = sqlx::query_scalar(
+                "INSERT INTO processos_procedimentos
+                     (apuratorio_id, documento_iniciador_id, numero_documento,
+                      unidade_origem_id, municipio_fato_id, natureza_fato_id, data_instauracao)
+                 VALUES ((SELECT apuratorio_id FROM apuratorio_papeis ORDER BY apuratorio_id LIMIT 1),
+                         (SELECT tipo_documento_id FROM apuratorio_documentos_iniciadores ORDER BY tipo_documento_id LIMIT 1),
+                         'IPC-SUBST-001',
+                         (SELECT id FROM unidades_pm ORDER BY id LIMIT 1),
+                         (SELECT id FROM municipios_distritos ORDER BY id LIMIT 1),
+                         (SELECT id FROM naturezas_fato ORDER BY id LIMIT 1),
+                         $1)
+              RETURNING id::text",
+            )
+            .bind(NaiveDate::from_ymd_opt(2026, 1, 10).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            let inicial_id: String = sqlx::query_scalar(
+                "INSERT INTO processo_designacoes
+                     (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+                 SELECT p.id, p.apuratorio_id,
+                        (SELECT id FROM policiais_militares ORDER BY matricula LIMIT 1),
+                        (SELECT papel_id FROM apuratorio_papeis
+                          WHERE apuratorio_id = p.apuratorio_id AND e_responsavel LIMIT 1),
+                        p.data_instauracao
+                   FROM processos_procedimentos p WHERE p.id = $1::uuid
+              RETURNING id::text",
+            )
+            .bind(&processo_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            (processo_id, inicial_id)
+        });
+
+        let sucessor: String = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            sqlx::query_scalar(
+                "SELECT id::text FROM policiais_militares ORDER BY matricula OFFSET 1 LIMIT 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        });
+
+        let criada = ok(&invocar(
+            &webview,
+            "proceedings_substitute_designation",
+            json!({ "request": {
+                "processo_id": processo_id,
+                "designacao_id": inicial_id,
+                "sucessor_id": sucessor,
+                "data_troca": "2026-02-01",
+                "motivo": "ferias do titular"
+            } }),
+        ))
+        .as_str()
+        .expect("id da designacao criada")
+        .to_string();
+
+        // O detalhe já devolve o vínculo e a matrícula que a tela desenha.
+        let detalhe = invocar(&webview, "proceedings_get", json!({ "id": processo_id }));
+        let designacoes = ok(&detalhe)["designacoes"].as_array().unwrap().clone();
+        assert_eq!(designacoes.len(), 2);
+        let nova = designacoes
+            .iter()
+            .find(|d| d["id"] == json!(criada))
+            .unwrap();
+        assert_eq!(nova["designacao_anterior_id"], json!(inicial_id));
+        assert!(
+            nova["matricula"].is_string(),
+            "a matricula acompanha: {nova}"
+        );
+        assert!(nova["documento_autorizador_id"].is_null());
+
+        // Corrigir: `motivo` obrigatório também aqui.
+        let falha = invocar(
+            &webview,
+            "proceedings_update_substitution",
+            json!({ "request": {
+                "processo_id": processo_id,
+                "designacao_id": criada,
+                "sucessor_id": sucessor,
+                "data_troca": "2026-02-10",
+                "motivo": "  "
+            } }),
+        );
+        assert!(erro(&falha).contains("Informe o motivo"), "{falha}");
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "proceedings_update_substitution",
+                json!({ "request": {
+                    "processo_id": processo_id,
+                    "designacao_id": criada,
+                    "sucessor_id": sucessor,
+                    "data_troca": "2026-02-10",
+                    "motivo": "correcao da data"
+                } }),
+            )),
+            &json!(true)
+        );
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "proceedings_delete_substitution",
+                json!({ "processoId": processo_id, "designacaoId": criada }),
+            )),
+            &json!(true)
+        );
+
+        let designacoes = ok(&invocar(
+            &webview,
+            "proceedings_get",
+            json!({ "id": processo_id }),
+        ))["designacoes"]
+            .as_array()
+            .unwrap()
+            .clone();
+        assert_eq!(designacoes.len(), 1, "desfazer apaga a sucessora");
+        assert!(
+            designacoes[0]["data_fim"].is_null(),
+            "a antecessora reabriu"
+        );
+
+        // A trilha registra as duas linhas em cada operação: a sucessora com a
+        // operação própria, a antecessora sempre como UPDATE.
+        let (da_sucessora, da_antecessora): (Vec<String>, Vec<String>) =
+            tauri::async_runtime::block_on(async {
+                let estado: tauri::State<'_, AppState> = app.state();
+                let pool = estado.pool().await.unwrap();
+                let consulta = |registro: String| {
+                    let pool = pool.clone();
+                    async move {
+                        sqlx::query_scalar::<_, String>(
+                            "SELECT operacao FROM auditoria
+                              WHERE entidade = 'processo_designacoes' AND registro_id = $1
+                              ORDER BY ocorrido_em",
+                        )
+                        .bind(registro)
+                        .fetch_all(&pool)
+                        .await
+                        .unwrap()
+                    }
+                };
+                (
+                    consulta(criada.clone()).await,
+                    consulta(inicial_id.clone()).await,
+                )
+            });
+        assert_eq!(da_sucessora, vec!["CREATE", "UPDATE", "DELETE"]);
+        assert_eq!(
+            da_antecessora,
+            vec!["UPDATE", "UPDATE", "UPDATE"],
+            "a antecessora e alterada nas tres operacoes"
+        );
     });
 }
 

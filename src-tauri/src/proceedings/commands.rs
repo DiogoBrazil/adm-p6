@@ -5,8 +5,8 @@ use crate::audit::repository as audit_repository;
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::proceedings::domain::{
-    AnexoItem, AttachmentContent, DashboardSummary, ProceedingDetail, ProceedingFilter,
-    ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, DashboardSummary, ProceedingDetail,
+    ProceedingFilter, ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
     UploadAttachmentRequest,
 };
 use crate::proceedings::repository;
@@ -130,8 +130,39 @@ pub async fn proceedings_reopen(
     .await)
 }
 
+/// Registra na auditoria as duas designações que uma substituição sempre mexe.
+///
+/// A antecessora é tão alterada quanto a sucessora — ganha ou perde `data_fim` —
+/// e uma trilha que registrasse só a sucessora deixaria a outra mudando sozinha,
+/// sem autor nem instante.
+async fn auditar_substituicao(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    aplicada: &repository::SubstituicaoAplicada,
+    operacao_sucessora: &str,
+    ator: &str,
+) -> Result<(), AppError> {
+    audit_repository::register_tx(
+        tx,
+        "processo_designacoes",
+        &aplicada.designacao_id,
+        operacao_sucessora,
+        Some(ator),
+    )
+    .await?;
+    audit_repository::register_tx(
+        tx,
+        "processo_designacoes",
+        &aplicada.anterior_id,
+        "UPDATE",
+        Some(ator),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Substitui quem exerce um papel. O histórico é consequência: a designação
-/// anterior fica registrada com `data_fim`, sem jsonb nem tabela paralela.
+/// anterior fica registrada com `data_fim` e a sucessora aponta para ela, sem
+/// jsonb nem tabela paralela.
 #[tauri::command]
 pub async fn proceedings_substitute_designation(
     state: State<'_, AppState>,
@@ -140,29 +171,60 @@ pub async fn proceedings_substitute_designation(
     Ok(from_result(
         async {
             let actor = require_admin(&state).await?;
+            request.validate().map_err(AppError::Domain)?;
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
-            let id = repository::substituir_designacao(
-                &mut tx,
-                &request.processo_id,
-                &request.papel_id,
-                &request.sucessor_id,
-                request.data_troca,
-                request.motivo.as_deref(),
-                request.documento_autorizador_id.as_deref(),
-                request.numero_documento.as_deref(),
-            )
-            .await?;
-            audit_repository::register_tx(
-                &mut tx,
-                "processo_designacoes",
-                &id,
-                "CREATE",
-                Some(&actor.id),
-            )
-            .await?;
+            let aplicada = repository::substituir_designacao(&mut tx, &request).await?;
+            auditar_substituicao(&mut tx, &aplicada, "CREATE", &actor.id).await?;
             tx.commit().await?;
-            Ok(id)
+            Ok(aplicada.designacao_id)
+        }
+        .await,
+    )
+    .await)
+}
+
+/// Corrige a última substituição de uma cadeia: sucessor, data, motivo e
+/// documento. A função não muda — trocar de papel seria outra designação.
+#[tauri::command]
+pub async fn proceedings_update_substitution(
+    state: State<'_, AppState>,
+    request: AtualizarSubstituicaoRequest,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            request.validate().map_err(AppError::Domain)?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            let aplicada = repository::atualizar_substituicao(&mut tx, &request).await?;
+            auditar_substituicao(&mut tx, &aplicada, "UPDATE", &actor.id).await?;
+            tx.commit().await?;
+            Ok(true)
+        }
+        .await,
+    )
+    .await)
+}
+
+/// Desfaz a última substituição de uma cadeia. A antecessora volta a ser a
+/// designação vigente, e a substituição anterior a ela passa a ser a última.
+#[tauri::command]
+pub async fn proceedings_delete_substitution(
+    state: State<'_, AppState>,
+    processo_id: String,
+    designacao_id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            let aplicada =
+                repository::remover_substituicao(&mut tx, &processo_id, &designacao_id).await?;
+            auditar_substituicao(&mut tx, &aplicada, "DELETE", &actor.id).await?;
+            tx.commit().await?;
+            Ok(true)
         }
         .await,
     )

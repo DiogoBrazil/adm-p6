@@ -162,14 +162,17 @@ async fn recusa_configuracao_que_deixaria_o_apuratorio_sem_responsavel() {
         )
         .await
         .expect_err("responsavel opcional deve ser recusado");
-        assert!(erro.contains("obrigatorio"), "mensagem inesperada: {erro}");
+        assert!(
+            erro.contains("precisa ser obrigatória"),
+            "mensagem inesperada: {erro}"
+        );
 
         // Desativar o responsável exige apontar outro antes.
         let mut tx = pool.begin().await.unwrap();
         let erro = repository::deactivate_papel(&mut tx, &m.apuratorio, &m.papel_encarregado)
             .await
             .expect_err("desativar o responsavel deve ser recusado");
-        assert!(erro.message().contains("responde pelo apuratorio"));
+        assert!(erro.message().contains("responde pelo apuratório"));
         drop(tx);
 
         // O papel opcional, esse sim, desativa.

@@ -70,7 +70,9 @@ pub async fn users_save(
                                 == 0
                         {
                             return Err(AppError::Domain(
-                                "esta e a unica conta que pode administrar o sistema".to_string(),
+                                "Esta é a única conta que pode administrar o sistema. Dê perfil de administrador \
+                                 a outra conta antes."
+                                    .to_string(),
                             ));
                         }
                     }
@@ -109,7 +111,8 @@ pub async fn users_delete(
             if let Some(conta) = repository::conta_do_policial(&mut *tx, &id).await? {
                 if conta == actor.id {
                     return Err(AppError::Domain(
-                        "nao e possivel desativar a propria conta".to_string(),
+                        "Não é possível desativar a própria conta. Peça a outro administrador."
+                            .to_string(),
                     ));
                 }
                 if repository::outros_administradores_ativos(&mut *tx, Some(&conta)).await? == 0 {

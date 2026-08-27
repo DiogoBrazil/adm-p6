@@ -64,7 +64,7 @@ async fn login(state: &AppState, request: LoginRequest) -> Result<SessionUser, A
 
     if !stored_hash.starts_with("$2") {
         let upgraded = hash(&request.senha, DEFAULT_COST)
-            .map_err(|error| AppError::Domain(format!("falha ao atualizar hash: {error}")))?;
+            .map_err(|erro| AppError::Interno(format!("rehash da senha: {erro}")))?;
         repository::update_password_hash(&pool, &row.id, &upgraded).await?;
     }
 

@@ -13,8 +13,9 @@ use adm_p6_tauri_lib::deadlines::{
     domain::AddExtensionRequest, repository as deadlines_repository,
 };
 use adm_p6_tauri_lib::proceedings::domain::{
-    CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest, PessoaRequest, ProceedingFilter,
-    SaveProceedingRequest, UploadAttachmentRequest,
+    AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
+    PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    UploadAttachmentRequest,
 };
 use adm_p6_tauri_lib::proceedings::repository;
 use chrono::NaiveDate;
@@ -49,26 +50,46 @@ fn base(m: &Mundo, numero: &str) -> SaveProceedingRequest {
         data_conclusao: None,
         resumo_fatos: None,
         envolvidos: vec![],
-        designacoes: vec![designacao(
-            m,
-            &m.pm_um,
-            &m.papel_encarregado,
-            data(2026, 1, 10),
-        )],
+        designacoes: vec![designacao(m, &m.pm_um, &m.papel_encarregado)],
         pessoas: vec![],
         carta_precatoria: None,
     }
 }
 
-fn designacao(_m: &Mundo, pm: &str, papel: &str, inicio: NaiveDate) -> DesignacaoRequest {
+/// Designação nova: sem `id`. Início, documento e motivo não entram porque são
+/// derivados do cabeçalho do processo pelo repositório.
+fn designacao(_m: &Mundo, pm: &str, papel: &str) -> DesignacaoRequest {
     DesignacaoRequest {
+        id: None,
         policial_militar_id: pm.to_string(),
         papel_id: papel.to_string(),
-        data_inicio: inicio,
-        documento_autorizador_id: None,
-        numero_documento: None,
-        motivo: None,
     }
+}
+
+/// Designação que já existe no banco: o `id` é o que manda o repositório
+/// ATUALIZAR a linha em vez de criar outra.
+fn designacao_existente(id: &str, pm: &str, papel: &str) -> DesignacaoRequest {
+    DesignacaoRequest {
+        id: Some(id.to_string()),
+        policial_militar_id: pm.to_string(),
+        papel_id: papel.to_string(),
+    }
+}
+
+/// Repõe no request os ids das designações já gravadas.
+///
+/// É o que a tela faz ao reabrir o formulário: ela lê o detalhe e leva o `id` de
+/// cada designação vigente junto. Sem o id, o repositório entende "designação
+/// nova" — e reenviar a mesma pessoa na mesma função vira duplicidade, não
+/// edição.
+async fn sincronizar_designacoes(pool: &PgPool, req: &mut SaveProceedingRequest, id: &str) {
+    let detalhe = repository::get(pool, id).await.unwrap().unwrap();
+    req.designacoes = detalhe
+        .designacoes
+        .into_iter()
+        .filter(|d| d.data_fim.is_none())
+        .map(|d| designacao_existente(&d.id, &d.policial_militar_id, &d.papel_id))
+        .collect();
 }
 
 fn envolvido(m: &Mundo, pm: &str, ordem: i32) -> EnvolvidoRequest {
@@ -113,8 +134,8 @@ async fn cria_processo_completo_em_uma_transacao() {
         req.data_recebimento = Some(data(2026, 1, 12));
         req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
         req.designacoes = vec![
-            designacao(&m, &m.pm_um, &m.papel_encarregado, data(2026, 1, 10)),
-            designacao(&m, &m.pm_tres, &m.papel_escrivao, data(2026, 1, 10)),
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_tres, &m.papel_escrivao),
         ];
         req.pessoas = vec![
             PessoaRequest {
@@ -221,6 +242,7 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
         // Reenvia com outro envolvido e outra vítima: as coleções são
         // substituídas, não acumuladas.
         req.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut req, &id).await;
         req.envolvidos = vec![envolvido(&m, &m.pm_tres, 1)];
         req.pessoas = vec![PessoaRequest {
             papel_pessoa_id: m.papel_vitima.clone(),
@@ -262,6 +284,7 @@ async fn edicao_cria_remove_e_repara_o_prazo_inicial() {
         let mut req = base(&m, "001");
         let id = salvar(&pool, &req).await.unwrap();
         req.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut req, &id).await;
 
         // Preencher o recebimento depois do cadastro cria a ordem zero.
         req.data_recebimento = Some(data(2026, 1, 12));
@@ -456,7 +479,7 @@ async fn recusa_salvar_sem_os_papeis_obrigatorios_do_apuratorio() {
             .await
             .expect_err("papel obrigatorio ausente");
         assert!(
-            erro.contains("designacoes obrigatorias"),
+            erro.contains("Falta designar quem responde por"),
             "mensagem: {erro}"
         );
         assert!(
@@ -593,15 +616,20 @@ async fn banco_recusa_papel_nao_previsto_para_o_apuratorio() {
         req.apuratorio_id = m.apuratorio_livre.clone();
         req.natureza_fato_id = None;
         req.designacoes = vec![
-            designacao(&m, &m.pm_um, &m.papel_encarregado, data(2026, 1, 10)),
-            designacao(&m, &m.pm_tres, &m.papel_escrivao, data(2026, 1, 10)),
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_tres, &m.papel_escrivao),
         ];
         let erro = salvar(&pool, &req).await.expect_err("papel nao previsto");
+        // A regra é a mesma; o que mudou é quem responde. Antes só a FK
+        // composta recusava, e o usuário lia o fallback genérico do banco.
+        // Agora a aplicação consulta `apuratorio_papeis` antes de escrever e
+        // diz o que fazer — a FK segue no lugar, como rede.
         assert!(
-            erro.contains("Não foi possível concluir a operação no banco de dados"),
-            "esperado erro seguro sem detalhes da FK: {erro}"
+            erro.contains("não está prevista para esta espécie de apuratório"),
+            "esperado erro de dominio: {erro}"
         );
         assert!(!erro.contains("fk_designacao") && !erro.contains("foreign key"));
+        assert!(!erro.contains("banco de dados"));
     })
     .await;
 }
@@ -652,20 +680,10 @@ async fn substituicao_de_designacao_encosta_os_periodos_sem_sobrepor() {
         let m = fixtures::mundo_configurado(&pool).await;
         let id = salvar(&pool, &base(&m, "001")).await.unwrap();
 
-        let mut tx = pool.begin().await.unwrap();
-        repository::substituir_designacao(
-            &mut tx,
-            &id,
-            &m.papel_encarregado,
-            &m.pm_dois,
-            data(2026, 2, 1),
-            Some("ferias"),
-            None,
-            None,
-        )
-        .await
-        .expect("substituir o encarregado");
-        tx.commit().await.unwrap();
+        let vigente = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        substituir(&pool, &id, &vigente, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .expect("substituir o encarregado");
 
         let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
         assert_eq!(
@@ -701,6 +719,614 @@ async fn substituicao_de_designacao_encosta_os_periodos_sem_sobrepor() {
     .await;
 }
 
+// ─────────────────────────────────────────── auxiliares da substituição ──
+
+/// O id da designação vigente de um papel. A tela trabalha assim: a ação
+/// "Substituir" nasce de uma linha da tabela, que é uma designação específica.
+async fn vigente_de(pool: &PgPool, processo_id: &str, papel_id: &str) -> String {
+    let detalhe = repository::get(pool, processo_id).await.unwrap().unwrap();
+    detalhe
+        .designacoes
+        .into_iter()
+        .find(|d| d.papel_id == papel_id && d.data_fim.is_none())
+        .expect("designacao vigente do papel")
+        .id
+}
+
+async fn substituir(
+    pool: &PgPool,
+    processo_id: &str,
+    designacao_id: &str,
+    sucessor: &str,
+    quando: NaiveDate,
+) -> Result<String, String> {
+    substituir_com(
+        pool,
+        SubstituirDesignacaoRequest {
+            processo_id: processo_id.to_string(),
+            designacao_id: designacao_id.to_string(),
+            sucessor_id: sucessor.to_string(),
+            data_troca: quando,
+            motivo: "ferias do titular".to_string(),
+            documento_autorizador_id: None,
+            numero_documento: None,
+        },
+    )
+    .await
+}
+
+/// Percorre o mesmo caminho do comando: valida o request e só então grava.
+async fn substituir_com(
+    pool: &PgPool,
+    request: SubstituirDesignacaoRequest,
+) -> Result<String, String> {
+    request.validate()?;
+    let mut tx = pool.begin().await.unwrap();
+    let resultado = repository::substituir_designacao(&mut tx, &request).await;
+    match resultado {
+        Ok(aplicada) => {
+            tx.commit().await.map_err(|e| e.to_string())?;
+            Ok(aplicada.designacao_id)
+        }
+        Err(erro) => Err(erro.message()),
+    }
+}
+
+async fn atualizar_substituicao(
+    pool: &PgPool,
+    request: AtualizarSubstituicaoRequest,
+) -> Result<(), String> {
+    request.validate()?;
+    let mut tx = pool.begin().await.unwrap();
+    match repository::atualizar_substituicao(&mut tx, &request).await {
+        Ok(_) => tx.commit().await.map_err(|e| e.to_string()),
+        Err(erro) => Err(erro.message()),
+    }
+}
+
+async fn remover_substituicao(
+    pool: &PgPool,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.unwrap();
+    match repository::remover_substituicao(&mut tx, processo_id, designacao_id).await {
+        Ok(_) => tx.commit().await.map_err(|e| e.to_string()),
+        Err(erro) => Err(erro.message()),
+    }
+}
+
+/// Correção padrão da última substituição: muda o que o teste pedir, mantendo o
+/// resto igual.
+fn correcao(
+    processo_id: &str,
+    designacao_id: &str,
+    sucessor: &str,
+    quando: NaiveDate,
+) -> AtualizarSubstituicaoRequest {
+    AtualizarSubstituicaoRequest {
+        processo_id: processo_id.to_string(),
+        designacao_id: designacao_id.to_string(),
+        sucessor_id: sucessor.to_string(),
+        data_troca: quando,
+        motivo: "correcao do registro".to_string(),
+        documento_autorizador_id: None,
+        numero_documento: None,
+    }
+}
+
+// ────────────────────────────────────────────── a cadeia de substituição ──
+
+/// Cada função tem a SUA cadeia, e a "última" de uma não depende da outra.
+///
+/// É a regra que o `max_ocupantes` torna visível: o mesmo processo pode ter duas
+/// cadeias correndo em paralelo. A versão anterior de `substituir_designacao`
+/// encerrava por papel (`WHERE papel_id = $2 AND data_fim IS NULL`) e teria
+/// derrubado as duas de uma vez.
+#[tokio::test]
+async fn cada_funcao_tem_a_propria_cadeia_e_a_propria_ultima() {
+    util::com_banco_descartavel("proc_cadeias", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.designacoes = vec![
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_tres, &m.papel_escrivao),
+        ];
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let encarregado = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        let escrivao = vigente_de(&pool, &id, &m.papel_escrivao).await;
+
+        let novo_encarregado = substituir(&pool, &id, &encarregado, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .expect("substituir o encarregado");
+        let novo_escrivao = substituir(&pool, &id, &escrivao, &m.pm_um, data(2026, 3, 1))
+            .await
+            .expect("substituir o escrivao");
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 4, "duas cadeias de dois elos");
+
+        // A "última" é por cadeia: vigente E com antecessora. As duas são.
+        let ultimas: Vec<&str> = detalhe
+            .designacoes
+            .iter()
+            .filter(|d| d.data_fim.is_none() && d.designacao_anterior_id.is_some())
+            .map(|d| d.id.as_str())
+            .collect();
+        assert_eq!(
+            ultimas.len(),
+            2,
+            "uma ultima por cadeia, nao uma por processo"
+        );
+        assert!(ultimas.contains(&novo_encarregado.as_str()));
+        assert!(ultimas.contains(&novo_escrivao.as_str()));
+
+        // E cada uma se desfaz sozinha, sem exigir ordem entre as duas.
+        remover_substituicao(&pool, &id, &novo_escrivao)
+            .await
+            .expect("desfazer a troca do escrivao nao depende da do encarregado");
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 3);
+        assert!(detalhe
+            .designacoes
+            .iter()
+            .any(|d| d.id == novo_encarregado && d.data_fim.is_none()));
+    })
+    .await;
+}
+
+/// Corrigir a última substituição move a data das DUAS linhas: é uma data só, o
+/// fim de uma e o início da outra. Alterar apenas um dos lados abriria a lacuna.
+#[tokio::test]
+async fn editar_a_ultima_substituicao_nao_abre_lacuna_nem_sobreposicao() {
+    util::com_banco_descartavel("proc_subst_edit", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = salvar(&pool, &base(&m, "001")).await.unwrap();
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        let sucessora = substituir(&pool, &id, &inicial, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .unwrap();
+
+        // Muda sucessor, data e motivo de uma vez.
+        atualizar_substituicao(
+            &pool,
+            AtualizarSubstituicaoRequest {
+                motivo: "afastamento medico".to_string(),
+                ..correcao(&id, &sucessora, &m.pm_tres, data(2026, 2, 15))
+            },
+        )
+        .await
+        .expect("corrigir a ultima substituicao");
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 2, "corrigir nao cria elo novo");
+        let anterior = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.id == inicial)
+            .unwrap();
+        let atual = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.id == sucessora)
+            .unwrap();
+
+        assert_eq!(anterior.data_fim, Some(data(2026, 2, 15)));
+        assert_eq!(
+            atual.data_inicio,
+            data(2026, 2, 15),
+            "as duas datas andam juntas"
+        );
+        assert_eq!(atual.policial_militar_id, m.pm_tres);
+        assert_eq!(atual.motivo.as_deref(), Some("afastamento medico"));
+        assert_eq!(
+            atual.designacao_anterior_id.as_deref(),
+            Some(inicial.as_str())
+        );
+    })
+    .await;
+}
+
+/// Substituição do meio da cadeia é histórico: não se edita nem se remove.
+#[tokio::test]
+async fn substituicao_intermediaria_nao_pode_ser_editada_nem_removida() {
+    util::com_banco_descartavel("proc_subst_meio", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = salvar(&pool, &base(&m, "001")).await.unwrap();
+
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        let meio = substituir(&pool, &id, &inicial, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .unwrap();
+        let ponta = substituir(&pool, &id, &meio, &m.pm_tres, data(2026, 3, 1))
+            .await
+            .unwrap();
+
+        let erro = atualizar_substituicao(&pool, correcao(&id, &meio, &m.pm_um, data(2026, 2, 10)))
+            .await
+            .expect_err("a do meio nao se edita");
+        assert!(erro.contains("já foi sucedida por outra"), "{erro}");
+
+        let erro = remover_substituicao(&pool, &id, &meio)
+            .await
+            .expect_err("a do meio nao se remove");
+        assert!(erro.contains("Desfaça primeiro"), "{erro}");
+
+        // A designação INICIAL também não é "uma substituição" — corrigi-la é
+        // trabalho do cadastro, e a mensagem tem de dizer isso.
+        let erro = remover_substituicao(&pool, &id, &inicial)
+            .await
+            .expect_err("a inicial nao e substituicao");
+        assert!(erro.contains("é a inicial do processo"), "{erro}");
+
+        // A ponta, sim.
+        remover_substituicao(&pool, &id, &ponta).await.unwrap();
+    })
+    .await;
+}
+
+/// Desfazer de trás para frente devolve a cadeia ao estado anterior, elo a elo:
+/// removida a ponta, a que era intermediária vira a nova ponta.
+#[tokio::test]
+async fn remover_sucessivamente_reabre_cada_antecessora() {
+    util::com_banco_descartavel("proc_subst_desfaz", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = salvar(&pool, &base(&m, "001")).await.unwrap();
+
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        let meio = substituir(&pool, &id, &inicial, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .unwrap();
+        let ponta = substituir(&pool, &id, &meio, &m.pm_tres, data(2026, 3, 1))
+            .await
+            .unwrap();
+
+        remover_substituicao(&pool, &id, &ponta).await.unwrap();
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 2);
+        let vigente = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.data_fim.is_none())
+            .unwrap();
+        assert_eq!(vigente.id, meio, "a antecessora voltou a ser vigente");
+        assert_eq!(
+            detalhe.cabecalho.responsavel_nome.as_deref(),
+            Some("PM DOIS")
+        );
+
+        // E agora a que era intermediária é a última, e pode ser desfeita.
+        remover_substituicao(&pool, &id, &meio).await.unwrap();
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 1);
+        assert_eq!(detalhe.designacoes[0].id, inicial);
+        assert_eq!(detalhe.designacoes[0].data_fim, None, "reaberta");
+        assert_eq!(detalhe.cabecalho.responsavel_nome.as_deref(), Some("PM UM"));
+    })
+    .await;
+}
+
+/// As seis recusas de entrada, todas com frase própria em português e todas
+/// antes de qualquer escrita.
+#[tokio::test]
+async fn substituicao_recusa_cada_entrada_invalida_com_mensagem_propria() {
+    util::com_banco_descartavel("proc_subst_recusa", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = salvar(&pool, &base(&m, "001")).await.unwrap();
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+
+        let pedido = |ajuste: &dyn Fn(&mut SubstituirDesignacaoRequest)| {
+            let mut r = SubstituirDesignacaoRequest {
+                processo_id: id.clone(),
+                designacao_id: inicial.clone(),
+                sucessor_id: m.pm_dois.clone(),
+                data_troca: data(2026, 2, 1),
+                motivo: "ferias".to_string(),
+                documento_autorizador_id: None,
+                numero_documento: None,
+            };
+            ajuste(&mut r);
+            r
+        };
+
+        let casos: Vec<(&str, Box<dyn Fn(&mut SubstituirDesignacaoRequest)>, &str)> = vec![
+            (
+                "data futura",
+                Box::new(|r| {
+                    r.data_troca = chrono::Utc::now().date_naive() + chrono::Duration::days(1)
+                }),
+                "não pode ser futura",
+            ),
+            (
+                "data igual ao inicio",
+                Box::new(|r| r.data_troca = data(2026, 1, 10)),
+                "precisa ser posterior a 10/01/2026",
+            ),
+            (
+                "data anterior ao inicio",
+                Box::new(|r| r.data_troca = data(2026, 1, 5)),
+                "precisa ser posterior a 10/01/2026",
+            ),
+            (
+                "sucessor igual ao ocupante",
+                Box::new(|r| r.sucessor_id = m.pm_um.clone()),
+                "já ocupa a função",
+            ),
+            (
+                "motivo em branco",
+                Box::new(|r| r.motivo = "   ".to_string()),
+                "Informe o motivo",
+            ),
+            (
+                "documento sem numero",
+                Box::new(|r| r.documento_autorizador_id = Some(m.documento.clone())),
+                "Informe o número do documento",
+            ),
+            (
+                "numero sem documento",
+                Box::new(|r| r.numero_documento = Some("123".to_string())),
+                "Escolha o tipo de documento",
+            ),
+        ];
+
+        for (caso, ajuste, esperado) in casos {
+            let erro = substituir_com(&pool, pedido(&*ajuste))
+                .await
+                .expect_err(caso);
+            assert!(
+                erro.contains(esperado),
+                "{caso}: esperava {esperado:?}, veio {erro:?}"
+            );
+            // Nenhuma delas pode chegar ao PostgreSQL: a aplicação sabe qual
+            // campo está errado, e é ela que responde.
+            assert!(
+                !erro.contains("banco de dados"),
+                "{caso}: caiu no fallback do banco"
+            );
+        }
+
+        // Militar desativado é o caso que precisa de estado no banco, não só de
+        // um campo diferente no request.
+        sqlx::query("UPDATE policiais_militares SET ativo = false WHERE id = $1::uuid")
+            .bind(&m.pm_dois)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let erro = substituir_com(&pool, pedido(&|_| {}))
+            .await
+            .expect_err("sucessor desativado");
+        assert!(erro.contains("está desativado"), "{erro}");
+
+        // E nada disso escreveu: a designação inicial segue sozinha e vigente.
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 1);
+        assert_eq!(detalhe.designacoes[0].data_fim, None);
+    })
+    .await;
+}
+
+/// O cadastro edita e remove a designação inicial — e só ela.
+///
+/// Antes o formulário só sabia acrescentar: lançar o encarregado errado e
+/// reeditar criava uma SEGUNDA designação vigente em vez de corrigir a primeira.
+#[tokio::test]
+async fn cadastro_edita_e_remove_designacao_sem_historico() {
+    util::com_banco_descartavel("proc_des_sync", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        let id = salvar(&pool, &req).await.unwrap();
+        req.id = Some(id.clone());
+
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+
+        // Corrigir o ocupante: a MESMA linha muda de dono.
+        req.designacoes = vec![designacao_existente(
+            &inicial,
+            &m.pm_dois,
+            &m.papel_encarregado,
+        )];
+        salvar(&pool, &req).await.expect("corrigir o encarregado");
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(
+            detalhe.designacoes.len(),
+            1,
+            "corrigir nao cria segunda linha"
+        );
+        assert_eq!(detalhe.designacoes[0].id, inicial, "e a mesma linha");
+        assert_eq!(detalhe.designacoes[0].policial_militar_id, m.pm_dois);
+
+        // Os três campos derivados vêm do cabeçalho, não do formulário.
+        assert_eq!(detalhe.designacoes[0].data_inicio, req.data_instauracao);
+        assert_eq!(
+            detalhe.designacoes[0].documento_autorizador_id.as_deref(),
+            Some(m.documento.as_str())
+        );
+        assert_eq!(
+            detalhe.designacoes[0].numero_documento.as_deref(),
+            Some("001")
+        );
+        assert_eq!(
+            detalhe.designacoes[0].motivo.as_deref(),
+            Some("Designação inicial")
+        );
+
+        // Corrigir a instauração leva junto o início da designação, pela mesma
+        // razão que leva o prazo inicial: uma informação, uma fonte de verdade.
+        req.data_instauracao = data(2026, 1, 5);
+        salvar(&pool, &req).await.expect("corrigir a instauracao");
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes[0].data_inicio, data(2026, 1, 5));
+
+        // Acrescentar um escrivão e depois removê-lo: sem histórico, sai.
+        req.designacoes
+            .push(designacao(&m, &m.pm_tres, &m.papel_escrivao));
+        salvar(&pool, &req).await.expect("acrescentar escrivao");
+        assert_eq!(
+            repository::get(&pool, &id)
+                .await
+                .unwrap()
+                .unwrap()
+                .designacoes
+                .len(),
+            2
+        );
+
+        req.designacoes.pop();
+        salvar(&pool, &req).await.expect("remover escrivao");
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(
+            detalhe.designacoes.len(),
+            1,
+            "designacao sem historico e removivel"
+        );
+        assert_eq!(detalhe.designacoes[0].id, inicial);
+    })
+    .await;
+}
+
+/// Depois que existe substituição, a função fica fora do alcance do cadastro —
+/// e o backend recusa mesmo com a tela contornada.
+#[tokio::test]
+async fn cadastro_nao_alcanca_designacao_com_historico() {
+    util::com_banco_descartavel("proc_des_travada", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        let id = salvar(&pool, &req).await.unwrap();
+        req.id = Some(id.clone());
+
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        let sucessora = substituir(&pool, &id, &inicial, &m.pm_dois, data(2026, 2, 1))
+            .await
+            .unwrap();
+
+        // 1. Reenviar a vigente sem mudança é inofensivo: a tela a mostra
+        //    bloqueada, mas ainda a manda.
+        req.designacoes = vec![designacao_existente(
+            &sucessora,
+            &m.pm_dois,
+            &m.papel_encarregado,
+        )];
+        salvar(&pool, &req)
+            .await
+            .expect("reenviar sem mudanca e no-op");
+        assert_eq!(
+            repository::get(&pool, &id)
+                .await
+                .unwrap()
+                .unwrap()
+                .designacoes
+                .len(),
+            2
+        );
+
+        // 2. Trocar o ocupante por fora é recusado.
+        req.designacoes = vec![designacao_existente(
+            &sucessora,
+            &m.pm_tres,
+            &m.papel_encarregado,
+        )];
+        let erro = salvar(&pool, &req).await.expect_err("alterar a travada");
+        assert!(erro.contains("já tem histórico de substituição"), "{erro}");
+        assert!(
+            erro.contains("Substituir"),
+            "a mensagem diz onde fazer: {erro}"
+        );
+
+        // 3. Omiti-la é recusado. O teste usa o Escrivão porque o Encarregado é
+        //    obrigatório para esta espécie, e aí quem responderia primeiro seria
+        //    a validação de papel obrigatório — outra regra, outra mensagem.
+        let escrivao = salvar(&pool, &{
+            let mut com_escrivao = base(&m, "002");
+            com_escrivao.designacoes = vec![
+                designacao(&m, &m.pm_um, &m.papel_encarregado),
+                designacao(&m, &m.pm_tres, &m.papel_escrivao),
+            ];
+            com_escrivao
+        })
+        .await
+        .unwrap();
+        let vigente_escrivao = vigente_de(&pool, &escrivao, &m.papel_escrivao).await;
+        substituir(
+            &pool,
+            &escrivao,
+            &vigente_escrivao,
+            &m.pm_dois,
+            data(2026, 2, 1),
+        )
+        .await
+        .unwrap();
+
+        let mut so_encarregado = base(&m, "002");
+        so_encarregado.id = Some(escrivao.clone());
+        so_encarregado.designacoes = vec![designacao_existente(
+            &vigente_de(&pool, &escrivao, &m.papel_encarregado).await,
+            &m.pm_um,
+            &m.papel_encarregado,
+        )];
+        let erro = salvar(&pool, &so_encarregado)
+            .await
+            .expect_err("remover a travada");
+        assert!(erro.contains("não pode ser removida aqui"), "{erro}");
+
+        // Nada disso escreveu.
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.designacoes.len(), 2);
+        assert_eq!(
+            detalhe.cabecalho.responsavel_nome.as_deref(),
+            Some("PM DOIS")
+        );
+    })
+    .await;
+}
+
+/// Dois Encarregados num papel de um ocupante só: mensagem da aplicação, não a
+/// constraint trigger — que, por ser `DEFERRABLE`, só falharia no `commit`.
+#[tokio::test]
+async fn limite_de_ocupantes_fala_antes_da_constraint() {
+    util::com_banco_descartavel("proc_ocupantes", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+
+        req.designacoes = vec![
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_dois, &m.papel_encarregado),
+        ];
+        let erro = salvar(&pool, &req).await.expect_err("dois encarregados");
+        assert!(
+            erro.contains("Encarregado Teste"),
+            "diz qual funcao: {erro}"
+        );
+        assert!(erro.contains("no máximo 1 ocupante"), "{erro}");
+        assert!(
+            !erro.contains("banco de dados"),
+            "nao caiu na trigger: {erro}"
+        );
+
+        // O mesmo militar duas vezes na mesma função é outro erro, e tem frase
+        // própria — quem valida é o request, sem tocar no banco.
+        req.designacoes = vec![
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+        ];
+        let erro = salvar(&pool, &req)
+            .await
+            .expect_err("mesmo militar repetido");
+        assert!(erro.contains("duas vezes na mesma função"), "{erro}");
+
+        // Escrivão aceita dois: o limite vem do cadastro, não de um número
+        // escrito no código.
+        req.designacoes = vec![
+            designacao(&m, &m.pm_um, &m.papel_encarregado),
+            designacao(&m, &m.pm_dois, &m.papel_escrivao),
+            designacao(&m, &m.pm_tres, &m.papel_escrivao),
+        ];
+        salvar(&pool, &req).await.expect("dois escrivaes cabem");
+    })
+    .await;
+}
+
 // ────────────────────────────────────────────── leitura, filtros e anexos ──
 
 /// Monta três processos com atributos distintos para exercitar cada filtro.
@@ -723,12 +1349,7 @@ async fn cenario_de_listagem(pool: &PgPool, m: &Mundo) -> (String, String, Strin
         e_condutor: true,
         ..envolvido(m, &m.pm_dois, 1)
     }];
-    c.designacoes = vec![designacao(
-        m,
-        &m.pm_dois,
-        &m.papel_encarregado,
-        data(2026, 1, 10),
-    )];
+    c.designacoes = vec![designacao(m, &m.pm_dois, &m.papel_encarregado)];
     let c = salvar(pool, &c).await.unwrap();
 
     (a, b, c)

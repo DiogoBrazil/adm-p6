@@ -246,6 +246,92 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
 
 ---
 
+## h) Substituição de designações e mensagens (§8.15)
+
+É a rodada mais recente. Mexe em duas coisas que só a tela conta se estão certas:
+o fluxo de substituição, que envolve duas linhas por operação, e o texto que o
+usuário lê quando alguma coisa é recusada.
+
+### Preparar: duas cadeias no mesmo processo
+
+Use um apuratório que tenha **Encarregado e Escrivão** habilitados, com o Escrivão
+aceitando 2 ocupantes (*Catálogos → Configuração de apuratórios*). Cadastre um
+processo com um Encarregado e dois Escrivães.
+
+No cadastro, confira antes de salvar:
+
+- a linha de designação tem **Papel e Militar, e mais nada** — sem campo de data;
+- ao escolher Encarregado numa linha, a opção **some da outra** (fica desabilitada,
+  com "já preenchido"), porque o teto é 1;
+- Escrivão continua disponível nas duas, porque o teto é 2.
+
+### O que a tabela de Designações tem de mostrar
+
+Sete colunas: Papel, Militar, Início, Fim, **Documento**, Motivo, **Ações**. O
+militar aparece com **posto, matrícula e nome**. A designação inicial já nasce com
+Documento preenchido (o documento que instaurou) e motivo "Designação inicial" —
+ninguém digitou isso.
+
+### O fluxo, na ordem
+
+| # | O que fazer | O que tem de acontecer |
+|---|---|---|
+| 1 | *Substituir* no Encarregado | Formulário abre **abaixo da tabela**, com o resumo dizendo quem está sendo substituído e desde quando |
+| 2 | Salvar sem escolher sucessor | Aviso **em vermelho, embaixo do campo Sucessor**, e o foco vai para ele. Nada é salvo |
+| 3 | Escolher o **mesmo** militar que já ocupa | Aviso no campo Sucessor, nomeando quem já ocupa |
+| 4 | Data igual ou anterior ao início | Aviso no campo Data, com a data-limite escrita por extenso |
+| 5 | Data futura | Recusada — o campo já tem `max`, e a validação repete |
+| 6 | Motivo em branco | Aviso no campo Motivo |
+| 7 | Escolher Documento e **não** preencher o Nº (e o contrário) | Aviso no campo que falta. Os dois são opcionais **juntos** |
+| 8 | Preencher tudo e salvar | Duas linhas: a anterior encerrada na data da troca, a nova vigente **começando no mesmo dia**. Sem buraco, sem sobreposição |
+| 9 | Substituir **um dos escrivães** | A cadeia do outro escrivão **não se mexe** — e os dois passam a ter *Editar* e *Remover* |
+
+### O que só a última pode fazer
+
+Substitua o Encarregado **duas vezes**. Agora:
+
+- só a **última** linha da cadeia tem *Editar* e *Remover*;
+- a do meio e a inicial ficam **só com leitura** (a inicial mantém *Substituir*);
+- em *Editar*, o formulário abre **preenchido** com o que está gravado, e o botão
+  diz "Salvar correção";
+- mudar a data na correção move **as duas** linhas: o Fim da anterior e o Início
+  da corrigida andam juntos;
+- *Remover* pede confirmação **nominal** — quem sai, quem volta a ser o quê;
+- removida a última, a do meio **vira a última** e ganha os dois botões.
+
+### O cadastro depois que existe substituição
+
+Reabra o processo em *Editar*. A designação do Encarregado tem de aparecer
+**bloqueada**: sem `<select>`, com a tarja "com histórico", a borda em tom
+diferente e a frase mandando usar *Substituir* na página de detalhes. O Escrivão
+sem substituição continua editável e removível.
+
+Corrija a **data de instauração** e salve: o Início das designações **sem
+histórico** acompanha; as com histórico não se mexem.
+
+### As mensagens
+
+Nenhuma tela pode mostrar nome de constraint, SQL, caminho de arquivo ou texto em
+inglês. Três provocações rápidas:
+
+1. Cadastrar dois processos com o **mesmo número de documento** → frase explicando
+   a combinação (unidade, ano, apuratório, documento), não `uq_processo_...`;
+2. Excluir um item de catálogo **já usado** → "já foi usado... Desative-o";
+3. **Parar o banco** (`docker compose stop postgres`), tentar qualquer tela e
+   religar → tem de dizer para **verificar o serviço do banco**, não "tente
+   novamente". Religue com `docker compose start postgres`.
+
+> Toda mensagem começa com maiúscula, termina em ponto e diz **o que fazer**. Se
+> alguma só constatar o problema, é defeito — anote qual.
+
+### Janela estreita
+
+Estreite a janela até ~720px. A tabela de Designações **rola dentro da própria
+moldura**; a página **não** rola na horizontal. O formulário de substituição
+quebra em linhas, sem campo sobrepondo outro nem escapando da borda.
+
+---
+
 ## f) A amostra dos 6 processos
 
 O campo a campo já está feito e acusa **0 divergências em 377 comparações**,

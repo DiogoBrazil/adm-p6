@@ -616,7 +616,10 @@ async fn mapa_completo_nao_aponta_para_apuratorio_nenhum() {
         let erro = repository::delete_saved_map(&mut tx, "00000000-0000-4000-8000-000000000000")
             .await
             .expect_err("id inexistente");
-        assert!(erro.message().contains("nao encontrado"), "{erro}");
+        assert!(
+            erro.message().contains("Este mapa não existe mais"),
+            "{erro}"
+        );
     })
     .await;
 }

@@ -9,22 +9,30 @@
 
 > ## ▶ POR ONDE RETOMAR
 >
-> **Estado em 26/08/2026:** as seções 8.1 a **8.14** estão concluídas. Os **130 registros
+> **Estado em 26/08/2026:** as seções 8.1 a **8.15** estão concluídas. Os **130 registros
 > históricos/de teste da importação foram removidos com autorização** (§8.11) e, depois
 > disso, a conferência manual criou **2 processos/procedimentos ativos de teste**. O banco
 > conserva 235 militares, 7 usuários, 10 apuratórios, 11 unidades e todos os
-> catálogos/configurações. A rede de proteção tem **102 testes**, os **78 comandos Tauri**
-> estão no cliente tipado e as **7 migrations** estão aplicadas.
+> catálogos/configurações. A rede de proteção tem **116 testes**, os **80 comandos Tauri**
+> estão no cliente tipado e as **8 migrations** estão aplicadas.
 >
 > **Não há implementação conhecida pendente.** Não refaça as §8.11 a §8.14: elas já estão
 > no código e cobertas por teste. O próximo trabalho é **validar pela tela** os casos do
 > quadro abaixo e continuar **`CONFERENCIA-DE-TELA.md`**. Se a tela divergir deste
 > documento, trate como defeito novo e preserve as regras registradas nas decisões 34–38.
 >
-> **A última rodada (§8.14)** padronizou as listagens, pôs **dez itens por página** nas seis
-> operacionais e corrigiu três defeitos de corte silencioso — o pior deles em Prazos, onde
-> um prazo vencido aparecia **nas duas tabelas** da mesma tela enquanto os cartões de
-> contagem acima diziam outra coisa. Nada disso muda schema: **nenhuma migration nova.**
+> **A última rodada (§8.15)** deu à cadeia de designações o que a §8.13 deu à de prazos —
+> substituir, corrigir e desfazer de trás para frente, com o vínculo explícito no dado — e
+> varreu **~87 mensagens públicas** do backend inteiro. Esta rodada **traz migration nova
+> (`0008`)**, a primeira desde a 0007: `processo_designacoes.designacao_anterior_id`, com
+> `UNIQUE`, `ON DELETE RESTRICT` e trigger de contiguidade.
+>
+> A migration foi aplicada **em banco vazio** (pelo `migrations.rs`, via sqlx) **e numa
+> cópia do banco atualizado** — as duas conferidas. Como os 130 registros históricos já
+> haviam sido removidos (§8.11), as 4 designações atuais são todas vigentes e não havia
+> cadeia a retroalimentar: `fn_vincular_cadeias_existentes()` devolveu 0, que é o resultado
+> certo. **Quem reimportar o legado precisa chamá-la de novo** — ela é idempotente e está
+> lá para isso.
 >
 > ⚠ **Esta frase já esteve aqui antes e era falsa duas vezes.** Nas duas rodadas em que
 > alguém sentou para conferir a tela, apareceu código quebrado que nenhum teste alcançava:
@@ -44,7 +52,8 @@
 > | 2 | **Editar a última prorrogação pela tela.** Testar uma data anterior e outra posterior à atual, ambas depois do prazo precedente; o motivo deve permanecer igual | §8.13 | **Sim** |
 > | 3 | **Excluir prorrogações de trás para frente.** A anterior deve virar vigente; prazo inicial e prorrogação antiga não podem ser excluídos por chamada direta | §8.13 | **Sim** |
 > | 4 | **Confirmar os 2 registros atuais e decidir se continuam como massa de teste.** Não os apague por suposição | quadro abaixo | **Sim** antes de carga real |
-> | 5 | **Conferir as seis listagens padronizadas.** Dez por página, controle de página que alcança o fim, e o prazo vencido num bloco só. É a rodada mais recente e a que menos foi vista por olho humano | §**8.14**; `CONFERENCIA-DE-TELA.md`, seção **(g)** | **Sim** |
+> | 5 | **Conferir as seis listagens padronizadas.** Dez por página, controle de página que alcança o fim, e o prazo vencido num bloco só | §8.14; `CONFERENCIA-DE-TELA.md`, seção **(g)** | **Sim** |
+> | 5b | **Substituir, corrigir e desfazer uma designação pela tela.** Duas cadeias no mesmo processo (Encarregado e Escrivão) para ver que cada uma tem a sua "última"; e conferir que a função com histórico aparece **bloqueada no cadastro**. É a rodada mais recente e a que menos foi vista por olho humano | §**8.15** | **Sim** |
 > | 6 | **Percorrer as telas com o binário de produção e o console aberto (F12).** `npm run tauri build -- --no-bundle`, depois `./src-tauri/target/release/adm-p6-tauri` | `CONFERENCIA-DE-TELA.md`; §7.5 | **Sim** antes do uso real |
 > | 7 | **Criar uma carta precatória de ponta a ponta** | `CONFERENCIA-DE-TELA.md`, seção (e2); §8.10 | **Sim** |
 > | 8 | Para repetir a conferência dos 6 processos históricos, **restaurar o backup em banco descartável** ou reimportar os dados | §8.5 e §7.6 | não |
@@ -204,6 +213,11 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 36 | Qual prorrogação pode ser corrigida? | **Somente a última.** Editar uma antiga reescreveria `data_inicio`/`dias` das posteriores. A última pode ser antecipada ou postergada, mas o novo vencimento deve continuar estritamente depois do prazo precedente. Só a data muda; motivo e autorização são preservados. |
 | 37 | Qual prorrogação pode ser excluída? | **Somente a última, por exclusão física auditada.** Para chegar a uma antiga, excluem-se as mais recentes de trás para frente. A maior `ordem` restante volta a ser vigente automaticamente; prazo inicial nunca é excluído por esse fluxo. |
 | 38 | Que erro de banco pode chegar à tela? | **Nenhum detalhe técnico.** Unicidades conhecidas têm mensagens específicas; todo erro SQL desconhecido recebe fallback seguro e é logado no backend. Regras previsíveis devem ser validadas antes da escrita para retornar mensagem de domínio, como no bloqueio do Recebimento após prorrogação. |
+| 39 | Como uma substituição sabe qual designação ela sucedeu? | **Coluna com autorreferência, não inferência.** `processo_designacoes.designacao_anterior_id` aponta para a designação encerrada, com `UNIQUE` (uma antecessora, uma sucessora), `ON DELETE RESTRICT` e trigger de contiguidade. Antes o par se adivinhava por `data_fim = data_inicio` dentro do mesmo `(processo, papel)` — e a adivinhação é ambígua justamente onde o papel aceita dois ocupantes. É o princípio 3 outra vez: relação conhecida do domínio é FK. |
+| 40 | O que é "a última substituição"? | **A ponta de cada CADEIA, não do processo nem do papel.** É a designação vigente que tem antecessora: nada a sucedeu, senão teria `data_fim`. Com `max_ocupantes = 2` (a configuração de Escrivão prevê), duas cadeias correm em paralelo sob a mesma função, e corrigir a troca de um escrivão não pode depender da troca do outro. Coincide com "por função" sempre que o teto é 1. |
+| 41 | Qual substituição pode ser corrigida ou desfeita? | **Somente a última da cadeia.** Corrigir move sucessor, data, motivo e documento — a data move as DUAS linhas, porque é uma só: o fim da antecessora e o início da sucessora. Desfazer exclui a sucessora e reabre a antecessora (`data_fim = NULL`), e então a substituição anterior vira a última. A função nunca muda: trocar de papel não é corrigir uma substituição. |
+| 42 | Quem preenche data, documento e motivo da designação inicial? | **Ninguém — são derivados do cabeçalho.** Início = data de instauração; documento autorizador e número = o documento que instaurou o processo; motivo = "Designação inicial". O formulário pede só função e militar. Corrigir a instauração move junto o início de quem ainda não tem histórico, como `sync_initial` faz com o prazo. Documento e motivo próprios existem na SUBSTITUIÇÃO, que é onde o usuário de fato os informa. |
+| 43 | O cadastro do processo pode alterar qualquer designação? | **Só a que não tem histórico.** `data_fim` preenchida ou `designacao_anterior_id` preenchido tiram a linha do alcance do formulário — alterar reescreveria fato registrado (princípio 5). A designação inicial intocada, essa sim, é editável e removível, agora sincronizada pelo `id`. A recusa é do backend, não da tela. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -559,7 +573,7 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 102 testes
+### 5.7 Rede de proteção — 116 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -569,7 +583,7 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `schema_integrity.sql` + `.rs` | 42 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
 | `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
-| `proceedings_repository.rs` | **20 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, substituição de designação, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado |
+| `proceedings_repository.rs` | **29 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado — e a **cadeia de substituição**: duas cadeias com "últimas" independentes, correção sem lacuna, recusa da intermediária, remoção sucessiva reabrindo cada antecessora, as 7 entradas inválidas, e o cadastro editando/removendo só o que não tem histórico |
 | `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
 | `deadlines_repository.rs` | **6 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação; **os dois blocos do relatório sendo exclusivos** e batendo com o `dashboard`; e a paginação do relatório sobre 205 processos |
 | `maps_reports_repository.rs` | **11 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício; e a **paginação dos mapas salvos**, em que o excluído sai da página *e* do total |
@@ -2429,6 +2443,102 @@ Nada disto é pendência — é o que se deve observar com dado real, porque o b
   barato; se algum dia uma contagem sair de `v_processos_detalhados`, lembre da §10: ali
   é **7× mais lento**, e a agregação tem de partir das tabelas base.
 
+### 8.15 ~~Substituição de designações e mensagens amigáveis~~ — **CONCLUÍDA**
+
+Duas frentes numa rodada. A primeira dá à cadeia de designações o mesmo tratamento que a
+§8.13 deu à cadeia de prazos: **corrigir e desfazer, de trás para frente, sem reescrever o
+meio do histórico.** A segunda varre as mensagens públicas do backend inteiro.
+
+**Migration 0008 — a cadeia deixa de ser inferida.** `processo_designacoes` ganha
+`designacao_anterior_id`, autorreferência com `UNIQUE`, `ON DELETE RESTRICT` e um
+`CHECK` contra apontar para si. Antes, saber que a designação de PM DOIS sucedeu a de PM
+UM exigia adivinhar pelo par `data_fim = data_inicio` dentro do mesmo `(processo, papel)`.
+Isso basta para *ler* o histórico e **não basta para desfazê-lo**: com `max_ocupantes = 2`
+o par é ambíguo, e "a última substituição" não tem alvo definido.
+
+O trigger `tg_cadeia_designacao` (DEFERRABLE, como os outros dois) cobra a contiguidade:
+mesma função, mesmo processo, ocupante diferente, e a sucessora começando no dia em que a
+antecessora termina. **É a contiguidade que fecha o buraco dos ciclos** — como
+`ck_designacao_periodo` já exige `data_fim > data_inicio`, a data cresce a cada elo, e uma
+cadeia que voltasse a si mesma precisaria de um elo com início menor. Nem o ciclo de dois
+elos, que o `CHECK` sozinho deixaria passar, é possível.
+
+A retroalimentação vive em `fn_vincular_cadeias_existentes()`, chamada pela migration e
+disponível para quem reimportar o legado. Ela **se recusa a chutar**: o par precisa ser
+único nos dois sentidos, e onde houver ambiguidade o vínculo fica `NULL` — a designação
+segue legível como histórico, apenas sem oferecer "desfazer". Ligar a sucessora de uma
+cadeia à antecessora da outra seria pior do que não ligar nada.
+
+**Três comandos, e o alvo deixou de ser o papel.** `SubstituirDesignacaoRequest` passou a
+identificar a **designação vigente exata**, não a função. A versão anterior encerrava com
+`UPDATE ... WHERE papel_id = $2 AND data_fim IS NULL` e teria derrubado os dois escrivães
+de uma vez. Somaram-se `proceedings_update_substitution` e
+`proceedings_delete_substitution`; os três travam as linhas com `FOR UPDATE`, revalidam
+tudo no banco e auditam **as duas** designações que cada operação mexe — a antecessora
+muda de estado tanto quanto a sucessora.
+
+**O cadastro passou a editar, e não só acrescentar.** `DesignacaoRequest` ganhou `id`.
+Sem ele, corrigir um encarregado lançado errado criava uma *segunda* designação vigente em
+vez de arrumar a primeira. Em compensação o request **perdeu** `data_inicio`, `documento`,
+`numero` e `motivo`: são derivados do cabeçalho (decisão 42), e mandá-los como `null` a
+cada edição apagaria a portaria já registrada — a mesma armadilha que `textoSePresente` já
+tratava no cabeçalho.
+
+**As mensagens.** Foram revisados ~87 textos públicos: 54 `AppError::Domain`, 13 montados
+com `format!` e 20 validações, a maioria sem acentuação (`"data de instauracao nao pode
+ser futura"`). `AppError` ganhou `Arquivo` e `Interno`, que existem para **separar o que o
+usuário lê do que o console registra** — caminho local, erro de bcrypt e base64 quebrado
+saíam pela mensagem de domínio. O `error.rs` passou a mapear constraint conhecida em duas
+camadas: a frase específica por regra de negócio, e a **categoria pelo SQLSTATE** para o
+resto (duplicidade, vínculo, período, campo obrigatório, registro desatualizado, banco
+indisponível). Dois testes unitários recusam termo técnico em qualquer mensagem pública e
+exigem que ela comece com maiúscula e termine em ponto.
+
+No frontend, o `catch` do `call()` deixou de devolver `String(error)` — o texto cru do
+Tauri — e passou a orientar a reiniciar o programa, com o detalhe no console.
+
+> **A camada certa é a validação de domínio, não o mapa de constraints.** O mapa fala
+> depois do PostgreSQL e sem saber qual linha o usuário errou. Onde a aplicação sabe, quem
+> responde é ela: papel não previsto, teto de ocupantes, militar desativado e designação
+> repetida agora têm frase própria e nem chegam ao banco. O `banco_recusa_papel_nao_previsto`
+> era um teste que **esperava o fallback genérico** — hoje espera a frase de domínio, e a
+> FK composta continua no lugar, como rede.
+
+#### O que a tela ganhou
+
+A tabela de Designações tem **Documento** e **Ações**, e o militar aparece com a
+qualificação completa (posto, matrícula, nome). Designação vigente oferece *Substituir*; a
+**última de cada cadeia** oferece também *Editar* e *Remover*; o histórico encerrado é só
+leitura. O formulário é inline, abaixo da tabela, no padrão dos Prazos — e é **um só, em
+dois modos**, porque substituir e corrigir pedem exatamente os mesmos cinco campos.
+Validação junto do campo, foco no primeiro inválido, e confirmação nominal antes de
+desfazer, dizendo quem sai e quem volta.
+
+No cadastro, a linha de designação perdeu o campo *Início* (é derivado) e ganhou dois
+estados: **livre**, com as funções já preenchidas nas outras linhas desabilitadas até
+`max_ocupantes`; e **travada**, quando a função já tem substituição — vira texto, com a
+orientação de onde a troca acontece.
+
+**O piso da tabela subiu de 760px para 1080px**: eram cinco colunas, agora são sete. Medido
+no navegador, com a folga indo para Documento e Motivo — as duas de texto livre — para que
+as de data não quebrem em duas linhas. A adaptação em janela estreita continua sendo o
+scroll do `.table-wrap`, e o `<body>` não rola na horizontal em 720px nem em 1440px.
+
+> **A medição pegou um conflito real**, do tipo que a §10 avisa. O parágrafo de resumo do
+> formulário usa `.secao-ajuda`, que limita a `70ch` — certo para texto corrido, errado
+> para uma faixa que precisa da linha inteira. Com `flex-basis: 100%` ele ainda ficava em
+> **574px**, e os campos subiam para o lado dele. Só o computado no navegador mostrava
+> isso; o CSS lido parecia correto.
+
+#### Invariantes da cadeia de designações
+
+| Operação | Permitido | Recusado |
+|---|---|---|
+| substituir | designação **vigente**; data depois do início dela e não futura; sucessor ativo e diferente | designação encerrada, data igual/anterior/futura, sucessor igual, motivo vazio, documento sem número (ou o contrário) |
+| corrigir | somente a **ponta da cadeia** (vigente com antecessora); move as duas datas juntas | designação inicial, substituição já sucedida, e qualquer troca de função |
+| desfazer | somente a ponta; exclui a sucessora e reabre a antecessora | substituição intermediária — desfaça antes as mais recentes |
+| cadastro | designação **sem histórico**: editar, acrescentar, remover | alterar, remover ou duplicar quem tem `data_fim` ou antecessora |
+
 ---
 
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
@@ -2451,10 +2561,10 @@ morto — são capacidade sem entrada de UI —, mas alguns são lacuna de verda
 (não há como **desativar** um militar pela tela, embora `users_reactivate` tenha botão —
 assimetria visível), `proceedings_delete`, `evidence_remove_for_pm`, `audit_by_record` e
 `audit_by_user` (não há trilha de auditoria por registro nem por usuário),
-`deadlines_calculate` (nenhuma prévia de cálculo de prazo) e
-`proceedings_substitute_designation` (a substituição hoje acontece reescrevendo o array em
-`proceedings_save`). Expor cada um é decisão de produto: o backend e os testes já estão de
-pé. A lista completa está no levantamento da §8.9.
+e `deadlines_calculate` (nenhuma prévia de cálculo de prazo). Expor cada um é decisão de
+produto: o backend e os testes já estão de pé. A lista completa está no levantamento da
+§8.9. **`proceedings_substitute_designation` saiu desta lista na §8.15**: tem botão na
+tabela de Designações, e ganhou dois irmãos para corrigir e desfazer.
 
 **Formato da matrícula.** `9 caracteres, prefixo 1000 ou 3000` ficou como validação de
 domínio (`users/domain.rs`), não como CHECK, para não impedir a importação de registros
@@ -2490,7 +2600,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Armadilha | O que acontece | Como evitar |
 |---|---|---|
 | Argumento de comando em snake_case | O Tauri v2 espera **camelCase** nos argumentos do comando. Falha em runtime, sem erro de build | Use `call()` de `api.ts`; ele codifica a convenção. Dentro de `{ request: {...} }` os campos seguem snake_case |
-| Constraint trigger `DEFERRABLE` | `max_envolvidos`/`max_ocupantes` estourados **só falham no `commit`** | Em teste, sempre dar `tx.commit()` e verificar o erro ali |
+| Constraint trigger `DEFERRABLE` | `max_envolvidos`, `max_ocupantes` e `tg_cadeia_designacao` **só falham no `commit`** | Em teste, sempre dar `tx.commit()` e verificar o erro ali. E validar antes, no repositório, para o usuário ler a regra e não o fallback |
+| Mandar `null` num campo que o formulário não desenha | Com sincronização por `id`, `null` deixa de ser "não informado" e vira **UPDATE que apaga**. Foi o que quase apagou a portaria da designação inicial | Ou o campo existe no formulário, ou o valor é derivado no backend. Nunca `null` de conveniência — ver decisão 42 |
+| Mensagem de erro nova sem acento ou sem o que fazer | O texto vai direto para a tela de quem opera. `"registro nao encontrado"` não diz o que fazer, e `error.rs` tem um teste que recusa termo técnico | Frase em português, começando com maiúscula, terminando em ponto, dizendo qual campo corrigir ou onde a operação acontece |
+| Regra nova de designação só no `error.rs` | O mapa de constraints é rede, não primeira linha: ele fala depois do PostgreSQL e sem saber qual linha o usuário errou | Validar no repositório, com as linhas travadas por `FOR UPDATE`; o mapa cobre só o que escapa |
 | Fixture colidindo com o seed | A 0003 ocupa os nomes reais dos catálogos legais; índices únicos são case-insensitive | Nomes de fixture carregam "Teste"/"TST" |
 | Editar migration já aplicada | `VersionMismatch` no próximo startup | `docker compose down -v && docker compose up -d` |
 | Schema aplicado fora do sqlx | Se alguém rodar o `.sql` por `psql`, não existe `_sqlx_migrations` e o startup seguinte tenta recriar tudo | Conferir `select * from _sqlx_migrations;` |
@@ -2535,6 +2648,11 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | quais catálogos existem e o que cada atributo faz | `src-tauri/src/legal_catalogs/domain.rs::CATALOGOS` |
 | como o responsável do processo é resolvido sem nome de papel | `proceedings/repository.rs::JOIN_RESPONSAVEL` |
 | as validações que dependem de configuração | `proceedings/repository.rs::validar_contra_configuracao` |
+| como a cadeia de substituição é ligada e protegida | `migrations/0008_cadeia_de_substituicao.sql` |
+| quem pode ser corrigido ou desfeito numa cadeia | `proceedings/repository.rs::travar_ultima_substituicao` |
+| por que o cadastro não alcança uma designação | `proceedings/repository.rs::DesignacaoGravada::imutavel` |
+| que texto o usuário lê quando o banco recusa | `error.rs::mensagem_de_constraint` e `mensagem_de_categoria` |
+| onde o detalhe técnico de um erro vai parar | `error.rs::detalhe_tecnico`, impresso por `response.rs::err` |
 | por que apuratório não é um catálogo comum | `src-tauri/src/apuratorio_config/domain.rs` |
 | o que o banco recusa | `src-tauri/tests/schema_integrity.sql` |
 | como montar um cenário de teste com processo | `src-tauri/tests/util/fixtures.rs` |

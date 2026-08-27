@@ -117,10 +117,13 @@ impl SaveDocumentoIniciadorRequest {
     /// português, e não uma violação de constraint do PostgreSQL.
     pub fn validate(&self) -> Result<(), String> {
         if self.prazo_base_dias.is_some_and(|d| d <= 0) {
-            return Err("o prazo do documento iniciador deve ser maior que zero".to_string());
+            return Err("O prazo do documento iniciador precisa ser maior que zero.".to_string());
         }
         if self.padrao && !self.ativo {
-            return Err("um documento desativado nao pode ser o padrao do apuratorio".to_string());
+            return Err(
+                "Um documento desativado não pode ser o padrão do apuratório. Reative-o ou escolha outro."
+                    .to_string(),
+            );
         }
         Ok(())
     }
@@ -129,7 +132,7 @@ impl SaveDocumentoIniciadorRequest {
 impl SavePapelRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.max_ocupantes <= 0 {
-            return Err("o numero maximo de ocupantes deve ser maior que zero".to_string());
+            return Err("O número máximo de ocupantes precisa ser maior que zero.".to_string());
         }
         if self.e_responsavel && !self.ativo {
             return Err(
@@ -139,7 +142,9 @@ impl SavePapelRequest {
         // Sem responsável ativo, o processo aparece sem responsável na listagem,
         // no dashboard e nos relatórios — todos resolvem por `e_responsavel`.
         if self.e_responsavel && !self.obrigatorio {
-            return Err("o papel que responde pelo apuratorio precisa ser obrigatorio".to_string());
+            return Err(
+                "A função que responde pelo apuratório precisa ser obrigatória.".to_string(),
+            );
         }
         Ok(())
     }

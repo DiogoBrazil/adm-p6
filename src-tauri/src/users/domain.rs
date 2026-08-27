@@ -63,31 +63,31 @@ pub struct SaveUserRequest {
 impl SaveUserRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.nome.trim().is_empty() {
-            return Err("nome e obrigatorio".to_string());
+            return Err("Informe o nome do militar.".to_string());
         }
         // Formato administrativo da matrícula na PMRO. Fica na camada de domínio,
         // e não como CHECK, para não impedir a importação de registros históricos
         // que eventualmente não o sigam.
         let matricula = self.matricula.trim();
         if matricula.len() != 9 {
-            return Err("matricula deve ter exatamente 9 caracteres".to_string());
+            return Err("A matrícula precisa ter exatamente 9 caracteres.".to_string());
         }
         if !matricula.starts_with("1000") && !matricula.starts_with("3000") {
-            return Err("matricula deve iniciar com 1000 ou 3000".to_string());
+            return Err("A matrícula precisa começar com 1000 ou 3000.".to_string());
         }
         if self.posto_graduacao_id.trim().is_empty() {
-            return Err("posto/graduacao e obrigatorio".to_string());
+            return Err("Escolha o posto ou graduação do militar.".to_string());
         }
         if let Some(conta) = &self.conta {
             if !is_valid_email(conta.email.trim()) {
-                return Err("email invalido".to_string());
+                return Err("Informe um e-mail válido para a conta de acesso.".to_string());
             }
             if conta.perfil_id.trim().is_empty() {
-                return Err("perfil e obrigatorio para quem opera o sistema".to_string());
+                return Err("Escolha o perfil de acesso da conta.".to_string());
             }
             if let Some(senha) = conta.senha.as_deref() {
                 if !senha.is_empty() && senha.len() < 4 {
-                    return Err("senha minima de 4 caracteres".to_string());
+                    return Err("A senha precisa ter pelo menos 4 caracteres.".to_string());
                 }
             }
         }

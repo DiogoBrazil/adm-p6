@@ -327,7 +327,8 @@ async fn validar_categorias(
     .await?;
     if ausencia > 0 {
         return Err(AppError::Domain(
-            "a categoria que indica ausencia de indicios nao pode ser combinada com outras"
+            "A categoria que indica ausência de indícios não pode ser combinada com outras. \
+             Escolha apenas ela, ou remova-a da seleção."
                 .to_string(),
         ));
     }

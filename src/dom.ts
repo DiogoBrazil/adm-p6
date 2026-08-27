@@ -45,7 +45,8 @@ export type IconeAcao =
   | "reativar"
   | "padrao"
   | "excluir"
-  | "baixar";
+  | "baixar"
+  | "substituir";
 
 /** Ícones lineares das ações tabulares, desenhados com a cor do botão. */
 function iconeAcao(nome: IconeAcao): string {
@@ -57,6 +58,8 @@ function iconeAcao(nome: IconeAcao): string {
     padrao: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
     excluir: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m7 7 1 13h8l1-13"/><path d="M10 11v5M14 11v5"/>',
     baixar: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+    // Duas setas em sentidos opostos: quem sai e quem entra na mesma função.
+    substituir: '<path d="M4 8h13"/><path d="m13 4 4 4-4 4"/><path d="M20 16H7"/><path d="m11 12-4 4 4 4"/>',
   };
   return `<svg class="icone-acao" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${conteudo[nome]}</svg>`;
 }

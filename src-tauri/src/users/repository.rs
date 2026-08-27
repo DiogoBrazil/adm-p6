@@ -133,7 +133,11 @@ pub async fn save(
         .bind(request.is_encarregado)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("policial militar nao encontrado".to_string()))?,
+        .ok_or_else(|| {
+            AppError::Domain(
+                "Este militar não existe mais no cadastro. Recarregue a página.".to_string(),
+            )
+        })?,
         None => sqlx::query_scalar(
             "INSERT INTO policiais_militares (nome, matricula, posto_graduacao_id, is_encarregado)
                  VALUES ($1, $2, $3::uuid, $4)
@@ -171,7 +175,7 @@ pub async fn save(
             let senha_hash = match conta.senha.as_deref().filter(|s| !s.is_empty()) {
                 Some(senha) => Some(
                     hash(senha, DEFAULT_COST)
-                        .map_err(|e| AppError::Domain(format!("falha ao gerar hash: {e}")))?,
+                        .map_err(|erro| AppError::Interno(format!("hash da senha: {erro}")))?,
                 ),
                 None => None,
             };
@@ -195,7 +199,9 @@ pub async fn save(
                 }
                 None => {
                     let senha_hash = senha_hash.ok_or_else(|| {
-                        AppError::Domain("senha e obrigatoria ao criar o acesso".to_string())
+                        AppError::Domain(
+                            "Defina uma senha para a nova conta de acesso.".to_string(),
+                        )
                     })?;
                     let id: String = sqlx::query_scalar(
                         "INSERT INTO usuarios (policial_militar_id, email, senha_hash, perfil_id)

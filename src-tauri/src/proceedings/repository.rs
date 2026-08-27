@@ -5,10 +5,11 @@ use crate::db::paginacao::{PADRAO, TETO};
 use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
 use crate::proceedings::domain::{
-    AnexoItem, AttachmentContent, CartaPrecatoriaDetalhes, ContagemRotulada, DashboardSummary,
-    DesignacaoItem, EnvolvidoItem, PessoaItem, ProceedingDetail, ProceedingFilter,
-    ProceedingListItem, ProceedingListResult, SaveProceedingRequest, UploadAttachmentRequest,
-    EXTENSAO_CARTA_PRECATORIA,
+    AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, CartaPrecatoriaDetalhes,
+    ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
+    PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem, ProceedingListResult,
+    SaveProceedingRequest, SubstituirDesignacaoRequest, UploadAttachmentRequest,
+    EXTENSAO_CARTA_PRECATORIA, MOTIVO_DESIGNACAO_INICIAL,
 };
 
 /// Limite de tamanho do anexo. Trafega em base64 pelo IPC, então o custo real em
@@ -271,18 +272,21 @@ pub async fn list_designacoes<'e, E: PgExecutor<'e>>(
     processo_id: &str,
 ) -> Result<Vec<DesignacaoItem>, sqlx::Error> {
     sqlx::query_as::<_, DesignacaoItem>(
-        "SELECT d.id::text            AS id,
-                pap.id::text          AS papel_id,
-                pap.nome              AS papel,
-                ap.e_responsavel      AS e_responsavel,
-                pm.id::text           AS policial_militar_id,
-                pm.nome               AS nome,
-                pg.sigla              AS posto_graduacao,
-                d.data_inicio         AS data_inicio,
-                d.data_fim            AS data_fim,
-                td.nome               AS documento_autorizador,
-                d.numero_documento    AS numero_documento,
-                d.motivo              AS motivo
+        "SELECT d.id::text                     AS id,
+                pap.id::text                   AS papel_id,
+                pap.nome                       AS papel,
+                ap.e_responsavel               AS e_responsavel,
+                pm.id::text                    AS policial_militar_id,
+                pm.nome                        AS nome,
+                pg.sigla                       AS posto_graduacao,
+                pm.matricula                   AS matricula,
+                d.data_inicio                  AS data_inicio,
+                d.data_fim                     AS data_fim,
+                d.documento_autorizador_id::text AS documento_autorizador_id,
+                td.nome                        AS documento_autorizador,
+                d.numero_documento             AS numero_documento,
+                d.motivo                       AS motivo,
+                d.designacao_anterior_id::text AS designacao_anterior_id
            FROM processo_designacoes d
            JOIN papeis_processo pap    ON pap.id = d.papel_id
            JOIN apuratorio_papeis ap   ON ap.apuratorio_id = d.apuratorio_id
@@ -479,7 +483,7 @@ async fn validar_contra_configuracao(
     .await?;
     if !faltando.is_empty() {
         return Err(AppError::Domain(format!(
-            "faltam designacoes obrigatorias: {}",
+            "Falta designar quem responde por: {}. Esta espécie de apuratório exige.",
             faltando.join(", ")
         )));
     }
@@ -750,48 +754,304 @@ async fn gravar_envolvidos(
     Ok(())
 }
 
-/// Acrescenta designações que ainda não existem. Designações já gravadas NÃO são
-/// apagadas: elas são o histórico de quem respondeu pelo processo e quando.
-/// Encerrar uma é trabalho de `encerrar_designacao`.
+/// O que já está gravado para o processo, com o que decide se ainda pode mudar.
+#[derive(sqlx::FromRow)]
+struct DesignacaoGravada {
+    id: String,
+    papel_id: String,
+    papel: String,
+    policial_militar_id: String,
+    /// `data_fim` preenchida: o militar já saiu do papel. É histórico puro.
+    encerrada: bool,
+    /// Nasceu de uma substituição. Vigente, mas fora do alcance do cadastro.
+    e_substituicao: bool,
+}
+
+impl DesignacaoGravada {
+    /// Designação que o formulário do processo não altera nem remove. As duas
+    /// razões são diferentes e as duas valem: já terminou, ou já é elo de uma
+    /// cadeia. Mexer em qualquer das duas reescreveria fato registrado —
+    /// princípio 5. A troca de ocupante existe, mas é pela página de detalhes,
+    /// que preserva a cadeia.
+    fn imutavel(&self) -> bool {
+        self.encerrada || self.e_substituicao
+    }
+}
+
+/// Um papel previsto para o apuratório, como o cadastro o configurou.
+#[derive(sqlx::FromRow)]
+struct PapelConfigurado {
+    papel_id: String,
+    papel: String,
+    max_ocupantes: i32,
+    ativo: bool,
+}
+
+/// As regras de designação que dependem do cadastro do apuratório, verificadas
+/// ANTES de qualquer escrita.
+///
+/// Sem isto, cada uma destas situações chegava ao usuário como a frase genérica
+/// do banco: a FK composta recusando um papel que a espécie não prevê, e o
+/// `tg_max_ocupantes` — que, por ser `DEFERRABLE`, só falha no `commit`, longe
+/// da linha que a causou. A aplicação sabe qual linha está errada; é ela que
+/// deve dizer.
+async fn validar_designacoes(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveProceedingRequest,
+) -> Result<(), AppError> {
+    let configurados = sqlx::query_as::<_, PapelConfigurado>(
+        "SELECT ap.papel_id::text AS papel_id,
+                pap.nome          AS papel,
+                ap.max_ocupantes  AS max_ocupantes,
+                ap.ativo          AS ativo
+           FROM apuratorio_papeis ap
+           JOIN papeis_processo pap ON pap.id = ap.papel_id
+          WHERE ap.apuratorio_id = $1::uuid",
+    )
+    .bind(&request.apuratorio_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for designacao in &request.designacoes {
+        let Some(config) = configurados
+            .iter()
+            .find(|c| c.papel_id == designacao.papel_id)
+        else {
+            return Err(AppError::Domain(
+                "A função escolhida não está prevista para esta espécie de apuratório. \
+                 Cadastre-a em Catálogos → Apuratórios ou escolha outra."
+                    .to_string(),
+            ));
+        };
+
+        // Papel desativado continua valendo para quem já o exercia (princípio
+        // 6), mas não recebe designação nova.
+        if !config.ativo && designacao.id.is_none() {
+            return Err(AppError::Domain(format!(
+                "A função {} foi desativada e não aceita novas designações.",
+                config.papel
+            )));
+        }
+
+        let informados = request
+            .designacoes
+            .iter()
+            .filter(|d| d.papel_id == designacao.papel_id)
+            .count();
+        if informados > config.max_ocupantes as usize {
+            return Err(AppError::Domain(format!(
+                "A função {} aceita no máximo {} ocupante(s) ao mesmo tempo, e foram informados {}.",
+                config.papel, config.max_ocupantes, informados
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Sincroniza as designações **iniciais** do processo, pelo id de cada uma.
+///
+/// Antes disto a função só inseria o que não existisse, e o formulário não
+/// tinha como corrigir um encarregado lançado errado: reeditar com outro militar
+/// criava uma segunda designação vigente em vez de arrumar a primeira. O `id`
+/// que `DesignacaoRequest` passou a carregar é o que dá alvo ao UPDATE.
+///
+/// Três campos não vêm do formulário porque não são digitados — são derivados do
+/// cabeçalho do processo, e rederivados a cada gravação:
+///
+/// - `data_inicio` = data de instauração. Corrigir a instauração move junto o
+///   início de quem ainda não tem histórico, pelo mesmo motivo que
+///   `deadlines::sync_initial` move o prazo inicial quando o recebimento muda:
+///   uma informação, uma fonte de verdade (princípio 4).
+/// - `documento_autorizador_id` e `numero_documento` = o documento que instaurou
+///   o processo, que é o que de fato designou o encarregado inicial.
+///
+/// **O que a função nunca toca**: designação encerrada e designação nascida de
+/// substituição. Ver `DesignacaoGravada::imutavel`.
 async fn gravar_designacoes(
     tx: &mut Transaction<'_, Postgres>,
     processo_id: &str,
     request: &SaveProceedingRequest,
 ) -> Result<(), AppError> {
+    validar_designacoes(tx, request).await?;
+
+    // `FOR UPDATE` porque a decisão de cada linha (atualizar, apagar, recusar)
+    // depende do estado lido: sem o travamento, uma substituição concorrente
+    // poderia transformar uma linha livre em elo de cadeia entre a leitura e a
+    // escrita, e o cadastro a apagaria por baixo da substituição.
+    let gravadas = sqlx::query_as::<_, DesignacaoGravada>(
+        "SELECT d.id::text                        AS id,
+                d.papel_id::text                  AS papel_id,
+                pap.nome                          AS papel,
+                d.policial_militar_id::text       AS policial_militar_id,
+                d.data_fim IS NOT NULL            AS encerrada,
+                d.designacao_anterior_id IS NOT NULL AS e_substituicao
+           FROM processo_designacoes d
+           JOIN papeis_processo pap ON pap.id = d.papel_id
+          WHERE d.processo_id = $1::uuid
+          ORDER BY d.data_inicio
+            FOR UPDATE OF d",
+    )
+    .bind(processo_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut mantidas: Vec<&str> = Vec::new();
+
     for designacao in &request.designacoes {
-        let ja_existe: bool = sqlx::query_scalar(
-            "SELECT EXISTS (
-                 SELECT 1 FROM processo_designacoes
-                  WHERE processo_id = $1::uuid AND papel_id = $2::uuid
-                    AND policial_militar_id = $3::uuid AND data_fim IS NULL)",
-        )
-        .bind(processo_id)
-        .bind(&designacao.papel_id)
-        .bind(&designacao.policial_militar_id)
-        .fetch_one(&mut **tx)
-        .await?;
-        if ja_existe {
+        let Some(id) = designacao.id.as_deref() else {
+            // Sem `id`, é linha nova — e linha nova não pode repetir alguém que
+            // já ocupa a mesma função. O EXCLUDE do schema também recusaria,
+            // mas falando de "período que se sobrepõe", que não é o que o
+            // usuário fez: ele acrescentou uma designação repetida.
+            if let Some(repetida) = gravadas.iter().find(|g| {
+                !g.encerrada
+                    && g.papel_id == designacao.papel_id
+                    && g.policial_militar_id == designacao.policial_militar_id
+            }) {
+                return Err(AppError::Domain(format!(
+                    "Este militar já está designado como {} neste processo.",
+                    repetida.papel
+                )));
+            }
+            inserir_designacao(tx, processo_id, request, designacao).await?;
+            continue;
+        };
+
+        let Some(gravada) = gravadas.iter().find(|g| g.id == id) else {
+            return Err(AppError::Domain(
+                "Uma das designações não existe mais neste processo. \
+                 Recarregue a página antes de salvar."
+                    .to_string(),
+            ));
+        };
+        mantidas.push(id);
+
+        if gravada.imutavel() {
+            // Chegou até aqui contornando a tela, que a mostra bloqueada. Se
+            // nada mudou é ruído inofensivo do formulário reenviando o que leu;
+            // se mudou, é a alteração que a cadeia não admite.
+            if gravada.papel_id != designacao.papel_id
+                || gravada.policial_militar_id != designacao.policial_militar_id
+            {
+                return Err(AppError::Domain(format!(
+                    "A designação de {} já tem histórico de substituição e não pode ser alterada aqui. \
+                     Use Substituir, na página de detalhes do processo.",
+                    gravada.papel
+                )));
+            }
             continue;
         }
 
-        sqlx::query(
-            "INSERT INTO processo_designacoes
-                 (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
-                  documento_autorizador_id, numero_documento, motivo)
-             VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8)",
-        )
-        .bind(processo_id)
-        .bind(&request.apuratorio_id)
-        .bind(&designacao.policial_militar_id)
-        .bind(&designacao.papel_id)
-        .bind(designacao.data_inicio)
-        .bind(designacao.documento_autorizador_id.as_deref())
-        .bind(designacao.numero_documento.as_deref())
-        .bind(designacao.motivo.as_deref())
-        .execute(&mut **tx)
-        .await?;
+        // Só quem entra agora precisa estar ativo. Reeditar um processo cujo
+        // encarregado foi desativado depois não pode virar um erro.
+        if gravada.policial_militar_id != designacao.policial_militar_id {
+            exigir_militar_ativo(tx, &designacao.policial_militar_id).await?;
+        }
+        atualizar_designacao(tx, processo_id, request, designacao, id).await?;
     }
+
+    for gravada in &gravadas {
+        // Designação encerrada é histórico e nunca viaja no formulário: a tela
+        // só manda as vigentes. Ausência dela aqui não significa remoção.
+        if gravada.encerrada || mantidas.contains(&gravada.id.as_str()) {
+            continue;
+        }
+        if gravada.imutavel() {
+            return Err(AppError::Domain(format!(
+                "A designação de {} nasceu de uma substituição e não pode ser removida aqui. \
+                 Desfaça a substituição na página de detalhes do processo.",
+                gravada.papel
+            )));
+        }
+        sqlx::query("DELETE FROM processo_designacoes WHERE id = $1::uuid")
+            .bind(&gravada.id)
+            .execute(&mut **tx)
+            .await?;
+    }
+
     Ok(())
+}
+
+async fn inserir_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    designacao: &DesignacaoRequest,
+) -> Result<(), AppError> {
+    exigir_militar_ativo(tx, &designacao.policial_militar_id).await?;
+    sqlx::query(
+        "INSERT INTO processo_designacoes
+             (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
+              documento_autorizador_id, numero_documento, motivo)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8)",
+    )
+    .bind(processo_id)
+    .bind(&request.apuratorio_id)
+    .bind(&designacao.policial_militar_id)
+    .bind(&designacao.papel_id)
+    .bind(request.data_instauracao)
+    .bind(&request.documento_iniciador_id)
+    .bind(request.numero_documento.trim())
+    .bind(MOTIVO_DESIGNACAO_INICIAL)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn atualizar_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    designacao: &DesignacaoRequest,
+    id: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE processo_designacoes
+            SET policial_militar_id      = $3::uuid,
+                papel_id                 = $4::uuid,
+                data_inicio              = $5,
+                documento_autorizador_id = $6::uuid,
+                numero_documento         = $7,
+                motivo                   = $8,
+                updated_at               = now()
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(id)
+    .bind(processo_id)
+    .bind(&designacao.policial_militar_id)
+    .bind(&designacao.papel_id)
+    .bind(request.data_instauracao)
+    .bind(&request.documento_iniciador_id)
+    .bind(request.numero_documento.trim())
+    .bind(MOTIVO_DESIGNACAO_INICIAL)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Militar desativado não recebe designação nova.
+///
+/// A recíproca **não** vale, e é por isso que a checagem está aqui e não na
+/// leitura: quem já exercia um papel continua exibido depois de desativado, e
+/// reeditar o processo não pode apagar esse vínculo (princípio 6).
+async fn exigir_militar_ativo(
+    tx: &mut Transaction<'_, Postgres>,
+    policial_militar_id: &str,
+) -> Result<(), AppError> {
+    let ativo: Option<bool> =
+        sqlx::query_scalar("SELECT ativo FROM policiais_militares WHERE id = $1::uuid")
+            .bind(policial_militar_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    match ativo {
+        Some(true) => Ok(()),
+        Some(false) => Err(AppError::Domain(
+            "O militar escolhido está desativado e não pode receber designação.".to_string(),
+        )),
+        None => Err(AppError::Domain(
+            "O militar escolhido não existe mais no cadastro.".to_string(),
+        )),
+    }
 }
 
 async fn gravar_pessoas(
@@ -818,55 +1078,286 @@ async fn gravar_pessoas(
     Ok(())
 }
 
-/// Encerra uma designação e abre a do sucessor no MESMO dia. `data_fim` é
-/// exclusiva, então os períodos se encostam sem sobrepor — e o EXCLUDE do schema
-/// confirma isso na hora de gravar.
-pub async fn substituir_designacao(
+// ── Substituição: criar, corrigir e desfazer ─────────────────────────────────
+//
+// As três operam sobre a MESMA cadeia e compartilham o mesmo cuidado: travar as
+// linhas envolvidas com `FOR UPDATE` e reverificar tudo no banco. Nenhuma delas
+// confia no que a tela mandou — o IPC é chamável direto, e duas janelas do app
+// podem estar na mesma página.
+
+/// Uma designação com o que as regras da cadeia precisam saber, já travada.
+#[derive(sqlx::FromRow)]
+struct DesignacaoTravada {
+    id: String,
+    apuratorio_id: String,
+    papel_id: String,
+    papel: String,
+    policial_militar_id: String,
+    ocupante: String,
+    data_inicio: chrono::NaiveDate,
+    data_fim: Option<chrono::NaiveDate>,
+    designacao_anterior_id: Option<String>,
+}
+
+/// Ids que a substituição mexeu. Os dois são auditados: a antecessora muda de
+/// estado tanto quanto a sucessora, e uma trilha que registrasse só uma das duas
+/// não explicaria o que aconteceu com a outra.
+pub struct SubstituicaoAplicada {
+    pub designacao_id: String,
+    pub anterior_id: String,
+}
+
+/// Lê e trava uma designação do processo. `None` quando o id não é do processo
+/// informado — o que também cobre a tentativa de alcançar designação alheia
+/// passando um id qualquer pelo IPC.
+async fn travar_designacao(
     tx: &mut Transaction<'_, Postgres>,
     processo_id: &str,
-    papel_id: &str,
-    sucessor_id: &str,
-    data_troca: chrono::NaiveDate,
-    motivo: Option<&str>,
-    documento_autorizador_id: Option<&str>,
-    numero_documento: Option<&str>,
-) -> Result<String, AppError> {
-    let apuratorio_id: String = sqlx::query_scalar(
-        "SELECT apuratorio_id::text FROM processos_procedimentos WHERE id = $1::uuid",
+    designacao_id: &str,
+) -> Result<Option<DesignacaoTravada>, AppError> {
+    sqlx::query_as::<_, DesignacaoTravada>(
+        "SELECT d.id::text                    AS id,
+                d.apuratorio_id::text         AS apuratorio_id,
+                d.papel_id::text              AS papel_id,
+                pap.nome                      AS papel,
+                d.policial_militar_id::text   AS policial_militar_id,
+                pg.sigla || ' ' || pm.nome    AS ocupante,
+                d.data_inicio                 AS data_inicio,
+                d.data_fim                    AS data_fim,
+                d.designacao_anterior_id::text AS designacao_anterior_id
+           FROM processo_designacoes d
+           JOIN papeis_processo pap    ON pap.id = d.papel_id
+           JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+           JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+          WHERE d.id = $1::uuid AND d.processo_id = $2::uuid
+            FOR UPDATE OF d",
     )
+    .bind(designacao_id)
     .bind(processo_id)
     .fetch_optional(&mut **tx)
-    .await?
-    .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+    .await
+    .map_err(AppError::from)
+}
+
+const DESIGNACAO_AUSENTE: &str = "A designação informada não pertence a este processo. \
+                                  Recarregue a página e tente de novo.";
+
+/// Regras comuns a criar e a corrigir uma substituição: quem sai, quem entra e
+/// quando. `antecessora` é sempre a designação que será encerrada na troca.
+async fn validar_troca(
+    tx: &mut Transaction<'_, Postgres>,
+    antecessora: &DesignacaoTravada,
+    sucessor_id: &str,
+    data_troca: chrono::NaiveDate,
+) -> Result<(), AppError> {
+    if data_troca <= antecessora.data_inicio {
+        return Err(AppError::Domain(format!(
+            "A substituição precisa ser posterior a {}, quando {} assumiu como {}.",
+            antecessora.data_inicio.format("%d/%m/%Y"),
+            antecessora.ocupante,
+            antecessora.papel
+        )));
+    }
+    if antecessora.policial_militar_id == sucessor_id {
+        return Err(AppError::Domain(format!(
+            "{} já ocupa a função de {}. Escolha outro militar como sucessor.",
+            antecessora.ocupante, antecessora.papel
+        )));
+    }
+    exigir_militar_ativo(tx, sucessor_id).await
+}
+
+/// Encerra uma designação vigente e abre a do sucessor no MESMO dia.
+///
+/// `data_fim` é exclusiva (decisão 6): os períodos se encostam sem sobrepor e
+/// sem lacuna, com uma data só registrada. O vínculo `designacao_anterior_id` é
+/// o que torna a troca reversível depois.
+pub async fn substituir_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SubstituirDesignacaoRequest,
+) -> Result<SubstituicaoAplicada, AppError> {
+    let antecessora = travar_designacao(tx, &request.processo_id, &request.designacao_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    if antecessora.data_fim.is_some() {
+        return Err(AppError::Domain(format!(
+            "A designação de {} como {} já foi encerrada em {}. \
+             Substitua quem está vigente na função.",
+            antecessora.ocupante,
+            antecessora.papel,
+            antecessora
+                .data_fim
+                .expect("data_fim conferida logo acima")
+                .format("%d/%m/%Y")
+        )));
+    }
+
+    validar_troca(tx, &antecessora, &request.sucessor_id, request.data_troca).await?;
 
     sqlx::query(
-        "UPDATE processo_designacoes SET data_fim = $3, updated_at = now()
-          WHERE processo_id = $1::uuid AND papel_id = $2::uuid AND data_fim IS NULL",
+        "UPDATE processo_designacoes SET data_fim = $2, updated_at = now() WHERE id = $1::uuid",
     )
-    .bind(processo_id)
-    .bind(papel_id)
-    .bind(data_troca)
+    .bind(&antecessora.id)
+    .bind(request.data_troca)
     .execute(&mut **tx)
     .await?;
 
-    sqlx::query_scalar(
+    let designacao_id: String = sqlx::query_scalar(
         "INSERT INTO processo_designacoes
              (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
-              documento_autorizador_id, numero_documento, motivo)
-         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8)
+              documento_autorizador_id, numero_documento, motivo, designacao_anterior_id)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8, $9::uuid)
       RETURNING id::text",
     )
-    .bind(processo_id)
-    .bind(&apuratorio_id)
-    .bind(sucessor_id)
-    .bind(papel_id)
-    .bind(data_troca)
-    .bind(documento_autorizador_id)
-    .bind(numero_documento)
-    .bind(motivo)
+    .bind(&request.processo_id)
+    .bind(&antecessora.apuratorio_id)
+    .bind(&request.sucessor_id)
+    .bind(&antecessora.papel_id)
+    .bind(request.data_troca)
+    .bind(texto_opcional(request.documento_autorizador_id.as_deref()))
+    .bind(texto_opcional(request.numero_documento.as_deref()))
+    .bind(request.motivo.trim())
+    .bind(&antecessora.id)
     .fetch_one(&mut **tx)
-    .await
-    .map_err(AppError::from)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id,
+        anterior_id: antecessora.id,
+    })
+}
+
+/// A substituição que está na ponta da cadeia, travada junto com a antecessora.
+///
+/// "Última" é por CADEIA, não pelo processo nem pelo papel: uma designação
+/// vigente que tem antecessora é a ponta da sua própria cadeia. A diferença
+/// aparece quando um papel admite dois ocupantes — a configuração de Escrivão
+/// prevê isso —, e aí corrigir a troca de um escrivão não pode depender da troca
+/// do outro. Ser vigente (`data_fim IS NULL`) já garante que nada a sucedeu.
+async fn travar_ultima_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<(DesignacaoTravada, DesignacaoTravada), AppError> {
+    let sucessora = travar_designacao(tx, processo_id, designacao_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    let Some(anterior_id) = sucessora.designacao_anterior_id.clone() else {
+        return Err(AppError::Domain(format!(
+            "A designação de {} como {} é a inicial do processo, não uma substituição. \
+             Corrija-a pelo cadastro do processo.",
+            sucessora.ocupante, sucessora.papel
+        )));
+    };
+
+    if sucessora.data_fim.is_some() {
+        return Err(AppError::Domain(format!(
+            "Esta substituição de {} já foi sucedida por outra. \
+             Desfaça primeiro a substituição mais recente da função.",
+            sucessora.papel
+        )));
+    }
+
+    let anterior = travar_designacao(tx, processo_id, &anterior_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    Ok((sucessora, anterior))
+}
+
+/// Corrige a última substituição da cadeia sem abrir lacuna nem sobreposição.
+///
+/// A data move as DUAS linhas: é uma data só, o fim da antecessora e o início da
+/// sucessora. Alterar apenas uma delas é o que produziria o buraco — e é também
+/// o que `tg_cadeia_designacao` recusa no `commit`, caso algum caminho futuro
+/// tente.
+pub async fn atualizar_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &AtualizarSubstituicaoRequest,
+) -> Result<SubstituicaoAplicada, AppError> {
+    let (sucessora, anterior) =
+        travar_ultima_substituicao(tx, &request.processo_id, &request.designacao_id).await?;
+
+    validar_troca(tx, &anterior, &request.sucessor_id, request.data_troca).await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes SET data_fim = $2, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(&anterior.id)
+    .bind(request.data_troca)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes
+            SET policial_militar_id      = $2::uuid,
+                data_inicio              = $3,
+                documento_autorizador_id = $4::uuid,
+                numero_documento         = $5,
+                motivo                   = $6,
+                updated_at               = now()
+          WHERE id = $1::uuid",
+    )
+    .bind(&sucessora.id)
+    .bind(&request.sucessor_id)
+    .bind(request.data_troca)
+    .bind(texto_opcional(request.documento_autorizador_id.as_deref()))
+    .bind(texto_opcional(request.numero_documento.as_deref()))
+    .bind(request.motivo.trim())
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id: sucessora.id,
+        anterior_id: anterior.id,
+    })
+}
+
+/// Desfaz a última substituição da cadeia: apaga a sucessora e reabre a
+/// antecessora.
+///
+/// Reabrir é limpar `data_fim` — a vigência é derivada dela, não de uma coluna
+/// `ativo`. Feito isto, a substituição anterior passa a ser a ponta da cadeia e
+/// pode ser desfeita em seguida, uma a uma, de trás para frente. É o mesmo
+/// desenho de `deadlines::delete_extension`.
+pub async fn remover_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<SubstituicaoAplicada, AppError> {
+    let (sucessora, anterior) = travar_ultima_substituicao(tx, processo_id, designacao_id).await?;
+
+    // Nesta ordem: enquanto a sucessora existir, a FK `fk_designacao_anterior`
+    // segura a antecessora — que é exatamente o que impede alguém apagar o meio
+    // da cadeia por fora.
+    sqlx::query("DELETE FROM processo_designacoes WHERE id = $1::uuid")
+        .bind(&sucessora.id)
+        .execute(&mut **tx)
+        .await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes SET data_fim = NULL, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(&anterior.id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id: sucessora.id,
+        anterior_id: anterior.id,
+    })
+}
+
+/// Campo de texto opcional vindo da tela: em branco é ausência, não string
+/// vazia. Sem isto, um `<input>` intocado gravaria `''` e o documento passaria a
+/// "existir" vazio no histórico.
+fn texto_opcional(valor: Option<&str>) -> Option<String> {
+    valor
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
 }
 
 pub async fn soft_delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {

@@ -22,10 +22,13 @@
 import {
   call,
   type ApuratorioConfig,
+  type AtualizarSubstituicaoRequest,
   type CartaPrecatoriaRequest,
+  type DesignacaoItem,
   type DesignacaoRequest,
   type EnvolvidoRequest,
   type MilitarQualificado,
+  type PapelItem,
   type PessoaRequest,
   type SaveProceedingRequest,
   type UserListItem,
@@ -152,6 +155,17 @@ function rascunhoVazio(): Rascunho {
   };
 }
 
+/**
+ * As designações que o cadastro NÃO alcança, por id.
+ *
+ * Vive fora do `Rascunho` de propósito: `Rascunho` é o corpo de
+ * `proceedings_save`, e enfiar informação de tela nele mandaria campo
+ * inventado pelo IPC. Sobrevive aos re-renders porque o formulário se
+ * redesenha passando o mesmo rascunho adiante, e é recarregado toda vez que um
+ * processo é aberto.
+ */
+const designacoesTravadas = new Map<string, { papel: string; ocupante: string }>();
+
 /** Lê o formulário para o rascunho antes de qualquer re-render estrutural. */
 function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   const dados = new FormData(form);
@@ -211,13 +225,17 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
       : (anterior.penalidade_dias ?? null),
   }));
 
+  // A designação travada é desenhada como texto, sem `<select>`: `dados.has()`
+  // devolve false para ela e o valor do rascunho é preservado. É o mesmo
+  // cuidado de `textoSePresente` — campo ausente do DOM não é campo apagado.
   rascunho.designacoes = rascunho.designacoes.map((d, i) => ({
-    policial_militar_id: String(dados.get(`des_${i}_pm`) ?? ""),
-    papel_id: String(dados.get(`des_${i}_papel`) ?? ""),
-    data_inicio: String(dados.get(`des_${i}_inicio`) ?? d.data_inicio),
-    documento_autorizador_id: null,
-    numero_documento: null,
-    motivo: null,
+    id: d.id ?? null,
+    policial_militar_id: dados.has(`des_${i}_pm`)
+      ? String(dados.get(`des_${i}_pm`) ?? "")
+      : d.policial_militar_id,
+    papel_id: dados.has(`des_${i}_papel`)
+      ? String(dados.get(`des_${i}_papel`) ?? "")
+      : d.papel_id,
   }));
 
   rascunho.pessoas = rascunho.pessoas.map((_, i) => ({
@@ -231,6 +249,11 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
 
 function nomeMilitar(m: UserListItem): string {
   return `${m.posto_graduacao} ${m.nome} (${m.matricula})`;
+}
+
+/** Qualificação completa de um designado: posto, matrícula e nome. */
+function qualificacaoDesignado(d: DesignacaoItem): string {
+  return `${d.posto_graduacao} ${d.matricula} ${d.nome}`;
 }
 
 function selectMilitares(nome: string, militares: UserListItem[], atual: string): string {
@@ -279,6 +302,64 @@ function campoData(
   </div>`;
 }
 
+/**
+ * Uma linha de designação do cadastro.
+ *
+ * Dois estados. **Travada**: a função já tem substituição, e a linha vira texto
+ * — sem `<select>`, sem botão de remover — com a orientação de onde a troca
+ * acontece. **Livre**: papel e militar editáveis.
+ *
+ * As opções de papel de uma linha livre desabilitam as funções que as OUTRAS
+ * linhas já preencheram até o teto de `max_ocupantes`. É a mesma regra que o
+ * backend cobra, adiantada para o ponto em que ainda dá para escolher: sem
+ * isso, o usuário só descobre no "Salvar" — e o `tg_max_ocupantes`, por ser
+ * DEFERRABLE, falharia lá no commit, longe da linha que causou.
+ */
+function linhaDesignacao(
+  d: DesignacaoRequest,
+  i: number,
+  papeis: PapelItem[],
+  militares: UserListItem[],
+  todas: DesignacaoRequest[],
+): string {
+  const travada = d.id ? designacoesTravadas.get(d.id) : undefined;
+  if (travada) {
+    return `<div class="linha-colecao linha-colecao--travada">
+      <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
+        <span class="badge badge--neutro">com histórico</span>
+      </div>
+      <p class="campo-efeito"><strong>${escapeHtml(travada.papel)}</strong> — ${escapeHtml(travada.ocupante)}</p>
+      <p class="campo-efeito">Esta função já foi substituída. Para trocar de novo, corrigir ou desfazer, use <strong>Substituir</strong> na página de detalhes do processo.</p>
+    </div>`;
+  }
+
+  const opcoesPapel = papeis.map((p) => {
+    const ocupadas = todas.filter((outra, j) => j !== i && outra.papel_id === p.papel_id).length;
+    const cheio = ocupadas >= p.max_ocupantes && p.papel_id !== d.papel_id;
+    const rotulo =
+      p.papel +
+      (p.obrigatorio ? " *" : "") +
+      (cheio ? ` — já preenchido (máx. ${p.max_ocupantes})` : "");
+    // `option()` não emite `disabled`; a marcação sai daqui e o atributo é
+    // estático, então não esbarra na CSP como um `style` interpolado esbarraria.
+    return option(p.papel_id, rotulo, p.papel_id === d.papel_id).replace(
+      "<option ",
+      cheio ? "<option disabled " : "<option ",
+    );
+  });
+
+  return `<div class="linha-colecao">
+    <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
+      <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
+    </div>
+    <label>Papel<select name="des_${i}_papel" required>
+      <option value=""></option>
+      ${opcoesPapel.join("")}
+    </select></label>
+    <label>Militar${selectMilitares(`des_${i}_pm`, militares, d.policial_militar_id)}</label>
+  </div>`;
+}
+
 export async function renderFormularioProcesso(
   ctx: ContextoTela,
   id: string | null,
@@ -291,6 +372,7 @@ export async function renderFormularioProcesso(
 
   if (!rascunho) {
     rascunho = rascunhoVazio();
+    designacoesTravadas.clear();
     if (id) {
       const r = await call("proceedings_get", { id });
       const d = r.data;
@@ -326,17 +408,15 @@ export async function renderFormularioProcesso(
           penalidade_tipo_id: e.penalidade_tipo_id,
           penalidade_dias: e.penalidade_dias,
         })),
-        // Designações são histórico e o backend nunca as apaga; reenviar as
-        // vigentes é inofensivo (ele ignora as que já existem).
+        // Só as vigentes: designação encerrada é histórico e não viaja no
+        // formulário. O `id` vai junto — é ele que faz o backend ATUALIZAR a
+        // linha em vez de criar outra, que era o defeito de antes.
         designacoes: d.designacoes
           .filter((x) => x.data_fim === null)
           .map((x) => ({
+            id: x.id,
             policial_militar_id: x.policial_militar_id,
             papel_id: x.papel_id,
-            data_inicio: x.data_inicio,
-            documento_autorizador_id: null,
-            numero_documento: null,
-            motivo: null,
           })),
         pessoas: d.pessoas.map((p, i) => ({
           papel_pessoa_id: p.papel_pessoa_id,
@@ -350,6 +430,18 @@ export async function renderFormularioProcesso(
             }
           : null,
       };
+
+      // Quem já tem substituição sai do alcance do cadastro. A tela mostra a
+      // linha bloqueada, com a orientação de onde a troca acontece; o backend
+      // recusa a alteração de todo jeito, mesmo que se contorne o formulário.
+      for (const x of d.designacoes) {
+        if (x.data_fim === null && x.designacao_anterior_id !== null) {
+          designacoesTravadas.set(x.id, {
+            papel: x.papel,
+            ocupante: qualificacaoDesignado(x),
+          });
+        }
+      }
     }
   }
 
@@ -496,21 +588,9 @@ export async function renderFormularioProcesso(
           <legend>Designações</legend>
           ${papeis.length === 0 ? `<p class="empty">Nenhum papel habilitado para este apuratório.</p>` : ""}
           ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Papéis obrigatórios: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O processo não salva sem eles.</p>` : ""}
+          <p class="secao-ajuda">A designação inicial começa na data de instauração e é autorizada pelo documento que instaurou o processo — por isso não se digitam data nem documento aqui. Trocas posteriores são feitas em <strong>Substituir</strong>, na página de detalhes.</p>
           ${r.designacoes
-            .map(
-              (d, i) => `
-            <div class="linha-colecao">
-              <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
-                <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
-              </div>
-              <label>Papel<select name="des_${i}_papel" required>
-                <option value=""></option>
-                ${papeis.map((p) => option(p.papel_id, p.papel + (p.obrigatorio ? " *" : ""), p.papel_id === d.papel_id)).join("")}
-              </select></label>
-              <label>Militar${selectMilitares(`des_${i}_pm`, cats.militares, d.policial_militar_id)}</label>
-              <label>Início<input name="des_${i}_inicio" type="date" value="${escapeHtml(d.data_inicio)}" required /></label>
-            </div>`,
-            )
+            .map((d, i) => linhaDesignacao(d, i, papeis, cats.militares, r.designacoes))
             .join("")}
           <button type="button" class="secondary small" id="add-des">Adicionar designação</button>
         </fieldset>
@@ -626,14 +706,7 @@ export async function renderFormularioProcesso(
 
   document.querySelector("#add-des")?.addEventListener("click", () =>
     rerender(() =>
-      r.designacoes.push({
-        policial_militar_id: "",
-        papel_id: "",
-        data_inicio: r.data_instauracao,
-        documento_autorizador_id: null,
-        numero_documento: null,
-        motivo: null,
-      }),
+      r.designacoes.push({ id: null, policial_militar_id: "", papel_id: "" }),
     ),
   );
   document.querySelector("#add-env")?.addEventListener("click", () =>
@@ -960,13 +1033,32 @@ function dataParaExibicao(dataIso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/** Hoje em ISO, para o `max` dos campos que não aceitam data futura. */
+function hojeIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** O ato que autorizou a designação, como a Seção o escreve. */
+function documentoDaDesignacao(d: DesignacaoItem): string {
+  if (!d.documento_autorizador) return "";
+  return d.numero_documento
+    ? `${d.documento_autorizador} nº ${d.numero_documento}`
+    : d.documento_autorizador;
+}
+
 export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
-  const [detalheResp, prazos, andamentos, tiposAndamento] = await Promise.all([
-    call("proceedings_get", { id }),
-    call("deadlines_list", { processoId: id }).then((r) => r.data ?? []),
-    call("movements_list", { processoId: id }).then((r) => r.data ?? []),
-    catalogo("tipos_andamento", ["nome"]),
-  ]);
+  // `users_list_ativos` e não um comando paginado: lista de OPÇÕES não pagina.
+  // O teto de 200 de uma listagem cortaria o seletor em silêncio, que foi o
+  // defeito da §8.9 — e são 235 militares no banco real.
+  const [detalheResp, prazos, andamentos, tiposAndamento, militares, tiposDocumento] =
+    await Promise.all([
+      call("proceedings_get", { id }),
+      call("deadlines_list", { processoId: id }).then((r) => r.data ?? []),
+      call("movements_list", { processoId: id }).then((r) => r.data ?? []),
+      catalogo("tipos_andamento", ["nome"]),
+      call("users_list_ativos", {}).then((r) => r.data ?? []),
+      catalogo("tipos_documento", ["nome"]),
+    ]);
 
   const d = detalheResp.data;
   if (!detalheResp.ok || !d) {
@@ -1047,20 +1139,78 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ${
         d.designacoes.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--designacoes">
-              <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Motivo</th></tr></thead>
+              <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Documento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${d.designacoes
                 .map(
                   (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>
                     <td>${escapeHtml(x.papel)}${x.e_responsavel ? " (responsável)" : ""}</td>
-                    <td>${escapeHtml(`${x.posto_graduacao} ${x.nome}`)}</td>
-                    <td>${escapeHtml(x.data_inicio)}</td>
-                    <td>${escapeHtml(x.data_fim ?? "vigente")}</td>
+                    <td>${escapeHtml(qualificacaoDesignado(x))}</td>
+                    <td>${escapeHtml(dataParaExibicao(x.data_inicio))}</td>
+                    <td>${escapeHtml(x.data_fim ? dataParaExibicao(x.data_fim) : "vigente")}</td>
+                    <td>${escapeHtml(documentoDaDesignacao(x))}</td>
                     <td>${escapeHtml(x.motivo ?? "")}</td>
+                    ${
+                      podeEscrever
+                        ? `<td class="row-actions">${
+                            x.data_fim
+                              ? ""
+                              : `${botaoIcone("substituir", `Substituir ${x.papel}`, {
+                                  classe: "secondary",
+                                  dados: { substituir: x.id },
+                                })}
+                                 ${
+                                   // Só a ponta da cadeia se corrige e se desfaz.
+                                   // Uma designação vigente COM antecessora é,
+                                   // por definição, a última da sua cadeia —
+                                   // nada a sucedeu, senão teria `data_fim`.
+                                   x.designacao_anterior_id
+                                     ? `${botaoIcone("editar", "Editar esta substituição", {
+                                         classe: "secondary",
+                                         dados: { "editar-substituicao": x.id },
+                                       })}
+                                        ${botaoIcone("excluir", "Desfazer esta substituição", {
+                                          classe: "danger",
+                                          dados: { "remover-substituicao": x.id },
+                                        })}`
+                                     : ""
+                                 }`
+                          }</td>`
+                        : ""
+                    }
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>
-             <p class="secao-ajuda">O fim é exclusivo: é o dia em que o sucessor assume, sem sobreposição nem lacuna.</p>`
+             <p class="secao-ajuda">O fim é exclusivo: é o dia em que o sucessor assume, sem sobreposição nem lacuna. Só a substituição mais recente de cada função pode ser corrigida ou desfeita.</p>`
           : `<p class="empty">Nenhuma designação.</p>`
+      }
+      ${
+        podeEscrever
+          ? `<form id="form-substituicao" class="linha-form linha-form--bloco" hidden>
+               <p id="resumo-substituicao" class="secao-ajuda linha-form__resumo"></p>
+               <label>Sucessor
+                 ${selectMilitares("sucessor_id", militares, "")}
+                 <small class="campo-erro" data-erro="sucessor_id" hidden></small>
+               </label>
+               <label>Data da substituição
+                 <input name="data_troca" type="date" max="${escapeHtml(hojeIso())}" required />
+                 <small class="campo-erro" data-erro="data_troca" hidden></small>
+               </label>
+               <label>Motivo
+                 <input name="motivo" required />
+                 <small class="campo-erro" data-erro="motivo" hidden></small>
+               </label>
+               <label>Documento autorizador
+                 ${selectOpcoes("documento_autorizador_id", tiposDocumento, "")}
+                 <small class="campo-erro" data-erro="documento_autorizador_id" hidden></small>
+               </label>
+               <label>Nº do documento
+                 <input name="numero_documento" />
+                 <small class="campo-erro" data-erro="numero_documento" hidden></small>
+               </label>
+               <button type="submit" id="salvar-substituicao">Substituir</button>
+               <button type="button" class="secondary" id="cancelar-substituicao">Cancelar</button>
+             </form>`
+          : ""
       }
 
       <h2>Prazos</h2>
@@ -1218,6 +1368,210 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   );
 
   if (!podeEscrever) return;
+
+  // ── Substituição de designação ────────────────────────────────────────────
+  //
+  // Um formulário só, em dois modos. Substituir e corrigir pedem exatamente os
+  // mesmos cinco campos e diferem apenas no alvo e no comando — dois
+  // formulários seriam a mesma marcação duas vezes, com duas chances de
+  // divergir.
+  const formSubstituicao = document.querySelector<HTMLFormElement>("#form-substituicao");
+  const resumoSubstituicao = document.querySelector<HTMLElement>("#resumo-substituicao");
+  const botaoSalvarSubstituicao =
+    document.querySelector<HTMLButtonElement>("#salvar-substituicao");
+  const porId = new Map(d.designacoes.map((x) => [x.id, x]));
+  let alvo: { designacao: DesignacaoItem; modo: "criar" | "editar" } | null = null;
+
+  const campo = (nome: string) =>
+    formSubstituicao?.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${nome}"]`) ??
+    null;
+
+  const limparErros = () => {
+    formSubstituicao?.querySelectorAll<HTMLElement>(".campo-erro").forEach((e) => {
+      e.hidden = true;
+      e.textContent = "";
+    });
+  };
+
+  /** Marca o campo, mostra o motivo e leva o foco para o primeiro que falhou. */
+  const marcarErro = (nome: string, mensagem: string) => {
+    const aviso = formSubstituicao?.querySelector<HTMLElement>(`[data-erro="${nome}"]`);
+    if (aviso) {
+      aviso.textContent = mensagem;
+      aviso.hidden = false;
+    }
+    campo(nome)?.focus();
+  };
+
+  const fecharSubstituicao = () => {
+    alvo = null;
+    limparErros();
+    if (formSubstituicao) formSubstituicao.hidden = true;
+  };
+
+  /**
+   * Abre o formulário sobre uma designação.
+   *
+   * Em "criar", os campos nascem vazios: a substituição é um ato novo, com
+   * motivo e documento próprios. Em "editar", nascem com o que está gravado —
+   * corrigir é ajustar o que já foi registrado, não redigitar.
+   */
+  const abrirSubstituicao = (designacao: DesignacaoItem, modo: "criar" | "editar") => {
+    if (!formSubstituicao) return;
+    alvo = { designacao, modo };
+    limparErros();
+    formSubstituicao.hidden = false;
+
+    const editando = modo === "editar";
+    // Em "editar" o alvo é a sucessora, mas quem define o piso da data é a
+    // ANTECESSORA: a troca precisa ser posterior ao dia em que ela assumiu.
+    const antecessora = editando
+      ? (porId.get(designacao.designacao_anterior_id ?? "") ?? designacao)
+      : designacao;
+
+    if (resumoSubstituicao) {
+      resumoSubstituicao.innerHTML = editando
+        ? `Corrigindo a substituição de <strong>${escapeHtml(antecessora.papel)}</strong>: ` +
+          `${escapeHtml(qualificacaoDesignado(antecessora))} saiu em ` +
+          `<strong>${escapeHtml(dataParaExibicao(designacao.data_inicio))}</strong>.`
+        : `Substituindo <strong>${escapeHtml(qualificacaoDesignado(designacao))}</strong> ` +
+          `na função de <strong>${escapeHtml(designacao.papel)}</strong>, ` +
+          `ocupada desde ${escapeHtml(dataParaExibicao(designacao.data_inicio))}.`;
+    }
+
+    // `min` é o dia seguinte ao início da antecessora: a troca tem de ser
+    // posterior, e o backend recusa o contrário com a mesma conta.
+    const data = campo("data_troca") as HTMLInputElement | null;
+    if (data) {
+      data.min = somarDiasIso(antecessora.data_inicio, 1);
+      data.value = editando ? designacao.data_inicio : "";
+    }
+    const preencher = (nome: string, valor: string) => {
+      const alvo = campo(nome);
+      if (alvo) alvo.value = valor;
+    };
+    preencher("sucessor_id", editando ? designacao.policial_militar_id : "");
+    preencher("motivo", editando ? (designacao.motivo ?? "") : "");
+    preencher(
+      "documento_autorizador_id",
+      editando ? (designacao.documento_autorizador_id ?? "") : "",
+    );
+    preencher("numero_documento", editando ? (designacao.numero_documento ?? "") : "");
+    if (botaoSalvarSubstituicao) {
+      botaoSalvarSubstituicao.textContent = editando ? "Salvar correção" : "Substituir";
+    }
+    formSubstituicao.scrollIntoView({ block: "nearest" });
+    campo("sucessor_id")?.focus();
+  };
+
+  document.querySelectorAll<HTMLButtonElement>("[data-substituir]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const designacao = porId.get(b.dataset.substituir!);
+      if (designacao) abrirSubstituicao(designacao, "criar");
+    }),
+  );
+  document.querySelectorAll<HTMLButtonElement>("[data-editar-substituicao]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const designacao = porId.get(b.dataset.editarSubstituicao!);
+      if (designacao) abrirSubstituicao(designacao, "editar");
+    }),
+  );
+  document.querySelector("#cancelar-substituicao")?.addEventListener("click", fecharSubstituicao);
+
+  formSubstituicao?.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    if (!alvo) return;
+    limparErros();
+
+    const sucessor = String(campo("sucessor_id")?.value ?? "");
+    const dataTroca = String(campo("data_troca")?.value ?? "");
+    const motivo = String(campo("motivo")?.value ?? "").trim();
+    const documento = String(campo("documento_autorizador_id")?.value ?? "");
+    const numero = String(campo("numero_documento")?.value ?? "").trim();
+
+    // As mesmas regras que o backend reverifica, adiantadas para junto do
+    // campo. Aqui elas dizem ONDE corrigir; lá elas garantem que valem.
+    const antecessora =
+      alvo.modo === "editar"
+        ? (porId.get(alvo.designacao.designacao_anterior_id ?? "") ?? alvo.designacao)
+        : alvo.designacao;
+
+    if (!sucessor) return marcarErro("sucessor_id", "Escolha quem assume a função.");
+    if (sucessor === antecessora.policial_militar_id) {
+      return marcarErro(
+        "sucessor_id",
+        `${qualificacaoDesignado(antecessora)} já ocupa a função. Escolha outro militar.`,
+      );
+    }
+    if (!dataTroca) return marcarErro("data_troca", "Informe a data da substituição.");
+    if (dataTroca <= antecessora.data_inicio) {
+      return marcarErro(
+        "data_troca",
+        `A data deve ser posterior a ${dataParaExibicao(antecessora.data_inicio)}.`,
+      );
+    }
+    if (dataTroca > hojeIso()) {
+      return marcarErro("data_troca", "A data da substituição não pode ser futura.");
+    }
+    if (!motivo) return marcarErro("motivo", "Informe o motivo da substituição.");
+    if (documento && !numero) {
+      return marcarErro("numero_documento", "Informe o número do documento.");
+    }
+    if (!documento && numero) {
+      return marcarErro("documento_autorizador_id", "Escolha o tipo de documento.");
+    }
+
+    const pedido = {
+      processo_id: id,
+      designacao_id: alvo.designacao.id,
+      sucessor_id: sucessor,
+      data_troca: dataTroca,
+      motivo,
+      documento_autorizador_id: documento || null,
+      numero_documento: numero || null,
+    };
+    const r =
+      alvo.modo === "editar"
+        ? await call("proceedings_update_substitution", {
+            request: pedido satisfies AtualizarSubstituicaoRequest,
+          })
+        : await call("proceedings_substitute_designation", { request: pedido });
+    if (r.ok) {
+      notificar(
+        alvo.modo === "editar" ? "Substituição corrigida." : "Substituição registrada.",
+        "sucesso",
+      );
+    }
+    reportar(r.ok, r.error);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-remover-substituicao]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const designacao = porId.get(b.dataset.removerSubstituicao!);
+      if (!designacao) return;
+      const antecessora = porId.get(designacao.designacao_anterior_id ?? "");
+      // Confirmação nominal: quem sai, quem volta e desde quando. "Tem
+      // certeza?" não dá ao usuário como conferir se o alvo é o que ele acha.
+      const volta = antecessora
+        ? `${qualificacaoDesignado(antecessora)} voltará a ser ${antecessora.papel}`
+        : "a designação anterior voltará a ser a vigente";
+      if (
+        !confirm(
+          `Desfazer a substituição de ${designacao.papel} feita em ` +
+            `${dataParaExibicao(designacao.data_inicio)}?\n\n` +
+            `A designação de ${qualificacaoDesignado(designacao)} será excluída e ${volta}.`,
+        )
+      ) {
+        return;
+      }
+      const r = await call("proceedings_delete_substitution", {
+        processoId: id,
+        designacaoId: designacao.id,
+      });
+      if (r.ok) notificar("Substituição desfeita.", "sucesso");
+      reportar(r.ok, r.error);
+    }),
+  );
 
   const formProrrogacao = document.querySelector<HTMLFormElement>("#form-prorrogacao");
   formProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {

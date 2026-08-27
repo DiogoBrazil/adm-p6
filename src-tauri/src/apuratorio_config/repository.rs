@@ -232,7 +232,7 @@ pub async fn deactivate_papel(
     match e_responsavel {
         None => Ok(false),
         Some(true) => Err(AppError::Domain(
-            "este papel responde pelo apuratorio; indique outro responsavel antes de desativa-lo"
+            "Esta função responde pelo apuratório. Indique outra responsável antes de desativá-la."
                 .to_string(),
         )),
         Some(false) => {

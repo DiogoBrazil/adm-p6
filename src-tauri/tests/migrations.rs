@@ -124,11 +124,11 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     // As duas constraint triggers de configuração existem.
     let triggers: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
-          AND tgname IN ('tg_max_envolvidos', 'tg_max_ocupantes')",
+          AND tgname IN ('tg_max_envolvidos', 'tg_max_ocupantes', 'tg_cadeia_designacao')",
     )
     .fetch_one(&mut conn)
     .await?;
-    assert_eq!(triggers, 2, "constraint triggers de configuracao ausentes");
+    assert_eq!(triggers, 3, "constraint triggers de configuracao ausentes");
 
     // Seed técnico: uma conta administrativa, sem policial associado.
     let admins: i64 = sqlx::query_scalar(
@@ -312,6 +312,155 @@ async fn a_view_de_processos_e_um_contrato_estavel() {
         .await
         .unwrap();
         assert!(!antiga, "a antiga v_processos nao pode voltar");
+    })
+    .await;
+}
+
+/// A retroalimentação da 0008 sobre histórico que já existia.
+///
+/// Os 19 processos importados do legado e qualquer substituição feita antes
+/// desta migration têm a cadeia no dado — `data_fim` de uma igual a
+/// `data_inicio` da outra — mas nenhum vínculo explícito. A migration liga o que
+/// é inequívoco e **deixa NULL o que é ambíguo**, que é o comportamento que
+/// importa: um papel de dois ocupantes com duas trocas no mesmo dia daria dois
+/// pares possíveis, e ligar a sucessora de uma cadeia à antecessora da outra
+/// seria pior do que não ligar.
+///
+/// O teste roda a mesma função que a migration chamou (`fn_vincular_cadeias_existentes`),
+/// sobre histórico montado à mão sem vínculo — que é exatamente a situação do
+/// banco de produção no instante em que a 0008 subir.
+#[tokio::test]
+async fn a_retroalimentacao_liga_o_inequivoco_e_deixa_o_ambiguo_em_branco() {
+    util::com_banco_descartavel("mig_cadeia", |pool| async move {
+        let m = util::fixtures::mundo_configurado(&pool).await;
+
+        // Cadeia inequívoca no Encarregado (um ocupante): PM UM → PM DOIS.
+        let processo = util::fixtures::processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "HIST-001",
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+
+        // Duas cadeias do Escrivão trocando no MESMO dia: par ambíguo.
+        let processo_ambiguo = util::fixtures::processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "HIST-002",
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+
+        let designar =
+            |processo: String, pm: String, papel: String, inicio: &str, fim: Option<&str>| {
+                let pool = pool.clone();
+                let apuratorio = m.apuratorio.clone();
+                let inicio = inicio.to_string();
+                let fim = fim.map(str::to_string);
+                async move {
+                    sqlx::query_scalar::<_, String>(
+                        "INSERT INTO processo_designacoes
+                         (processo_id, apuratorio_id, policial_militar_id, papel_id,
+                          data_inicio, data_fim)
+                     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::date, $6::date)
+                  RETURNING id::text",
+                    )
+                    .bind(processo)
+                    .bind(apuratorio)
+                    .bind(pm)
+                    .bind(papel)
+                    .bind(inicio)
+                    .bind(fim)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+                }
+            };
+
+        let antecessora = designar(
+            processo.clone(),
+            m.pm_um.clone(),
+            m.papel_encarregado.clone(),
+            "2026-01-10",
+            Some("2026-02-01"),
+        )
+        .await;
+        let sucessora = designar(
+            processo.clone(),
+            m.pm_dois.clone(),
+            m.papel_encarregado.clone(),
+            "2026-02-01",
+            None,
+        )
+        .await;
+
+        // Escrivão aceita 2: duas cadeias em paralelo, ambas trocando em 01/02.
+        for (saindo, entrando) in [(&m.pm_um, &m.pm_dois), (&m.pm_dois, &m.pm_tres)] {
+            designar(
+                processo_ambiguo.clone(),
+                saindo.clone(),
+                m.papel_escrivao.clone(),
+                "2026-01-10",
+                Some("2026-02-01"),
+            )
+            .await;
+            designar(
+                processo_ambiguo.clone(),
+                entrando.clone(),
+                m.papel_escrivao.clone(),
+                "2026-02-01",
+                None,
+            )
+            .await;
+        }
+
+        // Nada está vinculado ainda: é o estado que a migration encontra.
+        let soltas: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM processo_designacoes WHERE designacao_anterior_id IS NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(soltas, 6);
+
+        let vinculadas: i32 = sqlx::query_scalar("SELECT fn_vincular_cadeias_existentes()")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(vinculadas, 1, "so a cadeia inequivoca e ligada");
+
+        let anterior: Option<String> = sqlx::query_scalar(
+            "SELECT designacao_anterior_id::text FROM processo_designacoes WHERE id = $1::uuid",
+        )
+        .bind(&sucessora)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(anterior.as_deref(), Some(antecessora.as_str()));
+
+        // As quatro do processo ambíguo continuam sem palpite.
+        let ambiguas: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM processo_designacoes
+              WHERE processo_id = $1::uuid AND designacao_anterior_id IS NOT NULL",
+        )
+        .bind(&processo_ambiguo)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(ambiguas, 0, "par ambiguo fica em branco, nao chutado");
+
+        // Idempotente: reaplicar a migration num banco já atualizado não muda
+        // nada — é o que acontece a cada startup do app.
+        let segunda: i32 = sqlx::query_scalar("SELECT fn_vincular_cadeias_existentes()")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(segunda, 0);
     })
     .await;
 }

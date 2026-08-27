@@ -24,9 +24,12 @@ where
         }
     }
 
+    /// O detalhe técnico fica no console do backend; para a tela vai só a
+    /// mensagem em português. É esta separação que permite escrever mensagens
+    /// úteis sem perder o que se precisa para diagnosticar.
     pub fn err(error: AppError) -> Self {
-        if error.is_database() {
-            eprintln!("Erro interno de banco de dados: {error:?}");
+        if let Some(detalhe) = error.detalhe_tecnico() {
+            eprintln!("[adm-p6] {detalhe}");
         }
         Self {
             ok: false,

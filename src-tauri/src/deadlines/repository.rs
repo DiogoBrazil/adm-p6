@@ -185,7 +185,10 @@ pub async fn add_extension(
     .await?;
 
     let (ordem_atual, vencimento_atual) = atual.ok_or_else(|| {
-        AppError::Domain("o processo ainda nao tem prazo inicial para prorrogar".to_string())
+        AppError::Domain(
+            "O processo ainda não tem prazo inicial. Informe a data de recebimento para que ele nasça."
+                .to_string(),
+        )
     })?;
 
     let dias = request
