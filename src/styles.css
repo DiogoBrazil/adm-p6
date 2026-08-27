@@ -380,10 +380,17 @@ pre {
   color: #1f2937;
 }
 
-.andamento-texto {
+/* Texto livre que o operador digitou num `textarea`: o Resumo dos fatos, hoje.
+   `pre-wrap` preserva os parágrafos — sem ele o relato vira um bloco corrido, que
+   era o que acontecia enquanto o resumo morava numa célula da `.ficha`.
+   `break-word` acompanha pelo mesmo motivo que em `.detail-table td`: uma URL ou
+   um número de processo sem espaços estouraria a largura e faria a PÁGINA rolar
+   na horizontal. */
+.texto-livre {
   color: #374151;
   margin: 0;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .add-movement-form {

@@ -1491,7 +1491,6 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Responsável", d.responsavel_nome ? `${d.responsavel_nome} (${d.responsavel_papel})` : null)}
         ${d.carta_precatoria ? linha("Deprecante", d.carta_precatoria.deprecante) : ""}
         ${d.carta_precatoria ? linha("Unidade deprecada", d.carta_precatoria.unidade_deprecada) : ""}
-        ${linha("Resumo dos fatos", d.resumo_fatos)}
       </table>
 
       ${
@@ -1882,6 +1881,20 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
           : `<p class="empty">Nenhum anexo.</p>`
       }
       ${podeEscrever ? `<div class="linha-form"><label>Anexar arquivo<input type="file" id="anexo" /></label></div>` : ""}
+
+      ${/*
+         * Última seção da página, e em largura inteira de propósito: era a
+         * derradeira linha da `.ficha`, espremida ao lado de um rótulo de 220px
+         * e com as quebras de linha comidas por falta de `white-space`. O campo
+         * é um `textarea`, então o operador escreve em parágrafos — `.texto-livre`
+         * os preserva.
+         */ ""}
+      <h2>Resumo dos fatos</h2>
+      ${
+        d.resumo_fatos
+          ? `<p class="texto-livre">${escapeHtml(d.resumo_fatos)}</p>`
+          : `<p class="empty">Nenhum resumo registrado.</p>`
+      }
     </section>
   `);
 
