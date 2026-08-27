@@ -12,6 +12,7 @@
 use adm_p6_tauri_lib::deadlines::{
     domain::AddExtensionRequest, repository as deadlines_repository,
 };
+use adm_p6_tauri_lib::evidence::domain::{AcusacoesRequest, SelecaoInfracaoPenal};
 use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
     PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
@@ -94,6 +95,7 @@ fn envolvido(m: &Mundo, pm: &str, ordem: i32) -> EnvolvidoRequest {
         status_envolvido_id: m.status_envolvido.clone(),
         ordem,
         e_condutor: false,
+        acusacoes: None,
     }
 }
 
@@ -113,6 +115,122 @@ async fn salvar(pool: &PgPool, request: &SaveProceedingRequest) -> Result<String
 }
 
 // ─────────────────────────────────────────────────────────── criação completa ──
+
+#[tokio::test]
+async fn acusacao_e_obrigatoria_no_processo_novo_e_preserva_legado_incompleto() {
+    util::com_banco_descartavel("proc_acusacao_obrigatoria", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query(
+            "UPDATE apuratorios
+                SET permite_acusacao = true, permite_indicios = false,
+                    permite_solucao_sugerida = false
+              WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut novo = base(&m, "AC-1");
+        novo.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+        assert!(salvar(&pool, &novo)
+            .await
+            .unwrap_err()
+            .contains("ao menos uma acusação"));
+
+        let transgressao: String =
+            sqlx::query_scalar("SELECT id::text FROM transgressoes ORDER BY id LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        novo.envolvidos[0].acusacoes = Some(AcusacoesRequest {
+            transgressoes_ids: vec![transgressao],
+            ..Default::default()
+        });
+        let id = salvar(&pool, &novo).await.unwrap();
+
+        novo.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut novo, &id).await;
+        novo.apuratorio_id = m.apuratorio_livre.clone();
+        assert!(salvar(&pool, &novo)
+            .await
+            .unwrap_err()
+            .contains("acusação ou indícios"));
+        novo.apuratorio_id = m.apuratorio.clone();
+        novo.envolvidos[0].acusacoes = Some(AcusacoesRequest::default());
+        assert!(salvar(&pool, &novo)
+            .await
+            .unwrap_err()
+            .contains("não pode ficar sem enquadramento"));
+
+        // Um registro antigo que já estava vazio continua editável. Ele só não
+        // pode nascer vazio depois que a capacidade foi ligada.
+        sqlx::query("UPDATE apuratorios SET permite_acusacao = false WHERE id = $1::uuid")
+            .bind(&m.apuratorio_livre)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut legado = base(&m, "AC-LEGADO");
+        legado.apuratorio_id = m.apuratorio_livre.clone();
+        legado.envolvidos = vec![envolvido(&m, &m.pm_tres, 1)];
+        let legado_id = salvar(&pool, &legado).await.unwrap();
+        sqlx::query("UPDATE apuratorios SET permite_acusacao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio_livre)
+            .execute(&pool)
+            .await
+            .unwrap();
+        legado.id = Some(legado_id.clone());
+        legado.numero_documento = "AC-LEGADO-CORRIGIDO".to_string();
+        sincronizar_designacoes(&pool, &mut legado, &legado_id).await;
+        assert_eq!(salvar(&pool, &legado).await.unwrap(), legado_id);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn acusacao_penal_depende_da_capacidade_do_apuratorio() {
+    util::com_banco_descartavel("proc_acusacao_penal", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query("UPDATE apuratorios SET permite_acusacao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let infracao: String =
+            sqlx::query_scalar("SELECT id::text FROM infracoes_penais ORDER BY id LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let esfera: String =
+            sqlx::query_scalar("SELECT id::text FROM esferas_penais ORDER BY id LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        let mut req = base(&m, "AC-PENAL");
+        let mut acusado = envolvido(&m, &m.pm_dois, 1);
+        acusado.acusacoes = Some(AcusacoesRequest {
+            infracoes_penais: vec![SelecaoInfracaoPenal {
+                infracao_penal_id: infracao,
+                esfera_penal_id: esfera,
+            }],
+            ..Default::default()
+        });
+        req.envolvidos = vec![acusado];
+        assert!(salvar(&pool, &req)
+            .await
+            .unwrap_err()
+            .contains("disciplinares"));
+
+        sqlx::query("UPDATE apuratorios SET permite_acusacao_penal = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(salvar(&pool, &req).await.is_ok());
+    })
+    .await;
+}
 
 #[tokio::test]
 async fn cria_processo_completo_em_uma_transacao() {
@@ -465,6 +583,66 @@ async fn penalidade_so_onde_a_solucao_permite_e_dias_so_onde_a_penalidade_usa() 
         // autoridade decide. Dois campos, dois catálogos.
         assert_eq!(e.solucao_sugerida.as_deref(), Some("Sugerido Teste"));
         assert_eq!(e.solucao_decidida.as_deref(), Some("Punido Teste"));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn processo_rejeita_solucao_sugerida_e_preserva_valor_historico() {
+    util::com_banco_descartavel("proc_sem_sugerida", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "SEM-SUG");
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+        let id = salvar(&pool, &req).await.unwrap();
+        let envolvido_id = repository::get(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .envolvidos[0]
+            .id
+            .clone();
+
+        sqlx::query(
+            "UPDATE processo_envolvidos SET solucao_sugerida_id = $2::uuid WHERE id = $1::uuid",
+        )
+        .bind(&envolvido_id)
+        .bind(&m.solucao_sugerida)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE apuratorios SET permite_solucao_sugerida = false WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let mut resultado = UpdateInvolvedOutcomeRequest {
+            processo_id: id.clone(),
+            envolvido_id: envolvido_id.clone(),
+            solucao_sugerida_id: Some(m.solucao_sugerida.clone()),
+            solucao_decidida_id: Some(m.solucao_absolvido.clone()),
+            penalidade_tipo_id: None,
+            penalidade_dias: None,
+        };
+        let erro = repository::update_involved_outcome(&mut tx, &resultado)
+            .await
+            .unwrap_err()
+            .message();
+        assert!(erro.contains("somente para procedimentos"), "{erro}");
+        tx.rollback().await.unwrap();
+
+        resultado.solucao_sugerida_id = None;
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_involved_outcome(&mut tx, &resultado)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(
+            detalhe.envolvidos[0].solucao_sugerida_id.as_deref(),
+            Some(m.solucao_sugerida.as_str())
+        );
     })
     .await;
 }

@@ -233,7 +233,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
                 "evidence::repository::search_transgressoes",
                 "evidence::repository::search_infracoes_estatuto",
                 "evidence::repository::load_for_envolvido",
-                "evidence::repository::save_for_envolvido",
+                "evidence::repository::save_acusacoes",
                 "evidence::repository::remove_for_envolvido",
             ],
         ),

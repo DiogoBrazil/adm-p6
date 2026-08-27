@@ -227,6 +227,14 @@ pub const CATALOGOS: &[Catalogo] = &[
                  da solução decidida: a espécie precisa punir E o desfecho precisa punir."),
             booleano("permite_remessa_comissao", "Permite remessa à comissão",
                 "Revela a data de remessa à comissão no cadastro do processo."),
+            booleano("permite_acusacao", "Permite acusação",
+                "Exige enquadramento jurídico do acusado no cadastro do processo."),
+            booleano("permite_acusacao_penal", "Permite acusação penal",
+                "Libera crimes e contravenções na acusação, além das infrações disciplinares."),
+            booleano("permite_indicios", "Permite indícios",
+                "Libera o registro de indícios para procedimentos investigativos."),
+            booleano("permite_solucao_sugerida", "Permite solução sugerida",
+                "Libera a proposta de solução pelo encarregado no resultado do envolvido."),
             // `codigo_extensao` NÃO entra: é o único código técnico do schema
             // (§5.3), e acrescentar uma extensão de formulário é mudança de
             // código, não operação de administrador. A coluna continua no banco

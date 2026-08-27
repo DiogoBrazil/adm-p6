@@ -2,9 +2,9 @@ use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 
 use crate::error::AppError;
 use crate::evidence::domain::{
-    CategoriaIndicioItem, EnvolvidoComIndicios, EvidenceData, InfracaoEstatutoItem,
-    InfracaoEstatutoVinculo, InfracaoPenalItem, InfracaoPenalVinculo, SaveEvidenceRequest,
-    TransgressaoItem,
+    AcusacoesRequest, CategoriaIndicioItem, EnvolvidoComIndicios, EvidenceData,
+    InfracaoEstatutoItem, InfracaoEstatutoVinculo, InfracaoPenalItem, InfracaoPenalVinculo,
+    SaveEvidenceRequest, TransgressaoItem,
 };
 
 /// Rótulos montados a partir do dado. No schema anterior estes textos eram
@@ -243,19 +243,10 @@ pub async fn save_for_envolvido(
 ) -> Result<(), AppError> {
     validar_categorias(tx, &request.categorias_ids).await?;
 
-    for tabela in [
-        "envolvido_categorias_indicio",
-        "envolvido_infracoes_penais",
-        "envolvido_transgressoes",
-        "envolvido_infracoes_estatuto",
-    ] {
-        sqlx::query(&format!(
-            "DELETE FROM {tabela} WHERE envolvido_id = $1::uuid"
-        ))
+    sqlx::query("DELETE FROM envolvido_categorias_indicio WHERE envolvido_id = $1::uuid")
         .bind(&request.envolvido_id)
         .execute(&mut **tx)
         .await?;
-    }
 
     for categoria_id in &request.categorias_ids {
         sqlx::query(
@@ -268,13 +259,61 @@ pub async fn save_for_envolvido(
         .await?;
     }
 
+    save_acusacoes(
+        tx,
+        &request.envolvido_id,
+        &AcusacoesRequest {
+            infracoes_penais: request
+                .infracoes_penais
+                .iter()
+                .map(|item| crate::evidence::domain::SelecaoInfracaoPenal {
+                    infracao_penal_id: item.infracao_penal_id.clone(),
+                    esfera_penal_id: item.esfera_penal_id.clone(),
+                })
+                .collect(),
+            transgressoes_ids: request.transgressoes_ids.clone(),
+            infracoes_estatuto: request
+                .infracoes_estatuto
+                .iter()
+                .map(|item| crate::evidence::domain::SelecaoInfracaoEstatuto {
+                    infracao_estatuto_id: item.infracao_estatuto_id.clone(),
+                    analogia_transgressao_id: item.analogia_transgressao_id.clone(),
+                })
+                .collect(),
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Sincroniza somente o enquadramento juridico. Acusacoes usam esta parte sem
+/// tocar nas categorias, que pertencem exclusivamente ao fluxo de indicios.
+pub async fn save_acusacoes(
+    tx: &mut Transaction<'_, Postgres>,
+    envolvido_id: &str,
+    request: &AcusacoesRequest,
+) -> Result<(), AppError> {
+    for tabela in [
+        "envolvido_infracoes_penais",
+        "envolvido_transgressoes",
+        "envolvido_infracoes_estatuto",
+    ] {
+        sqlx::query(&format!(
+            "DELETE FROM {tabela} WHERE envolvido_id = $1::uuid"
+        ))
+        .bind(envolvido_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
     for selecao in &request.infracoes_penais {
         sqlx::query(
             "INSERT INTO envolvido_infracoes_penais
                  (envolvido_id, infracao_penal_id, esfera_penal_id)
              VALUES ($1::uuid, $2::uuid, $3::uuid)",
         )
-        .bind(&request.envolvido_id)
+        .bind(envolvido_id)
         .bind(&selecao.infracao_penal_id)
         .bind(&selecao.esfera_penal_id)
         .execute(&mut **tx)
@@ -286,7 +325,7 @@ pub async fn save_for_envolvido(
             "INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
              VALUES ($1::uuid, $2::uuid)",
         )
-        .bind(&request.envolvido_id)
+        .bind(envolvido_id)
         .bind(transgressao_id)
         .execute(&mut **tx)
         .await?;
@@ -298,13 +337,41 @@ pub async fn save_for_envolvido(
                  (envolvido_id, infracao_estatuto_id, analogia_transgressao_id)
              VALUES ($1::uuid, $2::uuid, $3::uuid)",
         )
-        .bind(&request.envolvido_id)
+        .bind(envolvido_id)
         .bind(&selecao.infracao_estatuto_id)
         .bind(&selecao.analogia_transgressao_id)
         .execute(&mut **tx)
         .await?;
     }
 
+    Ok(())
+}
+
+/// Impede que o comando de indicios seja usado como atalho para alterar uma
+/// acusacao ou para criar enquadramento em especie que nao investiga fatos.
+pub async fn exigir_permissao_indicios(
+    tx: &mut Transaction<'_, Postgres>,
+    envolvido_id: &str,
+) -> Result<(), AppError> {
+    let permite: bool = sqlx::query_scalar(
+        "SELECT a.permite_indicios
+           FROM processo_envolvidos e
+           JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+           JOIN apuratorios a ON a.id = p.apuratorio_id
+          WHERE e.id = $1::uuid
+          FOR UPDATE OF e",
+    )
+    .bind(envolvido_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("envolvido não encontrado".to_string()))?;
+
+    if !permite {
+        return Err(AppError::Domain(
+            "Indícios são registrados somente em procedimentos investigativos. Em processos, corrija a acusação pelo botão Editar."
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 

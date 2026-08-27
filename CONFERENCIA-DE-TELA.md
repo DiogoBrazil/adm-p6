@@ -47,7 +47,7 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] Com o processo concluído, chamadas diretas desses três comandos devolvem mensagem amigável e não gravam nada
 - [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nos papéis, a alternância grava, e tornar o mesmo papel responsável logo depois **não** religa a flag
 - [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessas, julgamento, conclusão, soluções e penalidade não aparecem antes do cadastro
-- [ ] **Indícios** — a partir do detalhe de um processo, num envolvido
+- [ ] **Indícios** — a partir do detalhe de um procedimento, num envolvido; em processo a ação não aparece
 - [ ] **Prazos** — o painel carrega
 - [ ] **Usuários → lista**
 - [ ] **Usuários → detalhe** — clicar numa linha
@@ -160,6 +160,11 @@ aparecer, pois nesses ritos as duas datas representam o mesmo fato.
 | **CD**, **CJ** ou **PAD** | Julgamento · Remessa à comissão · Penalidade · **Escrivão de Processo** | — |
 | **CP** | **Deprecante e Unidade deprecada** | Julgamento · Remessa à comissão · Penalidade |
 
+Em todos os processos, **Solução sugerida** não aparece. No cadastro, PADS exige uma ou
+mais acusações disciplinares; CD, CJ e PAD também oferecem crime/contravenção. O detalhe
+mostra o resumo das acusações sem botão de Indícios. PADE não apresenta nenhum dos dois
+fluxos.
+
 - [ ] IPM — confere a linha da tabela
 - [ ] SR — confere a linha da tabela
 - [ ] PADS — confere a linha da tabela
@@ -172,8 +177,9 @@ aparecer, pois nesses ritos as duas datas representam o mesmo fato.
 
 - [ ] Abrir um **PADS que já tem data de julgamento**, salvar sem tocar no campo, e
       conferir que a data **continua lá**. Campo escondido não pode apagar fato gravado
-- [ ] Em *Catálogos → Apuratórios*, os três atributos novos aparecem e são editáveis:
-      "Permite julgamento", "Permite punição", "Permite remessa à comissão"
+- [ ] Em *Catálogos → Apuratórios*, os atributos de comportamento aparecem e são editáveis,
+      incluindo julgamento, punição, remessa à comissão, acusação, acusação penal, indícios
+      e solução sugerida
 
 ### A reforma de tela
 

@@ -4,6 +4,7 @@ use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
 use crate::db::paginacao::{PADRAO, TETO};
 use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
+use crate::evidence::repository as evidence_repository;
 use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, CartaPrecatoriaDetalhes,
     ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
@@ -371,6 +372,8 @@ pub async fn carta_precatoria<'e, E: PgExecutor<'e>>(
 #[derive(sqlx::FromRow)]
 struct ConfigApuratorio {
     exige_natureza_fato: bool,
+    permite_acusacao: bool,
+    permite_acusacao_penal: bool,
     codigo_extensao: Option<String>,
 }
 
@@ -379,7 +382,9 @@ async fn config_apuratorio(
     apuratorio_id: &str,
 ) -> Result<ConfigApuratorio, AppError> {
     sqlx::query_as::<_, ConfigApuratorio>(
-        "SELECT exige_natureza_fato, codigo_extensao FROM apuratorios WHERE id = $1::uuid",
+        "SELECT exige_natureza_fato, permite_acusacao, permite_acusacao_penal,
+                codigo_extensao
+           FROM apuratorios WHERE id = $1::uuid",
     )
     .bind(apuratorio_id)
     .fetch_optional(&mut **tx)
@@ -394,10 +399,126 @@ async fn validar_contra_configuracao(
     request: &SaveProceedingRequest,
     config: &ConfigApuratorio,
 ) -> Result<(), AppError> {
+    if let Some(processo_id) = request.id.as_deref() {
+        let reclassificaria_enquadramento: bool = sqlx::query_scalar(
+            "SELECT p.apuratorio_id <> $2::uuid
+                    AND EXISTS (
+                        SELECT 1 FROM processo_envolvidos e
+                         WHERE e.processo_id = p.id
+                           AND (EXISTS (SELECT 1 FROM envolvido_categorias_indicio c WHERE c.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_infracoes_penais i WHERE i.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_transgressoes t WHERE t.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_infracoes_estatuto s WHERE s.envolvido_id = e.id))
+                    )
+               FROM processos_procedimentos p
+              WHERE p.id = $1::uuid AND p.ativo",
+        )
+        .bind(processo_id)
+        .bind(&request.apuratorio_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .unwrap_or(false);
+        if reclassificaria_enquadramento {
+            return Err(AppError::Domain(
+                "não é possível trocar a espécie porque já há acusação ou indícios registrados"
+                    .to_string(),
+            ));
+        }
+    }
+
     if config.exige_natureza_fato && request.natureza_fato_id.is_none() {
         return Err(AppError::Domain(
             "este apuratorio exige a natureza do fato apurado".to_string(),
         ));
+    }
+
+    let enviou_acusacao = request.envolvidos.iter().any(|e| e.acusacoes.is_some());
+    if !config.permite_acusacao && enviou_acusacao {
+        return Err(AppError::Domain(
+            "este apuratório não recebe acusação no cadastro".to_string(),
+        ));
+    }
+
+    if config.permite_acusacao {
+        if !config.permite_acusacao_penal
+            && request.envolvidos.iter().any(|e| {
+                e.acusacoes
+                    .as_ref()
+                    .is_some_and(|a| !a.infracoes_penais.is_empty())
+            })
+        {
+            return Err(AppError::Domain(
+                "este processo admite somente acusações disciplinares do RDPM ou do Estatuto"
+                    .to_string(),
+            ));
+        }
+
+        let quantidade_efetiva = if let Some(processo_id) = request.id.as_deref() {
+            let mut total = 0_i64;
+            for envolvido in &request.envolvidos {
+                total += match &envolvido.acusacoes {
+                    Some(acusacoes) => acusacoes.quantidade() as i64,
+                    None => sqlx::query_scalar(
+                        "SELECT
+                            (SELECT count(*) FROM envolvido_infracoes_penais p WHERE p.envolvido_id = e.id)
+                          + (SELECT count(*) FROM envolvido_transgressoes t WHERE t.envolvido_id = e.id)
+                          + (SELECT count(*) FROM envolvido_infracoes_estatuto s WHERE s.envolvido_id = e.id)
+                           FROM processo_envolvidos e
+                          WHERE e.processo_id = $1::uuid
+                            AND e.policial_militar_id = $2::uuid",
+                    )
+                    .bind(processo_id)
+                    .bind(&envolvido.policial_militar_id)
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .unwrap_or(0),
+                };
+            }
+            total
+        } else {
+            request
+                .envolvidos
+                .iter()
+                .filter_map(|e| e.acusacoes.as_ref())
+                .map(|a| a.quantidade() as i64)
+                .sum()
+        };
+
+        if request.id.is_none() {
+            if request.envolvidos.len() != 1 {
+                return Err(AppError::Domain(
+                    "informe o policial militar acusado neste processo".to_string(),
+                ));
+            }
+            if quantidade_efetiva == 0 {
+                return Err(AppError::Domain(
+                    "selecione ao menos uma acusação para o policial militar".to_string(),
+                ));
+            }
+        } else {
+            let processo_id = request.id.as_deref().expect("id verificado acima");
+            let quantidade_atual: i64 = sqlx::query_scalar(
+                "SELECT
+                    (SELECT count(*) FROM envolvido_infracoes_penais p
+                      JOIN processo_envolvidos e ON e.id = p.envolvido_id
+                     WHERE e.processo_id = $1::uuid)
+                  + (SELECT count(*) FROM envolvido_transgressoes t
+                      JOIN processo_envolvidos e ON e.id = t.envolvido_id
+                     WHERE e.processo_id = $1::uuid)
+                  + (SELECT count(*) FROM envolvido_infracoes_estatuto s
+                      JOIN processo_envolvidos e ON e.id = s.envolvido_id
+                     WHERE e.processo_id = $1::uuid)",
+            )
+            .bind(processo_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if quantidade_atual > 0 && quantidade_efetiva == 0 {
+                return Err(AppError::Domain(
+                    "um processo que já possui acusação não pode ficar sem enquadramento"
+                        .to_string(),
+                ));
+            }
+        }
     }
 
     // `naturezas_fato.exige_condutor` substitui o
@@ -675,7 +796,7 @@ async fn gravar_envolvidos(
     .await?;
 
     for envolvido in &request.envolvidos {
-        sqlx::query(
+        let envolvido_id: String = sqlx::query_scalar(
             "INSERT INTO processo_envolvidos
                  (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
              VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
@@ -683,15 +804,20 @@ async fn gravar_envolvidos(
                 SET status_envolvido_id = EXCLUDED.status_envolvido_id,
                     ordem               = EXCLUDED.ordem,
                     e_condutor          = EXCLUDED.e_condutor,
-                    updated_at          = now()",
+                    updated_at          = now()
+             RETURNING id::text",
         )
         .bind(processo_id)
         .bind(&envolvido.policial_militar_id)
         .bind(&envolvido.status_envolvido_id)
         .bind(envolvido.ordem)
         .bind(envolvido.e_condutor)
-        .execute(&mut **tx)
+        .fetch_one(&mut **tx)
         .await?;
+
+        if let Some(acusacoes) = &envolvido.acusacoes {
+            evidence_repository::save_acusacoes(tx, &envolvido_id, acusacoes).await?;
+        }
     }
     Ok(())
 }
@@ -1463,8 +1589,13 @@ pub async fn update_involved_outcome(
     tx: &mut Transaction<'_, Postgres>,
     request: &UpdateInvolvedOutcomeRequest,
 ) -> Result<(), AppError> {
-    let permite_punicao: bool = sqlx::query_scalar(
-        "SELECT a.permite_punicao
+    let (permite_punicao, permite_solucao_sugerida, solucao_sugerida_atual): (
+        bool,
+        bool,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT a.permite_punicao, a.permite_solucao_sugerida,
+                e.solucao_sugerida_id::text
            FROM processo_envolvidos e
            JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
            JOIN apuratorios a ON a.id = p.apuratorio_id
@@ -1476,6 +1607,17 @@ pub async fn update_involved_outcome(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| AppError::Domain("envolvido nao encontrado neste processo".to_string()))?;
+
+    if !permite_solucao_sugerida && request.solucao_sugerida_id.is_some() {
+        return Err(AppError::Domain(
+            "solução sugerida é permitida somente para procedimentos".to_string(),
+        ));
+    }
+    let solucao_sugerida = if permite_solucao_sugerida {
+        request.solucao_sugerida_id.as_deref()
+    } else {
+        solucao_sugerida_atual.as_deref()
+    };
 
     if request.penalidade_tipo_id.is_some() {
         if !permite_punicao {
@@ -1527,7 +1669,7 @@ pub async fn update_involved_outcome(
     )
     .bind(&request.envolvido_id)
     .bind(&request.processo_id)
-    .bind(request.solucao_sugerida_id.as_deref())
+    .bind(solucao_sugerida)
     .bind(request.solucao_decidida_id.as_deref())
     .bind(request.penalidade_tipo_id.as_deref())
     .bind(request.penalidade_dias)

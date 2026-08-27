@@ -125,10 +125,11 @@ INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
 INSERT INTO tipos_apuratorio (id, nome) VALUES ('{tipo_apuratorio}', 'procedimento');
 INSERT INTO apuratorios
     (id, sigla, nome, tipo_apuratorio_id, prazo_base_dias, max_envolvidos,
-     exige_natureza_fato, codigo_extensao) VALUES
-    ('{apuratorio}',       'TST-A', 'Apuratorio Teste A', '{tipo_apuratorio}', {prazo}, 1,    true,  NULL),
-    ('{apuratorio_livre}', 'TST-B', 'Apuratorio Teste B', '{tipo_apuratorio}', {prazo}, NULL, false, NULL),
-    ('{apuratorio_cp}',    'TST-C', 'Apuratorio Teste C', '{tipo_apuratorio}', {prazo}, 1,    false, 'carta_precatoria');
+     exige_natureza_fato, codigo_extensao, permite_indicios,
+     permite_solucao_sugerida) VALUES
+    ('{apuratorio}',       'TST-A', 'Apuratorio Teste A', '{tipo_apuratorio}', {prazo}, 1,    true,  NULL, true, true),
+    ('{apuratorio_livre}', 'TST-B', 'Apuratorio Teste B', '{tipo_apuratorio}', {prazo}, NULL, false, NULL, true, true),
+    ('{apuratorio_cp}',    'TST-C', 'Apuratorio Teste C', '{tipo_apuratorio}', {prazo}, 1,    false, 'carta_precatoria', true, true);
 
 INSERT INTO tipos_documento (id, nome) VALUES
     ('{documento}',       'Portaria Teste'),

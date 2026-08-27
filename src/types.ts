@@ -35,6 +35,14 @@ export interface ApuratorioConfig {
   permite_punicao: boolean;
   /** A espécie tramita por comissão: revela a data de remessa à comissão. */
   permite_remessa_comissao: boolean;
+  /** O cadastro recebe o enquadramento jurídico do acusado. */
+  permite_acusacao: boolean;
+  /** A acusação pode incluir crime ou contravenção. */
+  permite_acusacao_penal: boolean;
+  /** A espécie permite registrar indícios ao final da investigação. */
+  permite_indicios: boolean;
+  /** O encarregado pode propor uma solução. */
+  permite_solucao_sugerida: boolean;
   /** Único código técnico do schema. Hoje só `carta_precatoria`. */
   codigo_extensao: string | null;
 
@@ -330,6 +338,13 @@ export interface SelecaoInfracaoPenal {
 export interface SelecaoInfracaoEstatuto {
   infracao_estatuto_id: string;
   analogia_transgressao_id: string;
+}
+
+/** Enquadramentos jurídicos usados por uma acusação formal. */
+export interface AcusacoesRequest {
+  infracoes_penais?: SelecaoInfracaoPenal[];
+  transgressoes_ids?: string[];
+  infracoes_estatuto?: SelecaoInfracaoEstatuto[];
 }
 
 /** `evidence` */
@@ -753,6 +768,8 @@ export interface EnvolvidoRequest {
   status_envolvido_id: string;
   ordem: number;
   e_condutor?: boolean;
+  /** Ausente preserva a acusação atual; presente sincroniza toda a seleção. */
+  acusacoes?: AcusacoesRequest | null;
 }
 
 /** Datas informadas somente depois que o processo existe. */

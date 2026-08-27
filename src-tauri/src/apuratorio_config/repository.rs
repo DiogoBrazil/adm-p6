@@ -23,11 +23,17 @@ pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<Apuratorio
         bool,
         bool,
         bool,
+        bool,
+        bool,
+        bool,
+        bool,
         Option<String>,
     );
     let cabecalho: Option<Cabecalho> = sqlx::query_as(
         "SELECT sigla, nome, prazo_base_dias, max_envolvidos, exige_natureza_fato,
                 permite_julgamento, permite_punicao, permite_remessa_comissao,
+                permite_acusacao, permite_acusacao_penal, permite_indicios,
+                permite_solucao_sugerida,
                 codigo_extensao
            FROM apuratorios WHERE id = $1::uuid",
     )
@@ -44,6 +50,10 @@ pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<Apuratorio
         permite_julgamento,
         permite_punicao,
         permite_remessa_comissao,
+        permite_acusacao,
+        permite_acusacao_penal,
+        permite_indicios,
+        permite_solucao_sugerida,
         codigo_extensao,
     )) = cabecalho
     else {
@@ -100,6 +110,10 @@ pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<Apuratorio
         permite_julgamento,
         permite_punicao,
         permite_remessa_comissao,
+        permite_acusacao,
+        permite_acusacao_penal,
+        permite_indicios,
+        permite_solucao_sugerida,
         codigo_extensao,
         documentos,
         papeis,

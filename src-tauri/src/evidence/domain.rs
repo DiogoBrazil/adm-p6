@@ -80,6 +80,24 @@ pub struct SelecaoInfracaoEstatuto {
     pub analogia_transgressao_id: String,
 }
 
+/// Parte juridica comum a uma acusacao e ao resultado de uma investigacao.
+/// Categorias pertencem somente aos indicios e, por isso, ficam fora daqui.
+#[derive(Debug, Deserialize, Default)]
+pub struct AcusacoesRequest {
+    #[serde(default)]
+    pub infracoes_penais: Vec<SelecaoInfracaoPenal>,
+    #[serde(default)]
+    pub transgressoes_ids: Vec<String>,
+    #[serde(default)]
+    pub infracoes_estatuto: Vec<SelecaoInfracaoEstatuto>,
+}
+
+impl AcusacoesRequest {
+    pub fn quantidade(&self) -> usize {
+        self.infracoes_penais.len() + self.transgressoes_ids.len() + self.infracoes_estatuto.len()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SaveEvidenceRequest {
     pub envolvido_id: String,

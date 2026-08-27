@@ -19,6 +19,7 @@
 
 import {
   call,
+  type AcusacoesRequest,
   type ApuratorioConfig,
   type AtualizarSubstituicaoRequest,
   type CartaPrecatoriaRequest,
@@ -29,6 +30,8 @@ import {
   type PapelItem,
   type PessoaRequest,
   type SaveProceedingRequest,
+  type SelecaoInfracaoEstatuto,
+  type SelecaoInfracaoPenal,
   type UserListItem,
 } from "../api";
 import {
@@ -46,7 +49,7 @@ import {
   protegerFormulario,
 } from "../dom";
 import type { ContextoTela } from "./catalogos";
-import { renderIndicios } from "./indicios";
+import { pedirAnalogia, renderIndicios } from "./indicios";
 
 export const ROTA_LISTA = "/procedimentos/lista";
 
@@ -109,11 +112,41 @@ async function carregarCatalogos(): Promise<Catalogos> {
 
 // ── rascunho ────────────────────────────────────────────────────────────────
 
-type Rascunho = SaveProceedingRequest & {
-  envolvidos: EnvolvidoRequest[];
+type AcusacoesFormulario = Required<AcusacoesRequest> & {
+  rotulos: Record<string, string>;
+};
+
+type EnvolvidoFormulario = Omit<EnvolvidoRequest, "acusacoes"> & {
+  acusacoes?: AcusacoesFormulario | null;
+};
+
+type Rascunho = Omit<SaveProceedingRequest, "envolvidos"> & {
+  envolvidos: EnvolvidoFormulario[];
   designacoes: DesignacaoRequest[];
   pessoas: PessoaRequest[];
 };
+
+function acusacoesVazias(): AcusacoesFormulario {
+  return {
+    infracoes_penais: [],
+    transgressoes_ids: [],
+    infracoes_estatuto: [],
+    rotulos: {},
+  };
+}
+
+function acusacoesDo(envolvido: EnvolvidoFormulario): AcusacoesFormulario {
+  if (!envolvido.acusacoes) envolvido.acusacoes = acusacoesVazias();
+  return envolvido.acusacoes;
+}
+
+function quantidadeAcusacoes(acusacoes: AcusacoesFormulario): number {
+  return (
+    acusacoes.infracoes_penais.length +
+    acusacoes.transgressoes_ids.length +
+    acusacoes.infracoes_estatuto.length
+  );
+}
 
 function rascunhoVazio(): Rascunho {
   return {
@@ -173,11 +206,12 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
       ? ({ deprecante: deprecante ?? "", unidade_deprecada_id: deprecada } as CartaPrecatoriaRequest)
       : null;
 
-  rascunho.envolvidos = rascunho.envolvidos.map((_, i) => ({
+  rascunho.envolvidos = rascunho.envolvidos.map((envolvido, i) => ({
     policial_militar_id: String(dados.get(`env_${i}_pm`) ?? ""),
     status_envolvido_id: String(dados.get(`env_${i}_status`) ?? ""),
     ordem: i + 1,
     e_condutor: dados.get(`env_${i}_condutor`) === "on",
+    acusacoes: envolvido.acusacoes,
   }));
 
   // A designação travada é desenhada como texto, sem `<select>`: `dados.has()`
@@ -315,6 +349,92 @@ function linhaDesignacao(
   </div>`;
 }
 
+function listaAcusacoes(
+  acusacoes: AcusacoesFormulario,
+  indiceEnvolvido: number,
+  esferas: Opcao[],
+): string {
+  const rotulo = (id: string) => acusacoes.rotulos[id] ?? id;
+  return `
+    <div class="acusacoes-lista">
+      ${acusacoes.infracoes_penais
+        .map(
+          (item, indice) => `<div class="vinculo">
+            <span>${escapeHtml(rotulo(item.infracao_penal_id))}</span>
+            <label>Esfera<select data-acusacao-esfera="${indiceEnvolvido}:${indice}">
+              ${esferas.map((e) => option(e.id, e.rotulo, e.id === item.esfera_penal_id)).join("")}
+            </select></label>
+            <button type="button" class="danger small" data-remover-acusacao-penal="${indiceEnvolvido}:${indice}" aria-label="Remover infração penal">×</button>
+          </div>`,
+        )
+        .join("")}
+      ${acusacoes.transgressoes_ids
+        .map(
+          (id, indice) => `<div class="vinculo">
+            <span>${escapeHtml(rotulo(id))}</span>
+            <button type="button" class="danger small" data-remover-acusacao-transgressao="${indiceEnvolvido}:${indice}" aria-label="Remover transgressão">×</button>
+          </div>`,
+        )
+        .join("")}
+      ${acusacoes.infracoes_estatuto
+        .map(
+          (item, indice) => `<div class="vinculo">
+            <span>${escapeHtml(rotulo(item.infracao_estatuto_id))}</span>
+            <span class="analogia">analogia: ${escapeHtml(rotulo(item.analogia_transgressao_id))}</span>
+            <button type="button" class="secondary small" data-trocar-analogia-acusacao="${indiceEnvolvido}:${indice}">Trocar analogia</button>
+            <button type="button" class="danger small" data-remover-acusacao-estatuto="${indiceEnvolvido}:${indice}" aria-label="Remover infração do Estatuto">×</button>
+          </div>`,
+        )
+        .join("")}
+      ${quantidadeAcusacoes(acusacoes) === 0 ? `<p class="empty">Nenhuma acusação selecionada.</p>` : ""}
+    </div>`;
+}
+
+function blocoAcusacoes(
+  envolvido: EnvolvidoFormulario,
+  indice: number,
+  permitePenal: boolean,
+  esferas: Opcao[],
+  dispositivos: Opcao[],
+  naturezasTransgressao: Opcao[],
+): string {
+  const acusacoes = acusacoesDo(envolvido);
+  return `<section class="acusacoes-editor" aria-label="Acusações do envolvido ${indice + 1}">
+    <div class="acusacoes-editor__cabecalho">
+      <div><h3>Acusações</h3><p class="secao-ajuda">Selecione um ou mais enquadramentos. Infrações do Estatuto exigem analogia com o RDPM.</p></div>
+      <span class="badge badge--neutro">${quantidadeAcusacoes(acusacoes)} selecionada(s)</span>
+    </div>
+    ${listaAcusacoes(acusacoes, indice, esferas)}
+    <div class="acusacoes-buscas">
+      ${
+        permitePenal
+          ? `<div class="acusacao-busca">
+              <strong>Crime ou contravenção</strong>
+              <div class="linha-form">
+                <label>Buscar artigo<input id="acusacao-penal-${indice}" placeholder="artigo ou descrição" autocomplete="off" /></label>
+                <label>Dispositivo<select id="acusacao-dispositivo-${indice}"><option value="">Todos</option>${dispositivos.map((d) => option(d.id, d.rotulo, false)).join("")}</select></label>
+              </div>
+              <div id="acusacao-penal-resultados-${indice}" class="resultados"></div>
+            </div>`
+          : ""
+      }
+      <div class="acusacao-busca">
+        <strong>Transgressão do RDPM</strong>
+        <div class="linha-form">
+          <label>Buscar transgressão<input id="acusacao-transgressao-${indice}" placeholder="inciso ou texto" autocomplete="off" /></label>
+          <label>Natureza<select id="acusacao-natureza-${indice}"><option value="">Todas</option>${naturezasTransgressao.map((n) => option(n.id, n.rotulo, false)).join("")}</select></label>
+        </div>
+        <div id="acusacao-transgressao-resultados-${indice}" class="resultados"></div>
+      </div>
+      <div class="acusacao-busca">
+        <strong>Infração do Estatuto</strong>
+        <label>Buscar infração<input id="acusacao-estatuto-${indice}" placeholder="artigo, inciso ou texto" autocomplete="off" /></label>
+        <div id="acusacao-estatuto-resultados-${indice}" class="resultados"></div>
+      </div>
+    </div>
+  </section>`;
+}
+
 export async function renderFormularioProcesso(
   ctx: ContextoTela,
   id: string | null,
@@ -329,12 +449,18 @@ export async function renderFormularioProcesso(
     rascunho = rascunhoVazio();
     designacoesTravadas.clear();
     if (id) {
-      const r = await call("proceedings_get", { id });
+      const [r, evidenciasResp] = await Promise.all([
+        call("proceedings_get", { id }),
+        call("evidence_list_for_proceeding", { processoId: id }),
+      ]);
       const d = r.data;
       if (!d) {
         ctx.shell(`<section class="panel"><p class="error">Processo não encontrado.</p></section>`);
         return;
       }
+      const evidenciasPorMilitar = new Map(
+        (evidenciasResp.data ?? []).map((item) => [item.policial_militar_id, item.indicios]),
+      );
       rascunho = {
         id: d.id,
         apuratorio_id: d.apuratorio_id,
@@ -349,12 +475,34 @@ export async function renderFormularioProcesso(
         data_instauracao: d.data_instauracao,
         data_recebimento: d.data_recebimento,
         resumo_fatos: d.resumo_fatos,
-        envolvidos: d.envolvidos.map((e, i) => ({
-          policial_militar_id: e.policial_militar_id,
-          status_envolvido_id: e.status_envolvido_id,
-          ordem: i + 1,
-          e_condutor: e.e_condutor,
-        })),
+        envolvidos: d.envolvidos.map((e, i) => {
+          const dados = evidenciasPorMilitar.get(e.policial_militar_id);
+          const rotulos: Record<string, string> = {};
+          for (const item of dados?.infracoes_penais ?? []) rotulos[item.infracao_penal_id] = item.rotulo;
+          for (const item of dados?.transgressoes ?? []) rotulos[item.id] = item.rotulo;
+          for (const item of dados?.infracoes_estatuto ?? []) {
+            rotulos[item.infracao_estatuto_id] = item.rotulo;
+            rotulos[item.analogia_transgressao_id] = item.analogia_rotulo;
+          }
+          return {
+            policial_militar_id: e.policial_militar_id,
+            status_envolvido_id: e.status_envolvido_id,
+            ordem: i + 1,
+            e_condutor: e.e_condutor,
+            acusacoes: {
+              infracoes_penais: (dados?.infracoes_penais ?? []).map((item) => ({
+                infracao_penal_id: item.infracao_penal_id,
+                esfera_penal_id: item.esfera_penal_id,
+              })),
+              transgressoes_ids: (dados?.transgressoes ?? []).map((item) => item.id),
+              infracoes_estatuto: (dados?.infracoes_estatuto ?? []).map((item) => ({
+                infracao_estatuto_id: item.infracao_estatuto_id,
+                analogia_transgressao_id: item.analogia_transgressao_id,
+              })),
+              rotulos,
+            },
+          };
+        }),
         // Só as vigentes: designação encerrada é histórico e não viaja no
         // formulário. O `id` vai junto — é ele que faz o backend ATUALIZAR a
         // linha em vez de criar outra, que era o defeito de antes.
@@ -416,6 +564,16 @@ export async function renderFormularioProcesso(
   const exigeNatureza = config?.exige_natureza_fato === true;
   const ehCartaPrecatoria = config?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
   const maxEnvolvidos = config?.max_envolvidos ?? null;
+  const permiteAcusacao = config?.permite_acusacao === true;
+  const permiteAcusacaoPenal = config?.permite_acusacao_penal === true;
+
+  const [esferasPenais, dispositivosLegais, naturezasTransgressao] = permiteAcusacao
+    ? await Promise.all([
+        catalogo("esferas_penais", ["nome"]),
+        catalogo("dispositivos_legais", ["nome"]),
+        catalogo("naturezas_transgressao", ["nome"]),
+      ])
+    : [[], [], []];
 
   const documentos = (config?.documentos ?? []).filter((d) => d.ativo);
   const papeis = (config?.papeis ?? []).filter((p) => p.ativo);
@@ -511,6 +669,18 @@ export async function renderFormularioProcesso(
               <label>Militar${selectMilitares(`env_${i}_pm`, cats.militares, e.policial_militar_id)}</label>
               <label>Situação${selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true)}</label>
               ${exigeCondutor ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor ? " checked" : ""} /> Condutor</label>` : ""}
+              ${
+                permiteAcusacao
+                  ? blocoAcusacoes(
+                      e,
+                      i,
+                      permiteAcusacaoPenal,
+                      esferasPenais,
+                      dispositivosLegais,
+                      naturezasTransgressao,
+                    )
+                  : ""
+              }
             </div>`,
             )
             .join("")}
@@ -582,6 +752,175 @@ export async function renderFormularioProcesso(
     void renderFormularioProcesso(ctx, id, "", r);
   };
 
+  const coordenadas = (valor: string | undefined): [number, number] | null => {
+    if (!valor) return null;
+    const partes = valor.split(":");
+    if (partes.length !== 2) return null;
+    const envolvido = Number(partes[0]);
+    const item = Number(partes[1]);
+    return Number.isInteger(envolvido) && Number.isInteger(item) ? [envolvido, item] : null;
+  };
+
+  form.querySelectorAll<HTMLSelectElement>("[data-acusacao-esfera]").forEach((select) =>
+    select.addEventListener("change", () => {
+      const posicao = coordenadas(select.dataset.acusacaoEsfera);
+      if (!posicao) return;
+      const item = r.envolvidos[posicao[0]]?.acusacoes?.infracoes_penais[posicao[1]];
+      if (item) item.esfera_penal_id = select.value;
+    }),
+  );
+
+  const ligarRemocao = (
+    seletor: string,
+    atributo: "removerAcusacaoPenal" | "removerAcusacaoTransgressao" | "removerAcusacaoEstatuto",
+    removerItem: (acusacoes: AcusacoesFormulario, indice: number) => void,
+  ) =>
+    form.querySelectorAll<HTMLButtonElement>(seletor).forEach((botao) =>
+      botao.addEventListener("click", () => {
+        const posicao = coordenadas(botao.dataset[atributo]);
+        if (!posicao) return;
+        rerender(() => removerItem(acusacoesDo(r.envolvidos[posicao[0]]!), posicao[1]));
+      }),
+    );
+  ligarRemocao("[data-remover-acusacao-penal]", "removerAcusacaoPenal", (a, i) =>
+    a.infracoes_penais.splice(i, 1),
+  );
+  ligarRemocao(
+    "[data-remover-acusacao-transgressao]",
+    "removerAcusacaoTransgressao",
+    (a, i) => a.transgressoes_ids.splice(i, 1),
+  );
+  ligarRemocao("[data-remover-acusacao-estatuto]", "removerAcusacaoEstatuto", (a, i) =>
+    a.infracoes_estatuto.splice(i, 1),
+  );
+
+  form.querySelectorAll<HTMLButtonElement>("[data-trocar-analogia-acusacao]").forEach((botao) =>
+    botao.addEventListener("click", async () => {
+      const posicao = coordenadas(botao.dataset.trocarAnalogiaAcusacao);
+      if (!posicao) return;
+      absorverFormulario(r, form);
+      const acusacoes = acusacoesDo(r.envolvidos[posicao[0]]!);
+      const item = acusacoes.infracoes_estatuto[posicao[1]];
+      if (!item) return;
+      const analogia = await pedirAnalogia(acusacoes.rotulos);
+      if (!analogia) return;
+      item.analogia_transgressao_id = analogia;
+      void renderFormularioProcesso(ctx, id, "", r);
+    }),
+  );
+
+  type ResultadoBusca = { id: string; rotulo: string };
+  const ligarBusca = (
+    input: HTMLInputElement | null,
+    destino: HTMLElement | null,
+    buscar: (termo: string) => Promise<ResultadoBusca[]>,
+    escolher: (item: ResultadoBusca) => void | Promise<void>,
+    filtro?: HTMLSelectElement | null,
+  ) => {
+    let sequencia = 0;
+    const executar = async () => {
+      const termo = input?.value.trim() ?? "";
+      if (!destino) return;
+      if (termo.length < 2) {
+        destino.innerHTML = "";
+        return;
+      }
+      const atual = ++sequencia;
+      const resultados = await buscar(termo);
+      if (atual !== sequencia) return;
+      destino.innerHTML = resultados.length
+        ? resultados
+            .map(
+              (item) =>
+                `<button type="button" class="secondary small" data-escolher-acusacao="${escapeHtml(item.id)}">${escapeHtml(item.rotulo)}</button>`,
+            )
+            .join("")
+        : `<span class="empty">Nenhum enquadramento encontrado.</span>`;
+      destino.querySelectorAll<HTMLButtonElement>("[data-escolher-acusacao]").forEach((botao) =>
+        botao.addEventListener("click", async () => {
+          const item = resultados.find((resultado) => resultado.id === botao.dataset.escolherAcusacao);
+          if (item) await escolher(item);
+        }),
+      );
+    };
+    input?.addEventListener("input", () => void executar());
+    filtro?.addEventListener("change", () => void executar());
+  };
+
+  if (permiteAcusacao) {
+    r.envolvidos.forEach((envolvido, indice) => {
+      const acusacoes = acusacoesDo(envolvido);
+      const filtroDispositivo = form.querySelector<HTMLSelectElement>(
+        `#acusacao-dispositivo-${indice}`,
+      );
+      ligarBusca(
+        form.querySelector<HTMLInputElement>(`#acusacao-penal-${indice}`),
+        form.querySelector(`#acusacao-penal-resultados-${indice}`),
+        (termo) =>
+          call("evidence_search_infracoes_penais", {
+            termo,
+            dispositivoLegalId: filtroDispositivo?.value || null,
+          }).then((resposta) => resposta.data ?? []),
+        (item) => {
+          const esfera = esferasPenais[0];
+          if (!esfera) {
+            notificar("Cadastre ao menos uma esfera penal antes de selecionar o artigo.", "erro");
+            return;
+          }
+          if (acusacoes.infracoes_penais.some((x) => x.infracao_penal_id === item.id)) return;
+          absorverFormulario(r, form);
+          acusacoes.rotulos[item.id] = item.rotulo;
+          acusacoes.infracoes_penais.push({
+            infracao_penal_id: item.id,
+            esfera_penal_id: esfera.id,
+          } satisfies SelecaoInfracaoPenal);
+          void renderFormularioProcesso(ctx, id, "", r);
+        },
+        filtroDispositivo,
+      );
+
+      const filtroNatureza = form.querySelector<HTMLSelectElement>(`#acusacao-natureza-${indice}`);
+      ligarBusca(
+        form.querySelector<HTMLInputElement>(`#acusacao-transgressao-${indice}`),
+        form.querySelector(`#acusacao-transgressao-resultados-${indice}`),
+        (termo) =>
+          call("evidence_search_transgressoes", {
+            termo,
+            naturezaId: filtroNatureza?.value || null,
+          }).then((resposta) => resposta.data ?? []),
+        (item) => {
+          if (acusacoes.transgressoes_ids.includes(item.id)) return;
+          absorverFormulario(r, form);
+          acusacoes.rotulos[item.id] = item.rotulo;
+          acusacoes.transgressoes_ids.push(item.id);
+          void renderFormularioProcesso(ctx, id, "", r);
+        },
+        filtroNatureza,
+      );
+
+      ligarBusca(
+        form.querySelector<HTMLInputElement>(`#acusacao-estatuto-${indice}`),
+        form.querySelector(`#acusacao-estatuto-resultados-${indice}`),
+        (termo) =>
+          call("evidence_search_infracoes_estatuto", { termo }).then(
+            (resposta) => resposta.data ?? [],
+          ),
+        async (item) => {
+          if (acusacoes.infracoes_estatuto.some((x) => x.infracao_estatuto_id === item.id)) return;
+          absorverFormulario(r, form);
+          acusacoes.rotulos[item.id] = item.rotulo;
+          const analogia = await pedirAnalogia(acusacoes.rotulos);
+          if (!analogia) return;
+          acusacoes.infracoes_estatuto.push({
+            infracao_estatuto_id: item.id,
+            analogia_transgressao_id: analogia,
+          } satisfies SelecaoInfracaoEstatuto);
+          void renderFormularioProcesso(ctx, id, "", r);
+        },
+      );
+    });
+  }
+
   document.querySelector<HTMLButtonElement>("#cancelar")?.addEventListener("click", () => {
     if (!podeDescartarFormulario()) return;
     void renderListaProcessos(ctx);
@@ -603,6 +942,7 @@ export async function renderFormularioProcesso(
         status_envolvido_id: "",
         ordem: r.envolvidos.length + 1,
         e_condutor: false,
+        acusacoes: permiteAcusacao ? acusacoesVazias() : null,
       }),
     ),
   );
@@ -627,7 +967,24 @@ export async function renderFormularioProcesso(
     salvar.disabled = true;
     salvar.textContent = "Salvando…";
     absorverFormulario(r, form);
-    const resposta = await call("proceedings_save", { request: r });
+    const request: SaveProceedingRequest = {
+      ...r,
+      envolvidos: r.envolvidos.map((envolvido) => ({
+        policial_militar_id: envolvido.policial_militar_id,
+        status_envolvido_id: envolvido.status_envolvido_id,
+        ordem: envolvido.ordem,
+        e_condutor: envolvido.e_condutor,
+        acusacoes:
+          permiteAcusacao && envolvido.acusacoes
+            ? {
+                infracoes_penais: envolvido.acusacoes.infracoes_penais,
+                transgressoes_ids: envolvido.acusacoes.transgressoes_ids,
+                infracoes_estatuto: envolvido.acusacoes.infracoes_estatuto,
+              }
+            : undefined,
+      })),
+    };
+    const resposta = await call("proceedings_save", { request });
     if (!resposta.ok) {
       void renderFormularioProcesso(ctx, id, resposta.error ?? "Falha ao salvar.", r);
       return;
@@ -944,6 +1301,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     solucoesSugeridas,
     solucoesDecididas,
     penalidades,
+    envolvidosComEnquadramento,
   ] =
     await Promise.all([
       call("proceedings_get", { id }),
@@ -955,6 +1313,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       catalogo("tipos_solucao_sugerida", ["nome"]),
       catalogo("tipos_solucao_decidida", ["nome"]),
       catalogo("tipos_penalidade", ["nome"]),
+      call("evidence_list_for_proceeding", { processoId: id }).then((r) => r.data ?? []),
     ]);
 
   const d = detalheResp.data;
@@ -980,6 +1339,27 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     remessaComissao,
   );
   const mostraJulgamento = mostrarData(config?.permite_julgamento, d.data_julgamento);
+  const permiteAcusacao = config?.permite_acusacao === true;
+  const permiteIndicios = config?.permite_indicios === true;
+  const permiteSolucaoSugerida = config?.permite_solucao_sugerida === true;
+  const enquadramentoPorEnvolvido = new Map(
+    envolvidosComEnquadramento.map((item) => [item.envolvido_id, item.indicios]),
+  );
+  const resumoAcusacoes = (envolvidoId: string) => {
+    const dados = enquadramentoPorEnvolvido.get(envolvidoId);
+    const itens = [
+      ...(dados?.infracoes_penais ?? []).map(
+        (item) => `${item.rotulo} — esfera ${item.esfera_penal}`,
+      ),
+      ...(dados?.transgressoes ?? []).map((item) => item.rotulo),
+      ...(dados?.infracoes_estatuto ?? []).map(
+        (item) => `${item.rotulo} — analogia: ${item.analogia_rotulo}`,
+      ),
+    ];
+    return itens.length
+      ? `<ul class="acusacoes-resumo">${itens.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+      : `<span class="empty">Nenhuma acusação registrada.</span>`;
+  };
 
   const campoDataPosterior = (
     nome: string,
@@ -999,6 +1379,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         </div>`;
 
   const podeEscrever = ctx.podeEscrever();
+  const mostraAcoesEnvolvido = podeEscrever || permiteIndicios;
   const prazoVigente = prazos.find((prazo) => prazo.vigente) ?? null;
   const ultimaProrrogacao = prazos.find((prazo) => prazo.vigente && prazo.ordem > 0) ?? null;
   const linha = (rotulo: string, valor: unknown) =>
@@ -1100,7 +1481,8 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         d.envolvidos.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--envolvidos">
               <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
-                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Ações</th></tr></thead>
+                ${permiteAcusacao ? "<th>Acusações</th>" : ""}
+                ${permiteSolucaoSugerida ? "<th>Sugerida</th>" : ""}<th>Decidida</th><th>Penalidade</th>${mostraAcoesEnvolvido ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${d.envolvidos
                 .map(
                   (e) => `<tr>
@@ -1108,10 +1490,13 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${escapeHtml(`${e.posto_graduacao} ${e.nome}`)}</td>
                     <td>${escapeHtml(e.status_envolvido)}</td>
                     <td>${e.e_condutor ? "sim" : ""}</td>
-                    <td>${escapeHtml(e.solucao_sugerida ?? "")}</td>
+                    ${permiteAcusacao ? `<td class="celula-acusacoes">${resumoAcusacoes(e.id)}</td>` : ""}
+                    ${permiteSolucaoSugerida ? `<td>${escapeHtml(e.solucao_sugerida ?? "")}</td>` : ""}
                     <td>${escapeHtml(e.solucao_decidida ?? "")}</td>
                     <td>${escapeHtml(e.penalidade_tipo ?? "")}${e.penalidade_dias ? ` — ${e.penalidade_dias} dias` : ""}</td>
-                    <td class="row-actions">
+                    ${
+                      mostraAcoesEnvolvido
+                        ? `<td class="row-actions">
                       ${
                         podeEscrever
                           ? botaoIcone("editar", "Editar resultado", {
@@ -1120,11 +1505,17 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                             })
                           : ""
                       }
-                      ${botaoIcone("abrir", "Ver indícios", {
-                        classe: "secondary",
-                        dados: { indicios: e.id },
-                      })}
-                    </td>
+                      ${
+                        permiteIndicios
+                          ? botaoIcone("abrir", "Ver indícios", {
+                              classe: "secondary",
+                              dados: { indicios: e.id },
+                            })
+                          : ""
+                      }
+                    </td>`
+                        : ""
+                    }
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>`
@@ -1134,9 +1525,13 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         podeEscrever && d.envolvidos.length
           ? `<form id="form-resultado-envolvido" class="linha-form linha-form--bloco" hidden>
                <p id="resumo-resultado" class="secao-ajuda linha-form__resumo"></p>
-               <label>Solução sugerida
-                 ${selectOpcoes("solucao_sugerida_id", solucoesSugeridas, "")}
-               </label>
+               ${
+                 permiteSolucaoSugerida
+                   ? `<label>Solução sugerida
+                        ${selectOpcoes("solucao_sugerida_id", solucoesSugeridas, "")}
+                      </label>`
+                   : ""
+               }
                <label>Solução decidida
                  ${selectOpcoes("solucao_decidida_id", solucoesDecididas, "")}
                </label>
@@ -1508,11 +1903,13 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       if (!envolvido || !formResultado) return;
       resultadoEmEdicao = envolvido;
       limparOpcoesHistoricasResultado();
-      garantirOpcaoHistorica(
-        "solucao_sugerida_id",
-        envolvido.solucao_sugerida_id,
-        envolvido.solucao_sugerida,
-      );
+      if (permiteSolucaoSugerida) {
+        garantirOpcaoHistorica(
+          "solucao_sugerida_id",
+          envolvido.solucao_sugerida_id,
+          envolvido.solucao_sugerida,
+        );
+      }
       garantirOpcaoHistorica(
         "solucao_decidida_id",
         envolvido.solucao_decidida_id,
@@ -1523,7 +1920,8 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         envolvido.penalidade_tipo_id,
         envolvido.penalidade_tipo,
       );
-      selectResultado("solucao_sugerida_id")!.value = envolvido.solucao_sugerida_id ?? "";
+      const sugerida = selectResultado("solucao_sugerida_id");
+      if (sugerida) sugerida.value = envolvido.solucao_sugerida_id ?? "";
       selectResultado("solucao_decidida_id")!.value = envolvido.solucao_decidida_id ?? "";
       selectResultado("penalidade_tipo_id")!.value = envolvido.penalidade_tipo_id ?? "";
       inputDias()!.value = envolvido.penalidade_dias?.toString() ?? "";
@@ -1534,7 +1932,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       formResultado.hidden = false;
       atualizarCamposPenalidade();
       formResultado.scrollIntoView({ block: "nearest" });
-      selectResultado("solucao_sugerida_id")?.focus();
+      (selectResultado("solucao_sugerida_id") ?? selectResultado("solucao_decidida_id"))?.focus();
     }),
   );
 
@@ -1550,7 +1948,9 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       request: {
         processo_id: id,
         envolvido_id: resultadoEmEdicao.id,
-        solucao_sugerida_id: selectResultado("solucao_sugerida_id")?.value || null,
+        solucao_sugerida_id: permiteSolucaoSugerida
+          ? selectResultado("solucao_sugerida_id")?.value || null
+          : null,
         solucao_decidida_id: selectResultado("solucao_decidida_id")?.value || null,
         penalidade_tipo_id: penalidadeVisivel
           ? selectResultado("penalidade_tipo_id")?.value || null

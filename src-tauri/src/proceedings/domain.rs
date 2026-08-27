@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::evidence::domain::AcusacoesRequest;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MilitarQualificado {
     pub posto_graduacao: String,
@@ -167,6 +169,9 @@ pub struct EnvolvidoRequest {
     pub ordem: i32,
     #[serde(default)]
     pub e_condutor: bool,
+    /// Ausente preserva o enquadramento atual. Presente sincroniza a acusacao
+    /// inteira, inclusive quando vazia em um registro legado.
+    pub acusacoes: Option<AcusacoesRequest>,
 }
 
 /// Uma designação **inicial**, lançada no cadastro do processo.

@@ -197,6 +197,9 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         "ck_apuratorio_max_envolvidos" => {
             "O número máximo de envolvidos precisa ser maior que zero."
         }
+        "ck_apuratorio_acusacao_penal" => {
+            "Ative primeiro a acusação do apuratório para então permitir acusações penais."
+        }
         "ck_appapel_max" => "O número máximo de ocupantes precisa ser maior que zero.",
         "ck_apuratorio_prazo_base" | "ck_apdoc_prazo" => {
             "O prazo em dias precisa ser maior que zero."

@@ -87,7 +87,9 @@ ON CONFLICT DO NOTHING;
 --                         têm. Dá true em FP/IPM/SR/SV e false em CP e nos 5
 --                         disciplinares — a CP realmente não tem rubrica.
 INSERT INTO apuratorios (sigla, nome, tipo_apuratorio_id, prazo_base_dias,
-                         max_envolvidos, exige_natureza_fato, codigo_extensao)
+                         max_envolvidos, exige_natureza_fato, codigo_extensao,
+                         permite_acusacao, permite_acusacao_penal,
+                         permite_indicios, permite_solucao_sugerida)
 SELECT e.tipo_detalhe,
        e.tipo_detalhe,                       -- nome por extenso: revisar na tela
        ta.id,
@@ -95,7 +97,11 @@ SELECT e.tipo_detalhe,
        CASE WHEN e.tipo_geral = 'processo' THEN 1 ELSE NULL END,
        e.todos_tem_natureza,
        -- exceção 1: código técnico, não sigla de apresentação
-       CASE WHEN e.tipo_detalhe = 'CP' THEN 'carta_precatoria' END
+       CASE WHEN e.tipo_detalhe = 'CP' THEN 'carta_precatoria' END,
+       upper(e.tipo_detalhe) IN ('PADS', 'CD', 'CJ', 'PAD'),
+       upper(e.tipo_detalhe) IN ('CD', 'CJ', 'PAD'),
+       e.tipo_geral = 'procedimento',
+       e.tipo_geral = 'procedimento'
   FROM (
       SELECT tipo_geral,
              tipo_detalhe,

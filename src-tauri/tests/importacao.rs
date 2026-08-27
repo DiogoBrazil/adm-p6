@@ -237,6 +237,25 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
     util::com_banco_descartavel("importacao_decisoes", |pool| async move {
         importar(&pool).await;
 
+        let capacidades: Vec<(String, bool, bool, bool, bool)> = sqlx::query_as(
+            "SELECT sigla, permite_acusacao, permite_acusacao_penal,
+                    permite_indicios, permite_solucao_sugerida
+               FROM apuratorios ORDER BY sigla",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        for (sigla, acusacao, penal, indicios, sugerida) in capacidades {
+            match sigla.as_str() {
+                "PADS" => assert!((acusacao && !penal && !indicios && !sugerida)),
+                "CD" | "CJ" | "PAD" => {
+                    assert!((acusacao && penal && !indicios && !sugerida))
+                }
+                "PADE" => assert!((!acusacao && !penal && !indicios && !sugerida)),
+                _ => assert!((!acusacao && !penal && indicios && sugerida)),
+            }
+        }
+
         // B1 — as prorrogações começam NO DIA do vencimento anterior, e o
         // EXCLUDE da 0005 as aceita. Se voltasse para `[]`, a etapa 07 nem
         // teria chegado até aqui; o que se confere é que a convenção do

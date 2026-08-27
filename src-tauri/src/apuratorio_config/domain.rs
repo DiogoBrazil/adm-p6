@@ -49,6 +49,16 @@ pub struct ApuratorioConfig {
     pub permite_punicao: bool,
     /// A espécie tramita por comissão: revela a data de remessa à comissão.
     pub permite_remessa_comissao: bool,
+    /// A especie nasce com uma acusacao formal vinculada ao acusado.
+    pub permite_acusacao: bool,
+    /// A acusacao pode incluir crime ou contravencao. Sem este atributo, ficam
+    /// somente RDPM e Estatuto com analogia.
+    pub permite_acusacao_penal: bool,
+    /// A especie investiga um fato e pode registrar indicios ao final.
+    pub permite_indicios: bool,
+    /// O encarregado pode propor uma solucao. Processos recebem apenas a
+    /// solucao decidida pela autoridade competente.
+    pub permite_solucao_sugerida: bool,
     /// O único código técnico do schema (§5.3). Dirige a extensão de formulário
     /// — hoje só `carta_precatoria`. Fica fora do registro de administração de
     /// propósito: acrescentar extensão é mudança de código, não operação de

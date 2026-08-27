@@ -2433,6 +2433,75 @@ tr.atrasado {
   justify-self: end;
 }
 
+.acusacoes-editor {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.acusacoes-editor__cabecalho {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.acusacoes-editor__cabecalho h3,
+.acusacao-busca strong {
+  color: #183a50;
+  margin: 0;
+}
+
+.acusacoes-editor__cabecalho p {
+  margin: 4px 0 0;
+}
+
+.acusacoes-lista {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.acusacoes-buscas {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.acusacao-busca {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.acusacao-busca .linha-form {
+  margin: 0;
+}
+
+.acusacao-busca .resultados {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.celula-acusacoes {
+  min-width: 300px;
+  white-space: normal;
+}
+
+.acusacoes-resumo {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.acusacoes-resumo li + li {
+  margin-top: 6px;
+}
+
 .form-actions {
   position: sticky;
   z-index: 4;

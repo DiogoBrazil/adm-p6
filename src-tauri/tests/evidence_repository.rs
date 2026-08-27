@@ -51,6 +51,33 @@ async fn cenario(pool: &PgPool, m: &fixtures::Mundo) -> String {
     envolvido(pool, m, &p, &m.pm_um, 1).await
 }
 
+#[tokio::test]
+async fn indicios_dependem_da_capacidade_do_apuratorio() {
+    util::com_banco_descartavel("ev_capacidade", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let env = cenario(&pool, &m).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::exigir_permissao_indicios(&mut tx, &env)
+            .await
+            .expect("procedimento permite indicios");
+        tx.rollback().await.unwrap();
+
+        sqlx::query("UPDATE apuratorios SET permite_indicios = false WHERE id = $1::uuid")
+            .bind(&m.apuratorio_livre)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::exigir_permissao_indicios(&mut tx, &env)
+            .await
+            .unwrap_err()
+            .message();
+        assert!(erro.contains("somente em procedimentos"), "{erro}");
+    })
+    .await;
+}
+
 // ── Buscas do formulário ─────────────────────────────────────────────────────
 
 /// O rótulo é montado a partir do dado. No schema anterior o nome da lei estava

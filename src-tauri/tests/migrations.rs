@@ -244,6 +244,10 @@ async fn atributos_de_comportamento_do_apuratorio_nascem_desligados() {
             "permite_julgamento",
             "permite_punicao",
             "permite_remessa_comissao",
+            "permite_acusacao",
+            "permite_acusacao_penal",
+            "permite_indicios",
+            "permite_solucao_sugerida",
         ] {
             let (tipo, anulavel, padrao): (String, String, Option<String>) = sqlx::query_as(
                 "SELECT data_type, is_nullable, column_default

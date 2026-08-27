@@ -20,6 +20,7 @@ pub async fn evidence_save_for_pm(
             let actor = require_admin(&state).await?;
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
+            repository::exigir_permissao_indicios(&mut tx, &request.envolvido_id).await?;
             repository::save_for_envolvido(&mut tx, &request).await?;
             audit_repository::register_tx(
                 &mut tx,
@@ -79,6 +80,7 @@ pub async fn evidence_remove_for_pm(
             let actor = require_admin(&state).await?;
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
+            repository::exigir_permissao_indicios(&mut tx, &envolvido_id).await?;
             repository::remove_for_envolvido(&mut tx, &envolvido_id).await?;
             audit_repository::register_tx(
                 &mut tx,

@@ -300,6 +300,10 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
         assert!(!comum.permite_julgamento);
         assert!(!comum.permite_punicao);
         assert!(!comum.permite_remessa_comissao);
+        assert!(!comum.permite_acusacao);
+        assert!(!comum.permite_acusacao_penal);
+        assert!(comum.permite_indicios);
+        assert!(comum.permite_solucao_sugerida);
 
         // Ligados, chegam ligados — é o que o formulário consulta para revelar
         // julgamento, punição e remessa à comissão.
@@ -307,7 +311,9 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
             "UPDATE apuratorios
                 SET permite_julgamento = true,
                     permite_punicao = true,
-                    permite_remessa_comissao = true
+                    permite_remessa_comissao = true,
+                    permite_acusacao = true,
+                    permite_acusacao_penal = true
               WHERE id = $1::uuid",
         )
         .bind(&m.apuratorio)
@@ -322,6 +328,8 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
         assert!(depois.permite_julgamento);
         assert!(depois.permite_punicao);
         assert!(depois.permite_remessa_comissao);
+        assert!(depois.permite_acusacao);
+        assert!(depois.permite_acusacao_penal);
     })
     .await;
 }

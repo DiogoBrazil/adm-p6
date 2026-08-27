@@ -357,7 +357,7 @@ export async function renderIndicios(
  * `null` como "não mexe em nada". É o comportamento certo: a analogia é
  * `NOT NULL`, então metade de uma escolha não pode virar registro.
  */
-function pedirAnalogia(rotulos: Rotulos): Promise<string | null> {
+export function pedirAnalogia(rotulos: Rotulos): Promise<string | null> {
   return new Promise((resolver) => {
     // Dois cliques rápidos em "Trocar analogia" empilhariam dois seletores —
     // cada um resolvendo a sua Promise, e o de baixo escondido. Um por vez.
