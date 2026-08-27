@@ -382,6 +382,28 @@ deprecada) — as duas seções aparecem no mesmo formulário.
   oferecido no seletor de "Pessoas inquiridas".
 - O `<legend>` de "Pessoas inquiridas" não pode mais dizer "(vítimas, inquiridos)".
 
+### Na página de detalhe
+
+Abrir o detalhe de um procedimento que tenha ofendido. Entre **Envolvidos** e
+**Designações** têm de aparecer, nesta ordem:
+
+| Bloco | Colunas | Quando aparece |
+|---|---|---|
+| **Ofendidos/Vítimas** | `#` e `Nome` | espécie que registra ofendido, **ou** registro que já tem um gravado |
+| **Pessoas inquiridas** | `Papel` e `Nome` | só quando há pelo menos uma |
+
+Com a massa que já está no banco:
+
+- **SR nº 6/7ºBPM/2026** — dois ofendidos, `ADMINISTRAÇÃO PÚBLICA` (1) e
+  `MARIA FERREIRA` (2), nessa ordem.
+- **IPM nº 2/7ºBPM/2026** — um, `MANUEL GOMES`.
+- Qualquer **PADS/CD/PAD** — **nenhum** bloco de Ofendidos/Vítimas.
+- Hoje **nenhum** registro mostra Pessoas inquiridas: `processo_pessoas` está
+  vazia. Para ver o bloco, cadastre um inquirido pelo formulário e reabra.
+
+Nada ali é editável — sem botão de incluir ou remover. O cadastro é do
+formulário, e só dele.
+
 ### A preservação do que já foi gravado
 
 Este é o caso que só a tela pega. Pelo `psql`, num procedimento que já tem vítima:
@@ -392,8 +414,8 @@ UPDATE apuratorios SET permite_cadastro_vitima = false
 ```
 
 Reabrir o cadastro. As vítimas têm de aparecer **em texto**, com o aviso de que a
-espécie não as registra mais. **Salvar sem mexer em nada** e reabrir: elas continuam
-lá. Se sumirem, `gravar_vitimas` está sincronizando quando não devia — é o princípio
+espécie não as registra mais — e, **na página de detalhe, o bloco tem de continuar
+aparecendo também**. **Salvar sem mexer em nada** e reabrir: elas continuam lá. Se sumirem, `gravar_vitimas` está sincronizando quando não devia — é o princípio
 5, e o teste `vitima_historica_sobrevive_ao_desligar_a_configuracao` cobre o backend,
 mas só a tela prova que o formulário não as reenviou.
 

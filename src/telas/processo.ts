@@ -1397,7 +1397,11 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   // A configuração decide quais fatos novos a espécie aceita. Um valor antigo
   // continua visível mesmo se o atributo for desligado depois: configuração
   // futura não pode apagar nem esconder fato já registrado (princípio 5).
-  const mostrarData = (permitido: boolean | undefined, valor: string | null) =>
+  //
+  // Serve a qualquer fato, não só data: `valor` é `unknown` porque o bloco de
+  // Ofendidos/Vítimas passa uma CONTAGEM, e `!!0` já é falso. Sem isso, desligar
+  // `permite_cadastro_vitima` faria sumirem do detalhe ofendidos já registrados.
+  const mostrarData = (permitido: boolean | undefined, valor: unknown) =>
     permitido === true || !!valor;
   const usaRemessaComissao = config?.permite_remessa_comissao === true;
   const remessaComissao =
@@ -1612,6 +1616,55 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                <button type="submit">Salvar resultado</button>
                <button type="button" class="secondary" id="cancelar-resultado">Cancelar</button>
              </form>`
+          : ""
+      }
+
+      ${
+        /*
+         * Ofendidos/Vítimas. Somente leitura: o cadastro é do formulário, e um
+         * segundo caminho de escrita para a mesma coisa seria duas fontes para
+         * o mesmo fato.
+         *
+         * A coluna `#` é a `ordem` do próprio dado — `uq_vitima_ordem` a faz
+         * única POR PROCESSO, então a numeração não se repete.
+         */
+        mostrarData(config?.permite_cadastro_vitima, d.vitimas.length)
+          ? `<h2>Ofendidos/Vítimas</h2>
+      ${
+        d.vitimas.length
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo">
+              <thead><tr><th>#</th><th>Nome</th></tr></thead>
+              <tbody>${d.vitimas
+                .map(
+                  (v) => `<tr><td>${v.ordem}</td><td>${escapeHtml(v.nome)}</td></tr>`,
+                )
+                .join("")}</tbody></table></div>`
+          : `<p class="empty">Nenhum ofendido/vítima registrado.</p>`
+      }`
+          : ""
+      }
+
+      ${
+        /*
+         * Pessoas inquiridas. Diferente do bloco acima, aparece só quando HÁ
+         * linha: nenhum atributo de apuratório a governa, e um cabeçalho vazio
+         * em cada uma das dez espécies seria ruído — são 3 registros em todo o
+         * dump legado.
+         *
+         * Sem coluna `#`: aqui a `ordem` é única por (processo, PAPEL), então
+         * uma coluna de número recomeçaria em 1 a cada papel e pareceria
+         * defeito. `list_pessoas` já devolve ordenado por papel e ordem.
+         */
+        d.pessoas.length
+          ? `<h2>Pessoas inquiridas</h2>
+      <div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo">
+        <thead><tr><th>Papel</th><th>Nome</th></tr></thead>
+        <tbody>${d.pessoas
+          .map(
+            (p) =>
+              `<tr><td>${escapeHtml(p.papel_pessoa)}</td><td>${escapeHtml(p.nome)}</td></tr>`,
+          )
+          .join("")}</tbody></table></div>`
           : ""
       }
 

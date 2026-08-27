@@ -2006,10 +2006,15 @@ tr.atrasado {
   justify-content: center;
 }
 
-/* As quatro listagens do detalhe do processo seguem a mesma grade das telas
+/* As sete listagens do detalhe do processo seguem a mesma grade das telas
    operacionais. O conteúdo é centralizado por pedido da tela; textos longos
    quebram dentro da própria célula, enquanto a largura mínima preserva a
-   leitura e delega a adaptação em telas estreitas ao scroll do `.table-wrap`. */
+   leitura e delega a adaptação em telas estreitas ao scroll do `.table-wrap`.
+
+   Ofendidos/Vítimas e Pessoas inquiridas são as duas únicas SEM modificador
+   `--<nome>`: têm duas colunas, e o piso de 680px de `.table-wrap > table` já
+   as serve. Modificador aqui só existe para declarar `min-width` MAIOR que
+   esse piso, e nenhuma tabela de duas colunas precisa disso. */
 .tabela-detalhe-processo :is(th, td) {
   text-align: center;
 }

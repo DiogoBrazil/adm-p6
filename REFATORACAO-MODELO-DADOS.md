@@ -2642,6 +2642,32 @@ recusar, e o registro ficaria impossível de salvar: seria trocar um defeito por
 espécies com o seletor de papel. O papel 'Vítima' desativado some das opções sozinho — a
 lista de **opções** filtra `ativo`, e nada mais foi preciso.
 
+#### O detalhe passou a exibir os dois — e um achado no caminho
+
+Fechada a primeira parte, faltava o outro lado: quem abria a página de detalhe **não via
+o ofendido que tinha acabado de cadastrar**. Ao mexer nisso apareceu um buraco mais
+antigo:
+
+> `renderDetalheProcesso` já recebia `d.pessoas` do backend **e o descartava**. Nunca
+> houve bloco de pessoas citadas no detalhe. Quem cadastrava um inquirido não o via em
+> lugar nenhum depois de salvar — desde sempre, e nenhum teste alcançava isso, porque a
+> rede do Rust para na borda do IPC.
+
+Os dois blocos entraram entre Envolvidos e Designações, somente leitura — o cadastro é do
+formulário, e um segundo caminho de escrita seria duas fontes para o mesmo fato.
+
+| | |
+|---|---|
+| **Ofendidos/Vítimas** | colunas `#` e `Nome`. Aparece por `mostrarData(permite_cadastro_vitima, d.vitimas.length)` — o helper que julgamento e remessa já usavam, cujo segundo parâmetro passou a `unknown` para aceitar contagem. É o princípio 5 de novo: desligar o atributo não pode fazer sumir ofendido já registrado |
+| **Pessoas inquiridas** | colunas `Papel` e `Nome`, **sem `#`** — ali a `ordem` é única por `(processo, papel)`, e uma coluna de número recomeçaria em 1 a cada papel, parecendo defeito. Aparece só quando há linha: nenhum atributo a governa, e cabeçalho vazio nas dez espécies seria ruído |
+
+Nenhuma regra nova de CSS. As duas são as únicas listagens do detalhe **sem** modificador
+`--<nome>`: modificador ali só serve para declarar `min-width` maior que o piso de 680px
+de `.table-wrap > table`, e tabela de duas colunas não precisa. Medido no navegador, com
+o IPC substituído por um stub que serviu o shape real: a 1366px as duas ficam em 990px
+dentro da moldura, e a 720px a página **não** rola na horizontal — quem rola é o
+`.table-wrap`, que é o que o comentário do próprio CSS prescreve para esta página.
+
 #### Testes (132 → 137)
 
 | Teste | O que trava |
