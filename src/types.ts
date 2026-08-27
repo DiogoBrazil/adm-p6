@@ -63,6 +63,8 @@ export interface PapelItem {
   obrigatorio: boolean;
   max_ocupantes: number;
   e_responsavel: boolean;
+  /** As designações deste papel citam tipo e número do documento autorizador. */
+  usa_documento_designacao: boolean;
   ativo: boolean;
   em_uso: boolean;
 }
@@ -83,6 +85,9 @@ export interface SavePapelRequest {
   obrigatorio?: boolean;
   max_ocupantes: number;
   e_responsavel?: boolean;
+  /** Ausente = cita documento. O backend regrava a linha inteira: mande o
+   *  valor corrente ao mexer em qualquer outro atributo do papel. */
+  usa_documento_designacao?: boolean;
   ativo?: boolean;
 }
 
@@ -677,6 +682,8 @@ export interface DesignacaoItem {
   papel_id: string;
   papel: string;
   e_responsavel: boolean;
+  /** A relação apuratório × papel define se a designação cita documento. */
+  usa_documento_designacao: boolean;
   policial_militar_id: string;
   nome: string;
   posto_graduacao: string;

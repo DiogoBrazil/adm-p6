@@ -277,6 +277,7 @@ pub async fn list_designacoes<'e, E: PgExecutor<'e>>(
                 pap.id::text                   AS papel_id,
                 pap.nome                       AS papel,
                 ap.e_responsavel               AS e_responsavel,
+                ap.usa_documento_designacao    AS usa_documento_designacao,
                 pm.id::text                    AS policial_militar_id,
                 pm.nome                        AS nome,
                 pg.sigla                       AS posto_graduacao,
@@ -930,7 +931,16 @@ async fn inserir_designacao(
         "INSERT INTO processo_designacoes
              (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
               documento_autorizador_id, numero_documento, motivo)
-         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8)",
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
+                 CASE WHEN (SELECT usa_documento_designacao
+                                   FROM apuratorio_papeis
+                                  WHERE apuratorio_id = $2::uuid AND papel_id = $4::uuid)
+                      THEN $6::uuid END,
+                 CASE WHEN (SELECT usa_documento_designacao
+                                   FROM apuratorio_papeis
+                                  WHERE apuratorio_id = $2::uuid AND papel_id = $4::uuid)
+                      THEN $7 END,
+                 $8)",
     )
     .bind(processo_id)
     .bind(&request.apuratorio_id)
@@ -957,8 +967,16 @@ async fn atualizar_designacao(
             SET policial_militar_id      = $3::uuid,
                 papel_id                 = $4::uuid,
                 data_inicio              = $5,
-                documento_autorizador_id = $6::uuid,
-                numero_documento         = $7,
+                documento_autorizador_id = CASE WHEN (SELECT usa_documento_designacao
+                                                         FROM apuratorio_papeis
+                                                        WHERE apuratorio_id = $9::uuid
+                                                          AND papel_id = $4::uuid)
+                                                   THEN $6::uuid END,
+                numero_documento         = CASE WHEN (SELECT usa_documento_designacao
+                                                         FROM apuratorio_papeis
+                                                        WHERE apuratorio_id = $9::uuid
+                                                          AND papel_id = $4::uuid)
+                                                   THEN $7 END,
                 motivo                   = $8,
                 updated_at               = now()
           WHERE id = $1::uuid AND processo_id = $2::uuid",
@@ -971,6 +989,7 @@ async fn atualizar_designacao(
     .bind(&request.documento_iniciador_id)
     .bind(request.numero_documento.trim())
     .bind(MOTIVO_DESIGNACAO_INICIAL)
+    .bind(&request.apuratorio_id)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -1039,6 +1058,7 @@ struct DesignacaoTravada {
     apuratorio_id: String,
     papel_id: String,
     papel: String,
+    usa_documento_designacao: bool,
     policial_militar_id: String,
     ocupante: String,
     data_inicio: chrono::NaiveDate,
@@ -1067,6 +1087,7 @@ async fn travar_designacao(
                 d.apuratorio_id::text         AS apuratorio_id,
                 d.papel_id::text              AS papel_id,
                 pap.nome                      AS papel,
+                ap.usa_documento_designacao   AS usa_documento_designacao,
                 d.policial_militar_id::text   AS policial_militar_id,
                 pg.sigla || ' ' || pm.nome    AS ocupante,
                 d.data_inicio                 AS data_inicio,
@@ -1074,6 +1095,8 @@ async fn travar_designacao(
                 d.designacao_anterior_id::text AS designacao_anterior_id
            FROM processo_designacoes d
            JOIN papeis_processo pap    ON pap.id = d.papel_id
+           JOIN apuratorio_papeis ap   ON ap.apuratorio_id = d.apuratorio_id
+                                      AND ap.papel_id = d.papel_id
            JOIN policiais_militares pm ON pm.id = d.policial_militar_id
            JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
           WHERE d.id = $1::uuid AND d.processo_id = $2::uuid
@@ -1123,6 +1146,12 @@ pub async fn substituir_designacao(
     tx: &mut Transaction<'_, Postgres>,
     request: &SubstituirDesignacaoRequest,
 ) -> Result<SubstituicaoAplicada, AppError> {
+    crate::db::processo::exigir_em_andamento(
+        tx,
+        &request.processo_id,
+        "registrar uma substituição",
+    )
+    .await?;
     let antecessora = travar_designacao(tx, &request.processo_id, &request.designacao_id)
         .await?
         .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
@@ -1150,6 +1179,14 @@ pub async fn substituir_designacao(
     .execute(&mut **tx)
     .await?;
 
+    let documento = antecessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.documento_autorizador_id.as_deref()))
+        .flatten();
+    let numero_documento = antecessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.numero_documento.as_deref()))
+        .flatten();
     let designacao_id: String = sqlx::query_scalar(
         "INSERT INTO processo_designacoes
              (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
@@ -1162,8 +1199,8 @@ pub async fn substituir_designacao(
     .bind(&request.sucessor_id)
     .bind(&antecessora.papel_id)
     .bind(request.data_troca)
-    .bind(texto_opcional(request.documento_autorizador_id.as_deref()))
-    .bind(texto_opcional(request.numero_documento.as_deref()))
+    .bind(documento)
+    .bind(numero_documento)
     .bind(request.motivo.trim())
     .bind(&antecessora.id)
     .fetch_one(&mut **tx)
@@ -1229,6 +1266,15 @@ pub async fn atualizar_substituicao(
 
     validar_troca(tx, &anterior, &request.sucessor_id, request.data_troca).await?;
 
+    let documento = sucessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.documento_autorizador_id.as_deref()))
+        .flatten();
+    let numero_documento = sucessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.numero_documento.as_deref()))
+        .flatten();
+
     sqlx::query(
         "UPDATE processo_designacoes SET data_fim = $2, updated_at = now() WHERE id = $1::uuid",
     )
@@ -1250,8 +1296,8 @@ pub async fn atualizar_substituicao(
     .bind(&sucessora.id)
     .bind(&request.sucessor_id)
     .bind(request.data_troca)
-    .bind(texto_opcional(request.documento_autorizador_id.as_deref()))
-    .bind(texto_opcional(request.numero_documento.as_deref()))
+    .bind(documento)
+    .bind(numero_documento)
     .bind(request.motivo.trim())
     .execute(&mut **tx)
     .await?;

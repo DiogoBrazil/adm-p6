@@ -1,5 +1,6 @@
 use sqlx::{PgPool, Postgres, Transaction};
 
+use crate::error::AppError;
 use crate::movements::domain::{AddMovementRequest, MovementItem, UpdateMovementRequest};
 
 /// Andamentos ativos de um processo, do mais recente para o mais antigo.
@@ -31,8 +32,14 @@ pub async fn add(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddMovementRequest,
     autor_id: &str,
-) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar(
+) -> Result<String, AppError> {
+    crate::db::processo::exigir_em_andamento(
+        tx,
+        &request.processo_id,
+        "registrar um novo andamento",
+    )
+    .await?;
+    Ok(sqlx::query_scalar(
         "INSERT INTO processo_andamentos
              (processo_id, tipo_andamento_id, descricao, ocorrido_em, registrado_por_id)
          VALUES ($1::uuid, $2::uuid, $3, COALESCE($4, now()), $5::uuid)
@@ -44,7 +51,7 @@ pub async fn add(
     .bind(request.ocorrido_em)
     .bind(autor_id)
     .fetch_one(&mut **tx)
-    .await
+    .await?)
 }
 
 /// Corrige somente os dados que o operador informou ao registrar: tipo e

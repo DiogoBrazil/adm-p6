@@ -76,6 +76,7 @@ pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<Apuratorio
                 ap.obrigatorio     AS obrigatorio,
                 ap.max_ocupantes   AS max_ocupantes,
                 ap.e_responsavel   AS e_responsavel,
+                ap.usa_documento_designacao AS usa_documento_designacao,
                 ap.ativo           AS ativo,
                 EXISTS (SELECT 1 FROM processo_designacoes d
                          WHERE d.apuratorio_id = ap.apuratorio_id
@@ -149,6 +150,10 @@ pub async fn save_documento(
 /// Baixar `max_ocupantes` **não** invalida designações já gravadas: a constraint
 /// trigger só dispara em escrita de `processo_designacoes`. É o princípio de que
 /// configuração define o comportamento futuro e não reescreve fatos passados.
+///
+/// O `ON CONFLICT` regrava a linha **inteira**, inclusive
+/// `usa_documento_designacao`. Quem chama para mexer num atributo só precisa
+/// mandar os demais como estão — é o que a tela faz ao mesclar com o item atual.
 pub async fn save_papel(
     tx: &mut Transaction<'_, Postgres>,
     request: &SavePapelRequest,
@@ -168,12 +173,14 @@ pub async fn save_papel(
 
     sqlx::query(
         "INSERT INTO apuratorio_papeis
-             (apuratorio_id, papel_id, obrigatorio, max_ocupantes, e_responsavel, ativo)
-         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
+             (apuratorio_id, papel_id, obrigatorio, max_ocupantes, e_responsavel,
+              usa_documento_designacao, ativo)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
          ON CONFLICT (apuratorio_id, papel_id) DO UPDATE
             SET obrigatorio   = EXCLUDED.obrigatorio,
                 max_ocupantes = EXCLUDED.max_ocupantes,
                 e_responsavel = EXCLUDED.e_responsavel,
+                usa_documento_designacao = EXCLUDED.usa_documento_designacao,
                 ativo         = EXCLUDED.ativo,
                 updated_at    = now()",
     )
@@ -182,6 +189,7 @@ pub async fn save_papel(
     .bind(request.obrigatorio)
     .bind(request.max_ocupantes)
     .bind(request.e_responsavel)
+    .bind(request.usa_documento_designacao)
     .bind(request.ativo)
     .execute(&mut **tx)
     .await?;

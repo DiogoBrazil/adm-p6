@@ -1795,3 +1795,99 @@ async fn listagem_traz_qualificacoes_sei_e_envolvidos_na_ordem() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn papel_sem_documento_nao_grava_nem_exibe_citacao() {
+    util::com_banco_descartavel("proc_papel_sem_doc", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query(
+            "UPDATE apuratorio_papeis
+                SET usa_documento_designacao = false
+              WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+        )
+        .bind(&m.apuratorio)
+        .bind(&m.papel_escrivao)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut req = base(&m, "001");
+        req.designacoes
+            .push(designacao(&m, &m.pm_tres, &m.papel_escrivao));
+        let id = salvar(&pool, &req).await.unwrap();
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        let encarregado = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.papel_id == m.papel_encarregado)
+            .unwrap();
+        let escrivao = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.papel_id == m.papel_escrivao)
+            .unwrap();
+        assert!(encarregado.usa_documento_designacao);
+        assert!(encarregado.documento_autorizador_id.is_some());
+        assert!(!escrivao.usa_documento_designacao);
+        assert!(escrivao.documento_autorizador_id.is_none());
+        assert!(escrivao.numero_documento.is_none());
+
+        let sucessora = substituir_com(
+            &pool,
+            SubstituirDesignacaoRequest {
+                processo_id: id.clone(),
+                designacao_id: escrivao.id.clone(),
+                sucessor_id: m.pm_dois.clone(),
+                data_troca: data(2026, 2, 1),
+                motivo: "troca do escrivão".to_string(),
+                documento_autorizador_id: Some(m.documento.clone()),
+                numero_documento: Some("DOC-IGNORADO".to_string()),
+            },
+        )
+        .await
+        .unwrap();
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        let sucessora = detalhe
+            .designacoes
+            .iter()
+            .find(|d| d.id == sucessora)
+            .unwrap();
+        assert!(!sucessora.usa_documento_designacao);
+        assert!(sucessora.documento_autorizador_id.is_none());
+        assert!(sucessora.numero_documento.is_none());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn processo_concluido_recusa_nova_substituicao_e_orienta_reabrir() {
+    util::com_banco_descartavel("proc_subst_concluido", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = salvar(&pool, &base(&m, "001")).await.unwrap();
+        let inicial = vigente_de(&pool, &id, &m.papel_encarregado).await;
+        sqlx::query(
+            "UPDATE processos_procedimentos SET data_conclusao = DATE '2026-02-01'
+              WHERE id = $1::uuid",
+        )
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let erro = substituir(&pool, &id, &inicial, &m.pm_dois, data(2026, 2, 2))
+            .await
+            .expect_err("processo concluido");
+        assert!(erro.contains("concluído"), "{erro}");
+        assert!(erro.contains("Reabra"), "{erro}");
+        assert_eq!(
+            repository::get(&pool, &id)
+                .await
+                .unwrap()
+                .unwrap()
+                .designacoes
+                .len(),
+            1
+        );
+    })
+    .await;
+}

@@ -80,6 +80,11 @@ pub struct PapelItem {
     pub obrigatorio: bool,
     pub max_ocupantes: i32,
     pub e_responsavel: bool,
+    /// As designações deste papel citam tipo e número do documento que as
+    /// autorizou. Quem decide é a relação apuratório × papel, não o nome do
+    /// papel: o mesmo "Escrivão" cita documento numa espécie e não cita em
+    /// outra, e a tela não pode sair comparando siglas para descobrir isso.
+    pub usa_documento_designacao: bool,
     pub ativo: bool,
     pub em_uso: bool,
 }
@@ -104,6 +109,11 @@ pub struct SavePapelRequest {
     pub max_ocupantes: i32,
     #[serde(default)]
     pub e_responsavel: bool,
+    /// Ausente = cita documento, que é o comportamento da maioria dos papéis e
+    /// o `DEFAULT` da coluna. Quem chama precisa mandar o valor corrente junto,
+    /// como já faz com `ativo`: o `ON CONFLICT` regrava a linha inteira.
+    #[serde(default = "verdadeiro")]
+    pub usa_documento_designacao: bool,
     #[serde(default = "verdadeiro")]
     pub ativo: bool,
 }

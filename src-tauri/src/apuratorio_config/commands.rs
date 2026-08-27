@@ -90,6 +90,7 @@ pub async fn apuratorio_config_save_papel(
                     "obrigatorio": request.obrigatorio,
                     "max_ocupantes": request.max_ocupantes,
                     "e_responsavel": request.e_responsavel,
+                    "usa_documento_designacao": request.usa_documento_designacao,
                     "ativo": request.ativo,
                 })),
             )

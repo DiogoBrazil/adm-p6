@@ -973,6 +973,7 @@ function hojeIso(): string {
 
 /** O ato que autorizou a designação, como a Seção o escreve. */
 function documentoDaDesignacao(d: DesignacaoItem): string {
+  if (!d.usa_documento_designacao) return "-";
   if (!d.documento_autorizador) return "";
   return d.numero_documento
     ? `${d.documento_autorizador} nº ${d.numero_documento}`
@@ -1058,6 +1059,12 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${d.carta_precatoria ? linha("Unidade deprecada", d.carta_precatoria.unidade_deprecada) : ""}
         ${linha("Resumo dos fatos", d.resumo_fatos)}
       </table>
+
+      ${
+        podeEscrever && d.concluido
+          ? `<p class="aviso">Este processo ou procedimento está concluído. Para registrar substituições, prorrogações ou novos andamentos, use <strong>Reabrir</strong>.</p>`
+          : ""
+      }
 
       ${
         podeEscrever
@@ -1155,10 +1162,14 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                         ? `<td class="row-actions">${
                             x.data_fim
                               ? ""
-                              : `${botaoIcone("substituir", `Substituir ${x.papel}`, {
+                              : `${
+                                  d.concluido
+                                    ? ""
+                                    : botaoIcone("substituir", `Substituir ${x.papel}`, {
                                   classe: "secondary",
                                   dados: { substituir: x.id },
-                                })}
+                                      })
+                                }
                                  ${
                                    // Só a ponta da cadeia se corrige e se desfaz.
                                    // Uma designação vigente COM antecessora é,
@@ -1200,11 +1211,11 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                  <input name="motivo" required />
                  <small class="campo-erro" data-erro="motivo" hidden></small>
                </label>
-               <label>Documento autorizador
+               <label id="campo-documento-substituicao">Documento autorizador
                  ${selectOpcoes("documento_autorizador_id", tiposDocumento, "")}
                  <small class="campo-erro" data-erro="documento_autorizador_id" hidden></small>
                </label>
-               <label>Nº do documento
+               <label id="campo-numero-documento-substituicao">Nº do documento
                  <input name="numero_documento" />
                  <small class="campo-erro" data-erro="numero_documento" hidden></small>
                </label>
@@ -1249,7 +1260,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
           : `<p class="empty">Sem prazo. O prazo inicial nasce da data de recebimento.</p>`
       }
       ${
-        podeEscrever && prazoVigente
+        podeEscrever && !d.concluido && prazoVigente
           ? `<form id="form-prorrogacao" class="linha-form">
                <label>Novo vencimento<input name="nova_data_vencimento" type="date" min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
                <label>Motivo<input name="motivo" required /></label>
@@ -1306,7 +1317,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       }
       ${
         podeEscrever
-          ? `<form id="form-andamento" class="linha-form">
+          ? `<form id="form-andamento" class="linha-form"${d.concluido ? " hidden" : ""}>
                <label>Tipo<select name="tipo_andamento_id">
                  <option value=""></option>
                  ${tiposAndamento.map((t) => option(t.id, t.rotulo, false)).join("")}
@@ -1528,6 +1539,12 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   const resumoSubstituicao = document.querySelector<HTMLElement>("#resumo-substituicao");
   const botaoSalvarSubstituicao =
     document.querySelector<HTMLButtonElement>("#salvar-substituicao");
+  const campoDocumentoSubstituicao = document.querySelector<HTMLElement>(
+    "#campo-documento-substituicao",
+  );
+  const campoNumeroDocumentoSubstituicao = document.querySelector<HTMLElement>(
+    "#campo-numero-documento-substituicao",
+  );
   const porId = new Map(d.designacoes.map((x) => [x.id, x]));
   let alvo: { designacao: DesignacaoItem; modo: "criar" | "editar" } | null = null;
 
@@ -1601,11 +1618,17 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     };
     preencher("sucessor_id", editando ? designacao.policial_militar_id : "");
     preencher("motivo", editando ? (designacao.motivo ?? "") : "");
+    const usaDocumento = designacao.usa_documento_designacao;
+    if (campoDocumentoSubstituicao) campoDocumentoSubstituicao.hidden = !usaDocumento;
+    if (campoNumeroDocumentoSubstituicao) campoNumeroDocumentoSubstituicao.hidden = !usaDocumento;
     preencher(
       "documento_autorizador_id",
-      editando ? (designacao.documento_autorizador_id ?? "") : "",
+      usaDocumento && editando ? (designacao.documento_autorizador_id ?? "") : "",
     );
-    preencher("numero_documento", editando ? (designacao.numero_documento ?? "") : "");
+    preencher(
+      "numero_documento",
+      usaDocumento && editando ? (designacao.numero_documento ?? "") : "",
+    );
     if (botaoSalvarSubstituicao) {
       botaoSalvarSubstituicao.textContent = editando ? "Salvar correção" : "Substituir";
     }
@@ -1803,6 +1826,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     limparTipoHistorico();
     if (botaoSalvarAndamento) botaoSalvarAndamento.textContent = "Registrar";
     if (botaoCancelarEdicaoAndamento) botaoCancelarEdicaoAndamento.hidden = true;
+    if (formAndamento && d.concluido) formAndamento.hidden = true;
   };
 
   document.querySelectorAll<HTMLButtonElement>("[data-editar-andamento]").forEach((botao) =>
@@ -1810,6 +1834,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       const andamento = andamentosPorId.get(botao.dataset.editarAndamento!);
       if (!andamento || !formAndamento) return;
       andamentoEmEdicao = andamento.id;
+      formAndamento.hidden = false;
       const tipo = formAndamento.querySelector<HTMLSelectElement>('[name="tipo_andamento_id"]');
       const descricao = formAndamento.querySelector<HTMLInputElement>('[name="descricao"]');
       limparTipoHistorico();

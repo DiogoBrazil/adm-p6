@@ -13,8 +13,8 @@
 > históricos/de teste da importação foram removidos com autorização** (§8.11) e, depois
 > disso, a conferência manual criou **2 processos/procedimentos ativos de teste**. O banco
 > conserva 235 militares, 7 usuários, 10 apuratórios, 11 unidades e todos os
-> catálogos/configurações. A rede de proteção tem **121 testes**, os **80 comandos Tauri**
-> estão no cliente tipado e as **8 migrations** estão aplicadas.
+> catálogos/configurações. A rede de proteção tem **126 testes**, os **80 comandos Tauri**
+> estão no cliente tipado e as **9 migrations** estão aplicadas.
 >
 > **Não há implementação conhecida pendente.** Não refaça as §8.11 a §8.14: elas já estão
 > no código e cobertas por teste. O próximo trabalho é **validar pela tela** os casos do
@@ -218,6 +218,8 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 41 | Qual substituição pode ser corrigida ou desfeita? | **Somente a última da cadeia.** Corrigir move sucessor, data, motivo e documento — a data move as DUAS linhas, porque é uma só: o fim da antecessora e o início da sucessora. Desfazer exclui a sucessora e reabre a antecessora (`data_fim = NULL`), e então a substituição anterior vira a última. A função nunca muda: trocar de papel não é corrigir uma substituição. |
 | 42 | Quem preenche data, documento e motivo da designação inicial? | **Ninguém — são derivados do cabeçalho.** Início = data de instauração; documento autorizador e número = o documento que instaurou o processo; motivo = "Designação inicial". O formulário pede só função e militar. Corrigir a instauração move junto o início de quem ainda não tem histórico, como `sync_initial` faz com o prazo. Documento e motivo próprios existem na SUBSTITUIÇÃO, que é onde o usuário de fato os informa. |
 | 43 | O cadastro do processo pode alterar qualquer designação? | **Só a que não tem histórico.** `data_fim` preenchida ou `designacao_anterior_id` preenchido tiram a linha do alcance do formulário — alterar reescreveria fato registrado (princípio 5). A designação inicial intocada, essa sim, é editável e removível, agora sincronizada pelo `id`. A recusa é do backend, não da tela. |
+| 44 | O que um processo concluído ainda pode receber? | **Nenhum novo fato operacional.** Nova substituição, prorrogação e andamento exigem `data_conclusao IS NULL`; a mensagem orienta reabrir. A checagem trava a linha do processo no backend, então vale também para IPC direto e para duas janelas concorrentes. Correções de registros históricos continuam separadas da inclusão. |
+| 45 | Toda designação cita documento? | **Não.** A relação `apuratorio_papeis.usa_documento_designacao` decide. No IPM, o Escrivão tem a flag desligada: documento e número não são gravados nem pedidos, e a tabela mostra “-”. A retroalimentação por nomes acontece uma vez na migration; o código lê apenas o booleano. E, como todo conceito de negócio, é **cadastro administrável**: a flag é uma coluna da tabela de papéis em Catálogos → Apuratórios, com alternância própria — outra espécie que dispense a citação não precisa de migration nova. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -308,6 +310,8 @@ da direita — foi medida contra o dump e conferida pelos scripts que rodaram.
 | `0005_prazo_intervalo_ocupacao.sql` | 31 | o intervalo de *ocupação* do prazo passou de `[]` para `[)`, para acomodar a prorrogação que começa no dia do vencimento anterior (decisão 17). Não mexe em `data_vencimento`. |
 | `0006_ajustes_catalogos_administraveis.sql` | 93 | quatro ajustes vindos da conferência das telas: `e_estatuto_militar`, `e_distrito` no lugar de `tipo`, e a remoção de `ordem_hierarquica` e das subdivisões (decisões 27 a 30). |
 | `0007_campos_por_apuratorio.sql` | 147 | os três atributos que decidem quais campos o formulário de processo mostra (`permite_julgamento`, `permite_punicao`, `permite_remessa_comissao`), e a separação do escrivão do IPM do escrivão do processo, que a importação havia fundido (decisões 31 e 32). |
+| `0008_cadeia_de_substituicao.sql` | 158 | liga cada substituição à sua antecessora e protege a contiguidade da cadeia. |
+| `0009_regras_operacionais_conclusao.sql` | 21 | configura quais relações apuratório × papel usam documento; desliga a citação para o Escrivão do IPM. |
 
 **Seed técnico:** `admin@sistema.com` / `123456` (bcrypt custo 12, hash verificado por teste).
 `policial_militar_id` é `NULL` — a conta técnica não inventa militar. **Trocar a senha em
@@ -573,7 +577,7 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 121 testes
+### 5.7 Rede de proteção — 126 testes
 
 | Arquivo | O que cobre |
 |---|---|
@@ -584,12 +588,12 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 | `schema_integrity.sql` + `.rs` | 42 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
 | `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
-| `proceedings_repository.rs` | **30 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, resultados e datas pós-cadastro preservados na edição geral, limites configuráveis, FK composta de papel, numeração parcial, filtros, anexos, ciclo de vida, dashboard, catálogo desativado — e a **cadeia de substituição**: duas cadeias com "últimas" independentes, correção sem lacuna, recusa da intermediária, remoção sucessiva reabrindo cada antecessora, as entradas inválidas, e o cadastro editando/removendo só o que não tem histórico |
-| `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
-| `deadlines_repository.rs` | **6 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação; **os dois blocos do relatório sendo exclusivos** e batendo com o `dashboard`; e a paginação do relatório sobre 205 processos |
+| `proceedings_repository.rs` | **32 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, resultados e datas pós-cadastro preservados na edição geral, papel sem documento, conclusão bloqueando nova substituição, limites configuráveis, FK composta de papel, numeração parcial, filtros, anexos, ciclo de vida, dashboard, catálogo desativado — e a **cadeia de substituição**: duas cadeias com "últimas" independentes, correção sem lacuna, recusa da intermediária, remoção sucessiva reabrindo cada antecessora, as entradas inválidas, e o cadastro editando/removendo só o que não tem histórico |
+| `apuratorio_config.rs` | **5 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10; e a citação de documento, que se configura por papel e **sobrevive** à gravação seguinte — o `ON CONFLICT` regrava a linha inteira |
+| `deadlines_repository.rs` | **7 testes** — `dias_base`; prorrogação encostando no vencimento; conclusão bloqueando nova prorrogação; motivo obrigatório; edição/exclusão somente da última prorrogação; **os dois blocos do relatório sendo exclusivos** e batendo com o `dashboard`; e a paginação do relatório sobre 205 processos |
 | `maps_reports_repository.rs` | **11 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício; e a **paginação dos mapas salvos**, em que o excluído sai da página *e* do total |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
-| `movements_repository.rs` | **9 testes** — o autor como FK; tipo opcional; ordem do mais recente; edição preservando autoria/data; tipo histórico desativado; cancelamento datado, e o par (processo, andamento) obrigatório |
+| `movements_repository.rs` | **10 testes** — o autor como FK; tipo opcional; ordem do mais recente; conclusão bloqueando novo andamento; edição preservando autoria/data; tipo histórico desativado; cancelamento datado, e o par (processo, andamento) obrigatório |
 | `audit_repository.rs` | **8 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas; e a **listagem principal paginando** sobre 205 registros, com o total acompanhando o filtro |
 | `legal_catalogs_repository.rs` | **11 testes** — os catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; centralização vem dos metadados; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
 | `commands_ipc.rs` | **12 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções, auditoria da edição de andamento, prorrogação, substituição, datas de encerramento e resultado do envolvido, e as listagens paginadas falando as duas convenções ao mesmo tempo (`perPage` camelCase no comando, `per_page` snake_case dentro do `filter`) |
@@ -731,7 +735,7 @@ valia enquanto o banco estava vazio — "editou migration, recria o banco" — n
 
 O `sqlx::migrate!` guarda um checksum por versão: editar um `.sql` já aplicado gera
 `VersionMismatch` no próximo startup. A partir de agora **toda mudança de schema é uma
-migration nova** (`0008`…), e os sete arquivos existentes são imutáveis.
+migration nova** (`0008`…), e todas as migrations já aplicadas são imutáveis.
 
 Se ainda assim for preciso recomeçar do zero — numa máquina de desenvolvimento, por
 exemplo — o caminho completo é: recriar o volume, aplicar as migrations, restaurar o

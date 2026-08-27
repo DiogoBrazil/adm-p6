@@ -130,6 +130,21 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     .await?;
     assert_eq!(triggers, 3, "constraint triggers de configuracao ausentes");
 
+    // A regra de citação do documento pertence à relação apuratório × papel.
+    // Ela precisa nascer obrigatória e ligada; a 0009 desliga apenas as linhas
+    // legadas correspondentes ao Escrivão do IPM.
+    let configuracao_documento: (String, Option<String>) = sqlx::query_as(
+        "SELECT is_nullable::text, column_default::text
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'apuratorio_papeis'
+            AND column_name = 'usa_documento_designacao'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(configuracao_documento.0, "NO");
+    assert_eq!(configuracao_documento.1.as_deref(), Some("true"));
+
     // Seed técnico: uma conta administrativa, sem policial associado.
     let admins: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM usuarios u

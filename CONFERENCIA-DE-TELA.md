@@ -42,6 +42,10 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Painel** (`/`) — os cartões trazem números, não zeros
 - [ ] **Procedimentos → lista** — a tabela lista processos
 - [ ] **Procedimentos → detalhe** — registrar/corrigir remessa e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
+- [ ] Em um **IPM**, a linha de Escrivão mostra apenas **“-”** na coluna Documento e o formulário de substituição não pede tipo/número
+- [ ] Depois de concluir, desaparecem os controles de nova substituição, prorrogação e andamento; o aviso orienta usar **Reabrir**
+- [ ] Com o processo concluído, chamadas diretas desses três comandos devolvem mensagem amigável e não gravam nada
+- [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nos papéis, a alternância grava, e tornar o mesmo papel responsável logo depois **não** religa a flag
 - [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessa, conclusão, soluções e penalidade não aparecem antes do cadastro
 - [ ] **Indícios** — a partir do detalhe de um processo, num envolvido
 - [ ] **Prazos** — o painel carrega

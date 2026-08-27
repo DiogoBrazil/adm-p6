@@ -544,3 +544,39 @@ async fn report_pagina_e_ordena() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn processo_concluido_recusa_prorrogacao_e_orienta_reabrir() {
+    util::com_banco_descartavel("prazo_concluido", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = processo_com_prazo_inicial(&pool, &m, data(2026, 1, 10)).await;
+        sqlx::query(
+            "UPDATE processos_procedimentos SET data_conclusao = DATE '2026-02-01'
+              WHERE id = $1::uuid",
+        )
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::add_extension(
+            &mut tx,
+            &AddExtensionRequest {
+                processo_id: id.clone(),
+                nova_data_vencimento: data(2026, 3, 1),
+                motivo: "novo prazo".to_string(),
+                documento_autorizador_id: None,
+                numero_documento: None,
+                data_documento: None,
+                autoridade_id: None,
+            },
+        )
+        .await
+        .expect_err("processo concluido")
+        .message();
+        assert!(erro.contains("concluído"), "{erro}");
+        assert!(erro.contains("Reabra"), "{erro}");
+        assert_eq!(repository::list(&pool, &id).await.unwrap().len(), 1);
+    })
+    .await;
+}

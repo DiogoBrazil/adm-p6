@@ -105,6 +105,7 @@ async fn configura_documentos_e_papeis_de_um_apuratorio() {
                 obrigatorio: true,
                 max_ocupantes: 1,
                 e_responsavel: true,
+                usa_documento_designacao: true,
                 ativo: true,
             },
         )
@@ -142,6 +143,7 @@ async fn recusa_configuracao_que_deixaria_o_apuratorio_sem_responsavel() {
                 obrigatorio: true,
                 max_ocupantes: 1,
                 e_responsavel: true,
+                usa_documento_designacao: true,
                 ativo: false,
             },
         )
@@ -157,6 +159,7 @@ async fn recusa_configuracao_que_deixaria_o_apuratorio_sem_responsavel() {
                 obrigatorio: false,
                 max_ocupantes: 1,
                 e_responsavel: true,
+                usa_documento_designacao: true,
                 ativo: true,
             },
         )
@@ -319,6 +322,87 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
         assert!(depois.permite_julgamento);
         assert!(depois.permite_punicao);
         assert!(depois.permite_remessa_comissao);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn citacao_de_documento_e_configuravel_e_sobrevive_a_outras_gravacoes() {
+    util::com_banco_descartavel("apconfig_documento", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // Nasce ligado, porque é o que a maioria dos papéis faz.
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(cfg.papeis.iter().all(|p| p.usa_documento_designacao));
+
+        // O administrador desliga a citação para um papel desta espécie — é
+        // assim que o Escrivão do IPM deixa de pedir tipo e número.
+        salvar_papel(
+            &pool,
+            SavePapelRequest {
+                apuratorio_id: m.apuratorio.clone(),
+                papel_id: m.papel_escrivao.clone(),
+                obrigatorio: false,
+                max_ocupantes: 1,
+                e_responsavel: false,
+                usa_documento_designacao: false,
+                ativo: true,
+            },
+        )
+        .await
+        .expect("desligar a citacao de documento");
+
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        let escrivao = cfg
+            .papeis
+            .iter()
+            .find(|p| p.papel_id == m.papel_escrivao)
+            .unwrap();
+        assert!(!escrivao.usa_documento_designacao);
+        // E só aquele papel: o encarregado continua citando.
+        assert!(
+            cfg.papeis
+                .iter()
+                .find(|p| p.papel_id == m.papel_encarregado)
+                .unwrap()
+                .usa_documento_designacao
+        );
+
+        // O `ON CONFLICT` regrava a linha inteira. Mexer em OUTRO atributo
+        // mandando a flag corrente junto — que é o que a tela faz — não pode
+        // religar a citação pelas costas do administrador.
+        salvar_papel(
+            &pool,
+            SavePapelRequest {
+                apuratorio_id: m.apuratorio.clone(),
+                papel_id: m.papel_escrivao.clone(),
+                obrigatorio: true,
+                max_ocupantes: 1,
+                e_responsavel: true,
+                usa_documento_designacao: escrivao.usa_documento_designacao,
+                ativo: true,
+            },
+        )
+        .await
+        .expect("tornar responsavel");
+
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        let escrivao = cfg
+            .papeis
+            .iter()
+            .find(|p| p.papel_id == m.papel_escrivao)
+            .unwrap();
+        assert!(escrivao.e_responsavel);
+        assert!(!escrivao.usa_documento_designacao, "a flag foi religada");
     })
     .await;
 }

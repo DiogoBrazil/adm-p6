@@ -173,14 +173,17 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         <strong>Obrigatório</strong> impede salvar o processo sem a designação.
         <strong>Responsável</strong> é o papel que responde pelo apuratório — é
         dele que saem o responsável da listagem, do dashboard e dos relatórios,
-        e só pode haver um.
+        e só pode haver um. <strong>Cita documento</strong> diz se a designação
+        deste papel informa tipo e número do documento que a autorizou; desligado,
+        o detalhe do processo mostra apenas “-” e o formulário de substituição
+        deixa de pedir os dois campos.
       </p>
       ${
         config.papeis.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-configuracao-apuratorio">
                <thead><tr>
                  <th>Papel</th><th>Obrigatório</th><th>Máx. ocupantes</th>
-                 <th>Responsável</th><th>Situação</th><th>Em uso</th>
+                 <th>Responsável</th><th>Cita documento</th><th>Situação</th><th>Em uso</th>
                  ${podeEscrever ? "<th>Ações</th>" : ""}
                </tr></thead>
                <tbody>
@@ -192,6 +195,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                      <td>${p.obrigatorio ? "sim" : ""}</td>
                      <td>${p.max_ocupantes}</td>
                      <td>${p.e_responsavel ? "sim" : ""}</td>
+                     <td>${p.usa_documento_designacao ? "sim" : ""}</td>
                      <td><span class="badge ${p.ativo ? "badge--ok" : "badge--neutro"}">${p.ativo ? "ativo" : "inativo"}</span></td>
                      <td>${p.em_uso ? "sim" : ""}</td>
                      ${
@@ -216,6 +220,16 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                                     })
                                   : ""
                               }
+                              ${botaoIcone(
+                                "editar",
+                                p.usa_documento_designacao
+                                  ? "Deixar de citar documento"
+                                  : "Passar a citar documento",
+                                {
+                                  classe: "secondary",
+                                  dados: { "documento-papel": p.papel_id },
+                                },
+                              )}
                             </td>`
                          : ""
                      }
@@ -237,6 +251,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                <label>Máx. ocupantes<input name="max_ocupantes" type="number" min="1" value="1" required /></label>
                <label class="checkbox"><input name="obrigatorio" type="checkbox" /> Obrigatório</label>
                <label class="checkbox"><input name="e_responsavel" type="checkbox" /> Responsável</label>
+               <label class="checkbox"><input name="usa_documento_designacao" type="checkbox" checked /> Cita documento</label>
                <button type="submit">Habilitar</button>
              </form>`
           : `<p class="readonly">Perfil somente leitura.</p>`
@@ -308,9 +323,12 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       obrigatorio?: boolean;
       maxOcupantes?: number;
       eResponsavel?: boolean;
+      usaDocumento?: boolean;
       ativo?: boolean;
     },
   ) => {
+    // O backend regrava a linha inteira. Mesclar com o item atual é o que
+    // permite mexer num atributo só sem zerar os outros por omissão.
     const atual = config.papeis.find((p) => p.papel_id === papelId);
     const r = await call("apuratorio_config_save_papel", {
       request: {
@@ -319,6 +337,8 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         obrigatorio: campos.obrigatorio ?? atual?.obrigatorio ?? false,
         max_ocupantes: campos.maxOcupantes ?? atual?.max_ocupantes ?? 1,
         e_responsavel: campos.eResponsavel ?? atual?.e_responsavel ?? false,
+        usa_documento_designacao:
+          campos.usaDocumento ?? atual?.usa_documento_designacao ?? true,
         ativo: campos.ativo ?? atual?.ativo ?? true,
       },
     });
@@ -332,6 +352,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       obrigatorio: form.get("obrigatorio") === "on",
       maxOcupantes: Number(form.get("max_ocupantes") ?? 1),
       eResponsavel: form.get("e_responsavel") === "on",
+      usaDocumento: form.get("usa_documento_designacao") === "on",
       ativo: true,
     });
   });
@@ -346,6 +367,15 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         ativo: true,
       }),
     ),
+  );
+  // Alterna a citação de documento sem passar pelo formulário de habilitar —
+  // é regra de um papel já configurado, não parte do cadastro dele.
+  document.querySelectorAll<HTMLButtonElement>("[data-documento-papel]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const papelId = b.dataset.documentoPapel!;
+      const atual = config.papeis.find((p) => p.papel_id === papelId);
+      void salvarPapel(papelId, { usaDocumento: !(atual?.usa_documento_designacao ?? true) });
+    }),
   );
   document.querySelectorAll<HTMLButtonElement>("[data-reativar-papel]").forEach((b) =>
     b.addEventListener("click", () => void salvarPapel(b.dataset.reativarPapel!, { ativo: true })),

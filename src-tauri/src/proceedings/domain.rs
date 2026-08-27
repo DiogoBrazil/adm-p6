@@ -84,6 +84,9 @@ pub struct DesignacaoItem {
     pub papel_id: String,
     pub papel: String,
     pub e_responsavel: bool,
+    /// Algumas relações apuratório × papel não citam documento em suas
+    /// designações. É configuração, não comparação de sigla/nome na tela.
+    pub usa_documento_designacao: bool,
     pub policial_militar_id: String,
     pub nome: String,
     pub posto_graduacao: String,

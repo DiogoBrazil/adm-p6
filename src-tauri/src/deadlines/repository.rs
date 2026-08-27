@@ -176,6 +176,12 @@ pub async fn add_extension(
     tx: &mut Transaction<'_, Postgres>,
     request: &AddExtensionRequest,
 ) -> Result<String, AppError> {
+    crate::db::processo::exigir_em_andamento(
+        tx,
+        &request.processo_id,
+        "adicionar uma prorrogação de prazo",
+    )
+    .await?;
     let atual: Option<(i32, NaiveDate)> = sqlx::query_as(
         "SELECT ordem, data_vencimento FROM processo_prazos
           WHERE processo_id = $1::uuid ORDER BY ordem DESC LIMIT 1 FOR UPDATE",

@@ -340,3 +340,29 @@ async fn descricao_em_branco_e_recusada() {
     };
     assert!(edicao.validate().unwrap_err().contains("andamento"));
 }
+
+#[tokio::test]
+async fn processo_concluido_recusa_novo_andamento_e_orienta_reabrir() {
+    util::com_banco_descartavel("mov_concluido", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            data(2026, 2, 1),
+            Some(data(2026, 2, 2)),
+        )
+        .await;
+        let autor = conta_admin(&pool).await;
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::add(&mut tx, &pedido(&p, "Novo andamento.", None), &autor)
+            .await
+            .expect_err("processo concluido")
+            .message();
+        assert!(erro.contains("concluído"), "{erro}");
+        assert!(erro.contains("Reabra"), "{erro}");
+        assert!(repository::list(&pool, &p).await.unwrap().is_empty());
+    })
+    .await;
+}
