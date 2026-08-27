@@ -876,32 +876,6 @@ tr.vigente {
   color: #b91c1c;
 }
 
-.andamentos {
-  display: grid;
-  gap: 10px;
-  list-style: none;
-  margin: 0 0 20px;
-  padding: 0;
-}
-
-.andamentos li {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 10px 14px;
-}
-
-.andamento-head {
-  align-items: center;
-  color: #64748b;
-  display: flex;
-  font-size: 13px;
-  gap: 10px;
-}
-
-.andamento-texto {
-  margin: 6px 0 0;
-}
-
 /* ── Indícios ──────────────────────────────────────────────────────────── */
 
 .lista-vinculos {
@@ -2016,6 +1990,77 @@ tr.atrasado {
   vertical-align: middle;
 }
 
+/* Grade leve para listagens e tabelas administrativas que aderem ao padrão.
+   A classe separada impede que fichas, relatórios e matrizes herdem divisórias
+   ou alinhamento por acidente. `border-inline-end` respeita a direção do texto
+   e, com `border-box`, não aumenta os 100% distribuídos pelo `<colgroup>`. */
+.tabela-dados.tabela-dados--listagem :is(th, td):not(:last-child) {
+  border-inline-end: 1px solid var(--border);
+}
+
+.tabela-dados.tabela-dados--listagem thead th:not(:last-child) {
+  border-inline-end-color: var(--border-strong);
+}
+
+/* O cabeçalho é o eixo visual da grade. Os dados continuam com alinhamento
+   híbrido, declarado por coluna: texto longo à esquerda; valores compactos,
+   estado e ações ao centro. */
+.tabela-dados.tabela-dados--listagem thead th {
+  text-align: center;
+}
+
+/* Rótulos extensos ganham altura em vez de invadir a próxima coluna. A classe
+   afeta somente o cabeçalho; células de dados continuam truncando em uma linha. */
+.tabela-dados thead th.col--rotulo-quebra {
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1.25;
+}
+
+/* As duas grades de configuração têm conteúdo compacto e conceitualmente
+   equivalente; centralizar também o corpo torna a comparação vertical direta. */
+.tabela-configuracao-apuratorio :is(th, td) {
+  text-align: center;
+}
+
+.tabela-configuracao-apuratorio .row-actions {
+  justify-content: center;
+}
+
+/* As quatro listagens do detalhe do processo seguem a mesma grade das telas
+   operacionais. O conteúdo é centralizado por pedido da tela; textos longos
+   quebram dentro da própria célula, enquanto a largura mínima preserva a
+   leitura e delega a adaptação em telas estreitas ao scroll do `.table-wrap`. */
+.tabela-detalhe-processo :is(th, td) {
+  text-align: center;
+}
+
+.tabela-detalhe-processo td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.tabela-detalhe-processo .row-actions {
+  justify-content: center;
+}
+
+.tabela-detalhe-processo--envolvidos {
+  min-width: 1080px !important;
+}
+
+.tabela-detalhe-processo--designacoes,
+.tabela-detalhe-processo--prazos {
+  min-width: 760px !important;
+}
+
+.tabela-detalhe-processo--andamentos {
+  min-width: 820px !important;
+}
+
+.tabela-detalhe-processo--andamentos .col-descricao {
+  min-width: 260px;
+}
+
 /* Modificadores que `Coluna` emite. Valem no `th` e no `td` da mesma coluna,
    para que o rótulo acompanhe o alinhamento do conteúdo. */
 :is(th, td).col--centro {
@@ -2103,12 +2148,12 @@ tr.atrasado {
 .tabela-processos :is(th, td).col-ano,
 .tabela-processos :is(th, td).col-numero-processo,
 .tabela-processos :is(th, td).col-origem,
+.tabela-processos :is(th, td).col-sei,
 .tabela-processos :is(th, td).col-status-prazo,
 .tabela-processos :is(th, td).col-acao {
   text-align: center;
 }
 
-.tabela-processos :is(th, td).col-sei,
 .tabela-processos :is(th, td).col-pessoa {
   text-align: left;
 }
@@ -2155,14 +2200,30 @@ tr.atrasado {
   overflow: hidden;
 }
 
-/* O botão "Abrir" ocupa a coluna inteira: ela tem 5,5% e o rótulo é curto. */
-.tabela-processos .row-actions button {
-  width: 100%;
-  padding: 5px 4px;
-}
-
 .tabela-processos :is(th, td).col-acao {
   padding-inline: 5px;
+}
+
+/* Ações tabulares usam uma área quadrada estável. O texto continua disponível
+   no `title` e no `aria-label`, sem disputar largura com os dados da linha. */
+.row-actions .botao-icone,
+.tabela-dados--fixa .row-actions .botao-icone,
+.tabela-processos .row-actions .botao-icone {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+
+.icone-acao {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
 }
 
 .celula-reticencias,
@@ -2462,7 +2523,6 @@ tr.atrasado {
 }
 
 .andamento-item,
-.andamentos li,
 .vinculo,
 .evidence-item {
   border-color: var(--border);

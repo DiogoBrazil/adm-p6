@@ -151,6 +151,7 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
         resposta.ok
           ? tabela(COLUNAS, itens.map(linhaDaTabela), "Nenhum registro neste escopo.", {
               viewport: true,
+              listagem: true,
             })
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar a auditoria.")}</p>`
       }
@@ -214,7 +215,9 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();
       avisarSeCortado(cortado);
-      return tabela(COLUNAS, todos.map(linhaDaTabela), "Nenhum registro neste escopo.");
+      return tabela(COLUNAS, todos.map(linhaDaTabela), "Nenhum registro neste escopo.", {
+        listagem: true,
+      });
     },
   );
 }

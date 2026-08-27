@@ -32,7 +32,9 @@ import {
 } from "../api";
 import {
   baixarArquivoBase64,
+  botaoIcone,
   escapeHtml,
+  formatarQualificacaoMilitar,
   ligarPaginacao,
   limparFormularioPendente,
   notificar,
@@ -697,14 +699,6 @@ function qualificacaoMilitar(militar: MilitarQualificado): string {
   return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
 }
 
-function qualificacaoResponsavel(
-  posto: string | null,
-  matricula: string | null,
-  nome: string | null,
-): string {
-  return [posto, matricula, nome].filter((parte): parte is string => Boolean(parte)).join(" ") || "—";
-}
-
 function statusPrazo(concluido: boolean, diasRestantes: number | null): StatusPrazo {
   if (concluido) return { classe: "badge--info", texto: "Concluído" };
   if (diasRestantes === null) return { classe: "badge--neutro", texto: "Sem prazo" };
@@ -843,7 +837,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
       </div>
       ${
         items.length
-          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--fixa tabela-dados--larga tabela-processos">
+          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--fixa tabela-dados--larga tabela-dados--listagem tabela-processos">
               <colgroup>
                 <col class="col-layout-tipo" />
                 <col class="col-layout-ano" />
@@ -864,12 +858,12 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                 <th class="col-pessoa">Encarregado</th>
                 <th class="col-pessoa">PM envolvido</th>
                 <th class="col-status-prazo">Status prazo</th>
-                <th class="col-acao">Abrir</th>
+                <th class="col-acao">Ações</th>
               </tr></thead>
               <tbody>
                 ${items
                   .map((p) => {
-                    const encarregado = qualificacaoResponsavel(
+                    const encarregado = formatarQualificacaoMilitar(
                       p.responsavel_posto_graduacao,
                       p.responsavel_matricula,
                       p.responsavel_nome,
@@ -884,7 +878,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                     <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
                     <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
                     <td class="col-status-prazo">${badgeStatusPrazo(p.concluido, p.prazo_dias_restantes)}</td>
-                    <td class="col-acao"><div class="row-actions"><button type="button" class="outline small" data-processo="${escapeHtml(p.id)}">Abrir</button></div></td>
+                    <td class="col-acao"><div class="row-actions">${botaoIcone("abrir", "Abrir", { classe: "outline", dados: { processo: p.id } })}</div></td>
                   </tr>`;
                   })
                   .join("")}
@@ -1026,7 +1020,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Envolvidos</h2>
       ${
         d.envolvidos.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--envolvidos">
               <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
                 <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Indícios</th></tr></thead>
               <tbody>${d.envolvidos
@@ -1039,7 +1033,10 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${escapeHtml(e.solucao_sugerida ?? "")}</td>
                     <td>${escapeHtml(e.solucao_decidida ?? "")}</td>
                     <td>${escapeHtml(e.penalidade_tipo ?? "")}${e.penalidade_dias ? ` — ${e.penalidade_dias} dias` : ""}</td>
-                    <td><button class="secondary small" data-indicios="${escapeHtml(e.id)}">Indícios</button></td>
+                    <td class="row-actions">${botaoIcone("abrir", "Ver indícios", {
+                      classe: "secondary",
+                      dados: { indicios: e.id },
+                    })}</td>
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>`
@@ -1049,7 +1046,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Designações</h2>
       ${
         d.designacoes.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--designacoes">
               <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Motivo</th></tr></thead>
               <tbody>${d.designacoes
                 .map(
@@ -1069,7 +1066,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Prazos</h2>
       ${
         prazos.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--prazos">
               <thead><tr><th>Ordem</th><th>Início</th><th>Dias</th><th>Vencimento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${prazos
                 .map(
@@ -1083,8 +1080,14 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                       podeEscrever
                         ? `<td class="row-actions">${
                             p.vigente && p.ordem > 0
-                              ? `<button class="secondary small" data-editar-prorrogacao="${escapeHtml(p.id)}">Editar data</button>
-                                 <button class="danger small" data-excluir-prorrogacao="${escapeHtml(p.id)}">Excluir</button>`
+                              ? `${botaoIcone("editar", "Editar data", {
+                                  classe: "secondary",
+                                  dados: { "editar-prorrogacao": p.id },
+                                })}
+                                 ${botaoIcone("excluir", "Excluir", {
+                                   classe: "danger",
+                                   dados: { "excluir-prorrogacao": p.id },
+                                 })}`
                               : ""
                           }</td>`
                         : ""
@@ -1122,19 +1125,26 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Andamentos</h2>
       ${
         andamentos.length
-          ? `<ul class="andamentos">${andamentos
-              .map(
-                (a) => `<li>
-                  <div class="andamento-head">
-                    <span>${escapeHtml(a.ocorrido_em.slice(0, 10))}</span>
-                    ${a.tipo_andamento ? `<strong>${escapeHtml(a.tipo_andamento)}</strong>` : ""}
-                    ${a.registrado_por ? `<small>${escapeHtml(a.registrado_por)}</small>` : ""}
-                    ${podeEscrever ? `<button class="danger small" data-remover-andamento="${escapeHtml(a.id)}">Remover</button>` : ""}
-                  </div>
-                  <p class="andamento-texto">${escapeHtml(a.descricao)}</p>
-                </li>`,
-              )
-              .join("")}</ul>`
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--andamentos">
+              <thead><tr><th>Data</th><th>Tipo</th><th>Registrado por</th><th>Descrição</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
+              <tbody>${andamentos
+                .map(
+                  (a) => `<tr>
+                  <td>${escapeHtml(a.ocorrido_em.slice(0, 10))}</td>
+                  <td>${escapeHtml(a.tipo_andamento ?? "")}</td>
+                  <td>${escapeHtml(a.registrado_por ?? "")}</td>
+                  <td class="col-descricao">${escapeHtml(a.descricao)}</td>
+                  ${
+                    podeEscrever
+                      ? `<td class="row-actions">${botaoIcone("excluir", "Remover", {
+                          classe: "danger",
+                          dados: { "remover-andamento": a.id },
+                        })}</td>`
+                      : ""
+                  }
+                </tr>`,
+                )
+                .join("")}</tbody></table></div>`
           : `<p class="empty">Nenhum andamento.</p>`
       }
       ${
@@ -1162,8 +1172,15 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${(a.tamanho_bytes / 1024).toFixed(1)} KB</td>
                     <td>${escapeHtml(a.enviado_por ?? "")}</td>
                     <td class="row-actions">
-                      <button class="secondary small" data-baixar="${escapeHtml(a.id)}">Baixar</button>
-                      ${podeEscrever ? `<button class="danger small" data-remover-anexo="${escapeHtml(a.id)}">Remover</button>` : ""}
+                      ${botaoIcone("baixar", "Baixar", { classe: "secondary", dados: { baixar: a.id } })}
+                      ${
+                        podeEscrever
+                          ? botaoIcone("excluir", "Remover", {
+                              classe: "danger",
+                              dados: { "remover-anexo": a.id },
+                            })
+                          : ""
+                      }
                     </td>
                   </tr>`,
                 )

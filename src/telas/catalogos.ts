@@ -12,6 +12,7 @@
 import { call, type Catalogo, type Coluna } from "../api";
 import {
   cellDisplay,
+  botaoIcone,
   escapeHtml,
   ITENS_POR_PAGINA,
   ligarPaginacao,
@@ -85,6 +86,19 @@ function ehReferencia(coluna: Coluna): boolean {
  */
 function colunasVisiveis(cat: Catalogo): Coluna[] {
   return cat.colunas.filter((c) => c.tipo !== "referencia_fixa");
+}
+
+/**
+ * Na listagem, números e booleanos são compactos e ficam centralizados. Texto
+ * e referências seguem o alinhamento declarado pelo catálogo; descrições
+ * longas permanecem à esquerda para preservar a leitura por varredura.
+ */
+function classeDadoNaListagem(coluna: Coluna): string {
+  const compacto =
+    coluna.tipo === "booleano" ||
+    coluna.tipo === "inteiro" ||
+    coluna.tipo === "inteiro_opcional";
+  return `col--trunc${compacto || coluna.centralizar ? " col--centro" : ""}`;
 }
 
 /**
@@ -275,19 +289,29 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
     referencias[coluna.alvo ?? ""]?.find((o) => o.value === String(valor))?.label ??
     (valor === null || valor === undefined ? "" : String(valor));
 
+  // Listagem administrativa segue o mesmo vazio visual das demais telas. Isso
+  // torna explícito, por exemplo, que uma linha de município não tem município
+  // pai porque não representa um distrito.
+  const valorDaListagem = (coluna: Coluna, linha: Linha) => {
+    const texto = ehReferencia(coluna)
+      ? rotuloReferencia(coluna, linha[coluna.nome])
+      : cellDisplay(linha[coluna.nome]);
+    return texto || "—";
+  };
+
   const podeEscrever = ctx.podeEscrever();
 
   // As colunas de dado repartem o que sobra em partes iguais: o catálogo é
   // genérico e nenhuma tela sabe de antemão quais colunas ele tem. O que se
   // sabe é que Situação e Ações são estreitas e de conteúdo previsível.
   const larguraSituacao = 10;
-  const larguraAcoes = podeEscrever ? 16 : 0;
+  const larguraAcoes = podeEscrever ? 10 : 0;
   const larguraDado = (100 - larguraSituacao - larguraAcoes) / colunasVisiveis(cat).length;
 
   const corpo = daPagina.length
     ? `
       <div class="table-wrap">
-        <table class="tabela-dados tabela-dados--fixa">
+        <table class="tabela-dados tabela-dados--fixa tabela-dados--listagem tabela-catalogos">
           <colgroup>
             ${colunasVisiveis(cat)
               .map(() => `<col data-largura="${larguraDado.toFixed(2)}" />`)
@@ -298,7 +322,7 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
           <thead>
             <tr>
               ${colunasVisiveis(cat)
-                .map((c) => `<th class="col--trunc">${escapeHtml(c.rotulo)}</th>`)
+                .map((c) => `<th class="col--trunc col--rotulo-quebra">${escapeHtml(c.rotulo)}</th>`)
                 .join("")}
               <th class="col--centro col--nowrap">Situação</th>
               ${podeEscrever ? `<th class="col--centro col--nowrap">Ações</th>` : ""}
@@ -313,10 +337,8 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
                   .map(
                     (c) =>
                       ((texto) =>
-                        `<td class="col--trunc" title="${escapeHtml(texto)}">${escapeHtml(texto)}</td>`)(
-                        ehReferencia(c)
-                          ? rotuloReferencia(c, linha[c.nome])
-                          : cellDisplay(linha[c.nome]),
+                        `<td class="${classeDadoNaListagem(c)}" title="${escapeHtml(texto)}">${escapeHtml(texto)}</td>`)(
+                        valorDaListagem(c, linha),
                       ),
                   )
                   .join("")}
@@ -324,11 +346,17 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
                 ${
                   podeEscrever
                     ? `<td class="row-actions col--centro col--nowrap">
-                         <button class="secondary small" data-editar="${escapeHtml(linha.id)}">Editar</button>
+                         ${botaoIcone("editar", "Editar", { classe: "secondary", dados: { editar: linha.id } })}
                          ${
                            linha.ativo
-                             ? `<button class="danger small" data-desativar="${escapeHtml(linha.id)}">Desativar</button>`
-                             : `<button class="secondary small" data-reativar="${escapeHtml(linha.id)}">Reativar</button>`
+                             ? botaoIcone("desativar", "Desativar", {
+                                 classe: "danger",
+                                 dados: { desativar: linha.id },
+                               })
+                             : botaoIcone("reativar", "Reativar", {
+                                 classe: "secondary",
+                                 dados: { reativar: linha.id },
+                               })
                          }
                        </td>`
                     : ""

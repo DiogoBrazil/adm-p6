@@ -226,9 +226,9 @@ const COLUNAS_SALVOS: Coluna[] = [
   { rotulo: "Título", largura: 26, truncar: true },
   { rotulo: "Apuratório", largura: 11, alinhamento: "centro", nowrap: true },
   { rotulo: "Período", largura: 19, alinhamento: "centro", nowrap: true },
-  { rotulo: "Total", largura: 7, alinhamento: "direita", nowrap: true },
-  { rotulo: "Em andamento", largura: 10, alinhamento: "direita", nowrap: true },
-  { rotulo: "Concluídos", largura: 9, alinhamento: "direita", nowrap: true },
+  { rotulo: "Total", largura: 7, alinhamento: "centro", nowrap: true },
+  { rotulo: "Em andamento", largura: 10, alinhamento: "centro", nowrap: true },
+  { rotulo: "Concluídos", largura: 9, alinhamento: "centro", nowrap: true },
   { rotulo: "Gerado por", largura: 12, truncar: true },
   { rotulo: "Em", largura: 6, alinhamento: "centro", nowrap: true },
 ];
@@ -273,7 +273,7 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
         <div><h1>Mapas Salvos <span class="badge">${total}</span></h1>
           <p>Cada mapa é o registro do que foi emitido, não um recálculo.</p></div>
       </div>
-      ${tabela(COLUNAS_SALVOS, linhas, "Nenhum mapa salvo.")}
+      ${tabela(COLUNAS_SALVOS, linhas, "Nenhum mapa salvo.", { listagem: true })}
       ${paginacao("mapas-salvos", paginaSalvos, ITENS_POR_PAGINA, total)}
     </section>
   `);

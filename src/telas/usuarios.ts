@@ -58,14 +58,26 @@ const POR_PAGINA = ITENS_POR_PAGINA;
  * espremia "Encarregado" e "Perfil" até quebrarem.
  */
 const COLUNAS: Coluna[] = [
-  { rotulo: "Posto", largura: 8, alinhamento: "centro", nowrap: true },
+  {
+    rotulo: "Posto/Graduação",
+    largura: 16,
+    alinhamento: "centro",
+    truncar: true,
+    quebrarRotulo: true,
+  },
   { rotulo: "Matrícula", largura: 10, alinhamento: "centro", nowrap: true },
   { rotulo: "Nome", largura: 30, truncar: true },
   { rotulo: "Encarregado", largura: 9, alinhamento: "centro", nowrap: true },
-  { rotulo: "Conta", largura: 20, truncar: true },
-  { rotulo: "Perfil", largura: 11, truncar: true },
+  {
+    rotulo: "Usuário do sistema",
+    largura: 11,
+    alinhamento: "centro",
+    nowrap: true,
+    quebrarRotulo: true,
+  },
+  { rotulo: "Perfil", largura: 10, alinhamento: "centro", truncar: true },
   { rotulo: "Situação", largura: 8, alinhamento: "centro", nowrap: true },
-  { rotulo: "Ações", largura: 4, alinhamento: "centro", nowrap: true },
+  { rotulo: "Ações", largura: 6, alinhamento: "centro", nowrap: true },
 ];
 
 /**
@@ -80,11 +92,11 @@ const COLUNAS_IMPRESSAO = COLUNAS.slice(0, -1);
 
 /** As colunas do CSV — sem "Ações", que é botão, e sem acento no cabeçalho. */
 const COLUNAS_CSV = [
-  "Posto",
+  "Posto/Graduacao",
   "Matricula",
   "Nome",
   "Encarregado",
-  "Conta",
+  "Usuario do sistema",
   "Perfil",
   "Situacao",
 ];
@@ -94,7 +106,7 @@ const linhaCsv = (u: UserListItem) => [
   u.matricula,
   u.nome,
   u.is_encarregado ? "sim" : "nao",
-  u.conta_email ?? "",
+  u.conta_ativa === true ? "sim" : "nao",
   u.conta_perfil ?? "",
   u.ativo ? "ativo" : "inativo",
 ];
@@ -117,7 +129,7 @@ const linhaDaTabela = (u: UserListItem) => ({
     u.matricula,
     u.nome,
     u.is_encarregado ? "sim" : "—",
-    u.conta_email ?? "sem conta",
+    u.conta_ativa === true ? "sim" : "não",
     u.conta_perfil ?? "—",
     u.ativo ? "ativo" : "inativo",
     { texto: "", acao: { rotulo: "Abrir", id: u.id } },
@@ -170,7 +182,10 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
       ${
         resposta.ok
-          ? tabela(COLUNAS, linhas, "Nenhum militar cadastrado.", { viewport: true })
+          ? tabela(COLUNAS, linhas, "Nenhum militar cadastrado.", {
+              viewport: true,
+              listagem: true,
+            })
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
       ${paginacao("usuarios", pagina, POR_PAGINA, total)}
@@ -235,6 +250,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
           return { ...linha, celulas: linha.celulas.slice(0, -1) };
         }),
         "Nenhum militar cadastrado.",
+        { listagem: true },
       );
     },
   );

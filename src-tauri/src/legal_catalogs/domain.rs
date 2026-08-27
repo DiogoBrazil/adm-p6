@@ -42,6 +42,8 @@ pub struct Coluna {
     /// ao desmarcar. Quem garante a regra é o banco; isto é a tela não pedir
     /// o que não se aplica.
     pub visivel_se: Option<&'static str>,
+    /// Centraliza os valores desta coluna na listagem administrativa.
+    pub centralizar: bool,
 }
 
 const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -53,6 +55,7 @@ const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
         efeito: None,
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -64,6 +67,7 @@ const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
         efeito: None,
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -75,6 +79,7 @@ const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str
         efeito: Some(efeito),
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -86,6 +91,7 @@ const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str)
         efeito: Some(efeito),
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 const fn inteiro_opcional(
@@ -101,6 +107,7 @@ const fn inteiro_opcional(
         efeito: Some(efeito),
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str) -> Coluna {
@@ -112,6 +119,7 @@ const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str
         efeito: None,
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
 }
 /// Referência que o sistema resolve pela linha marcada com `marcador` no
@@ -125,6 +133,7 @@ const fn referencia_fixa(nome: &'static str, alvo: &'static str, marcador: &'sta
         efeito: None,
         marcador: Some(marcador),
         visivel_se: None,
+        centralizar: false,
     }
 }
 
@@ -144,6 +153,7 @@ const fn referencia_condicional(
         efeito: None,
         marcador: None,
         visivel_se: Some(gatilho),
+        centralizar: false,
     }
 }
 
@@ -160,7 +170,14 @@ const fn referencia_opcional(
         efeito: None,
         marcador: None,
         visivel_se: None,
+        centralizar: false,
     }
+}
+
+/** Marca uma coluna textual ou de referência como compacta na listagem. */
+const fn centralizada(mut coluna: Coluna) -> Coluna {
+    coluna.centralizar = true;
+    coluna
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -186,7 +203,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "tipos_apuratorio",
         tabela: "tipos_apuratorio",
         rotulo: "Tipos de apuratório",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -194,7 +211,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "apuratorios",
         rotulo: "Apuratórios",
         colunas: &[
-            texto("sigla", "Sigla"),
+            centralizada(texto("sigla", "Sigla")),
             texto("nome", "Nome"),
             referencia("tipo_apuratorio_id", "Tipo", "tipos_apuratorio"),
             inteiro("prazo_base_dias", "Prazo base (dias)",
@@ -223,21 +240,21 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "tipos_documento",
         tabela: "tipos_documento",
         rotulo: "Tipos de documento",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "papeis_processo",
         tabela: "papeis_processo",
         rotulo: "Papéis no processo",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "naturezas_transgressao",
         tabela: "naturezas_transgressao",
         rotulo: "Naturezas de transgressão",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -255,14 +272,14 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "status_envolvido",
         tabela: "status_envolvido",
         rotulo: "Status do envolvido",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "tipos_solucao_sugerida",
         tabela: "tipos_solucao_sugerida",
         rotulo: "Soluções sugeridas",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -270,7 +287,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "tipos_solucao_decidida",
         rotulo: "Soluções decididas",
         colunas: &[
-            texto("nome", "Nome"),
+            centralizada(texto("nome", "Nome")),
             booleano("permite_penalidade", "Permite penalidade",
                 "Só com uma solução assim marcada o cadastro aceita tipo e dias de penalidade."),
         ],
@@ -281,7 +298,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "tipos_penalidade",
         rotulo: "Tipos de penalidade",
         colunas: &[
-            texto("nome", "Nome"),
+            centralizada(texto("nome", "Nome")),
             booleano("usa_quantidade_dias", "Usa quantidade de dias",
                 "Habilita o campo de dias. Penalidades sem duração ficam desmarcadas."),
         ],
@@ -292,7 +309,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "categorias_indicio",
         rotulo: "Categorias de indício",
         colunas: &[
-            texto("nome", "Nome"),
+            centralizada(texto("nome", "Nome")),
             booleano("indica_ausencia", "Indica ausência de indícios",
                 "A categoria marcada assim não pode conviver com nenhuma outra no mesmo envolvido."),
         ],
@@ -302,21 +319,21 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "esferas_penais",
         tabela: "esferas_penais",
         rotulo: "Esferas penais",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "especies_infracao_penal",
         tabela: "especies_infracao_penal",
         rotulo: "Espécies de infração penal",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "dispositivos_legais",
         tabela: "dispositivos_legais",
         rotulo: "Dispositivos legais",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -325,12 +342,12 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Infrações penais",
         colunas: &[
             referencia("dispositivo_legal_id", "Dispositivo legal", "dispositivos_legais"),
-            referencia("especie_id", "Espécie", "especies_infracao_penal"),
-            texto("artigo", "Artigo"),
+            centralizada(referencia("especie_id", "Espécie", "especies_infracao_penal")),
+            centralizada(texto("artigo", "Artigo")),
             texto("descricao", "Descrição"),
-            texto_opcional("paragrafo", "Parágrafo"),
-            texto_opcional("inciso", "Inciso"),
-            texto_opcional("alinea", "Alínea"),
+            centralizada(texto_opcional("paragrafo", "Parágrafo")),
+            centralizada(texto_opcional("inciso", "Inciso")),
+            centralizada(texto_opcional("alinea", "Alínea")),
         ],
         ordenacao: "artigo",
     },
@@ -339,8 +356,8 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "artigos_rdpm",
         rotulo: "Artigos do RDPM",
         colunas: &[
-            texto("artigo", "Artigo"),
-            referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao"),
+            centralizada(texto("artigo", "Artigo")),
+            centralizada(referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao")),
         ],
         ordenacao: "artigo",
     },
@@ -349,8 +366,8 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "transgressoes",
         rotulo: "Transgressões do RDPM",
         colunas: &[
-            referencia("artigo_rdpm_id", "Artigo", "artigos_rdpm"),
-            texto("inciso", "Inciso"),
+            centralizada(referencia("artigo_rdpm_id", "Artigo", "artigos_rdpm")),
+            centralizada(texto("inciso", "Inciso")),
             texto("texto", "Texto"),
         ],
         ordenacao: "inciso",
@@ -364,8 +381,8 @@ pub const CATALOGOS: &[Catalogo] = &[
             // só podia ter uma resposta. A coluna fica porque monta o rótulo
             // completo, e é resolvida pelo atributo — nunca pelo nome.
             referencia_fixa("dispositivo_legal_id", "dispositivos_legais", "e_estatuto_militar"),
-            texto("artigo", "Artigo"),
-            texto("inciso", "Inciso"),
+            centralizada(texto("artigo", "Artigo")),
+            centralizada(texto("inciso", "Inciso")),
             texto("texto", "Texto"),
         ],
         ordenacao: "artigo, inciso",
@@ -374,14 +391,14 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "tipos_andamento",
         tabela: "tipos_andamento",
         rotulo: "Tipos de andamento",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
         chave: "papeis_pessoa",
         tabela: "papeis_pessoa",
         rotulo: "Papéis de pessoa",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -389,11 +406,11 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "municipios_distritos",
         rotulo: "Municípios e distritos",
         colunas: &[
-            texto("nome", "Nome"),
+            centralizada(texto("nome", "Nome")),
             booleano("e_distrito", "É distrito",
                 "Marcado, exige o município a que o distrito pertence — e o banco recusa gravar sem ele."),
-            referencia_condicional("municipio_pai_id", "Município",
-                "municipios_distritos", "e_distrito"),
+            centralizada(referencia_condicional("municipio_pai_id", "Município",
+                "municipios_distritos", "e_distrito")),
         ],
         ordenacao: "nome",
     },
@@ -402,8 +419,8 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "unidades_pm",
         rotulo: "Unidades PM",
         colunas: &[
-            texto("nome", "Nome"),
-            referencia_opcional("municipio_id", "Município", "municipios_distritos"),
+            centralizada(texto("nome", "Nome")),
+            centralizada(referencia_opcional("municipio_id", "Município", "municipios_distritos")),
         ],
         ordenacao: "nome",
     },
@@ -411,7 +428,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "circulos_hierarquicos",
         tabela: "circulos_hierarquicos",
         rotulo: "Círculos hierárquicos",
-        colunas: &[texto("nome", "Nome")],
+        colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },
     Catalogo {
@@ -419,9 +436,9 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "postos_graduacoes",
         rotulo: "Postos e graduações",
         colunas: &[
-            texto("sigla", "Sigla"),
-            texto("nome", "Nome"),
-            referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos"),
+            centralizada(texto("sigla", "Sigla")),
+            centralizada(texto("nome", "Nome")),
+            centralizada(referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos")),
         ],
         ordenacao: "nome",
     },
@@ -430,7 +447,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         tabela: "perfis_acesso",
         rotulo: "Perfis de acesso",
         colunas: &[
-            texto("nome", "Nome"),
+            centralizada(texto("nome", "Nome")),
             booleano("pode_administrar", "Pode administrar",
                 "Concede acesso às telas de cadastro e configuração. O sistema impede que sobre nenhum."),
         ],

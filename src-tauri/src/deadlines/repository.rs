@@ -401,10 +401,16 @@ pub async fn report(
                v.numero_controle     AS numero_controle,
                v.unidade_origem      AS unidade_origem,
                v.responsavel_nome    AS responsavel_nome,
+               responsavel_pm.matricula AS responsavel_matricula,
+               responsavel_posto.sigla AS responsavel_posto_graduacao,
                v.prazo_vencimento    AS data_vencimento,
                v.prazo_dias_restantes AS dias_restantes,
                v.prazo_ordem         AS ordem
           FROM v_processos_detalhados v
+          LEFT JOIN policiais_militares responsavel_pm
+                 ON responsavel_pm.id = v.responsavel_id::uuid
+          LEFT JOIN postos_graduacoes responsavel_posto
+                 ON responsavel_posto.id = responsavel_pm.posto_graduacao_id
          {FILTRO_REPORT}
          ORDER BY v.prazo_vencimento, v.id
          LIMIT $6 OFFSET $7"

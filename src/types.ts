@@ -196,6 +196,8 @@ export interface DeadlineReportItem {
   numero_controle: string;
   unidade_origem: string;
   responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
   data_vencimento: string;
   /** Negativo = já venceu. */
   dias_restantes: number;
@@ -370,6 +372,8 @@ export interface Coluna {
   marcador: string | null;
   /** Nome de uma coluna booleana DESTE catálogo que revela este campo. */
   visivel_se: string | null;
+  /** Centraliza os valores desta coluna na listagem administrativa. */
+  centralizar: boolean;
 }
 
 /** `legal_catalogs` */

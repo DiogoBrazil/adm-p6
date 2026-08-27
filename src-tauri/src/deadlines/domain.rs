@@ -37,6 +37,8 @@ pub struct DeadlineReportItem {
     pub numero_controle: String,
     pub unidade_origem: String,
     pub responsavel_nome: Option<String>,
+    pub responsavel_matricula: Option<String>,
+    pub responsavel_posto_graduacao: Option<String>,
     pub data_vencimento: NaiveDate,
     /// Negativo = já venceu.
     pub dias_restantes: i32,

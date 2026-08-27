@@ -11,7 +11,7 @@
 // composta, sem `id` e sem `nome`, e o CRUD genérico pressupõe os dois.
 
 import { call, type ApuratorioConfig } from "../api";
-import { escapeHtml, notificar, option } from "../dom";
+import { botaoIcone, escapeHtml, notificar, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/configuracao/apuratorios";
@@ -104,7 +104,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       </p>
       ${
         config.documentos.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-configuracao-apuratorio">
                <thead><tr>
                  <th>Documento</th><th>Prazo próprio</th><th>Prazo efetivo</th>
                  <th>Padrão</th><th>Situação</th><th>Em uso</th>
@@ -126,10 +126,23 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                          ? `<td class="row-actions">
                               ${
                                 d.ativo
-                                  ? `<button class="danger small" data-desativar-doc="${escapeHtml(d.tipo_documento_id)}">Desativar</button>`
-                                  : `<button class="secondary small" data-reativar-doc="${escapeHtml(d.tipo_documento_id)}">Reativar</button>`
+                                  ? botaoIcone("desativar", "Desativar", {
+                                      classe: "danger",
+                                      dados: { "desativar-doc": d.tipo_documento_id },
+                                    })
+                                  : botaoIcone("reativar", "Reativar", {
+                                      classe: "secondary",
+                                      dados: { "reativar-doc": d.tipo_documento_id },
+                                    })
                               }
-                              ${d.ativo && !d.padrao ? `<button class="secondary small" data-padrao-doc="${escapeHtml(d.tipo_documento_id)}">Tornar padrão</button>` : ""}
+                              ${
+                                d.ativo && !d.padrao
+                                  ? botaoIcone("padrao", "Tornar padrão", {
+                                      classe: "secondary",
+                                      dados: { "padrao-doc": d.tipo_documento_id },
+                                    })
+                                  : ""
+                              }
                             </td>`
                          : ""
                      }
@@ -164,7 +177,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       </p>
       ${
         config.papeis.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-configuracao-apuratorio">
                <thead><tr>
                  <th>Papel</th><th>Obrigatório</th><th>Máx. ocupantes</th>
                  <th>Responsável</th><th>Situação</th><th>Em uso</th>
@@ -186,10 +199,23 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                          ? `<td class="row-actions">
                               ${
                                 p.ativo
-                                  ? `<button class="danger small" data-desativar-papel="${escapeHtml(p.papel_id)}">Desativar</button>`
-                                  : `<button class="secondary small" data-reativar-papel="${escapeHtml(p.papel_id)}">Reativar</button>`
+                                  ? botaoIcone("desativar", "Desativar", {
+                                      classe: "danger",
+                                      dados: { "desativar-papel": p.papel_id },
+                                    })
+                                  : botaoIcone("reativar", "Reativar", {
+                                      classe: "secondary",
+                                      dados: { "reativar-papel": p.papel_id },
+                                    })
                               }
-                              ${p.ativo && !p.e_responsavel ? `<button class="secondary small" data-responsavel="${escapeHtml(p.papel_id)}">Tornar responsável</button>` : ""}
+                              ${
+                                p.ativo && !p.e_responsavel
+                                  ? botaoIcone("padrao", "Tornar responsável", {
+                                      classe: "secondary",
+                                      dados: { responsavel: p.papel_id },
+                                    })
+                                  : ""
+                              }
                             </td>`
                          : ""
                      }

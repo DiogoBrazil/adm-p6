@@ -416,6 +416,21 @@ async fn blocos_de_prazo_sao_exclusivos() {
         let dentro = processo_vencendo_em(&pool, &m, 3, 5).await;
         let fora = processo_vencendo_em(&pool, &m, 4, 30).await;
 
+        // O responsável precisa sair qualificado para a tabela e para o CSV,
+        // não apenas com o nome que a view já expunha.
+        sqlx::query(
+            "INSERT INTO processo_designacoes
+                 (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio)
+             SELECT $1::uuid, p.apuratorio_id, $2::uuid, $3::uuid, p.data_instauracao
+               FROM processos_procedimentos p WHERE p.id = $1::uuid",
+        )
+        .bind(&hoje)
+        .bind(&m.pm_um)
+        .bind(&m.papel_encarregado)
+        .execute(&pool)
+        .await
+        .unwrap();
+
         let vencidos = repository::report(
             &pool,
             &DeadlineReportFilter {
@@ -445,6 +460,20 @@ async fn blocos_de_prazo_sao_exclusivos() {
             ids(&proximos),
             vec![hoje.clone(), dentro.clone()],
             "a janela vai de hoje ate hoje + 14, em ordem de vencimento"
+        );
+        let qualificado = proximos
+            .items
+            .iter()
+            .find(|item| item.processo_id == hoje)
+            .expect("processo com responsavel");
+        assert_eq!(qualificado.responsavel_nome.as_deref(), Some("PM UM"));
+        assert_eq!(
+            qualificado.responsavel_matricula.as_deref(),
+            Some("100000001")
+        );
+        assert_eq!(
+            qualificado.responsavel_posto_graduacao.as_deref(),
+            Some("TST PM")
         );
 
         // A interseção é o defeito: se um id estiver nos dois, a tela repete.

@@ -18,6 +18,7 @@ import {
   baixarCsv,
   carregarTudo,
   escapeHtml,
+  formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarExportacao,
   ligarPaginacao,
@@ -45,11 +46,11 @@ const paginas = { vencidos: 1, proximos: 1 };
 
 /** As seis colunas dividem 100% da largura. */
 const COLUNAS: Coluna[] = [
-  { rotulo: "Processo", largura: 18, truncar: true },
-  { rotulo: "Unidade", largura: 22, truncar: true },
-  { rotulo: "Responsável", largura: 26, truncar: true },
+  { rotulo: "Processo", largura: 16, alinhamento: "centro", truncar: true },
+  { rotulo: "Unidade", largura: 18, alinhamento: "centro", truncar: true },
+  { rotulo: "Responsável", largura: 32, truncar: true },
   { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
-  { rotulo: "Dias", largura: 12, alinhamento: "direita", nowrap: true },
+  { rotulo: "Dias", largura: 12, alinhamento: "centro", nowrap: true },
   { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
 ];
 
@@ -75,6 +76,13 @@ const situacao = (i: DeadlineReportItem) =>
 const vigencia = (i: DeadlineReportItem) =>
   i.ordem === 0 ? "inicial" : `${i.ordem}ª prorrogação`;
 
+const responsavel = (i: DeadlineReportItem) =>
+  formatarQualificacaoMilitar(
+    i.responsavel_posto_graduacao,
+    i.responsavel_matricula,
+    i.responsavel_nome,
+  );
+
 function linhas(itens: DeadlineReportItem[]): Linha[] {
   return itens.map((i) => ({
     // `tr.atrasado` destaca a linha inteira, não só a célula dos dias.
@@ -82,7 +90,7 @@ function linhas(itens: DeadlineReportItem[]): Linha[] {
     celulas: [
       identificacao(i),
       i.unidade_origem,
-      i.responsavel_nome ?? "—",
+      responsavel(i),
       i.data_vencimento,
       { texto: situacao(i), numerica: true },
       vigencia(i),
@@ -140,12 +148,12 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
       </div>
 
       <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
-      ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.")}
+      ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
       ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
 
       <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
         <span class="badge badge--warn">${totalAVencer}</span></h2>
-      ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.")}
+      ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", { listagem: true })}
       ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
     </section>
   `);
@@ -195,7 +203,7 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         bloco,
         identificacao(i),
         i.unidade_origem,
-        i.responsavel_nome ?? "",
+        responsavel(i),
         i.data_vencimento,
         i.dias_restantes,
         vigencia(i),
@@ -212,9 +220,9 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     async () => {
       const todos = await carregarOsDois();
       return `<h2>Vencidos</h2>
-        ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.")}
+        ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.", { listagem: true })}
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
-        ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.")}`;
+        ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.", { listagem: true })}`;
     },
   );
 }

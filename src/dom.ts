@@ -29,6 +29,51 @@ export function cellDisplay(value: unknown): string {
   return String(value ?? "");
 }
 
+/** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
+export function formatarQualificacaoMilitar(
+  posto: string | null,
+  matricula: string | null,
+  nome: string | null,
+): string {
+  return [posto, matricula, nome].filter((parte): parte is string => Boolean(parte)).join(" ") || "—";
+}
+
+export type IconeAcao =
+  | "abrir"
+  | "editar"
+  | "desativar"
+  | "reativar"
+  | "padrao"
+  | "excluir"
+  | "baixar";
+
+/** Ícones lineares das ações tabulares, desenhados com a cor do botão. */
+function iconeAcao(nome: IconeAcao): string {
+  const conteudo: Record<IconeAcao, string> = {
+    abrir: '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+    editar: '<path d="M4 20h4l10.5-10.5a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>',
+    desativar: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+    reativar: '<path d="M20 7v5h-5"/><path d="M18.5 16a8 8 0 1 1 .5-8.5L20 12"/>',
+    padrao: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
+    excluir: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m7 7 1 13h8l1-13"/><path d="M10 11v5M14 11v5"/>',
+    baixar: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  };
+  return `<svg class="icone-acao" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${conteudo[nome]}</svg>`;
+}
+
+/** Botão compacto para células de ação, sempre com nome acessível e tooltip. */
+export function botaoIcone(
+  icone: IconeAcao,
+  rotulo: string,
+  opcoes: { classe?: string; dados?: Record<string, string> } = {},
+): string {
+  const dados = Object.entries(opcoes.dados ?? {})
+    .map(([nome, valor]) => ` data-${nome}="${escapeHtml(valor)}"`)
+    .join("");
+  const classes = ["botao-icone", opcoes.classe ?? ""].filter(Boolean).join(" ");
+  return `<button type="button" class="${escapeHtml(classes)}" aria-label="${escapeHtml(rotulo)}" title="${escapeHtml(rotulo)}"${dados}>${iconeAcao(icone)}</button>`;
+}
+
 /** `<option>` já escapado, marcando o selecionado. */
 export function option(valor: string, rotulo: string, selecionado: boolean): string {
   return `<option value="${escapeHtml(valor)}"${selecionado ? " selected" : ""}>${escapeHtml(rotulo)}</option>`;
@@ -101,6 +146,8 @@ export type Coluna = {
   truncar?: boolean;
   /** Impede a quebra em duas linhas: data, contagem, etiqueta, botão. */
   nowrap?: boolean;
+  /** Permite quebrar apenas o rótulo do cabeçalho, nunca o dado da célula. */
+  quebrarRotulo?: boolean;
 };
 
 /** Célula de tabela: o texto já sai escapado, o alinhamento é opcional. */
@@ -108,7 +155,7 @@ export type Celula = string | {
   texto: string;
   numerica?: boolean;
   classe?: string;
-  acao?: { rotulo: string; id: string };
+  acao?: { rotulo: string; id: string; icone?: IconeAcao };
 };
 
 /**
@@ -135,7 +182,7 @@ export function tabela(
   colunas: (string | Coluna)[],
   linhas: Linha[],
   vazio = "Nada a exibir.",
-  opcoes: { viewport?: boolean; larga?: boolean } = {},
+  opcoes: { viewport?: boolean; larga?: boolean; listagem?: boolean } = {},
 ): string {
   if (!linhas.length) return `<p class="empty">${escapeHtml(vazio)}</p>`;
 
@@ -150,6 +197,7 @@ export function tabela(
       c.alinhamento === "direita" ? "col--direita" : "",
       c.truncar ? "col--trunc" : "",
       c.nowrap ? "col--nowrap" : "",
+      c.quebrarRotulo ? "col--rotulo-quebra" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -157,7 +205,7 @@ export function tabela(
   const celula = (c: Celula, indice: number) => {
     const definicao = definicoes[indice] ?? { rotulo: "" };
     if (c && typeof c === "object" && c.acao) {
-      return `<td class="row-actions ${escapeHtml(classeDaColuna(definicao))}"><button type="button" class="outline small" data-tabela-acao="${escapeHtml(c.acao.id)}">${escapeHtml(c.acao.rotulo)}</button></td>`;
+      return `<td class="row-actions ${escapeHtml(classeDaColuna(definicao))}">${botaoIcone(c.acao.icone ?? "abrir", c.acao.rotulo, { classe: "outline", dados: { "tabela-acao": c.acao.id } })}</td>`;
     }
     const texto = typeof c === "string" ? c : c.texto;
     const extra = typeof c === "string" ? "" : [c.numerica ? "num" : "", c.classe ?? ""].join(" ");
@@ -187,7 +235,7 @@ export function tabela(
 
   // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
   // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
-  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}">
+  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
       ${colgroup}
       <thead><tr>${definicoes
         .map((c) => {

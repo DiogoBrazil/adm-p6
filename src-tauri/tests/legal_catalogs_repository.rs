@@ -33,6 +33,65 @@ async fn gravar(pool: &PgPool, chave: &str, id: Option<&str>, pares: Value) -> S
 
 // ── O registro ───────────────────────────────────────────────────────────────
 
+#[test]
+fn metadados_centralizam_as_colunas_definidas_pela_interface() {
+    let esperadas = [
+        ("apuratorios", "sigla"),
+        ("tipos_apuratorio", "nome"),
+        ("tipos_documento", "nome"),
+        ("papeis_processo", "nome"),
+        ("naturezas_transgressao", "nome"),
+        ("status_envolvido", "nome"),
+        ("tipos_solucao_sugerida", "nome"),
+        ("tipos_solucao_decidida", "nome"),
+        ("tipos_penalidade", "nome"),
+        ("categorias_indicio", "nome"),
+        ("esferas_penais", "nome"),
+        ("especies_infracao_penal", "nome"),
+        ("dispositivos_legais", "nome"),
+        ("infracoes_penais", "especie_id"),
+        ("infracoes_penais", "artigo"),
+        ("infracoes_penais", "paragrafo"),
+        ("infracoes_penais", "inciso"),
+        ("infracoes_penais", "alinea"),
+        ("artigos_rdpm", "artigo"),
+        ("artigos_rdpm", "natureza_transgressao_id"),
+        ("transgressoes", "artigo_rdpm_id"),
+        ("transgressoes", "inciso"),
+        ("infracoes_estatuto", "artigo"),
+        ("infracoes_estatuto", "inciso"),
+        ("tipos_andamento", "nome"),
+        ("papeis_pessoa", "nome"),
+        ("municipios_distritos", "nome"),
+        ("municipios_distritos", "municipio_pai_id"),
+        ("unidades_pm", "nome"),
+        ("unidades_pm", "municipio_id"),
+        ("circulos_hierarquicos", "nome"),
+        ("postos_graduacoes", "sigla"),
+        ("postos_graduacoes", "nome"),
+        ("postos_graduacoes", "circulo_hierarquico_id"),
+        ("perfis_acesso", "nome"),
+    ];
+
+    for (chave, nome) in esperadas {
+        let coluna = catalogo(chave)
+            .and_then(|cat| cat.colunas.iter().find(|coluna| coluna.nome == nome))
+            .unwrap_or_else(|| panic!("coluna {chave}.{nome} registrada"));
+        assert!(coluna.centralizar, "{chave}.{nome} deveria centralizar");
+    }
+
+    assert!(
+        !catalogo("infracoes_penais")
+            .unwrap()
+            .colunas
+            .iter()
+            .find(|coluna| coluna.nome == "descricao")
+            .unwrap()
+            .centralizar,
+        "descricao longa continua alinhada ao inicio"
+    );
+}
+
 /// O registro é a fonte de tudo: a tela de catálogos é montada dele, e o SQL
 /// também. Um catálogo cuja tabela não existe passaria despercebido até alguém
 /// abrir a tela.
