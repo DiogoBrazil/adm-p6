@@ -304,6 +304,11 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
         assert!(!comum.permite_acusacao_penal);
         assert!(comum.permite_indicios);
         assert!(comum.permite_solucao_sugerida);
+        // A fixture usa tipo 'procedimento', mas nasce DESLIGADO: o UPDATE da
+        // 0012 rodou com `apuratorios` vazia, entao vale o DEFAULT false. E a
+        // mesma razao pela qual todos os `permite_*` da 0007 e da 0011 nascem
+        // desligados aqui — carga de migracao nao alcanca linha criada depois.
+        assert!(!comum.permite_cadastro_vitima);
 
         // Ligados, chegam ligados — é o que o formulário consulta para revelar
         // julgamento, punição e remessa à comissão.
@@ -313,7 +318,8 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
                     permite_punicao = true,
                     permite_remessa_comissao = true,
                     permite_acusacao = true,
-                    permite_acusacao_penal = true
+                    permite_acusacao_penal = true,
+                    permite_cadastro_vitima = true
               WHERE id = $1::uuid",
         )
         .bind(&m.apuratorio)
@@ -330,6 +336,10 @@ async fn configuracao_entrega_os_atributos_de_comportamento() {
         assert!(depois.permite_remessa_comissao);
         assert!(depois.permite_acusacao);
         assert!(depois.permite_acusacao_penal);
+        // Sem isto, o formulario nao desenha a secao de Ofendido/Vitima e a
+        // informacao fica impossivel de registrar, sem erro que aponte a causa
+        // — que foi exatamente como a carta precatoria morreu (§8.10.2).
+        assert!(depois.permite_cadastro_vitima);
     })
     .await;
 }

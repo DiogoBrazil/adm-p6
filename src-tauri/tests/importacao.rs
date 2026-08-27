@@ -127,6 +127,40 @@ async fn as_oito_etapas_reproduzem_o_legado_sem_perder_nada() {
             );
         }
 
+        // Ofendido/Vítima foi para tabela própria na 0012, e o inquirido ficou
+        // em `processo_pessoas`. A separação tem de ser LIMPA: nenhuma vítima
+        // pode ter sobrado do lado das pessoas citadas, e vice-versa.
+        assert_eq!(
+            conta(&pool, "SELECT count(*) FROM processo_vitimas").await,
+            conta(
+                &pool,
+                "SELECT coalesce(sum(
+                        (SELECT count(*) FROM jsonb_array_elements_text(
+                             CASE WHEN btrim(l.nome_vitima) LIKE '[%'
+                                  THEN l.nome_vitima::jsonb ELSE '[]'::jsonb END) t(v)
+                          WHERE btrim(v) <> '')
+                      + CASE WHEN btrim(l.nome_vitima) NOT LIKE '[%'
+                              AND btrim(l.nome_vitima) <> '' THEN 1 ELSE 0 END), 0)::bigint
+                   FROM legado.processos_procedimentos l
+                  WHERE l.nome_vitima IS NOT NULL"
+            )
+            .await,
+            "ofendidos/vitimas: a contagem importada difere do recorte legado"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM papeis_pessoa WHERE lower(nome) LIKE 'v%tima'"
+            )
+            .await,
+            0,
+            "a importacao nao pode mais semear o papel 'Vitima': a 0012 o aposentou"
+        );
+        assert!(
+            conta(&pool, "SELECT count(*) FROM processo_vitimas").await > 0,
+            "o recorte legado tem vitimas; se zerou, o INSERT da etapa 05 parou de casar"
+        );
+
         // Envolvidos: os registrados MAIS os criados dos processos que os
         // guardavam em coluna (decisão 14). Nenhum a mais, nenhum a menos.
         assert_eq!(

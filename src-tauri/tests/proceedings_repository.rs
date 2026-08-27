@@ -17,6 +17,7 @@ use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
     PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
     UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
+    VitimaRequest,
 };
 use adm_p6_tauri_lib::proceedings::repository;
 use chrono::NaiveDate;
@@ -49,7 +50,26 @@ fn base(m: &Mundo, numero: &str) -> SaveProceedingRequest {
         envolvidos: vec![],
         designacoes: vec![designacao(m, &m.pm_um, &m.papel_encarregado)],
         pessoas: vec![],
+        vitimas: vec![],
         carta_precatoria: None,
+    }
+}
+
+/// Liga `permite_cadastro_vitima` no apuratório: a fixture nasce com ele
+/// desligado, porque a carga da 0012 rodou com `apuratorios` vazia.
+async fn habilitar_vitima(pool: &PgPool, apuratorio: &str, ligado: bool) {
+    sqlx::query("UPDATE apuratorios SET permite_cadastro_vitima = $2 WHERE id = $1::uuid")
+        .bind(apuratorio)
+        .bind(ligado)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn vitima(nome: &str, ordem: i32) -> VitimaRequest {
+    VitimaRequest {
+        nome: nome.to_string(),
+        ordem,
     }
 }
 
@@ -249,12 +269,12 @@ async fn cria_processo_completo_em_uma_transacao() {
         ];
         req.pessoas = vec![
             PessoaRequest {
-                papel_pessoa_id: m.papel_vitima.clone(),
+                papel_pessoa_id: m.papel_inquirido.clone(),
                 nome: "ADMINISTRACAO PUBLICA".to_string(),
                 ordem: 1,
             },
             PessoaRequest {
-                papel_pessoa_id: m.papel_vitima.clone(),
+                papel_pessoa_id: m.papel_inquirido.clone(),
                 nome: "FULANO DE TAL".to_string(),
                 ordem: 2,
             },
@@ -343,7 +363,7 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
         req.data_recebimento = Some(data(2026, 1, 12));
         req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
         req.pessoas = vec![PessoaRequest {
-            papel_pessoa_id: m.papel_vitima.clone(),
+            papel_pessoa_id: m.papel_inquirido.clone(),
             nome: "VITIMA UM".to_string(),
             ordem: 1,
         }];
@@ -355,7 +375,7 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
         sincronizar_designacoes(&pool, &mut req, &id).await;
         req.envolvidos = vec![envolvido(&m, &m.pm_tres, 1)];
         req.pessoas = vec![PessoaRequest {
-            papel_pessoa_id: m.papel_vitima.clone(),
+            papel_pessoa_id: m.papel_inquirido.clone(),
             nome: "VITIMA DOIS".to_string(),
             ordem: 1,
         }];
@@ -2202,6 +2222,189 @@ async fn processo_concluido_recusa_nova_substituicao_e_orienta_reabrir() {
                 .len(),
             1
         );
+    })
+    .await;
+}
+
+// ──────────────────────────────────────────────────────────── ofendido/vítima ──
+//
+// Desde a 0012 o ofendido é `processo_vitimas`, e não uma pessoa citada com
+// papel de catálogo. Quem decide se a espécie o registra é
+// `apuratorios.permite_cadastro_vitima` — atributo, nunca a sigla.
+
+#[tokio::test]
+async fn procedimento_grava_zero_uma_ou_varias_vitimas() {
+    util::com_banco_descartavel("proc_vitimas_varias", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        habilitar_vitima(&pool, &m.apuratorio, true).await;
+
+        // Zero: a informação é opcional, e o cadastro tem de fechar sem ela.
+        let id = salvar(&pool, &base(&m, "VIT-1")).await.unwrap();
+        assert!(repository::get(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .vitimas
+            .is_empty());
+
+        // Três, e o nome é normalizado para maiúsculas como o das pessoas.
+        let mut com_tres = base(&m, "VIT-1");
+        com_tres.id = Some(id.clone());
+        com_tres.vitimas = vec![
+            vitima("Fulano de Tal", 1),
+            vitima("ADMINISTRAÇÃO PÚBLICA", 2),
+            vitima("Beltrana", 3),
+        ];
+        sincronizar_designacoes(&pool, &mut com_tres, &id).await;
+        salvar(&pool, &com_tres).await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        let nomes: Vec<&str> = detalhe.vitimas.iter().map(|v| v.nome.as_str()).collect();
+        assert_eq!(
+            nomes,
+            ["FULANO DE TAL", "ADMINISTRAÇÃO PÚBLICA", "BELTRANA"]
+        );
+
+        // E voltar a zero também: remover a última vítima é operação legítima
+        // enquanto a espécie as registra.
+        let mut sem = base(&m, "VIT-1");
+        sem.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut sem, &id).await;
+        salvar(&pool, &sem).await.unwrap();
+        assert!(repository::get(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .vitimas
+            .is_empty());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn apuratorio_sem_cadastro_de_vitima_recusa_vitima() {
+    util::com_banco_descartavel("proc_vitima_recusada", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        // Desligado é o estado de nascença — nada a fazer antes.
+
+        let mut novo = base(&m, "VIT-2");
+        novo.vitimas = vec![vitima("Fulano", 1)];
+
+        // Recusa com mensagem de domínio, e não silêncio: a tela não desenha a
+        // seção, então quem chega aqui chamou o IPC direto e precisa saber por
+        // que o dado não entrou.
+        let erro = salvar(&pool, &novo).await.unwrap_err();
+        assert!(
+            erro.contains("não registra ofendido/vítima"),
+            "mensagem inesperada: {erro}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn vitima_historica_sobrevive_ao_desligar_a_configuracao() {
+    util::com_banco_descartavel("proc_vitima_historica", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        habilitar_vitima(&pool, &m.apuratorio, true).await;
+
+        let mut com_vitima = base(&m, "VIT-3");
+        com_vitima.vitimas = vec![vitima("Fulano de Tal", 1), vitima("Beltrana", 2)];
+        let id = salvar(&pool, &com_vitima).await.unwrap();
+
+        // A espécie deixa de registrar ofendido. É configuração, e configuração
+        // define comportamento futuro — não reescreve fato já gravado.
+        habilitar_vitima(&pool, &m.apuratorio, false).await;
+
+        // A tela nem desenha a seção, então a edição seguinte não manda vítima
+        // nenhuma. `gravar_vitimas` não toca na tabela, e as duas continuam lá.
+        let mut edicao = base(&m, "VIT-3");
+        edicao.id = Some(id.clone());
+        edicao.resumo_fatos = Some("Alteração que nada tem a ver com a vítima.".to_string());
+        sincronizar_designacoes(&pool, &mut edicao, &id).await;
+        salvar(&pool, &edicao).await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(
+            detalhe.vitimas.len(),
+            2,
+            "desligar o atributo apagou fato registrado — princípio 5"
+        );
+        assert_eq!(detalhe.vitimas[0].nome, "FULANO DE TAL");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn ordem_repetida_de_vitima_da_mensagem_de_dominio() {
+    util::com_banco_descartavel("proc_vitima_ordem", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        habilitar_vitima(&pool, &m.apuratorio, true).await;
+
+        let mut novo = base(&m, "VIT-4");
+        novo.vitimas = vec![vitima("Fulano", 1), vitima("Beltrana", 1)];
+
+        // `uq_vitima_ordem` também recusaria, mas com o texto cru do
+        // PostgreSQL — e a decisão 38 proíbe detalhe técnico na tela.
+        let erro = salvar(&pool, &novo).await.unwrap_err();
+        assert!(
+            erro.contains("ordem diferente"),
+            "mensagem inesperada: {erro}"
+        );
+
+        let vazio = {
+            let mut r = base(&m, "VIT-5");
+            r.vitimas = vec![vitima("   ", 1)];
+            r
+        };
+        let erro = salvar(&pool, &vazio).await.unwrap_err();
+        assert!(
+            erro.contains("ofendido/vítima"),
+            "mensagem inesperada: {erro}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn pessoas_inquiridas_e_vitimas_sao_independentes() {
+    util::com_banco_descartavel("proc_vitima_pessoa", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        habilitar_vitima(&pool, &m.apuratorio, true).await;
+
+        let mut novo = base(&m, "VIT-6");
+        novo.vitimas = vec![vitima("Ofendido Um", 1)];
+        novo.pessoas = vec![PessoaRequest {
+            papel_pessoa_id: m.papel_inquirido.clone(),
+            nome: "Inquirido Um".to_string(),
+            ordem: 1,
+        }];
+        let id = salvar(&pool, &novo).await.unwrap();
+
+        // Mexer só nos inquiridos não pode alcançar a vítima, e vice-versa: são
+        // duas tabelas, e cada `gravar_*` cuida da sua.
+        let mut so_pessoas = base(&m, "VIT-6");
+        so_pessoas.id = Some(id.clone());
+        so_pessoas.vitimas = vec![vitima("Ofendido Um", 1)];
+        so_pessoas.pessoas = vec![
+            PessoaRequest {
+                papel_pessoa_id: m.papel_inquirido.clone(),
+                nome: "Inquirido Um".to_string(),
+                ordem: 1,
+            },
+            PessoaRequest {
+                papel_pessoa_id: m.papel_inquirido.clone(),
+                nome: "Inquirido Dois".to_string(),
+                ordem: 2,
+            },
+        ];
+        sincronizar_designacoes(&pool, &mut so_pessoas, &id).await;
+        salvar(&pool, &so_pessoas).await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.pessoas.len(), 2);
+        assert_eq!(detalhe.vitimas.len(), 1);
+        assert_eq!(detalhe.vitimas[0].nome, "OFENDIDO UM");
     })
     .await;
 }

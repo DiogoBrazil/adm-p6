@@ -89,6 +89,15 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         assert!(!existe, "tabela {extinta} deveria ter sido eliminada");
     }
 
+    // A 0012 tirou o ofendido de `processo_pessoas` e o pôs em tabela própria,
+    // sem papel de catálogo. É o que faz a seção do formulário não depender de
+    // uma linha que alguém precise ter cadastrado antes.
+    let vitimas: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.processo_vitimas') IS NOT NULL")
+            .fetch_one(&mut conn)
+            .await?;
+    assert!(vitimas, "processo_vitimas deveria existir desde a 0012");
+
     // Toda FK precisa de ON DELETE explícito. No schema anterior as 111 FKs
     // ficavam todas em NO ACTION por omissão.
     let sem_acao: i64 = sqlx::query_scalar(
@@ -248,6 +257,7 @@ async fn atributos_de_comportamento_do_apuratorio_nascem_desligados() {
             "permite_acusacao_penal",
             "permite_indicios",
             "permite_solucao_sugerida",
+            "permite_cadastro_vitima",
         ] {
             let (tipo, anulavel, padrao): (String, String, Option<String>) = sqlx::query_as(
                 "SELECT data_type, is_nullable, column_default

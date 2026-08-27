@@ -221,6 +221,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 43 | O cadastro do processo pode alterar qualquer designação? | **Só a que não tem histórico.** `data_fim` preenchida ou `designacao_anterior_id` preenchido tiram a linha do alcance do formulário — alterar reescreveria fato registrado (princípio 5). A designação inicial intocada, essa sim, é editável e removível, agora sincronizada pelo `id`. A recusa é do backend, não da tela. |
 | 44 | O que um processo concluído ainda pode receber? | **Nenhum novo fato operacional.** Nova substituição, prorrogação e andamento exigem `data_conclusao IS NULL`; a mensagem orienta reabrir. A checagem trava a linha do processo no backend, então vale também para IPC direto e para duas janelas concorrentes. Correções de registros históricos continuam separadas da inclusão. |
 | 45 | Toda designação cita documento? | **Não.** A relação `apuratorio_papeis.usa_documento_designacao` decide. No IPM, o Escrivão tem a flag desligada: documento e número não são gravados nem pedidos, e a tabela mostra “-”. A retroalimentação por nomes acontece uma vez na migration; o código lê apenas o booleano. E, como todo conceito de negócio, é **cadastro administrável**: a flag é uma coluna da tabela de papéis em Catálogos → Apuratórios, com alternância própria — outra espécie que dispense a citação não precisa de migration nova. |
+| 46 | Quem registra Ofendido/Vítima, e onde ele mora | **Todo procedimento — CP, FP, IPM, SR e SV —, e em tabela própria.** Três escolhas numa. (a) **Vítima deixa de ser papel de pessoa.** Era uma linha de `papeis_pessoa` escolhida num `<select>`; virou `processo_vitimas`, relação do procedimento como `processo_envolvidos` (princípio 3). O motivo é concreto: `papeis_pessoa` é catálogo **operacional** e nasce vazio, então uma seção que dependesse dele sumiria numa instalação nova — a forma exata do defeito da carta precatória (§8.10.2). Sem catálogo no caminho, não há o que cadastrar nem o que renomear. (b) **Quem decide é `apuratorios.permite_cadastro_vitima`**, ligado pela `0012` em todo apuratório cujo tipo é `procedimento`; os cinco processos disciplinares ficam de fora, porque são instaurados **contra** um militar, e não para apurar um fato. Carga única, como `permite_indicios` (decisão 31). (c) **O atributo NÃO entra no registro de Catálogos** — desvio deliberado da §7.7, por decisão do responsável: registrar ofendido é capacidade da espécie, não escolha de administrador. Fica no mesmo caso de `codigo_extensao`. É opcional (zero, um ou vários), e o bloco genérico do formulário virou **"Pessoas inquiridas"**. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -2580,6 +2581,86 @@ restaurações futuras. Tela e backend recusam manter as duas fontes nesses rito
 
 ---
 
+### 8.17 ~~Ofendido/Vítima como informação do procedimento~~ — **CONCLUÍDA**
+
+Pedido do responsável: o procedimento passa a registrar **Ofendido/Vítima**, opcional e em
+qualquer quantidade, ao lado do que já tinha — Designações e PM envolvido. Os cinco
+processos disciplinares não recebem a informação.
+
+#### O que o pedido descartou, e por quê
+
+O caminho óbvio era `apuratorios.permite_cadastro_vitima` administrável em *Catálogos →
+Apuratórios* (a receita da §7.7) mais um atributo `e_vitima` em `papeis_pessoa` para o
+código achar o papel sem comparar nome. **As duas metades foram recusadas pelo
+responsável**, e a segunda tinha um defeito que a recusa evitou:
+
+> `papeis_pessoa` é catálogo **operacional**, e `tests/migrations.rs` exige que nasça
+> **vazio**. Nenhuma migration pode semear o papel. Logo, numa instalação nova a seção de
+> Ofendido/Vítima só apareceria depois que alguém cadastrasse a linha certa e a marcasse —
+> e, enquanto ninguém o fizesse, sumiria sem erro nenhum. É a forma exata do defeito da
+> §8.10.2: campo que o backend conhece e a tela não desenha.
+
+Daí a tabela própria: sem catálogo no caminho, não há linha que possa faltar.
+
+#### A `0012`, em três partes
+
+| | |
+|---|---|
+| `apuratorios.permite_cadastro_vitima` | `NOT NULL DEFAULT false`, ligado por `UPDATE` em todo apuratório cujo **tipo** é `procedimento`. Carga única de migração, como a `0011` fez com `permite_indicios` |
+| `processo_vitimas` | `(processo_id, nome, ordem)`, `UNIQUE (processo_id, ordem)`, nome não vazio, FK `ON DELETE RESTRICT`. Espelha `processo_pessoas` menos o papel; guarda **nome livre** porque o ofendido pode ser pessoa jurídica |
+| Migração das vítimas já gravadas | bloco `DO $$ … IF … RETURN` que move de `processo_pessoas`, apaga a origem e **desativa** o papel 'Vítima' (princípio 6). Num banco novo não existe papel nenhum e o bloco sai sem tocar em nada |
+
+A comparação por nome dentro do bloco é migração de **dado**, uma vez, sobre o que a
+importação escreveu. O princípio 2 veta o **código** comparar nome em tempo de execução —
+não a migration afirmar um fato uma vez (mesmo caso do Escrivão na `0007`).
+
+#### O atributo fica fora do registro de Catálogos
+
+Único ponto em que esta rodada **desvia** da §7.7, e é decisão do responsável: registrar
+ofendido é capacidade do procedimento, não escolha de administrador. Não há checkbox em
+*Catálogos → Apuratórios*. O `UPDATE` genérico do CRUD só escreve coluna declarada, então
+editar um apuratório pela tela nunca apaga a coluna — é a mesma convivência que
+`codigo_extensao` já tinha.
+
+O formulário continua lendo o atributo de **`apuratorio_config_get`**, nunca de
+`legal_catalogs_list` — que é justamente o que a §8.10.2 comprou caro.
+
+#### Fato registrado sobrevive a desligar a configuração
+
+`gravar_vitimas` **só sincroniza quando o atributo está ligado**; desligado, não toca na
+tabela nem para apagar. Do outro lado, `validar_contra_configuracao` **recusa** vítima
+enviada a um apuratório que não as registra, com mensagem de domínio. Os dois juntos dão a
+regra inteira: preserva o que existe, e nunca descarta em silêncio o que alguém mandou.
+
+Na tela, o bloco **aparece assim mesmo** quando há vítima gravada numa espécie que não as
+registra mais — em texto, com a nota —, e o submit não a reenvia. Reenviar faria o backend
+recusar, e o registro ficaria impossível de salvar: seria trocar um defeito por outro.
+
+#### O que mudou de nome
+
+`Pessoas (vítimas, inquiridos)` virou **`Pessoas inquiridas`**, e continua nas dez
+espécies com o seletor de papel. O papel 'Vítima' desativado some das opções sozinho — a
+lista de **opções** filtra `ativo`, e nada mais foi preciso.
+
+#### Testes (132 → 137)
+
+| Teste | O que trava |
+|---|---|
+| `procedimento_grava_zero_uma_ou_varias_vitimas` | zero, três e de volta a zero; o nome sai em maiúsculas |
+| `apuratorio_sem_cadastro_de_vitima_recusa_vitima` | mensagem de domínio, não silêncio |
+| `vitima_historica_sobrevive_ao_desligar_a_configuracao` | **o princípio 5** — a edição seguinte não apaga as duas linhas |
+| `ordem_repetida_de_vitima_da_mensagem_de_dominio` | o `validate()` chega antes de `uq_vitima_ordem` (decisão 38) |
+| `pessoas_inquiridas_e_vitimas_sao_independentes` | duas tabelas, dois `gravar_*`, nenhum alcança o outro |
+| 5 casos em `schema_integrity.sql` | nome em branco, ordem 0, ordem repetida, duas vítimas aceitas, e o `DELETE` barrado por **`fk_vitima_processo`** |
+| asserções em `importacao.rs` | as vítimas do recorte foram para `processo_vitimas`, e o papel 'Vítima' não é mais semeado |
+
+> ⚠ O caso do `DELETE` **passou provando outra coisa** na primeira escrita: o processo da
+> fixture tinha envolvidos, e a recusa veio de `fk_envolvido_processo`. Foi preciso um
+> processo dedicado, sem envolvido, prazo nem designação. Teste negativo que não nomeia a
+> constraint que esperava é teste que passa por acidente.
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**
@@ -2733,6 +2814,9 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | como esconder um campo sem apagar o que já foi gravado | `processo.ts::textoSePresente` e o princípio 5 |
 | como o formulário e a listagem se organizam na tela | §**8.10**, item 5, e o bloco "Listagem densa" em `src/styles.css` |
 | como acrescentar um campo que só alguns apuratórios usam | §**7.7** — o passo a passo completo |
+| por que o ofendido não é papel de pessoa, e onde ele mora | decisão **46**, §**8.17** e `migrations/0012_ofendido_vitima.sql` |
+| por que `permite_cadastro_vitima` não aparece em Catálogos | §**8.17**, "O atributo fica fora do registro" — e decisão **46**, item (c) |
+| como uma vítima gravada sobrevive a desligar a configuração | `proceedings/repository.rs::gravar_vitimas` (cabeçalho) e §**8.17** |
 | como mexer numa migration que altera dado existente | §**7.8** — o ensaio sobre cópia do backup |
 | por que o escrivão do IPM é um papel diferente | decisão **32** e §**8.10**, item 3 |
 | por que o documento iniciador não lista todos | decisão **33** |

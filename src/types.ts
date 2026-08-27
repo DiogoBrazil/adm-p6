@@ -43,6 +43,12 @@ export interface ApuratorioConfig {
   permite_indicios: boolean;
   /** O encarregado pode propor uma solução. */
   permite_solucao_sugerida: boolean;
+  /**
+   * A espécie registra Ofendido/Vítima: opcional, e em qualquer quantidade.
+   * Diferente dos outros, este atributo NÃO aparece no cadastro do apuratório —
+   * é capacidade do procedimento, não escolha de administrador.
+   */
+  permite_cadastro_vitima: boolean;
   /** Único código técnico do schema. Hoje só `carta_precatoria`. */
   codigo_extensao: string | null;
 
@@ -732,6 +738,13 @@ export interface PessoaItem {
   ordem: number;
 }
 
+/** `proceedings` — Ofendido/Vítima. Não tem papel: a espécie decide, não o catálogo. */
+export interface VitimaItem {
+  id: string;
+  nome: string;
+  ordem: number;
+}
+
 /** `proceedings` */
 export interface AnexoItem {
   id: string;
@@ -758,6 +771,7 @@ export interface ProceedingDetail extends ProceedingListItem {
   envolvidos: EnvolvidoItem[];
   designacoes: DesignacaoItem[];
   pessoas: PessoaItem[];
+  vitimas: VitimaItem[];
   anexos: AnexoItem[];
   carta_precatoria: CartaPrecatoriaDetalhes | null;
 }
@@ -802,6 +816,12 @@ export interface DesignacaoRequest {
 /** `proceedings` */
 export interface PessoaRequest {
   papel_pessoa_id: string;
+  nome: string;
+  ordem: number;
+}
+
+/** `proceedings` */
+export interface VitimaRequest {
   nome: string;
   ordem: number;
 }
@@ -857,6 +877,8 @@ export interface SaveProceedingRequest {
   envolvidos?: EnvolvidoRequest[];
   designacoes?: DesignacaoRequest[];
   pessoas?: PessoaRequest[];
+  /** Vazio quando a espécie não registra ofendido — o backend recusa o contrário. */
+  vitimas?: VitimaRequest[];
   carta_precatoria?: CartaPrecatoriaRequest | null;
 }
 

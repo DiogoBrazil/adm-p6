@@ -10,7 +10,7 @@ use crate::proceedings::domain::{
     ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
     PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem, ProceedingListResult,
     SaveProceedingRequest, SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest,
-    UpdateProceedingDatesRequest, UploadAttachmentRequest, EXTENSAO_CARTA_PRECATORIA,
+    UpdateProceedingDatesRequest, UploadAttachmentRequest, VitimaItem, EXTENSAO_CARTA_PRECATORIA,
     MOTIVO_DESIGNACAO_INICIAL,
 };
 
@@ -226,6 +226,7 @@ pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sq
         envolvidos: list_envolvidos(pool, id).await?,
         designacoes: list_designacoes(pool, id).await?,
         pessoas: list_pessoas(pool, id).await?,
+        vitimas: list_vitimas(pool, id).await?,
         anexos: list_anexos(pool, id).await?,
         carta_precatoria: carta_precatoria(pool, id).await?,
     }))
@@ -325,6 +326,24 @@ pub async fn list_pessoas<'e, E: PgExecutor<'e>>(
     .await
 }
 
+/// Ofendidos/Vítimas, na ordem em que foram informados. Sem JOIN em catálogo:
+/// o ofendido não tem papel, e é isso que faz a seção nunca depender de uma
+/// linha que alguém precise ter cadastrado antes.
+pub async fn list_vitimas<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<VitimaItem>, sqlx::Error> {
+    sqlx::query_as::<_, VitimaItem>(
+        "SELECT id::text AS id, nome, ordem
+           FROM processo_vitimas
+          WHERE processo_id = $1::uuid
+          ORDER BY ordem",
+    )
+    .bind(processo_id)
+    .fetch_all(executor)
+    .await
+}
+
 /// Metadados dos anexos. O conteúdo fica de fora: `octet_length` devolve o
 /// tamanho sem carregar o arquivo, e sem uma coluna que possa divergir dele.
 pub async fn list_anexos<'e, E: PgExecutor<'e>>(
@@ -374,6 +393,7 @@ struct ConfigApuratorio {
     exige_natureza_fato: bool,
     permite_acusacao: bool,
     permite_acusacao_penal: bool,
+    permite_cadastro_vitima: bool,
     codigo_extensao: Option<String>,
 }
 
@@ -383,7 +403,7 @@ async fn config_apuratorio(
 ) -> Result<ConfigApuratorio, AppError> {
     sqlx::query_as::<_, ConfigApuratorio>(
         "SELECT exige_natureza_fato, permite_acusacao, permite_acusacao_penal,
-                codigo_extensao
+                permite_cadastro_vitima, codigo_extensao
            FROM apuratorios WHERE id = $1::uuid",
     )
     .bind(apuratorio_id)
@@ -429,6 +449,15 @@ async fn validar_contra_configuracao(
     if config.exige_natureza_fato && request.natureza_fato_id.is_none() {
         return Err(AppError::Domain(
             "este apuratorio exige a natureza do fato apurado".to_string(),
+        ));
+    }
+
+    // Recusar em vez de ignorar: uma vítima descartada em silêncio some sem
+    // que ninguém saiba. A tela não desenha a seção quando o atributo está
+    // desligado, então esta mensagem só alcança quem chamou o IPC direto.
+    if !config.permite_cadastro_vitima && !request.vitimas.is_empty() {
+        return Err(AppError::Domain(
+            "este apuratório não registra ofendido/vítima".to_string(),
         ));
     }
 
@@ -709,6 +738,7 @@ pub async fn save(
     gravar_envolvidos(tx, &id, request).await?;
     gravar_designacoes(tx, &id, request).await?;
     gravar_pessoas(tx, &id, request).await?;
+    gravar_vitimas(tx, &id, request, &config).await?;
 
     match data_recebimento_anterior {
         Some(anterior) => {
@@ -1158,6 +1188,44 @@ async fn gravar_pessoas(
         .bind(&pessoa.papel_pessoa_id)
         .bind(pessoa.nome.trim().to_uppercase())
         .bind(pessoa.ordem)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Sincroniza os Ofendidos/Vítimas — **somente quando a espécie os registra**.
+///
+/// Com o atributo desligado a função não toca na tabela, nem para apagar. É o
+/// princípio 5 no caso concreto: desligar `permite_cadastro_vitima` de uma
+/// espécie que já registrou ofendidos não apaga nenhum. Eles saem do alcance do
+/// formulário e continuam existindo, do mesmo jeito que a data de julgamento
+/// sobrevive a alguém desligar `permite_julgamento`.
+///
+/// O silêncio nunca é resposta a um pedido: quem MANDA vítima para um
+/// apuratório que não as registra é recusado antes, em
+/// `validar_contra_configuracao`. Aqui só chega lista vazia.
+async fn gravar_vitimas(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    config: &ConfigApuratorio,
+) -> Result<(), AppError> {
+    if !config.permite_cadastro_vitima {
+        return Ok(());
+    }
+    sqlx::query("DELETE FROM processo_vitimas WHERE processo_id = $1::uuid")
+        .bind(processo_id)
+        .execute(&mut **tx)
+        .await?;
+    for vitima in &request.vitimas {
+        sqlx::query(
+            "INSERT INTO processo_vitimas (processo_id, nome, ordem)
+             VALUES ($1::uuid, $2, $3)",
+        )
+        .bind(processo_id)
+        .bind(vitima.nome.trim().to_uppercase())
+        .bind(vitima.ordem)
         .execute(&mut **tx)
         .await?;
     }

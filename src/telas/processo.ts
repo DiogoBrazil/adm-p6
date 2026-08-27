@@ -29,6 +29,7 @@ import {
   type MilitarQualificado,
   type PapelItem,
   type PessoaRequest,
+  type VitimaRequest,
   type SaveProceedingRequest,
   type SelecaoInfracaoEstatuto,
   type SelecaoInfracaoPenal,
@@ -124,6 +125,7 @@ type Rascunho = Omit<SaveProceedingRequest, "envolvidos"> & {
   envolvidos: EnvolvidoFormulario[];
   designacoes: DesignacaoRequest[];
   pessoas: PessoaRequest[];
+  vitimas: VitimaRequest[];
 };
 
 function acusacoesVazias(): AcusacoesFormulario {
@@ -166,6 +168,7 @@ function rascunhoVazio(): Rascunho {
     envolvidos: [],
     designacoes: [],
     pessoas: [],
+    vitimas: [],
     carta_precatoria: null,
   };
 }
@@ -230,6 +233,16 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   rascunho.pessoas = rascunho.pessoas.map((_, i) => ({
     papel_pessoa_id: String(dados.get(`pes_${i}_papel`) ?? ""),
     nome: String(dados.get(`pes_${i}_nome`) ?? "").trim(),
+    ordem: i + 1,
+  }));
+
+  // Vítima já gravada numa espécie que não a registra mais é desenhada como
+  // TEXTO, sem `<input>`: `dados.has()` devolve false e o valor do rascunho é
+  // preservado. Mesmo cuidado da designação travada, logo acima.
+  rascunho.vitimas = rascunho.vitimas.map((v, i) => ({
+    nome: dados.has(`vit_${i}_nome`)
+      ? String(dados.get(`vit_${i}_nome`) ?? "").trim()
+      : v.nome,
     ordem: i + 1,
   }));
 }
@@ -518,6 +531,7 @@ export async function renderFormularioProcesso(
           nome: p.nome,
           ordem: i + 1,
         })),
+        vitimas: d.vitimas.map((v, i) => ({ nome: v.nome, ordem: i + 1 })),
         carta_precatoria: d.carta_precatoria
           ? {
               deprecante: d.carta_precatoria.deprecante,
@@ -566,6 +580,7 @@ export async function renderFormularioProcesso(
   const maxEnvolvidos = config?.max_envolvidos ?? null;
   const permiteAcusacao = config?.permite_acusacao === true;
   const permiteAcusacaoPenal = config?.permite_acusacao_penal === true;
+  const permiteVitima = config?.permite_cadastro_vitima === true;
 
   const [esferasPenais, dispositivosLegais, naturezasTransgressao] = permiteAcusacao
     ? await Promise.all([
@@ -687,8 +702,50 @@ export async function renderFormularioProcesso(
           ${podeAdicionarEnvolvido ? `<button type="button" class="secondary small" id="add-env">Adicionar envolvido</button>` : ""}
         </fieldset>
 
+        ${
+          permiteVitima
+            ? `<fieldset>
+          <legend>Ofendidos/Vítimas (opcional)</legend>
+          ${r.vitimas
+            .map(
+              (v, i) => `
+            <div class="linha-colecao">
+              <div class="linha-colecao-head"><strong>Ofendido/Vítima ${i + 1}</strong>
+                <button type="button" class="danger small" data-remover-vit="${i}">Remover</button>
+              </div>
+              <label>Nome<input name="vit_${i}_nome" value="${escapeHtml(v.nome)}" required /></label>
+            </div>`,
+            )
+            .join("")}
+          <button type="button" class="secondary small" id="add-vit">Adicionar ofendido/vítima</button>
+        </fieldset>`
+            : /*
+               * Espécie que não registra mais ofendido, mas já registrou: o
+               * bloco APARECE ASSIM MESMO, em texto, com a nota. Esconder
+               * apagaria fato registrado na primeira edição — é o princípio 5,
+               * e a mesma escolha da data de julgamento (§8.10.4).
+               *
+               * O `id` importa: num cadastro NOVO, trocar o apuratório de um
+               * procedimento para um processo não preservou nada — o que está
+               * no rascunho ainda não é fato. Sem essa condição a tela diria
+               * "preservado" sobre um nome que nunca foi gravado.
+               */
+              id && r.vitimas.length > 0
+              ? `<fieldset>
+          <legend>Ofendidos/Vítimas</legend>
+          <p class="aviso">Esta espécie não registra Ofendido/Vítima. O que já estava
+            gravado é preservado e continua sendo exibido, mas não pode ser alterado aqui.</p>
+          ${r.vitimas
+            .map(
+              (v, i) => `<div class="linha-colecao"><strong>${i + 1}. ${escapeHtml(v.nome)}</strong></div>`,
+            )
+            .join("")}
+        </fieldset>`
+              : ""
+        }
+
         <fieldset>
-          <legend>Pessoas (vítimas, inquiridos)</legend>
+          <legend>Pessoas inquiridas</legend>
           ${r.pessoas
             .map(
               (p, i) => `
@@ -949,6 +1006,9 @@ export async function renderFormularioProcesso(
   document.querySelector("#add-pes")?.addEventListener("click", () =>
     rerender(() => r.pessoas.push({ papel_pessoa_id: "", nome: "", ordem: r.pessoas.length + 1 })),
   );
+  document.querySelector("#add-vit")?.addEventListener("click", () =>
+    rerender(() => r.vitimas.push({ nome: "", ordem: r.vitimas.length + 1 })),
+  );
 
   const remover = <T,>(lista: T[], indice: number) => lista.splice(indice, 1);
   form.querySelectorAll<HTMLButtonElement>("[data-remover-des]").forEach((b) =>
@@ -960,6 +1020,9 @@ export async function renderFormularioProcesso(
   form.querySelectorAll<HTMLButtonElement>("[data-remover-pes]").forEach((b) =>
     b.addEventListener("click", () => rerender(() => remover(r.pessoas, Number(b.dataset.removerPes)))),
   );
+  form.querySelectorAll<HTMLButtonElement>("[data-remover-vit]").forEach((b) =>
+    b.addEventListener("click", () => rerender(() => remover(r.vitimas, Number(b.dataset.removerVit)))),
+  );
 
   form.addEventListener("submit", async (evento) => {
     evento.preventDefault();
@@ -969,6 +1032,11 @@ export async function renderFormularioProcesso(
     absorverFormulario(r, form);
     const request: SaveProceedingRequest = {
       ...r,
+      // A vítima histórica de uma espécie que não as registra mais NÃO viaja: o
+      // backend recusaria a lista não vazia e o registro ficaria impossível de
+      // salvar. Quem a preserva é `gravar_vitimas`, que não toca na tabela
+      // quando o atributo está desligado.
+      vitimas: permiteVitima ? r.vitimas : [],
       envolvidos: r.envolvidos.map((envolvido) => ({
         policial_militar_id: envolvido.policial_militar_id,
         status_envolvido_id: envolvido.status_envolvido_id,

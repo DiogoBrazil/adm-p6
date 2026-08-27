@@ -62,7 +62,9 @@ pub struct Mundo {
     pub penalidade_prisao: String,
     /// `usa_quantidade_dias = false`.
     pub penalidade_repreensao: String,
-    pub papel_vitima: String,
+    /// Papel de pessoa CITADA. Vítima não é mais um deles: desde a 0012 o
+    /// ofendido é `processo_vitimas`, sem papel de catálogo.
+    pub papel_inquirido: String,
     pub categoria_indicio: String,
     pub tipo_andamento: String,
 }
@@ -98,7 +100,7 @@ pub async fn mundo_configurado(pool: &PgPool) -> Mundo {
         solucao_absolvido: id("22200000", 6),
         penalidade_prisao: id("22200000", 7),
         penalidade_repreensao: id("22200000", 8),
-        papel_vitima: id("22200000", 9),
+        papel_inquirido: id("22200000", 9),
         categoria_indicio: id("22200000", 10),
         tipo_andamento: id("22200000", 11),
     };
@@ -164,7 +166,7 @@ INSERT INTO tipos_solucao_decidida (id, nome, permite_penalidade) VALUES
 INSERT INTO tipos_penalidade (id, nome, usa_quantidade_dias) VALUES
     ('{pen_prisao}',     'Prisao Teste',     true),
     ('{pen_repreensao}', 'Repreensao Teste', false);
-INSERT INTO papeis_pessoa (id, nome) VALUES ('{papel_vitima}', 'Vitima Teste');
+INSERT INTO papeis_pessoa (id, nome) VALUES ('{papel_inquirido}', 'Inquirido Teste');
 INSERT INTO categorias_indicio (id, nome, indica_ausencia) VALUES
     ('{categoria}', 'Sem Indicios Teste', true);
 INSERT INTO tipos_andamento (id, nome) VALUES ('{andamento}', 'Despacho Teste');
@@ -195,7 +197,7 @@ INSERT INTO tipos_andamento (id, nome) VALUES ('{andamento}', 'Despacho Teste');
         sol_absolvido = m.solucao_absolvido,
         pen_prisao = m.penalidade_prisao,
         pen_repreensao = m.penalidade_repreensao,
-        papel_vitima = m.papel_vitima,
+        papel_inquirido = m.papel_inquirido,
         categoria = m.categoria_indicio,
         andamento = m.tipo_andamento,
     );

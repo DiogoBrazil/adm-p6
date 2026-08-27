@@ -59,6 +59,12 @@ pub struct ApuratorioConfig {
     /// O encarregado pode propor uma solucao. Processos recebem apenas a
     /// solucao decidida pela autoridade competente.
     pub permite_solucao_sugerida: bool,
+    /// A especie registra Ofendido/Vitima: opcional, e em qualquer quantidade.
+    /// Vale para os procedimentos, que apuram um fato — nao para os processos
+    /// disciplinares, instaurados contra um militar. Diferente dos atributos
+    /// acima, este NAO aparece no cadastro do apuratorio: por decisao do
+    /// responsavel e capacidade da especie, nao escolha de administrador.
+    pub permite_cadastro_vitima: bool,
     /// O único código técnico do schema (§5.3). Dirige a extensão de formulário
     /// — hoje só `carta_precatoria`. Fica fora do registro de administração de
     /// propósito: acrescentar extensão é mudança de código, não operação de

@@ -128,6 +128,16 @@ pub struct PessoaItem {
     pub ordem: i32,
 }
 
+/// Ofendido/Vítima. Não tem papel: quem decide se a espécie a registra é
+/// `apuratorios.permite_cadastro_vitima`, e não uma linha de catálogo que
+/// alguém precise ter cadastrado antes.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct VitimaItem {
+    pub id: String,
+    pub nome: String,
+    pub ordem: i32,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct AnexoItem {
     pub id: String,
@@ -156,6 +166,7 @@ pub struct ProceedingDetail {
     pub envolvidos: Vec<EnvolvidoItem>,
     pub designacoes: Vec<DesignacaoItem>,
     pub pessoas: Vec<PessoaItem>,
+    pub vitimas: Vec<VitimaItem>,
     pub anexos: Vec<AnexoItem>,
     pub carta_precatoria: Option<CartaPrecatoriaDetalhes>,
 }
@@ -203,6 +214,12 @@ pub const MOTIVO_DESIGNACAO_INICIAL: &str = "Designação inicial";
 #[derive(Debug, Deserialize)]
 pub struct PessoaRequest {
     pub papel_pessoa_id: String,
+    pub nome: String,
+    pub ordem: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VitimaRequest {
     pub nome: String,
     pub ordem: i32,
 }
@@ -324,6 +341,10 @@ pub struct SaveProceedingRequest {
     pub designacoes: Vec<DesignacaoRequest>,
     #[serde(default)]
     pub pessoas: Vec<PessoaRequest>,
+    /// Vazio quando a espécie não registra ofendido — a tela não desenha a
+    /// seção, e o backend recusa a lista não vazia (`validar_contra_configuracao`).
+    #[serde(default)]
+    pub vitimas: Vec<VitimaRequest>,
     pub carta_precatoria: Option<CartaPrecatoriaRequest>,
 }
 
@@ -356,6 +377,21 @@ impl SaveProceedingRequest {
             if pessoa.nome.trim().is_empty() {
                 return Err("Informe o nome da pessoa, ou remova a linha.".to_string());
             }
+        }
+
+        for vitima in &self.vitimas {
+            if vitima.nome.trim().is_empty() {
+                return Err("Informe o nome do ofendido/vítima, ou remova a linha.".to_string());
+            }
+        }
+        // `uq_vitima_ordem` também recusaria, mas com o texto cru do
+        // PostgreSQL — e a decisão 38 exige mensagem de domínio para regra
+        // previsível.
+        let mut ordens_vitima: Vec<i32> = self.vitimas.iter().map(|v| v.ordem).collect();
+        ordens_vitima.sort_unstable();
+        ordens_vitima.dedup();
+        if ordens_vitima.len() != self.vitimas.len() {
+            return Err("Cada ofendido/vítima precisa de uma ordem diferente.".to_string());
         }
 
         // A mesma pessoa duas vezes no mesmo papel. O EXCLUDE do schema também

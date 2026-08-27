@@ -347,6 +347,60 @@ quebra em linhas, sem campo sobrepondo outro nem escapando da borda.
 
 ---
 
+## i) Ofendido/Vítima nos procedimentos (§8.17)
+
+A informação é do **procedimento**, e ninguém a configura pela tela. Quem decide é
+`apuratorios.permite_cadastro_vitima`, ligado pela `0012` nos cinco procedimentos.
+
+### O que tem de aparecer
+
+| Espécie | "Ofendidos/Vítimas" | "Pessoas inquiridas" |
+|---|---|---|
+| IPM, SR, SV, FP, **CP** | **sim**, com "(opcional)" no título e sem seletor de papel | sim |
+| CD, CJ, PAD, PADE, PADS | **não** | sim |
+
+Na CP, o bloco tem de conviver com o de Carta precatória (Deprecante / Unidade
+deprecada) — as duas seções aparecem no mesmo formulário.
+
+### O fluxo, na ordem
+
+1. Num **IPM novo**, salvar **sem nenhuma** vítima. Tem de fechar: a informação é
+   opcional, não obrigatória.
+2. Reabrir, **Adicionar ofendido/vítima** três vezes, com um nome minúsculo, um com
+   acento e "ADMINISTRAÇÃO PÚBLICA". Salvar e reabrir: os três voltam **em
+   maiúsculas** e na ordem em que foram digitados.
+3. **Remover** o do meio e salvar. Voltam dois, e a numeração da tela recomeça em 1.
+4. Remover os dois e salvar. Fecha, e a seção volta vazia.
+5. Num **PADS**, conferir que a seção **não existe** — e que "Pessoas inquiridas"
+   continua funcionando normalmente.
+
+### O que não pode acontecer
+
+- Em *Catálogos → Apuratórios*, **não pode haver checkbox de vítima**. Se aparecer, a
+  coluna entrou no registro por engano — é o item (c) da decisão 46.
+- Em *Catálogos → Papéis de pessoa*, o papel **'Vítima' aparece inativo**, e **não** é
+  oferecido no seletor de "Pessoas inquiridas".
+- O `<legend>` de "Pessoas inquiridas" não pode mais dizer "(vítimas, inquiridos)".
+
+### A preservação do que já foi gravado
+
+Este é o caso que só a tela pega. Pelo `psql`, num procedimento que já tem vítima:
+
+```sql
+UPDATE apuratorios SET permite_cadastro_vitima = false
+ WHERE id = (SELECT apuratorio_id FROM processos_procedimentos WHERE id = '<o processo>');
+```
+
+Reabrir o cadastro. As vítimas têm de aparecer **em texto**, com o aviso de que a
+espécie não as registra mais. **Salvar sem mexer em nada** e reabrir: elas continuam
+lá. Se sumirem, `gravar_vitimas` está sincronizando quando não devia — é o princípio
+5, e o teste `vitima_historica_sobrevive_ao_desligar_a_configuracao` cobre o backend,
+mas só a tela prova que o formulário não as reenviou.
+
+Depois, religar o atributo pelo `psql` e conferir que a seção volta editável.
+
+---
+
 ## f) A amostra dos 6 processos
 
 O campo a campo já está feito e acusa **0 divergências em 377 comparações**,
