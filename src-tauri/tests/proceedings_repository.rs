@@ -15,7 +15,7 @@ use adm_p6_tauri_lib::deadlines::{
 use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
     PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UploadAttachmentRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingClosureRequest, UploadAttachmentRequest,
 };
 use adm_p6_tauri_lib::proceedings::repository;
 use chrono::NaiveDate;
@@ -44,10 +44,8 @@ fn base(m: &Mundo, numero: &str) -> SaveProceedingRequest {
         natureza_fato_id: Some(m.natureza.clone()),
         data_instauracao: data(2026, 1, 10),
         data_recebimento: None,
-        data_remessa_encarregado: None,
         data_remessa_comissao: None,
         data_julgamento: None,
-        data_conclusao: None,
         resumo_fatos: None,
         envolvidos: vec![],
         designacoes: vec![designacao(m, &m.pm_um, &m.papel_encarregado)],
@@ -98,10 +96,6 @@ fn envolvido(m: &Mundo, pm: &str, ordem: i32) -> EnvolvidoRequest {
         status_envolvido_id: m.status_envolvido.clone(),
         ordem,
         e_condutor: false,
-        solucao_sugerida_id: None,
-        solucao_decidida_id: None,
-        penalidade_tipo_id: None,
-        penalidade_dias: None,
     }
 }
 
@@ -414,45 +408,57 @@ async fn exige_condutor_quando_a_natureza_do_fato_pede() {
 async fn penalidade_so_onde_a_solucao_permite_e_dias_so_onde_a_penalidade_usa() {
     util::com_banco_descartavel("proc_val_pena", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query("UPDATE apuratorios SET permite_punicao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
 
         // Era `solucao_tipo == "Punido"`; virou `tipos_solucao_decidida.permite_penalidade`.
         let mut req = base(&m, "001");
-        req.envolvidos = vec![EnvolvidoRequest {
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+        let id = salvar(&pool, &req).await.unwrap();
+        let envolvido_id = repository::get(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .envolvidos[0]
+            .id
+            .clone();
+
+        let mut resultado = UpdateInvolvedOutcomeRequest {
+            processo_id: id.clone(),
+            envolvido_id,
+            solucao_sugerida_id: None,
             solucao_decidida_id: Some(m.solucao_absolvido.clone()),
             penalidade_tipo_id: Some(m.penalidade_prisao.clone()),
-            ..envolvido(&m, &m.pm_dois, 1)
-        }];
-        let erro = salvar(&pool, &req)
+            penalidade_dias: None,
+        };
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_involved_outcome(&mut tx, &resultado)
             .await
-            .expect_err("solucao nao permite penalidade");
+            .expect_err("solucao nao permite penalidade")
+            .message();
         assert!(erro.contains("penalidade"), "mensagem: {erro}");
 
         // Era `Some("Prisao") | Some("Detencao")`; virou
         // `tipos_penalidade.usa_quantidade_dias`.
-        let mut req = base(&m, "001");
-        req.envolvidos = vec![EnvolvidoRequest {
-            solucao_decidida_id: Some(m.solucao_punido.clone()),
-            penalidade_tipo_id: Some(m.penalidade_repreensao.clone()),
-            penalidade_dias: Some(5),
-            ..envolvido(&m, &m.pm_dois, 1)
-        }];
-        let erro = salvar(&pool, &req)
+        resultado.solucao_decidida_id = Some(m.solucao_punido.clone());
+        resultado.penalidade_tipo_id = Some(m.penalidade_repreensao.clone());
+        resultado.penalidade_dias = Some(5);
+        let erro = repository::update_involved_outcome(&mut tx, &resultado)
             .await
-            .expect_err("penalidade nao usa dias");
+            .expect_err("penalidade nao usa dias")
+            .message();
         assert!(erro.contains("dias"), "mensagem: {erro}");
 
         // A combinação coerente passa.
-        let mut req = base(&m, "001");
-        req.envolvidos = vec![EnvolvidoRequest {
-            solucao_sugerida_id: Some(m.solucao_sugerida.clone()),
-            solucao_decidida_id: Some(m.solucao_punido.clone()),
-            penalidade_tipo_id: Some(m.penalidade_prisao.clone()),
-            penalidade_dias: Some(5),
-            ..envolvido(&m, &m.pm_dois, 1)
-        }];
-        let id = salvar(&pool, &req)
+        resultado.solucao_sugerida_id = Some(m.solucao_sugerida.clone());
+        resultado.penalidade_tipo_id = Some(m.penalidade_prisao.clone());
+        repository::update_involved_outcome(&mut tx, &resultado)
             .await
             .expect("punido com dias de prisao");
+        tx.commit().await.unwrap();
 
         let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
         let e = &detalhe.envolvidos[0];
@@ -461,6 +467,93 @@ async fn penalidade_so_onde_a_solucao_permite_e_dias_so_onde_a_penalidade_usa() 
         // autoridade decide. Dois campos, dois catálogos.
         assert_eq!(e.solucao_sugerida.as_deref(), Some("Sugerido Teste"));
         assert_eq!(e.solucao_decidida.as_deref(), Some("Punido Teste"));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
+    util::com_banco_descartavel("proc_pos_cadastro", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query("UPDATE apuratorios SET permite_punicao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut req = base(&m, "001");
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+        let id = salvar(&pool, &req).await.unwrap();
+        let envolvido_id = repository::get(&pool, &id)
+            .await
+            .unwrap()
+            .unwrap()
+            .envolvidos[0]
+            .id
+            .clone();
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_closure(
+            &mut tx,
+            &UpdateProceedingClosureRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: Some(data(2026, 2, 1)),
+                data_conclusao: Some(data(2026, 2, 2)),
+            },
+        )
+        .await
+        .unwrap();
+        repository::update_involved_outcome(
+            &mut tx,
+            &UpdateInvolvedOutcomeRequest {
+                processo_id: id.clone(),
+                envolvido_id: envolvido_id.clone(),
+                solucao_sugerida_id: Some(m.solucao_sugerida.clone()),
+                solucao_decidida_id: Some(m.solucao_punido.clone()),
+                penalidade_tipo_id: Some(m.penalidade_prisao.clone()),
+                penalidade_dias: Some(3),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        req.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut req, &id).await;
+        req.resumo_fatos = Some("correção dos dados gerais".to_string());
+        salvar(&pool, &req).await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.data_remessa_encarregado, Some(data(2026, 2, 1)));
+        assert_eq!(detalhe.cabecalho.data_conclusao, Some(data(2026, 2, 2)));
+        assert_eq!(detalhe.envolvidos[0].penalidade_dias, Some(3));
+
+        // Remessa pode ser apagada, mas conclusão tem uma operação explícita.
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_closure(
+            &mut tx,
+            &UpdateProceedingClosureRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_conclusao: Some(data(2026, 2, 3)),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_closure(
+            &mut tx,
+            &UpdateProceedingClosureRequest {
+                processo_id: id,
+                data_remessa_encarregado: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .expect_err("conclusao so sai por reabrir")
+        .message();
+        assert!(erro.contains("Reabrir"), "{erro}");
     })
     .await;
 }
@@ -1340,8 +1433,19 @@ async fn cenario_de_listagem(pool: &PgPool, m: &Mundo) -> (String, String, Strin
     b.apuratorio_id = m.apuratorio_livre.clone();
     b.natureza_fato_id = None;
     b.data_instauracao = data(2025, 6, 1);
-    b.data_conclusao = Some(data(2025, 8, 1));
     let b = salvar(pool, &b).await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    repository::update_closure(
+        &mut tx,
+        &UpdateProceedingClosureRequest {
+            processo_id: b.clone(),
+            data_remessa_encarregado: None,
+            data_conclusao: Some(data(2025, 8, 1)),
+        },
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
 
     let mut c = base(m, "003");
     c.natureza_fato_id = Some(m.natureza_transito.clone());
@@ -1453,9 +1557,20 @@ async fn soft_delete_some_da_listagem_e_reopen_limpa_a_conclusao() {
     util::com_banco_descartavel("proc_ciclo", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
 
-        let mut req = base(&m, "001");
-        req.data_conclusao = Some(data(2026, 3, 1));
+        let req = base(&m, "001");
         let id = salvar(&pool, &req).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_closure(
+            &mut tx,
+            &UpdateProceedingClosureRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_conclusao: Some(data(2026, 3, 1)),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
 
         assert!(
             repository::get(&pool, &id)

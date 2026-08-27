@@ -735,6 +735,7 @@ tr.inativo td:first-child {
 /* Formulários contextuais de edição usam `hidden`; a regra explícita evita
    que o `display: flex` de `.linha-form` prevaleça sobre o atributo nativo. */
 .linha-form[hidden],
+.linha-form label[hidden],
 .secao-ajuda[hidden] {
   display: none;
 }
@@ -976,12 +977,6 @@ tr.atrasado {
     grid-template-columns: 1fr;
   }
 
-  /* A barra proporcional some no fundo branco da impressora. */
-  td.barra span {
-    background: #94a3b8 !important;
-    print-color-adjust: exact;
-  }
-
   .main {
     margin-left: 0 !important;
   }
@@ -1013,20 +1008,6 @@ td.num {
 .stat-panel h2 {
   font-size: 1rem;
   margin: 0 0 8px;
-}
-
-/* Barra proporcional ao maior valor do próprio painel. */
-td.barra {
-  padding: 0 8px;
-  width: 40%;
-}
-
-td.barra span {
-  background: #2563eb;
-  border-radius: 3px;
-  display: block;
-  height: 8px;
-  min-width: 2px;
 }
 
 /* Barra de filtro das telas de relatório. */
@@ -2002,9 +1983,7 @@ tr.atrasado {
   border-inline-end-color: var(--border-strong);
 }
 
-/* O cabeçalho é o eixo visual da grade. Os dados continuam com alinhamento
-   híbrido, declarado por coluna: texto longo à esquerda; valores compactos,
-   estado e ações ao centro. */
+/* O cabeçalho é o eixo visual da grade e acompanha o corpo centralizado. */
 .tabela-dados.tabela-dados--listagem thead th {
   text-align: center;
 }
@@ -2089,6 +2068,13 @@ tr.atrasado {
   font-variant-numeric: tabular-nums;
 }
 
+/* Todas as tabelas operacionais e de relatório compartilham o alinhamento.
+   Fichas chave/valor e o detalhe de auditoria usam outras classes e preservam
+   sua leitura própria. */
+.tabela-dados :is(th, td) {
+  text-align: center;
+}
+
 :is(th, td).col--nowrap {
   white-space: nowrap;
 }
@@ -2169,10 +2155,6 @@ tr.atrasado {
 .tabela-processos :is(th, td).col-status-prazo,
 .tabela-processos :is(th, td).col-acao {
   text-align: center;
-}
-
-.tabela-processos :is(th, td).col-pessoa {
-  text-align: left;
 }
 
 .tabela-processos .col-tipo,

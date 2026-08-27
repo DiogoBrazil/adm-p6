@@ -13,8 +13,6 @@
 //   campo de condutor         <- naturezas_fato.exige_condutor
 //   deprecante/deprecada      <- apuratorios.codigo_extensao == 'carta_precatoria'
 //   papéis oferecidos         <- apuratorio_papeis do apuratório escolhido
-//   penalidade habilitada     <- tipos_solucao_decidida.permite_penalidade
-//   dias de penalidade        <- tipos_penalidade.usa_quantidade_dias
 //
 // Nenhuma dessas regras aparece como literal aqui. Trocar o nome de um
 // apuratório, de uma natureza ou de uma solução não muda nada nesta tela.
@@ -63,9 +61,6 @@ type Catalogos = {
   municipios: Opcao[];
   naturezas: Opcao[];
   status: Opcao[];
-  solucoesSugeridas: Opcao[];
-  solucoesDecididas: Opcao[];
-  penalidades: Opcao[];
   papeisPessoa: Opcao[];
   militares: UserListItem[];
 };
@@ -90,9 +85,6 @@ async function carregarCatalogos(): Promise<Catalogos> {
     municipios,
     naturezas,
     status,
-    solucoesSugeridas,
-    solucoesDecididas,
-    penalidades,
     papeisPessoa,
     militares,
   ] = await Promise.all([
@@ -101,9 +93,6 @@ async function carregarCatalogos(): Promise<Catalogos> {
     catalogo("municipios_distritos", ["nome"]),
     catalogo("naturezas_fato", ["nome"]),
     catalogo("status_envolvido", ["nome"]),
-    catalogo("tipos_solucao_sugerida", ["nome"]),
-    catalogo("tipos_solucao_decidida", ["nome"]),
-    catalogo("tipos_penalidade", ["nome"]),
     catalogo("papeis_pessoa", ["nome"]),
     call("users_list_ativos", {}).then((r) => r.data ?? []),
   ]);
@@ -113,9 +102,6 @@ async function carregarCatalogos(): Promise<Catalogos> {
     municipios,
     naturezas,
     status,
-    solucoesSugeridas,
-    solucoesDecididas,
-    penalidades,
     papeisPessoa,
     militares,
   };
@@ -143,10 +129,8 @@ function rascunhoVazio(): Rascunho {
     natureza_fato_id: null,
     data_instauracao: new Date().toISOString().slice(0, 10),
     data_recebimento: null,
-    data_remessa_encarregado: null,
     data_remessa_comissao: null,
     data_julgamento: null,
-    data_conclusao: null,
     resumo_fatos: null,
     envolvidos: [],
     designacoes: [],
@@ -191,13 +175,11 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   rascunho.natureza_fato_id = texto("natureza_fato_id");
   rascunho.data_instauracao = String(dados.get("data_instauracao") ?? "");
   rascunho.data_recebimento = texto("data_recebimento");
-  rascunho.data_remessa_encarregado = texto("data_remessa_encarregado");
   rascunho.data_remessa_comissao = textoSePresente(
     "data_remessa_comissao",
     rascunho.data_remessa_comissao,
   );
   rascunho.data_julgamento = textoSePresente("data_julgamento", rascunho.data_julgamento);
-  rascunho.data_conclusao = texto("data_conclusao");
   rascunho.resumo_fatos = texto("resumo_fatos");
 
   const deprecante = texto("cp_deprecante");
@@ -207,22 +189,11 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
       ? ({ deprecante: deprecante ?? "", unidade_deprecada_id: deprecada } as CartaPrecatoriaRequest)
       : null;
 
-  rascunho.envolvidos = rascunho.envolvidos.map((anterior, i) => ({
+  rascunho.envolvidos = rascunho.envolvidos.map((_, i) => ({
     policial_militar_id: String(dados.get(`env_${i}_pm`) ?? ""),
     status_envolvido_id: String(dados.get(`env_${i}_status`) ?? ""),
     ordem: i + 1,
     e_condutor: dados.get(`env_${i}_condutor`) === "on",
-    solucao_sugerida_id: String(dados.get(`env_${i}_sug`) ?? "") || null,
-    solucao_decidida_id: String(dados.get(`env_${i}_dec`) ?? "") || null,
-    // Penalidade e dias somem quando a espécie não pune ou o desfecho não
-    // permite. Ausente ≠ apagado: preserva o que estava, pela mesma razão de
-    // `textoSePresente`.
-    penalidade_tipo_id: dados.has(`env_${i}_pena`)
-      ? String(dados.get(`env_${i}_pena`) ?? "") || null
-      : (anterior.penalidade_tipo_id ?? null),
-    penalidade_dias: dados.has(`env_${i}_dias`)
-      ? Number(dados.get(`env_${i}_dias`) ?? 0) || null
-      : (anterior.penalidade_dias ?? null),
   }));
 
   // A designação travada é desenhada como texto, sem `<select>`: `dados.has()`
@@ -393,20 +364,14 @@ export async function renderFormularioProcesso(
         natureza_fato_id: d.natureza_fato_id,
         data_instauracao: d.data_instauracao,
         data_recebimento: d.data_recebimento,
-        data_remessa_encarregado: d.data_remessa_encarregado,
         data_remessa_comissao: d.data_remessa_comissao,
         data_julgamento: d.data_julgamento,
-        data_conclusao: d.data_conclusao,
         resumo_fatos: d.resumo_fatos,
         envolvidos: d.envolvidos.map((e, i) => ({
           policial_militar_id: e.policial_militar_id,
           status_envolvido_id: e.status_envolvido_id,
           ordem: i + 1,
           e_condutor: e.e_condutor,
-          solucao_sugerida_id: e.solucao_sugerida_id,
-          solucao_decidida_id: e.solucao_decidida_id,
-          penalidade_tipo_id: e.penalidade_tipo_id,
-          penalidade_dias: e.penalidade_dias,
         })),
         // Só as vigentes: designação encerrada é histórico e não viaja no
         // formulário. O `id` vai junto — é ele que faz o backend ATUALIZAR a
@@ -495,15 +460,6 @@ export async function renderFormularioProcesso(
   const natureza = cats.naturezas.find((n) => n.id === rascunho.natureza_fato_id);
   const exigeCondutor = natureza?.extra?.exige_condutor === true;
 
-  // Dois gates, em níveis diferentes, e os dois valem: o apuratório diz se a
-  // ESPÉCIE pune (um IPM nunca pune), a solução decidida diz se AQUELE desfecho
-  // pune (um PADS pune quando a solução é "Punido", não quando é "Absolvido").
-  const permitePenalidade = (solucaoId: string | null | undefined) =>
-    config?.permite_punicao === true &&
-    cats.solucoesDecididas.find((s) => s.id === solucaoId)?.extra?.permite_penalidade === true;
-  const usaDias = (penalidadeId: string | null | undefined) =>
-    cats.penalidades.find((p) => p.id === penalidadeId)?.extra?.usa_quantidade_dias === true;
-
   const r = rascunho;
   const podeAdicionarEnvolvido = maxEnvolvidos === null || r.envolvidos.length < maxEnvolvidos;
 
@@ -558,7 +514,6 @@ export async function renderFormularioProcesso(
           ${campoData("data_recebimento", "Recebimento", r.data_recebimento, {
             ajuda: "Dispara o prazo inicial: sem ela, nenhum prazo nasce.",
           })}
-          ${campoData("data_remessa_encarregado", "Remessa do encarregado", r.data_remessa_encarregado)}
           ${
             mostraRemessaComissao
               ? campoData("data_remessa_comissao", "Remessa à comissão", r.data_remessa_comissao, {
@@ -579,9 +534,6 @@ export async function renderFormularioProcesso(
                 })
               : ""
           }
-          ${campoData("data_conclusao", "Conclusão", r.data_conclusao, {
-            ajuda: "Preenchida = processo concluído.",
-          })}
         </fieldset>
 
         <fieldset>
@@ -609,16 +561,6 @@ export async function renderFormularioProcesso(
               <label>Militar${selectMilitares(`env_${i}_pm`, cats.militares, e.policial_militar_id)}</label>
               <label>Situação${selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true)}</label>
               ${exigeCondutor ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor ? " checked" : ""} /> Condutor</label>` : ""}
-              <label>Solução sugerida${selectOpcoes(`env_${i}_sug`, cats.solucoesSugeridas, e.solucao_sugerida_id ?? "")}</label>
-              <label>Solução decidida${selectOpcoes(`env_${i}_dec`, cats.solucoesDecididas, e.solucao_decidida_id ?? "")}</label>
-              ${
-                // Penalidade já gravada continua à vista mesmo se a configuração
-                // mudar depois — esconder apagaria o fato no próximo salvamento.
-                permitePenalidade(e.solucao_decidida_id) || e.penalidade_tipo_id
-                  ? `<label>Penalidade${selectOpcoes(`env_${i}_pena`, cats.penalidades, e.penalidade_tipo_id ?? "")}</label>
-                     ${usaDias(e.penalidade_tipo_id) ? `<label>Dias<input name="env_${i}_dias" type="number" min="1" value="${e.penalidade_dias ?? ""}" /></label>` : ""}`
-                  : ""
-              }
             </div>`,
             )
             .join("")}
@@ -695,15 +637,10 @@ export async function renderFormularioProcesso(
     void renderListaProcessos(ctx);
   });
 
-  // Trocar apuratório, natureza ou solução muda o que o formulário mostra —
-  // por isso re-renderiza em vez de esconder campo com CSS.
+  // Trocar apuratório ou natureza muda os campos configurados do cadastro.
   for (const seletor of ['[name="apuratorio_id"]', '[name="natureza_fato_id"]']) {
     form.querySelector<HTMLSelectElement>(seletor)?.addEventListener("change", () => rerender(() => {}));
   }
-  form.querySelectorAll<HTMLSelectElement>('[name$="_dec"], [name$="_pena"]').forEach((s) =>
-    s.addEventListener("change", () => rerender(() => {})),
-  );
-
   document.querySelector("#add-des")?.addEventListener("click", () =>
     rerender(() =>
       r.designacoes.push({ id: null, policial_militar_id: "", papel_id: "" }),
@@ -716,10 +653,6 @@ export async function renderFormularioProcesso(
         status_envolvido_id: "",
         ordem: r.envolvidos.length + 1,
         e_condutor: false,
-        solucao_sugerida_id: null,
-        solucao_decidida_id: null,
-        penalidade_tipo_id: null,
-        penalidade_dias: null,
       }),
     ),
   );
@@ -1050,7 +983,17 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   // `users_list_ativos` e não um comando paginado: lista de OPÇÕES não pagina.
   // O teto de 200 de uma listagem cortaria o seletor em silêncio, que foi o
   // defeito da §8.9 — e são 235 militares no banco real.
-  const [detalheResp, prazos, andamentos, tiposAndamento, militares, tiposDocumento] =
+  const [
+    detalheResp,
+    prazos,
+    andamentos,
+    tiposAndamento,
+    militares,
+    tiposDocumento,
+    solucoesSugeridas,
+    solucoesDecididas,
+    penalidades,
+  ] =
     await Promise.all([
       call("proceedings_get", { id }),
       call("deadlines_list", { processoId: id }).then((r) => r.data ?? []),
@@ -1058,6 +1001,9 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       catalogo("tipos_andamento", ["nome"]),
       call("users_list_ativos", {}).then((r) => r.data ?? []),
       catalogo("tipos_documento", ["nome"]),
+      catalogo("tipos_solucao_sugerida", ["nome"]),
+      catalogo("tipos_solucao_decidida", ["nome"]),
+      catalogo("tipos_penalidade", ["nome"]),
     ]);
 
   const d = detalheResp.data;
@@ -1065,6 +1011,10 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     ctx.shell(`<section class="panel"><p class="error">${escapeHtml(detalheResp.error ?? "Processo não encontrado.")}</p></section>`);
     return;
   }
+
+  const config = await call("apuratorio_config_get", { apuratorioId: d.apuratorio_id }).then(
+    (r) => r.data,
+  );
 
   const podeEscrever = ctx.podeEscrever();
   const prazoVigente = prazos.find((prazo) => prazo.vigente) ?? null;
@@ -1109,12 +1059,32 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Resumo dos fatos", d.resumo_fatos)}
       </table>
 
+      ${
+        podeEscrever
+          ? `<h2>Remessa e conclusão</h2>
+             <form id="form-encerramento" class="linha-form">
+               <label>Remessa do encarregado
+                 <input name="data_remessa_encarregado" type="date"
+                   min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+                   value="${escapeHtml(d.data_remessa_encarregado ?? "")}" />
+               </label>
+               <label>Conclusão
+                 <input name="data_conclusao" type="date"
+                   min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+                   value="${escapeHtml(d.data_conclusao ?? "")}"${d.data_conclusao ? " required" : ""} />
+               </label>
+               <button type="submit">Salvar datas</button>
+             </form>
+             <p class="secao-ajuda">A remessa pode ser corrigida ou removida. Para remover uma conclusão já registrada, use <strong>Reabrir</strong>.</p>`
+          : ""
+      }
+
       <h2>Envolvidos</h2>
       ${
         d.envolvidos.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--envolvidos">
               <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
-                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Indícios</th></tr></thead>
+                <th>Sugerida</th><th>Decidida</th><th>Penalidade</th><th>Ações</th></tr></thead>
               <tbody>${d.envolvidos
                 .map(
                   (e) => `<tr>
@@ -1125,14 +1095,45 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${escapeHtml(e.solucao_sugerida ?? "")}</td>
                     <td>${escapeHtml(e.solucao_decidida ?? "")}</td>
                     <td>${escapeHtml(e.penalidade_tipo ?? "")}${e.penalidade_dias ? ` — ${e.penalidade_dias} dias` : ""}</td>
-                    <td class="row-actions">${botaoIcone("abrir", "Ver indícios", {
-                      classe: "secondary",
-                      dados: { indicios: e.id },
-                    })}</td>
+                    <td class="row-actions">
+                      ${
+                        podeEscrever
+                          ? botaoIcone("editar", "Editar resultado", {
+                              classe: "secondary",
+                              dados: { "editar-resultado": e.id },
+                            })
+                          : ""
+                      }
+                      ${botaoIcone("abrir", "Ver indícios", {
+                        classe: "secondary",
+                        dados: { indicios: e.id },
+                      })}
+                    </td>
                   </tr>`,
                 )
                 .join("")}</tbody></table></div>`
           : `<p class="empty">Nenhum envolvido.</p>`
+      }
+      ${
+        podeEscrever && d.envolvidos.length
+          ? `<form id="form-resultado-envolvido" class="linha-form linha-form--bloco" hidden>
+               <p id="resumo-resultado" class="secao-ajuda linha-form__resumo"></p>
+               <label>Solução sugerida
+                 ${selectOpcoes("solucao_sugerida_id", solucoesSugeridas, "")}
+               </label>
+               <label>Solução decidida
+                 ${selectOpcoes("solucao_decidida_id", solucoesDecididas, "")}
+               </label>
+               <label id="campo-penalidade" hidden>Penalidade
+                 ${selectOpcoes("penalidade_tipo_id", penalidades, "")}
+               </label>
+               <label id="campo-penalidade-dias" hidden>Dias
+                 <input name="penalidade_dias" type="number" min="1" />
+               </label>
+               <button type="submit">Salvar resultado</button>
+               <button type="button" class="secondary" id="cancelar-resultado">Cancelar</button>
+             </form>`
+          : ""
       }
 
       <h2>Designações</h2>
@@ -1375,6 +1376,147 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   );
 
   if (!podeEscrever) return;
+
+  const formEncerramento = document.querySelector<HTMLFormElement>("#form-encerramento");
+  formEncerramento?.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    const dados = new FormData(formEncerramento);
+    const remessa = String(dados.get("data_remessa_encarregado") ?? "") || null;
+    const conclusao = String(dados.get("data_conclusao") ?? "") || null;
+    const r = await call("proceedings_update_closure", {
+      request: {
+        processo_id: id,
+        data_remessa_encarregado: remessa,
+        data_conclusao: conclusao,
+      },
+    });
+    if (r.ok) notificar("Datas atualizadas.", "sucesso");
+    reportar(r.ok, r.error);
+  });
+
+  // ── Resultado do envolvido ───────────────────────────────────────────────
+  const formResultado = document.querySelector<HTMLFormElement>("#form-resultado-envolvido");
+  const resumoResultado = document.querySelector<HTMLElement>("#resumo-resultado");
+  const campoPenalidade = document.querySelector<HTMLElement>("#campo-penalidade");
+  const campoDias = document.querySelector<HTMLElement>("#campo-penalidade-dias");
+  const envolvidosPorId = new Map(d.envolvidos.map((envolvido) => [envolvido.id, envolvido]));
+  let resultadoEmEdicao = null as (typeof d.envolvidos)[number] | null;
+
+  const selectResultado = (nome: string) =>
+    formResultado?.querySelector<HTMLSelectElement>(`select[name="${nome}"]`) ?? null;
+  const inputDias = () =>
+    formResultado?.querySelector<HTMLInputElement>('input[name="penalidade_dias"]') ?? null;
+  const limparOpcoesHistoricasResultado = () => {
+    formResultado
+      ?.querySelectorAll<HTMLOptionElement>("option[data-resultado-historico]")
+      .forEach((opcao) => opcao.remove());
+  };
+  const garantirOpcaoHistorica = (
+    nome: string,
+    valor: string | null,
+    rotulo: string | null,
+  ) => {
+    if (!valor) return;
+    const select = selectResultado(nome);
+    if (!select || Array.from(select.options).some((opcao) => opcao.value === valor)) return;
+    const historica = document.createElement("option");
+    historica.value = valor;
+    historica.textContent = `${rotulo ?? "Opção"} (desativada)`;
+    historica.dataset.resultadoHistorico = "true";
+    select.append(historica);
+  };
+
+  const atualizarCamposPenalidade = () => {
+    const decididaId = selectResultado("solucao_decidida_id")?.value ?? "";
+    const decisaoHistoricaPermitia =
+      resultadoEmEdicao?.solucao_decidida_id === decididaId &&
+      resultadoEmEdicao.penalidade_tipo_id !== null;
+    const permitePena =
+      config?.permite_punicao === true &&
+      (solucoesDecididas.find((item) => item.id === decididaId)?.extra?.permite_penalidade === true ||
+        decisaoHistoricaPermitia);
+    if (campoPenalidade) campoPenalidade.hidden = !permitePena;
+    const selectPena = selectResultado("penalidade_tipo_id");
+    if (!permitePena && selectPena) selectPena.value = "";
+
+    const penalidadeId = selectPena?.value ?? "";
+    const penalidadeHistoricaUsavaDias =
+      resultadoEmEdicao?.penalidade_tipo_id === penalidadeId &&
+      resultadoEmEdicao.penalidade_dias !== null;
+    const usaQuantidade =
+      permitePena &&
+      (penalidades.find((item) => item.id === penalidadeId)?.extra?.usa_quantidade_dias === true ||
+        penalidadeHistoricaUsavaDias);
+    if (campoDias) campoDias.hidden = !usaQuantidade;
+    if (!usaQuantidade && inputDias()) inputDias()!.value = "";
+  };
+
+  const fecharResultado = () => {
+    resultadoEmEdicao = null;
+    formResultado?.reset();
+    limparOpcoesHistoricasResultado();
+    if (formResultado) formResultado.hidden = true;
+  };
+
+  document.querySelectorAll<HTMLButtonElement>("[data-editar-resultado]").forEach((botao) =>
+    botao.addEventListener("click", () => {
+      const envolvido = envolvidosPorId.get(botao.dataset.editarResultado!);
+      if (!envolvido || !formResultado) return;
+      resultadoEmEdicao = envolvido;
+      limparOpcoesHistoricasResultado();
+      garantirOpcaoHistorica(
+        "solucao_sugerida_id",
+        envolvido.solucao_sugerida_id,
+        envolvido.solucao_sugerida,
+      );
+      garantirOpcaoHistorica(
+        "solucao_decidida_id",
+        envolvido.solucao_decidida_id,
+        envolvido.solucao_decidida,
+      );
+      garantirOpcaoHistorica(
+        "penalidade_tipo_id",
+        envolvido.penalidade_tipo_id,
+        envolvido.penalidade_tipo,
+      );
+      selectResultado("solucao_sugerida_id")!.value = envolvido.solucao_sugerida_id ?? "";
+      selectResultado("solucao_decidida_id")!.value = envolvido.solucao_decidida_id ?? "";
+      selectResultado("penalidade_tipo_id")!.value = envolvido.penalidade_tipo_id ?? "";
+      inputDias()!.value = envolvido.penalidade_dias?.toString() ?? "";
+      if (resumoResultado) {
+        resumoResultado.textContent =
+          `Editando o resultado de ${envolvido.posto_graduacao} ${envolvido.matricula} ${envolvido.nome}.`;
+      }
+      formResultado.hidden = false;
+      atualizarCamposPenalidade();
+      formResultado.scrollIntoView({ block: "nearest" });
+      selectResultado("solucao_sugerida_id")?.focus();
+    }),
+  );
+
+  selectResultado("solucao_decidida_id")?.addEventListener("change", atualizarCamposPenalidade);
+  selectResultado("penalidade_tipo_id")?.addEventListener("change", atualizarCamposPenalidade);
+  document.querySelector("#cancelar-resultado")?.addEventListener("click", fecharResultado);
+  formResultado?.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    if (!resultadoEmEdicao) return;
+    const penalidadeVisivel = campoPenalidade?.hidden === false;
+    const diasVisiveis = campoDias?.hidden === false;
+    const r = await call("proceedings_update_involved_outcome", {
+      request: {
+        processo_id: id,
+        envolvido_id: resultadoEmEdicao.id,
+        solucao_sugerida_id: selectResultado("solucao_sugerida_id")?.value || null,
+        solucao_decidida_id: selectResultado("solucao_decidida_id")?.value || null,
+        penalidade_tipo_id: penalidadeVisivel
+          ? selectResultado("penalidade_tipo_id")?.value || null
+          : null,
+        penalidade_dias: diasVisiveis ? Number(inputDias()?.value) || null : null,
+      },
+    });
+    if (r.ok) notificar("Resultado do envolvido atualizado.", "sucesso");
+    reportar(r.ok, r.error);
+  });
 
   // ── Substituição de designação ────────────────────────────────────────────
   //

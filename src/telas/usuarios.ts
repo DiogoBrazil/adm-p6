@@ -397,9 +397,7 @@ export async function renderFormularioUsuario(
 // ── Detalhe ───────────────────────────────────────────────────────────
 
 const OPCOES_CONTAGEM_USUARIO = {
-  mostrarBarra: false,
   listagem: true,
-  centralizar: true,
 } as const;
 
 function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel" | "status_envolvido") {

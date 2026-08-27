@@ -29,9 +29,9 @@ Entre com `admin@sistema.com` / `123456` e **deixe o console aberto (F12)**.
 
 | Sintoma | Causa provável |
 |---|---|
-| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 76 comandos passam |
+| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que todos os comandos passam |
 | Uma tela abre **sem estilo** | `style-src`. Em produção o Vite emite `<link>`; em dev injeta `<style>` |
-| As **barras** dos painéis de contagem aparecem sem largura | `aplicarBarras()` não rodou, ou voltou um `style=""` no markup |
+| Uma tabela de contagem mostra uma terceira coluna vazia | Sobrou marcação da antiga barra percentual; cada painel deve ter somente rótulo e quantidade |
 
 ---
 
@@ -41,8 +41,8 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 
 - [ ] **Painel** (`/`) — os cartões trazem números, não zeros
 - [ ] **Procedimentos → lista** — a tabela lista processos
-- [ ] **Procedimentos → detalhe** — abrir um processo
-- [ ] **Procedimentos → formulário** — abrir "Novo"
+- [ ] **Procedimentos → detalhe** — registrar/corrigir remessa e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
+- [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessa, conclusão, soluções e penalidade não aparecem antes do cadastro
 - [ ] **Indícios** — a partir do detalhe de um processo, num envolvido
 - [ ] **Prazos** — o painel carrega
 - [ ] **Usuários → lista**
@@ -52,8 +52,8 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Catálogos** — abrir ao menos três catálogos diferentes do menu
 - [ ] **Auditoria** — a lista e os três filtros
 - [ ] **Designações por Militar**
-- [ ] **Estatísticas de Processos** — conferir que **as barras têm largura**
-- [ ] **Estatísticas de Procedimentos** — idem
+- [ ] **Estatísticas de Processos** — tabelas centralizadas, somente rótulo e quantidade
+- [ ] **Estatísticas de Procedimentos** — idem, sem barras percentuais
 - [ ] **Mapa do Período**
 - [ ] **Mapas Salvos**
 - [ ] **Relatório Anual**

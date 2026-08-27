@@ -9,7 +9,7 @@
 //! num JSON. Duas convenções são travadas de uma vez:
 //!
 //! - **argumento de comando em camelCase** (`processoId`), porque é o que o
-//!   Tauri v2 faz e nenhum dos 75 comandos declara `rename_all`;
+//!   Tauri v2 faz e os comandos não declaram `rename_all`;
 //! - **campo de request em snake_case**, dentro de `{ request: {...} }`, porque
 //!   ali quem desserializa é o serde.
 //!
@@ -385,6 +385,124 @@ fn editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria() {
             .unwrap()
         });
         assert_eq!(operacoes, vec!["UPDATE", "DELETE"]);
+    });
+}
+
+#[test]
+fn encerramento_e_resultado_passam_pelo_ipc_e_auditoria() {
+    com_app_e_banco("ipc_resultado", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+        let (processo_id, envolvido_id, sugerida, decidida, penalidade) =
+            tauri::async_runtime::block_on(async {
+                let estado: tauri::State<'_, AppState> = app.state();
+                let pool = estado.pool().await.unwrap();
+                sqlx::query(
+                    "UPDATE apuratorios SET permite_punicao = true
+                      WHERE id = (SELECT id FROM apuratorios ORDER BY id LIMIT 1)",
+                )
+                .execute(&pool)
+                .await
+                .unwrap();
+                let processo_id: String = sqlx::query_scalar(
+                    "INSERT INTO processos_procedimentos
+                         (apuratorio_id, documento_iniciador_id, numero_documento,
+                          unidade_origem_id, municipio_fato_id, natureza_fato_id,
+                          data_instauracao)
+                     VALUES ((SELECT id FROM apuratorios WHERE permite_punicao LIMIT 1),
+                             (SELECT tipo_documento_id
+                                FROM apuratorio_documentos_iniciadores
+                               WHERE apuratorio_id =
+                                     (SELECT id FROM apuratorios WHERE permite_punicao LIMIT 1)
+                               ORDER BY tipo_documento_id LIMIT 1),
+                             'IPC-RESULTADO-001',
+                             (SELECT id FROM unidades_pm ORDER BY id LIMIT 1),
+                             (SELECT id FROM municipios_distritos ORDER BY id LIMIT 1),
+                             (SELECT id FROM naturezas_fato ORDER BY id LIMIT 1),
+                             DATE '2026-01-10')
+                  RETURNING id::text",
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                let envolvido_id: String = sqlx::query_scalar(
+                    "INSERT INTO processo_envolvidos
+                         (processo_id, policial_militar_id, status_envolvido_id, ordem)
+                     VALUES ($1::uuid,
+                             (SELECT id FROM policiais_militares WHERE ativo ORDER BY id LIMIT 1),
+                             (SELECT id FROM status_envolvido WHERE ativo ORDER BY id LIMIT 1), 1)
+                  RETURNING id::text",
+                )
+                .bind(&processo_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                let sugerida: String = sqlx::query_scalar(
+                    "SELECT id::text FROM tipos_solucao_sugerida WHERE ativo ORDER BY id LIMIT 1",
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                let decidida: String = sqlx::query_scalar(
+                    "SELECT id::text FROM tipos_solucao_decidida WHERE permite_penalidade ORDER BY id LIMIT 1",
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                let penalidade: String = sqlx::query_scalar(
+                    "SELECT id::text FROM tipos_penalidade WHERE usa_quantidade_dias ORDER BY id LIMIT 1",
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                (processo_id, envolvido_id, sugerida, decidida, penalidade)
+            });
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "proceedings_update_closure",
+                json!({ "request": {
+                    "processo_id": processo_id,
+                    "data_remessa_encarregado": "2026-02-01",
+                    "data_conclusao": "2026-02-02"
+                } }),
+            )),
+            &json!(true)
+        );
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "proceedings_update_involved_outcome",
+                json!({ "request": {
+                    "processo_id": processo_id,
+                    "envolvido_id": envolvido_id,
+                    "solucao_sugerida_id": sugerida,
+                    "solucao_decidida_id": decidida,
+                    "penalidade_tipo_id": penalidade,
+                    "penalidade_dias": 4
+                } }),
+            )),
+            &json!(true)
+        );
+
+        let entidades: Vec<String> = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            sqlx::query_scalar(
+                "SELECT entidade FROM auditoria
+                  WHERE registro_id = $1 OR registro_id = $2
+                  ORDER BY entidade",
+            )
+            .bind(&processo_id)
+            .bind(&envolvido_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        });
+        assert_eq!(
+            entidades,
+            vec!["processo_envolvidos", "processos_procedimentos"]
+        );
     });
 }
 

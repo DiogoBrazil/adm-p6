@@ -13,7 +13,7 @@
 > históricos/de teste da importação foram removidos com autorização** (§8.11) e, depois
 > disso, a conferência manual criou **2 processos/procedimentos ativos de teste**. O banco
 > conserva 235 militares, 7 usuários, 10 apuratórios, 11 unidades e todos os
-> catálogos/configurações. A rede de proteção tem **116 testes**, os **80 comandos Tauri**
+> catálogos/configurações. A rede de proteção tem **121 testes**, os **80 comandos Tauri**
 > estão no cliente tipado e as **8 migrations** estão aplicadas.
 >
 > **Não há implementação conhecida pendente.** Não refaça as §8.11 a §8.14: elas já estão
@@ -412,7 +412,7 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
 `commit`, não no `insert`.** São as únicas triggers do schema; acrescentar outra exige
 justificar por que não cabe em constraint.
 
-### 5.5 Backend Rust — 11 módulos, 78 comandos
+### 5.5 Backend Rust — 11 módulos, 80 comandos
 
 | Módulo | Papel |
 |---|---|
@@ -446,7 +446,7 @@ delas trunca um `<select>` em silêncio, que é o defeito da §8.9.
 
 ```
 src/
-  api.ts            275   cliente tipado: mapa `Commands` com os 78 comandos
+  api.ts            275   cliente tipado: mapa `Commands` com os 80 comandos
   types.ts          928   interfaces derivadas de src-tauri/src/*/domain.rs
   dom.ts            459   escape, tabela com metadados de coluna, paginação,
                           carga em lote para CSV/impressão, entrega de arquivo
@@ -476,7 +476,7 @@ por ele, e é por isso que as seis listagens operacionais se parecem. O que ele 
 |---|---|
 | `Coluna` | largura (%), alinhamento, truncamento e `nowrap` de cada coluna |
 | `tabela(colunas, linhas, vazio, opcoes)` | aceita `string[]` (só rótulos, como antes) **ou** `Coluna[]`; com larguras, emite `<colgroup>` e liga `table-layout: fixed` |
-| `aplicarLarguras()` | aplica as larguras pela CSSOM. **Chamada de `main.ts::shell()`**, do lado de `aplicarBarras`, para que nenhuma tela possa esquecer |
+| `aplicarLarguras()` | aplica as larguras pela CSSOM. **Chamada de `main.ts::shell()`**, para que nenhuma tela possa esquecer |
 | `ITENS_POR_PAGINA` | 10, para todas. O backend usa o mesmo em `db::paginacao::PADRAO` |
 | `paginacao(chave, …)` / `ligarPaginacao(chave, …)` | a `chave` permite dois paginadores independentes na mesma tela — é o que Prazos precisa |
 | `paginaValida(pagina, porPagina, total)` | recua para a última página que ainda existe, depois de excluir ou filtrar |
@@ -487,7 +487,7 @@ por ele, e é por isso que as seis listagens operacionais se parecem. O que ele 
 **A largura de coluna não pode ir em `style=""` — nem num `<col>`.** A CSP recusa o
 atributo, o elemento fica sem largura e **não há erro de build nem mensagem que aponte a
 tabela**: ela simplesmente volta a se dimensionar pelo conteúdo. Por isso a largura sai em
-`data-largura` e é aplicada pela CSSOM, exatamente como as barras dos painéis de contagem.
+`data-largura` e é aplicada pela CSSOM por `aplicarLarguras()`.
 
 **Não sobrou chamada não tipada.** `grep -rn "invoke" src/ --include=*.ts` só
 acha `api.ts`. O `main.ts` caiu de 1.484 para 356 linhas: saíram o `call()`
@@ -573,26 +573,27 @@ diálogo é aberto no Rust, que também grava; a tela nunca recebe um caminho.
 > `files_save_download` recebe. Com isso não sobrou nenhum `blob:` no sistema, e
 > a CSP pôde ficar sem ele.
 
-### 5.7 Rede de proteção — 116 testes
+### 5.7 Rede de proteção — 121 testes
 
 | Arquivo | O que cobre |
 |---|---|
+| testes unitários de `error.rs` | **3 testes** — mensagem pública legível sem vazar o detalhe técnico |
 | `util/mod.rs` | cria banco descartável, aplica migrations, remove ao final mesmo com pânico |
 | `util/fixtures.rs` | `mundo_configurado()`: monta a cadeia inteira até um apuratório configurado. **Base de todo teste que toque em processo** |
-| `migrations.rs` | **3 testes** — o contrato de 32 colunas de `v_processos_detalhados`, e que a antiga `v_processos` não voltou; migrations aplicam do zero **e são idempotentes**; tabelas extintas não ressuscitam; nenhuma FK sem `ON DELETE`; JSONB só nas 2 colunas justificadas; **a fronteira do seed** (11 catálogos legais com contagem exata, 17 operacionais vazios, e nenhum papel de escrivão semeado pela `0007`); e os três atributos de comportamento nascendo `NOT NULL DEFAULT false` |
+| `migrations.rs` | **4 testes** — o contrato de 32 colunas de `v_processos_detalhados`, e que a antiga `v_processos` não voltou; migrations aplicam do zero **e são idempotentes**; tabelas extintas não ressuscitam; nenhuma FK sem `ON DELETE`; JSONB só nas 2 colunas justificadas; **a fronteira do seed** (11 catálogos legais com contagem exata, 17 operacionais vazios, e nenhum papel de escrivão semeado pela `0007`); e os atributos de comportamento nascendo `NOT NULL DEFAULT false` |
 | `schema_integrity.sql` + `.rs` | 42 asserções: estados impossíveis que o banco recusa + controles que ele deve aceitar |
 | `auth_login.rs` | admin do seed autentica; busca case-insensitive; conta desativada não entra |
 | `users_repository.rs` | **6 testes** — policial com e sem conta; normalização; retirar acesso desativa; listagem que pagina e busca; as duas listas de processos do militar; e a **lista de opções que não pagina**, montando 250 militares para passar do teto de 200 (§8.9) |
-| `proceedings_repository.rs` | **29 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, as 6 validações semânticas, limites configuráveis, FK composta de papel, numeração parcial, os 8 filtros, anexos, ciclo de vida, dashboard, catálogo desativado — e a **cadeia de substituição**: duas cadeias com "últimas" independentes, correção sem lacuna, recusa da intermediária, remoção sucessiva reabrindo cada antecessora, as 7 entradas inválidas, e o cadastro editando/removendo só o que não tem histórico |
+| `proceedings_repository.rs` | **30 testes** — criação completa, prazo inicial vindo da configuração, sincronização na edição, bloqueio após prorrogação, resultados e datas pós-cadastro preservados na edição geral, limites configuráveis, FK composta de papel, numeração parcial, filtros, anexos, ciclo de vida, dashboard, catálogo desativado — e a **cadeia de substituição**: duas cadeias com "últimas" independentes, correção sem lacuna, recusa da intermediária, remoção sucessiva reabrindo cada antecessora, as entradas inválidas, e o cadastro editando/removendo só o que não tem histórico |
 | `apuratorio_config.rs` | **4 testes** — troca de padrão e de responsável sem violar os índices únicos parciais; desativação preserva processos existentes; e o comando entrega os **atributos de comportamento** (`codigo_extensao` inclusive), que é o que teria pego a carta precatória morta da §8.10 |
 | `deadlines_repository.rs` | **6 testes** — `dias_base`; prorrogação encostando no vencimento; motivo obrigatório; edição/exclusão somente da última prorrogação; **os dois blocos do relatório sendo exclusivos** e batendo com o `dashboard`; e a paginação do relatório sobre 205 processos |
 | `maps_reports_repository.rs` | **11 testes** — o mapa salvo como snapshot imutável; a regra do período do mapa; escopo vazio = todos; situação por apuratório; esfera penal escolhida no vínculo; catálogo desativado continua contando; matriz de designações por papel; sugerida × decidida; categorias de indício; e a **paginação dos mapas salvos**, em que o excluído sai da página *e* do total |
 | `evidence_repository.rs` | **10 testes** — gravação substitui o enquadramento inteiro; esfera penal do vínculo; analogia do RDPM obrigatória; `indica_ausencia` lida do atributo, não do nome; lista de opções filtra `ativo` e leitura de registro não; painel na ordem dos envolvidos |
-| `movements_repository.rs` | **7 testes** — o autor como FK; tipo opcional; ordem do mais recente; cancelamento datado, e o par (processo, andamento) obrigatório |
+| `movements_repository.rs` | **9 testes** — o autor como FK; tipo opcional; ordem do mais recente; edição preservando autoria/data; tipo histórico desativado; cancelamento datado, e o par (processo, andamento) obrigatório |
 | `audit_repository.rs` | **8 testes** — o autor é uma conta, e a conta técnica não inventa militar; o diff de `alteracoes`; os três filtros; total do escopo na paginação; período nas estatísticas; e a **listagem principal paginando** sobre 205 registros, com o total acompanhando o filtro |
-| `legal_catalogs_repository.rs` | **10 testes** — os 25 catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
-| `commands_ipc.rs` | **9 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções, auditoria da edição/exclusão de prorrogação, e as **três listagens paginadas** falando as duas convenções ao mesmo tempo (`perPage` camelCase no comando, `per_page` snake_case dentro do `filter`) |
-| `sql_prepare.rs` | **2 testes** — as 92 consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as 40 dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
+| `legal_catalogs_repository.rs` | **11 testes** — os catálogos do registro leem de verdade e toda referência aponta para catálogo existente; cada tipo de coluna é lido como declara; centralização vem dos metadados; item em uso desativa e não apaga; a busca recusa campo fora do registro; e a `ReferenciaFixa` sai do atributo, não da requisição — na gravação **e** na edição |
+| `commands_ipc.rs` | **12 testes** — os comandos pelo IPC real, sobre o `MockRuntime`: guards, contratos, envelope `ApiResponse`, lista de opções, auditoria da edição de andamento, prorrogação, substituição, datas de encerramento e resultado do envolvido, e as listagens paginadas falando as duas convenções ao mesmo tempo (`perPage` camelCase no comando, `per_page` snake_case dentro do `filter`) |
+| `sql_prepare.rs` | **2 testes** — todas as consultas literais são analisadas pelo PostgreSQL, extraídas do próprio código-fonte; e as dinâmicas precisam ter um teste que as execute, conferido nos dois sentidos |
 | `importacao.rs` | **3 testes** — as oito etapas de `importacao/` rodam de verdade, na ordem, sobre um recorte do dump (`tests/fixtures/legado_amostra.sql`, 26 dos 128 processos, as 10 espécies). As contagens são comparadas com o próprio recorte, não com número mágico; o que fica fixado são as **decisões** — o colapso das trocas do mesmo dia, o motivo suprido, a solução replicada e o art. 29 que fica de fora. O terceiro roda o relatório de conferência da amostra e cobra **0 divergências** |
 
 ---
@@ -824,9 +825,9 @@ usuários, mapas, estatísticas (as duas), auditoria, encarregados, relatório a
 
 | Sintoma | Causa provável |
 |---|---|
-| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 78 comandos passam |
+| O app abre e **nenhuma tela carrega dado** | `connect-src` sem `ipc: http://ipc.localhost` — é por aí que os 80 comandos passam |
 | Uma tela abre **sem estilo** | `style-src`. Em produção o Vite emite `<link>`; em dev injeta `<style>`, e é por isso que existe `devCsp` |
-| As **barras** dos painéis de contagem aparecem sem largura | `aplicarBarras()` não rodou, ou voltou um `style=""` no markup (§10) |
+| Uma tabela de contagem mostra uma terceira coluna vazia | Sobrou marcação da antiga barra percentual; cada painel deve ter somente rótulo e quantidade |
 
 > A `csp` de produção **não é exercida por `tauri dev`**, que usa a `devCsp`. Para provar a
 > restritiva de verdade é preciso `npm run tauri build` e abrir o bundle. A diferença entre
@@ -1171,7 +1172,7 @@ sobreviveu tanto tempo no `main.ts` legado.
 
 **Estado atual:** todos os módulos de repositório têm integração sobre PostgreSQL
 descartável; os totais por arquivo estão na §5.7. A cobertura de IPC continua
-deliberadamente representativa, não exaustiva: 9 dos 78 comandos são chamados pelo nome e
+deliberadamente representativa, não exaustiva: 9 dos 80 comandos são chamados pelo nome e
 JSON reais para travar guards, camelCase/snake_case, envelope, formato de resposta e o
 fluxo transacional de prorrogação. Acrescentar comando de formato novo pede um caso aqui.
 
@@ -1596,7 +1597,7 @@ object-src 'none'; base-uri 'self'; frame-src 'none'; form-action 'none'
 ```
 
 **`connect-src` precisa de `ipc: http://ipc.localhost`.** É por aí que todo o IPC do Tauri
-v2 passa: sem isso não é uma tela que quebra, são os 78 comandos de uma vez.
+v2 passa: sem isso não é uma tela que quebra, são os 80 comandos de uma vez.
 
 **`devCsp` existe porque desenvolvimento e produção carregam o CSS de formas diferentes.**
 Em dev o Vite injeta o `styles.css` por `<style>` via JS (e o overlay de erro faz o mesmo),
@@ -1642,10 +1643,9 @@ CSV havia abandonado. Passou a usar `dom.ts::baixarArquivoBase64` →`files_save
 como todo o resto. Ver §5.6.
 
 **A barra dos painéis de contagem interpolava `style=""` no markup** —
-`src/telas/estatisticas.ts`. Era a única do sistema, e a CSP a recusaria. A largura passou a
-sair num `data-largura`, e quem a aplica é `aplicarBarras()`, pela CSSOM — que a CSP não
-governa. A chamada mora em `main.ts::shell()`, o **único** ponto que escreve em `#app`,
-para que nenhuma tela nova precise lembrar de fazê-la.
+`src/telas/estatisticas.ts`. Era a única do sistema, e a CSP a recusaria. Depois de uma
+correção intermediária pela CSSOM, as barras foram removidas por completo: os painéis
+agora mostram somente rótulo e quantidade, centralizados como as demais tabelas.
 
 Os dois juntos são o que permitiu a CSP de produção ficar sem `'unsafe-inline'` e sem
 `blob:`.
@@ -2332,7 +2332,7 @@ Para quem for mexer nisto depois, ou precisar entender um `git diff` sem context
 | Arquivo | O que mudou |
 |---|---|
 | `dom.ts` | `Coluna`, `tabela()` com `<colgroup>`, `aplicarLarguras`, `ITENS_POR_PAGINA`, paginação por chave, `paginaValida`, `carregarTudo`, `TETO_EXPORTACAO`, `avisarSeCortado`, `ligarExportacao` com impressão completa, e `Linha.id` (o `data-linha` do clique) |
-| `main.ts` | chama `aplicarLarguras(document)` em `shell()`, ao lado de `aplicarBarras` |
+| `main.ts` | chama `aplicarLarguras(document)` em `shell()` |
 | `types.ts` · `api.ts` | os três envelopes e os três contratos |
 | `telas/processo.ts` | **só** o tamanho de página, a chave `"processos"` e a classe `tabela-dados--fixa`. Aparência intacta |
 | `telas/usuarios.ts` | `COLUNAS`/`COLUNAS_IMPRESSAO`/`COLUNAS_CSV`, dez por página, CSV e impressão sobre o filtro inteiro |
@@ -2620,10 +2620,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (§5.3) |
-| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **78 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
-| **Largura de coluna num `<col style="">`** | É `style` como qualquer outro, e a CSP recusa igual: o `<col>` fica sem largura e a tabela volta a se dimensionar pelo conteúdo, **sem erro de build e sem erro de console que aponte a tabela** | A largura sai em `data-largura` e é aplicada pela CSSOM em `dom.ts::aplicarLarguras`, chamada de `main.ts::shell()` — do lado de `aplicarBarras`, e pela mesma razão |
+| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **80 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
+| **Largura de coluna num `<col style="">`** | É `style` como qualquer outro, e a CSP recusa igual: o `<col>` fica sem largura e a tabela volta a se dimensionar pelo conteúdo, **sem erro de build e sem erro de console que aponte a tabela** | A largura sai em `data-largura` e é aplicada pela CSSOM em `dom.ts::aplicarLarguras`, chamada de `main.ts::shell()` |
 | **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a §8.14 provou que a listagem de processos não mudou |
-| `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Largura calculada vai num `data-*` e é aplicada em JS. `aplicarBarras()` faz isso, chamada de `shell()` |
+| `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Larguras calculadas de coluna vão em `data-*` e são aplicadas por `aplicarLarguras()` em `shell()` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver §8.6.2 |
 | Meta-comando de psql em SQL que um teste executa | `\echo`, `\pset` e `\.` são sintaxe do **cliente**, não SQL: `sqlx` estoura com "syntax error at or near \". É por isso que `98_` é uma instrução só e `99_` não roda no `cargo test` | SQL que precisa rodar nos dois lugares não leva barra invertida |
 | Supor que um conceito tem **uma** fonte no legado | O enquadramento tinha duas, que nunca se encontraram: `pm_envolvido_*` para procedimentos e o jsonb `transgressoes_ids` para PADS. A segunda tinha 73 vínculos e quase ficou de fora | Antes de dar um conceito por importado, contar **por espécie de apuratório**: um zero redondo numa espécie inteira é sinal de fonte paralela |

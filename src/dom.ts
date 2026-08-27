@@ -229,7 +229,7 @@ export function tabela(
   // A largura sai em `data-largura` e é aplicada pela CSSOM em
   // `aplicarLarguras`. `style=""` interpolado no markup — inclusive num
   // `<col>` — é recusado pela CSP, e o elemento aparece sem estilo **sem erro
-  // de build**. É a mesma via das barras dos painéis de contagem.
+  // de build**. A CSSOM mantém a CSP restritiva sem perder as proporções.
   const colgroup = fixa
     ? `<colgroup>${definicoes
         .map((c) => `<col${c.largura === undefined ? "" : ` data-largura="${c.largura}"`} />`)
@@ -253,8 +253,8 @@ export function tabela(
 /**
  * Aplica as larguras declaradas em `Coluna.largura`.
  *
- * Gêmea de `aplicarBarras`, e pela mesma razão: a CSP recusa `style=""` no
- * markup, e a CSSOM é a única via que ela não alcança. Chamada de
+ * A CSP recusa `style=""` no markup, e a CSSOM é a via usada para aplicar os
+ * valores calculados. Chamada de
  * `main.ts::shell()` depois de cada render, para que nenhuma tela possa
  * esquecer — se ela não rodar, as colunas ficam sem largura e **nada acusa**.
  */

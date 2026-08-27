@@ -16,9 +16,7 @@ export const ROTA = "/dashboard";
 const VENCIDOS_NO_PAINEL = 8;
 
 const OPCOES_CONTAGEM_PAINEL = {
-  mostrarBarra: false,
   listagem: true,
-  centralizar: true,
 } as const;
 
 export async function renderDashboard(ctx: ContextoTela): Promise<void> {

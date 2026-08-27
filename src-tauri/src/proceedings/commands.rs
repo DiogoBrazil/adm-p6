@@ -7,7 +7,7 @@ use crate::error::AppError;
 use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, DashboardSummary, ProceedingDetail,
     ProceedingFilter, ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UploadAttachmentRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingClosureRequest, UploadAttachmentRequest,
 };
 use crate::proceedings::repository;
 use crate::response::{from_result, ApiResponse};
@@ -118,6 +118,62 @@ pub async fn proceedings_reopen(
                 &mut tx,
                 "processos_procedimentos",
                 &id,
+                "UPDATE",
+                Some(&actor.id),
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(true)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn proceedings_update_closure(
+    state: State<'_, AppState>,
+    request: UpdateProceedingClosureRequest,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            request.validate().map_err(AppError::Domain)?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            repository::update_closure(&mut tx, &request).await?;
+            audit_repository::register_tx(
+                &mut tx,
+                "processos_procedimentos",
+                &request.processo_id,
+                "UPDATE",
+                Some(&actor.id),
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(true)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn proceedings_update_involved_outcome(
+    state: State<'_, AppState>,
+    request: UpdateInvolvedOutcomeRequest,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            request.validate().map_err(AppError::Domain)?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+            repository::update_involved_outcome(&mut tx, &request).await?;
+            audit_repository::register_tx(
+                &mut tx,
+                "processo_envolvidos",
+                &request.envolvido_id,
                 "UPDATE",
                 Some(&actor.id),
             )

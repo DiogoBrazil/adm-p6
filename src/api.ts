@@ -107,6 +107,8 @@ import type {
   TipoColuna,
   TransgressaoItem,
   UploadAttachmentRequest,
+  UpdateInvolvedOutcomeRequest,
+  UpdateProceedingClosureRequest,
   UserAuthRow,
   UserFormSchema,
   UserListItem,
@@ -125,7 +127,7 @@ export type ApiResponse<T> = {
 };
 
 /**
- * Contrato dos 76 comandos registrados em `src-tauri/src/lib.rs`.
+ * Contrato dos comandos registrados em `src-tauri/src/lib.rs`.
  *
  * Se `generate_handler!` mudar lá, este mapa precisa mudar aqui — é
  * deliberado: a divergência vira erro de compilação em vez de erro de runtime.
@@ -172,6 +174,8 @@ export interface Commands {
   proceedings_save: { args: { request: SaveProceedingRequest }; result: string };
   proceedings_delete: { args: { id: string }; result: boolean };
   proceedings_reopen: { args: { id: string }; result: boolean };
+  proceedings_update_closure: { args: { request: UpdateProceedingClosureRequest }; result: boolean };
+  proceedings_update_involved_outcome: { args: { request: UpdateInvolvedOutcomeRequest }; result: boolean };
   proceedings_substitute_designation: { args: { request: SubstituirDesignacaoRequest }; result: string };
   proceedings_update_substitution: { args: { request: AtualizarSubstituicaoRequest }; result: boolean };
   proceedings_delete_substitution: { args: { processoId: string, designacaoId: string }; result: boolean };

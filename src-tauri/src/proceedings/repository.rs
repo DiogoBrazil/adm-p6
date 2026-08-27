@@ -8,8 +8,9 @@ use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, CartaPrecatoriaDetalhes,
     ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
     PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem, ProceedingListResult,
-    SaveProceedingRequest, SubstituirDesignacaoRequest, UploadAttachmentRequest,
-    EXTENSAO_CARTA_PRECATORIA, MOTIVO_DESIGNACAO_INICIAL,
+    SaveProceedingRequest, SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest,
+    UpdateProceedingClosureRequest, UploadAttachmentRequest, EXTENSAO_CARTA_PRECATORIA,
+    MOTIVO_DESIGNACAO_INICIAL,
 };
 
 /// Limite de tamanho do anexo. Trafega em base64 pelo IPC, então o custo real em
@@ -423,46 +424,6 @@ async fn validar_contra_configuracao(
         ));
     }
 
-    for envolvido in &request.envolvidos {
-        // Penalidade só onde a solução decidida permite.
-        if envolvido.penalidade_tipo_id.is_some() {
-            let permite: bool = match envolvido.solucao_decidida_id.as_deref() {
-                Some(id) => sqlx::query_scalar(
-                    "SELECT permite_penalidade FROM tipos_solucao_decidida WHERE id = $1::uuid",
-                )
-                .bind(id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .unwrap_or(false),
-                None => false,
-            };
-            if !permite {
-                return Err(AppError::Domain(
-                    "a solucao escolhida nao permite registrar penalidade".to_string(),
-                ));
-            }
-        }
-
-        // Dias só onde o tipo de penalidade usa dias.
-        if envolvido.penalidade_dias.is_some_and(|d| d > 0) {
-            let usa_dias: bool = match envolvido.penalidade_tipo_id.as_deref() {
-                Some(id) => sqlx::query_scalar(
-                    "SELECT usa_quantidade_dias FROM tipos_penalidade WHERE id = $1::uuid",
-                )
-                .bind(id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .unwrap_or(false),
-                None => false,
-            };
-            if !usa_dias {
-                return Err(AppError::Domain(
-                    "esta penalidade nao trabalha com quantidade de dias".to_string(),
-                ));
-            }
-        }
-    }
-
     // Papéis obrigatórios do apuratório precisam estar designados.
     let faltando: Vec<String> = sqlx::query_scalar(
         "SELECT pap.nome
@@ -574,8 +535,8 @@ pub async fn save(
                      numero_rgf = $7, unidade_origem_id = $8::uuid,
                      municipio_fato_id = $9::uuid, natureza_fato_id = $10::uuid,
                      data_instauracao = $11, data_recebimento = $12,
-                     data_remessa_encarregado = $13, data_remessa_comissao = $14,
-                     data_julgamento = $15, data_conclusao = $16, resumo_fatos = $17,
+                     data_remessa_comissao = $13, data_julgamento = $14,
+                     resumo_fatos = $15,
                      updated_at = now()
                  WHERE id = $1::uuid AND ativo
              RETURNING id::text",
@@ -592,10 +553,8 @@ pub async fn save(
         .bind(request.natureza_fato_id.as_deref())
         .bind(request.data_instauracao)
         .bind(request.data_recebimento)
-        .bind(request.data_remessa_encarregado)
         .bind(request.data_remessa_comissao)
         .bind(request.data_julgamento)
-        .bind(request.data_conclusao)
         .bind(request.resumo_fatos.as_deref())
         .fetch_optional(&mut **tx)
         .await?
@@ -606,10 +565,9 @@ pub async fn save(
                      (apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
                       processo_sei, numero_rgf, unidade_origem_id, municipio_fato_id,
                       natureza_fato_id, data_instauracao, data_recebimento,
-                      data_remessa_encarregado, data_remessa_comissao, data_julgamento,
-                      data_conclusao, resumo_fatos)
+                      data_remessa_comissao, data_julgamento, resumo_fatos)
                  VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid, $9::uuid,
-                         $10, $11, $12, $13, $14, $15, $16)
+                         $10, $11, $12, $13, $14)
              RETURNING id::text",
             )
             .bind(&request.apuratorio_id)
@@ -623,10 +581,8 @@ pub async fn save(
             .bind(request.natureza_fato_id.as_deref())
             .bind(request.data_instauracao)
             .bind(request.data_recebimento)
-            .bind(request.data_remessa_encarregado)
             .bind(request.data_remessa_comissao)
             .bind(request.data_julgamento)
-            .bind(request.data_conclusao)
             .bind(request.resumo_fatos.as_deref())
             .fetch_one(&mut **tx)
             .await?
@@ -726,17 +682,12 @@ async fn gravar_envolvidos(
     for envolvido in &request.envolvidos {
         sqlx::query(
             "INSERT INTO processo_envolvidos
-                 (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor,
-                  solucao_sugerida_id, solucao_decidida_id, penalidade_tipo_id, penalidade_dias)
-             VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, $7::uuid, $8::uuid, $9)
+                 (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
+             VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
              ON CONFLICT (processo_id, policial_militar_id) DO UPDATE
                 SET status_envolvido_id = EXCLUDED.status_envolvido_id,
                     ordem               = EXCLUDED.ordem,
                     e_condutor          = EXCLUDED.e_condutor,
-                    solucao_sugerida_id = EXCLUDED.solucao_sugerida_id,
-                    solucao_decidida_id = EXCLUDED.solucao_decidida_id,
-                    penalidade_tipo_id  = EXCLUDED.penalidade_tipo_id,
-                    penalidade_dias     = EXCLUDED.penalidade_dias,
                     updated_at          = now()",
         )
         .bind(processo_id)
@@ -744,10 +695,6 @@ async fn gravar_envolvidos(
         .bind(&envolvido.status_envolvido_id)
         .bind(envolvido.ordem)
         .bind(envolvido.e_condutor)
-        .bind(envolvido.solucao_sugerida_id.as_deref())
-        .bind(envolvido.solucao_decidida_id.as_deref())
-        .bind(envolvido.penalidade_tipo_id.as_deref())
-        .bind(envolvido.penalidade_dias)
         .execute(&mut **tx)
         .await?;
     }
@@ -1358,6 +1305,140 @@ fn texto_opcional(valor: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string)
+}
+
+/// Atualiza somente as datas registradas depois do cadastro. Uma conclusão já
+/// gravada pode ser corrigida aqui, mas sua remoção continua sendo a operação
+/// explícita `reopen`, com autorização e auditoria próprias.
+pub async fn update_closure(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateProceedingClosureRequest,
+) -> Result<(), AppError> {
+    let (data_instauracao, conclusao_atual): (chrono::NaiveDate, Option<chrono::NaiveDate>) =
+        sqlx::query_as(
+            "SELECT data_instauracao, data_conclusao
+               FROM processos_procedimentos
+              WHERE id = $1::uuid AND ativo
+              FOR UPDATE",
+        )
+        .bind(&request.processo_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+
+    if request
+        .data_remessa_encarregado
+        .is_some_and(|data| data < data_instauracao)
+    {
+        return Err(AppError::Domain(
+            "A remessa do encarregado não pode ser anterior à instauração.".to_string(),
+        ));
+    }
+    if request
+        .data_conclusao
+        .is_some_and(|data| data < data_instauracao)
+    {
+        return Err(AppError::Domain(
+            "A conclusão não pode ser anterior à instauração.".to_string(),
+        ));
+    }
+    if conclusao_atual.is_some() && request.data_conclusao.is_none() {
+        return Err(AppError::Domain(
+            "Para remover a conclusão, use a ação Reabrir processo.".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        "UPDATE processos_procedimentos
+            SET data_remessa_encarregado = $2, data_conclusao = $3, updated_at = now()
+          WHERE id = $1::uuid AND ativo",
+    )
+    .bind(&request.processo_id)
+    .bind(request.data_remessa_encarregado)
+    .bind(request.data_conclusao)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Atualiza o resultado de um único envolvido sem regravar os demais dados do
+/// processo. Os atributos dos catálogos, e não seus nomes, controlam punição e
+/// quantidade de dias.
+pub async fn update_involved_outcome(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateInvolvedOutcomeRequest,
+) -> Result<(), AppError> {
+    let permite_punicao: bool = sqlx::query_scalar(
+        "SELECT a.permite_punicao
+           FROM processo_envolvidos e
+           JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+           JOIN apuratorios a ON a.id = p.apuratorio_id
+          WHERE e.id = $1::uuid AND e.processo_id = $2::uuid
+          FOR UPDATE OF e",
+    )
+    .bind(&request.envolvido_id)
+    .bind(&request.processo_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("envolvido nao encontrado neste processo".to_string()))?;
+
+    if request.penalidade_tipo_id.is_some() {
+        if !permite_punicao {
+            return Err(AppError::Domain(
+                "este apuratório não permite registrar penalidade".to_string(),
+            ));
+        }
+        let permite_penalidade: bool = match request.solucao_decidida_id.as_deref() {
+            Some(id) => sqlx::query_scalar(
+                "SELECT permite_penalidade FROM tipos_solucao_decidida WHERE id = $1::uuid",
+            )
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .unwrap_or(false),
+            None => false,
+        };
+        if !permite_penalidade {
+            return Err(AppError::Domain(
+                "a solução decidida selecionada não permite penalidade".to_string(),
+            ));
+        }
+    }
+
+    if let Some(penalidade_id) = request.penalidade_tipo_id.as_deref() {
+        let usa_dias: bool = sqlx::query_scalar(
+            "SELECT usa_quantidade_dias FROM tipos_penalidade WHERE id = $1::uuid",
+        )
+        .bind(penalidade_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("tipo de penalidade não encontrado".to_string()))?;
+        if request.penalidade_dias.is_some() && !usa_dias {
+            return Err(AppError::Domain(
+                "este tipo de penalidade não usa quantidade de dias".to_string(),
+            ));
+        }
+    } else if request.penalidade_dias.is_some() {
+        return Err(AppError::Domain(
+            "selecione a penalidade antes de informar a quantidade de dias".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        "UPDATE processo_envolvidos
+            SET solucao_sugerida_id = $3::uuid, solucao_decidida_id = $4::uuid,
+                penalidade_tipo_id = $5::uuid, penalidade_dias = $6, updated_at = now()
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(&request.envolvido_id)
+    .bind(&request.processo_id)
+    .bind(request.solucao_sugerida_id.as_deref())
+    .bind(request.solucao_decidida_id.as_deref())
+    .bind(request.penalidade_tipo_id.as_deref())
+    .bind(request.penalidade_dias)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 pub async fn soft_delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {

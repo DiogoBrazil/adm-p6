@@ -746,6 +746,19 @@ export interface EnvolvidoRequest {
   status_envolvido_id: string;
   ordem: number;
   e_condutor?: boolean;
+}
+
+/** Datas de encerramento informadas somente depois que o processo existe. */
+export interface UpdateProceedingClosureRequest {
+  processo_id: string;
+  data_remessa_encarregado?: string | null;
+  data_conclusao?: string | null;
+}
+
+/** Resultado individual informado na página de detalhes do processo. */
+export interface UpdateInvolvedOutcomeRequest {
+  processo_id: string;
+  envolvido_id: string;
   solucao_sugerida_id?: string | null;
   solucao_decidida_id?: string | null;
   penalidade_tipo_id?: string | null;
@@ -814,10 +827,8 @@ export interface SaveProceedingRequest {
   natureza_fato_id?: string | null;
   data_instauracao: string;
   data_recebimento?: string | null;
-  data_remessa_encarregado?: string | null;
   data_remessa_comissao?: string | null;
   data_julgamento?: string | null;
-  data_conclusao?: string | null;
   resumo_fatos?: string | null;
   envolvidos?: EnvolvidoRequest[];
   designacoes?: DesignacaoRequest[];

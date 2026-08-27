@@ -12,95 +12,28 @@ import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/estatisticas/processos";
 
-/**
- * Painel de contagem com barra proporcional.
- *
- * A barra é largura relativa ao maior valor do próprio painel — comparar entre
- * painéis não faria sentido, porque as unidades são diferentes (processos por
- * apuratório × processos por ano).
- */
+/** Painel de contagem no mesmo padrão centralizado das demais tabelas. */
 export function painelContagem(
   titulo: string,
   itens: ContagemRotulada[],
   rotuloColuna = "Item",
-  opcoes: {
-    mostrarBarra?: boolean;
-    listagem?: boolean;
-    centralizar?: boolean;
-  } = {},
+  opcoes: { listagem?: boolean } = {},
 ): string {
   if (!itens.length) {
     return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>
       <p class="empty">Nada registrado neste escopo.</p></section>`;
   }
-  const mostrarBarra = opcoes.mostrarBarra ?? true;
-  const alinhamento = opcoes.centralizar ? "centro" as const : undefined;
-  const maior = Math.max(...itens.map((i) => i.total), 1);
-  const linhas = itens.map((i) =>
-    mostrarBarra
-      ? [
-          i.rotulo,
-          { texto: String(i.total), numerica: true },
-          { texto: "", classe: "barra" },
-        ]
-      : [i.rotulo, { texto: String(i.total), numerica: true }],
-  );
+  const linhas = itens.map((i) => [i.rotulo, { texto: String(i.total), numerica: true }]);
   const html = tabela(
-    mostrarBarra
-      ? [
-          { rotulo: rotuloColuna, largura: 46, truncar: true, alinhamento },
-          {
-            rotulo: "Quantidade",
-            largura: 14,
-            alinhamento: opcoes.centralizar ? "centro" : "direita",
-            nowrap: true,
-          },
-          { rotulo: "", largura: 40 },
-        ]
-      : [
-          { rotulo: rotuloColuna, largura: 65, truncar: true, alinhamento },
-          { rotulo: "Quantidade", largura: 35, alinhamento: "centro", nowrap: true },
-        ],
+    [
+      { rotulo: rotuloColuna, largura: 65, truncar: true, alinhamento: "centro" },
+      { rotulo: "Quantidade", largura: 35, alinhamento: "centro", nowrap: true },
+    ],
     linhas,
     "Nada registrado neste escopo.",
     { listagem: opcoes.listagem ?? false },
   );
-  // A barra entra depois, porque `tabela()` escapa todo conteúdo — e aqui o
-  // conteúdo é marcação, não dado.
-  //
-  // A largura vai num `data-largura`, e não num `style=""`: com a CSP ligada o
-  // atributo `style` no markup é recusado, enquanto atribuir pela CSSOM não é.
-  // Quem aplica é `aplicarBarras()`, chamada por `shell()` depois de cada
-  // render — ver o cabeçalho dela.
-  if (!mostrarBarra) {
-    return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
-  }
-
-  let indice = -1;
-  const comBarras = html.replace(/<td class="barra"><\/td>/g, () => {
-    indice += 1;
-    const largura = Math.round(((itens[indice]?.total ?? 0) / maior) * 100);
-    return `<td class="barra" data-largura="${largura}"><span></span></td>`;
-  });
-  return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${comBarras}</section>`;
-}
-
-/**
- * Aplica a largura das barras proporcionais depois que o HTML entrou no DOM.
- *
- * Existe por causa da CSP: `style-src 'self'` recusa o atributo `style` escrito
- * no markup, mas não governa a CSSOM — `elemento.style.width = …` passa. Como
- * a barra é a única largura calculada do sistema, isolar isso aqui deixou
- * `style-src` fechado sem `'unsafe-inline'` em produção.
- *
- * Chamada por `shell()`, que é o único ponto que escreve em `#app`; assim
- * nenhuma tela nova precisa lembrar de chamá-la.
- */
-export function aplicarBarras(raiz: ParentNode = document): void {
-  raiz.querySelectorAll<HTMLElement>("td.barra[data-largura]").forEach((celula) => {
-    const barra = celula.querySelector<HTMLElement>("span");
-    if (barra) barra.style.width = `${celula.dataset.largura ?? 0}%`;
-  });
+  return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
 }
 
 export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<void> {

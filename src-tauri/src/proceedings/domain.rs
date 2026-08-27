@@ -164,10 +164,6 @@ pub struct EnvolvidoRequest {
     pub ordem: i32,
     #[serde(default)]
     pub e_condutor: bool,
-    pub solucao_sugerida_id: Option<String>,
-    pub solucao_decidida_id: Option<String>,
-    pub penalidade_tipo_id: Option<String>,
-    pub penalidade_dias: Option<i32>,
 }
 
 /// Uma designação **inicial**, lançada no cadastro do processo.
@@ -313,10 +309,8 @@ pub struct SaveProceedingRequest {
     pub natureza_fato_id: Option<String>,
     pub data_instauracao: NaiveDate,
     pub data_recebimento: Option<NaiveDate>,
-    pub data_remessa_encarregado: Option<NaiveDate>,
     pub data_remessa_comissao: Option<NaiveDate>,
     pub data_julgamento: Option<NaiveDate>,
-    pub data_conclusao: Option<NaiveDate>,
     pub resumo_fatos: Option<String>,
     #[serde(default)]
     pub envolvidos: Vec<EnvolvidoRequest>,
@@ -328,10 +322,9 @@ pub struct SaveProceedingRequest {
 }
 
 impl SaveProceedingRequest {
-    /// Validações que não dependem do banco. As que dependem de configuração
-    /// (natureza obrigatória, condutor exigido, solução que permite penalidade,
-    /// penalidade que usa dias) ficam no repositório, que lê os atributos
-    /// semânticos dos catálogos.
+    /// Validações que não dependem do banco. As que dependem da configuração
+    /// do apuratório (natureza obrigatória, condutor e papéis) ficam no
+    /// repositório, que lê os atributos semânticos dos catálogos.
     pub fn validate(&self) -> Result<(), String> {
         let hoje = Utc::now().date_naive();
         if self.numero_documento.trim().is_empty() {
@@ -340,17 +333,8 @@ impl SaveProceedingRequest {
         if self.data_instauracao > hoje {
             return Err("A data de instauração não pode ser futura.".to_string());
         }
-        if self.data_conclusao.is_some_and(|d| d > hoje) {
-            return Err("A data de conclusão não pode ser futura.".to_string());
-        }
         if self.data_recebimento.is_some_and(|d| d > hoje) {
             return Err("A data de recebimento não pode ser futura.".to_string());
-        }
-        if self
-            .data_conclusao
-            .is_some_and(|d| d < self.data_instauracao)
-        {
-            return Err("A data de conclusão não pode ser anterior à instauração.".to_string());
         }
 
         let mut ordens: Vec<i32> = self.envolvidos.iter().map(|e| e.ordem).collect();
@@ -383,6 +367,51 @@ impl SaveProceedingRequest {
                         .to_string(),
                 );
             }
+        }
+        Ok(())
+    }
+}
+
+/// Datas que representam o encerramento da apuração e, por isso, só podem ser
+/// registradas depois que o processo já existe.
+#[derive(Debug, Deserialize)]
+pub struct UpdateProceedingClosureRequest {
+    pub processo_id: String,
+    pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_conclusao: Option<NaiveDate>,
+}
+
+impl UpdateProceedingClosureRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        let hoje = Utc::now().date_naive();
+        if self.data_remessa_encarregado.is_some_and(|d| d > hoje) {
+            return Err("A data de remessa do encarregado não pode ser futura.".to_string());
+        }
+        if self.data_conclusao.is_some_and(|d| d > hoje) {
+            return Err("A data de conclusão não pode ser futura.".to_string());
+        }
+        Ok(())
+    }
+}
+
+/// Resultado individual da apuração. Soluções e penalidade pertencem ao
+/// envolvido, nunca ao processo como um todo.
+#[derive(Debug, Deserialize)]
+pub struct UpdateInvolvedOutcomeRequest {
+    pub processo_id: String,
+    pub envolvido_id: String,
+    pub solucao_sugerida_id: Option<String>,
+    pub solucao_decidida_id: Option<String>,
+    pub penalidade_tipo_id: Option<String>,
+    pub penalidade_dias: Option<i32>,
+}
+
+impl UpdateInvolvedOutcomeRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.penalidade_dias.is_some_and(|dias| dias <= 0) {
+            return Err(
+                "A quantidade de dias da penalidade precisa ser maior que zero.".to_string(),
+            );
         }
         Ok(())
     }
