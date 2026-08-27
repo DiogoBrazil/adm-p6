@@ -32,3 +32,22 @@ impl AddMovementRequest {
         Ok(())
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateMovementRequest {
+    pub processo_id: String,
+    pub andamento_id: String,
+    pub descricao: String,
+    /// A classificação pode ser corrigida ou removida; a data e o autor são
+    /// fatos do registro original e permanecem intactos.
+    pub tipo_andamento_id: Option<String>,
+}
+
+impl UpdateMovementRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.descricao.trim().is_empty() {
+            return Err("Descreva o andamento antes de salvar.".to_string());
+        }
+        Ok(())
+    }
+}

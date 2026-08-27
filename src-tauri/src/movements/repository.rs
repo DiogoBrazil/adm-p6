@@ -1,6 +1,6 @@
 use sqlx::{PgPool, Postgres, Transaction};
 
-use crate::movements::domain::{AddMovementRequest, MovementItem};
+use crate::movements::domain::{AddMovementRequest, MovementItem, UpdateMovementRequest};
 
 /// Andamentos ativos de um processo, do mais recente para o mais antigo.
 /// Sem filtro de `ativo` nos catálogos: um tipo de andamento desativado hoje
@@ -45,6 +45,29 @@ pub async fn add(
     .bind(autor_id)
     .fetch_one(&mut **tx)
     .await
+}
+
+/// Corrige somente os dados que o operador informou ao registrar: tipo e
+/// descrição. Autor e momento permanecem como fatos do lançamento original.
+pub async fn update(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateMovementRequest,
+) -> Result<u64, sqlx::Error> {
+    Ok(sqlx::query(
+        "UPDATE processo_andamentos
+            SET tipo_andamento_id = $3::uuid,
+                descricao = $4
+          WHERE id = $1::uuid
+            AND processo_id = $2::uuid
+            AND cancelado_em IS NULL",
+    )
+    .bind(&request.andamento_id)
+    .bind(&request.processo_id)
+    .bind(request.tipo_andamento_id.as_deref())
+    .bind(request.descricao.trim())
+    .execute(&mut **tx)
+    .await?
+    .rows_affected())
 }
 
 /// Andamento é fato datado: em vez de um booleano genérico, registra-se QUANDO

@@ -82,6 +82,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             deadlines::commands::deadlines_delete_extension,
             movements::commands::movements_list,
             movements::commands::movements_add,
+            movements::commands::movements_update,
             movements::commands::movements_remove,
             evidence::commands::evidence_load_for_pm,
             evidence::commands::evidence_save_for_pm,

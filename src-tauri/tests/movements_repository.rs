@@ -6,7 +6,7 @@
 //! quebra. A segunda é o cancelamento: andamento é fato datado, então em vez de
 //! um booleano genérico registra-se QUANDO foi cancelado.
 
-use adm_p6_tauri_lib::movements::domain::AddMovementRequest;
+use adm_p6_tauri_lib::movements::domain::{AddMovementRequest, UpdateMovementRequest};
 use adm_p6_tauri_lib::movements::repository;
 use chrono::{DateTime, TimeZone, Utc};
 use sqlx::PgPool;
@@ -123,6 +123,106 @@ async fn lista_do_mais_recente_para_o_mais_antigo() {
     .await;
 }
 
+/// Editar corrige somente o que o operador digitou. O momento e o autor
+/// identificam o lançamento original e não podem ser reescritos pela correção.
+#[tokio::test]
+async fn edicao_corrige_tipo_e_descricao_sem_reescrever_autor_e_data() {
+    util::com_banco_descartavel("mov_edita", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo_de_teste(&pool, &m).await;
+        let autor = conta_admin(&pool).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        let id = repository::add(
+            &mut tx,
+            &pedido(&p, "Texto original.", Some(&m.tipo_andamento)),
+            &autor,
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let original = repository::list(&pool, &p).await.unwrap().remove(0);
+        let ocorrido_em = original.ocorrido_em;
+        let registrado_por_id = original.registrado_por_id;
+
+        let mut tx = pool.begin().await.unwrap();
+        assert_eq!(
+            repository::update(
+                &mut tx,
+                &UpdateMovementRequest {
+                    processo_id: p.clone(),
+                    andamento_id: id,
+                    descricao: "  Texto corrigido.  ".to_string(),
+                    tipo_andamento_id: None,
+                },
+            )
+            .await
+            .unwrap(),
+            1
+        );
+        tx.commit().await.unwrap();
+
+        let corrigido = repository::list(&pool, &p).await.unwrap().remove(0);
+        assert_eq!(corrigido.descricao, "Texto corrigido.");
+        assert!(
+            corrigido.tipo_andamento_id.is_none(),
+            "o tipo pode ser removido"
+        );
+        assert_eq!(corrigido.ocorrido_em, ocorrido_em);
+        assert_eq!(corrigido.registrado_por_id, registrado_por_id);
+    })
+    .await;
+}
+
+/// O par processo/andamento precisa casar, e um andamento cancelado deixa de
+/// ser editável pelo mesmo critério que o retira da listagem da tela.
+#[tokio::test]
+async fn edicao_exige_processo_correto_e_andamento_ativo() {
+    util::com_banco_descartavel("mov_edita_escopo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p1 = processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 5), None).await;
+        let p2 = processo(&pool, &m, &m.apuratorio, "002", data(2026, 2, 5), None).await;
+        let autor = conta_admin(&pool).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        let id = repository::add(&mut tx, &pedido(&p1, "Original.", None), &autor)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let pedido_edicao = |processo_id: &str| UpdateMovementRequest {
+            processo_id: processo_id.to_string(),
+            andamento_id: id.clone(),
+            descricao: "Corrigido.".to_string(),
+            tipo_andamento_id: None,
+        };
+
+        let mut tx = pool.begin().await.unwrap();
+        assert_eq!(
+            repository::update(&mut tx, &pedido_edicao(&p2))
+                .await
+                .unwrap(),
+            0
+        );
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::cancel(&mut tx, &p1, &id).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        assert_eq!(
+            repository::update(&mut tx, &pedido_edicao(&p1))
+                .await
+                .unwrap(),
+            0
+        );
+        tx.rollback().await.unwrap();
+    })
+    .await;
+}
+
 /// Cancelar não apaga: grava `cancelado_em`. O andamento sai da lista, mas o
 /// fato de ter existido permanece no banco.
 #[tokio::test]
@@ -231,4 +331,12 @@ async fn tipo_desativado_continua_legivel_no_andamento_antigo() {
 async fn descricao_em_branco_e_recusada() {
     assert!(pedido("", "   ", None).validate().is_err());
     assert!(pedido("", "Texto.", None).validate().is_ok());
+
+    let edicao = UpdateMovementRequest {
+        processo_id: String::new(),
+        andamento_id: String::new(),
+        descricao: "   ".to_string(),
+        tipo_andamento_id: None,
+    };
+    assert!(edicao.validate().unwrap_err().contains("andamento"));
 }

@@ -1225,7 +1225,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                     <td>${escapeHtml(p.data_inicio)}</td>
                     <td>${p.dias}</td>
                     <td>${escapeHtml(p.data_vencimento)}</td>
-                    <td>${escapeHtml(p.motivo ?? "")}</td>
+                    <td>${escapeHtml(p.ordem === 0 ? "Prazo inicial" : (p.motivo ?? ""))}</td>
                     ${
                       podeEscrever
                         ? `<td class="row-actions">${
@@ -1286,10 +1286,16 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                   <td class="col-descricao">${escapeHtml(a.descricao)}</td>
                   ${
                     podeEscrever
-                      ? `<td class="row-actions">${botaoIcone("excluir", "Remover", {
-                          classe: "danger",
-                          dados: { "remover-andamento": a.id },
-                        })}</td>`
+                      ? `<td class="row-actions">
+                          ${botaoIcone("editar", "Editar", {
+                            classe: "secondary",
+                            dados: { "editar-andamento": a.id },
+                          })}
+                          ${botaoIcone("excluir", "Remover", {
+                            classe: "danger",
+                            dados: { "remover-andamento": a.id },
+                          })}
+                        </td>`
                       : ""
                   }
                 </tr>`,
@@ -1305,7 +1311,8 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                  ${tiposAndamento.map((t) => option(t.id, t.rotulo, false)).join("")}
                </select></label>
                <label>Descrição<input name="descricao" required /></label>
-               <button type="submit">Registrar</button>
+               <button type="submit" id="salvar-andamento">Registrar</button>
+               <button type="button" class="secondary" id="cancelar-edicao-andamento" hidden>Cancelar</button>
              </form>`
           : ""
       }
@@ -1313,7 +1320,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       <h2>Anexos</h2>
       ${
         d.anexos.length
-          ? `<div class="table-wrap"><table class="tabela-dados">
+          ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--anexos">
               <thead><tr><th>Arquivo</th><th>Tamanho</th><th>Enviado por</th><th>Ações</th></tr></thead>
               <tbody>${d.anexos
                 .map(
@@ -1635,16 +1642,79 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     reportar(r.ok, r.error);
   });
 
-  document.querySelector<HTMLFormElement>("#form-andamento")?.addEventListener("submit", async (e) => {
+  const formAndamento = document.querySelector<HTMLFormElement>("#form-andamento");
+  const botaoSalvarAndamento = document.querySelector<HTMLButtonElement>("#salvar-andamento");
+  const botaoCancelarEdicaoAndamento =
+    document.querySelector<HTMLButtonElement>("#cancelar-edicao-andamento");
+  const andamentosPorId = new Map(andamentos.map((andamento) => [andamento.id, andamento]));
+  let andamentoEmEdicao: string | null = null;
+
+  const limparTipoHistorico = () => {
+    formAndamento
+      ?.querySelectorAll<HTMLOptionElement>("option[data-tipo-historico]")
+      .forEach((opcao) => opcao.remove());
+  };
+
+  const encerrarEdicaoAndamento = () => {
+    andamentoEmEdicao = null;
+    formAndamento?.reset();
+    limparTipoHistorico();
+    if (botaoSalvarAndamento) botaoSalvarAndamento.textContent = "Registrar";
+    if (botaoCancelarEdicaoAndamento) botaoCancelarEdicaoAndamento.hidden = true;
+  };
+
+  document.querySelectorAll<HTMLButtonElement>("[data-editar-andamento]").forEach((botao) =>
+    botao.addEventListener("click", () => {
+      const andamento = andamentosPorId.get(botao.dataset.editarAndamento!);
+      if (!andamento || !formAndamento) return;
+      andamentoEmEdicao = andamento.id;
+      const tipo = formAndamento.querySelector<HTMLSelectElement>('[name="tipo_andamento_id"]');
+      const descricao = formAndamento.querySelector<HTMLInputElement>('[name="descricao"]');
+      limparTipoHistorico();
+      if (tipo && andamento.tipo_andamento_id) {
+        // Uma opção desativada não pode voltar ao formulário de cadastro, mas
+        // precisa aparecer ao corrigir o registro histórico que já a usa.
+        const existe = Array.from(tipo.options).some(
+          (opcao) => opcao.value === andamento.tipo_andamento_id,
+        );
+        if (!existe) {
+          const historica = document.createElement("option");
+          historica.value = andamento.tipo_andamento_id;
+          historica.textContent = `${andamento.tipo_andamento ?? "Tipo de andamento"} (desativado)`;
+          historica.dataset.tipoHistorico = "true";
+          tipo.append(historica);
+        }
+      }
+      if (tipo) tipo.value = andamento.tipo_andamento_id ?? "";
+      if (descricao) descricao.value = andamento.descricao;
+      if (botaoSalvarAndamento) botaoSalvarAndamento.textContent = "Salvar alteração";
+      if (botaoCancelarEdicaoAndamento) botaoCancelarEdicaoAndamento.hidden = false;
+      formAndamento.scrollIntoView({ block: "nearest" });
+      descricao?.focus();
+    }),
+  );
+
+  botaoCancelarEdicaoAndamento?.addEventListener("click", encerrarEdicaoAndamento);
+
+  formAndamento?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
-    const r = await call("movements_add", {
-      request: {
-        processo_id: id,
-        descricao: String(form.get("descricao") ?? ""),
-        tipo_andamento_id: String(form.get("tipo_andamento_id") ?? "") || null,
-      },
-    });
+    const dados = {
+      processo_id: id,
+      descricao: String(form.get("descricao") ?? ""),
+      tipo_andamento_id: String(form.get("tipo_andamento_id") ?? "") || null,
+    };
+    const r = andamentoEmEdicao
+      ? await call("movements_update", {
+          request: { ...dados, andamento_id: andamentoEmEdicao },
+        })
+      : await call("movements_add", { request: dados });
+    if (r.ok) {
+      notificar(
+        andamentoEmEdicao ? "Andamento atualizado." : "Andamento registrado.",
+        "sucesso",
+      );
+    }
     reportar(r.ok, r.error);
   });
 

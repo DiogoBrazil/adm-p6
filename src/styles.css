@@ -857,7 +857,7 @@ tr.inativo td:first-child {
 .ficha th {
   color: #64748b;
   font-weight: 500;
-  padding: 6px 12px 6px 0;
+  padding: 6px 12px;
   text-align: left;
   vertical-align: top;
   white-space: nowrap;
@@ -865,7 +865,7 @@ tr.inativo td:first-child {
 }
 
 .ficha td {
-  padding: 6px 0;
+  padding: 6px 12px;
 }
 
 tr.vigente {
@@ -2072,6 +2072,10 @@ tr.atrasado {
 
 .tabela-detalhe-processo--andamentos .col-descricao {
   min-width: 260px;
+}
+
+.tabela-detalhe-processo--anexos {
+  min-width: 680px !important;
 }
 
 /* Modificadores que `Coluna` emite. Valem no `th` e no `td` da mesma coluna,

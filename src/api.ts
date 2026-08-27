@@ -33,6 +33,7 @@ import type {
   AddExtensionRequest,
   UpdateExtensionRequest,
   AddMovementRequest,
+  UpdateMovementRequest,
   AnexoItem,
   ApuratorioConfig,
   AttachmentContent,
@@ -192,6 +193,7 @@ export interface Commands {
   // ── Andamentos ────────────────────────────────────────────────────
   movements_list: { args: { processoId: string }; result: MovementItem[] };
   movements_add: { args: { request: AddMovementRequest }; result: string };
+  movements_update: { args: { request: UpdateMovementRequest }; result: boolean };
   movements_remove: { args: { processoId: string, andamentoId: string }; result: boolean };
 
   // ── Indícios e enquadramento ──────────────────────────────────────

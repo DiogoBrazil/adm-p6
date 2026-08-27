@@ -591,6 +591,15 @@ export interface AddMovementRequest {
   ocorrido_em?: string | null;
 }
 
+/** `movements` */
+export interface UpdateMovementRequest {
+  processo_id: string;
+  andamento_id: string;
+  descricao: string;
+  /** A edição corrige ou remove a classificação sem alterar autor e data. */
+  tipo_andamento_id?: string | null;
+}
+
 /** `proceedings` */
 export interface MilitarQualificado {
   posto_graduacao: string;

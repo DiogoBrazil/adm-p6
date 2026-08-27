@@ -388,6 +388,93 @@ fn editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria() {
     });
 }
 
+/// A edição de andamento atravessa o mesmo contrato usado pela tela e deixa a
+/// trilha de auditoria, sem trocar o autor nem o momento do lançamento.
+#[test]
+fn editar_andamento_passa_pelo_ipc_e_preserva_os_fatos_originais() {
+    com_app_e_banco("ipc_andamento_edicao", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        let (processo_id, andamento_id) = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            let processo_id: String = sqlx::query_scalar(
+                "INSERT INTO processos_procedimentos
+                     (apuratorio_id, documento_iniciador_id, numero_documento,
+                      unidade_origem_id, municipio_fato_id, natureza_fato_id,
+                      data_instauracao)
+                 VALUES ((SELECT id FROM apuratorios ORDER BY id LIMIT 1),
+                         (SELECT tipo_documento_id FROM apuratorio_documentos_iniciadores ORDER BY tipo_documento_id LIMIT 1),
+                         'IPC-ANDAMENTO-001',
+                         (SELECT id FROM unidades_pm ORDER BY id LIMIT 1),
+                         (SELECT id FROM municipios_distritos ORDER BY id LIMIT 1),
+                         (SELECT id FROM naturezas_fato ORDER BY id LIMIT 1),
+                         '2026-03-01')
+              RETURNING id::text",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let andamento_id: String = sqlx::query_scalar(
+                "INSERT INTO processo_andamentos
+                     (processo_id, tipo_andamento_id, descricao, ocorrido_em, registrado_por_id)
+                 VALUES ($1::uuid,
+                         (SELECT id FROM tipos_andamento ORDER BY id LIMIT 1),
+                         'Texto original.', '2026-03-04T12:00:00Z', $2::uuid)
+              RETURNING id::text",
+            )
+            .bind(&processo_id)
+            .bind(&conta)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            (processo_id, andamento_id)
+        });
+
+        assert_eq!(
+            ok(&invocar(
+                &webview,
+                "movements_update",
+                json!({ "request": {
+                    "processo_id": processo_id,
+                    "andamento_id": andamento_id,
+                    "descricao": "Texto corrigido.",
+                    "tipo_andamento_id": null
+                } }),
+            )),
+            &json!(true)
+        );
+
+        let itens = ok(&invocar(
+            &webview,
+            "movements_list",
+            json!({ "processoId": processo_id }),
+        ))
+        .as_array()
+        .unwrap()
+        .clone();
+        assert_eq!(itens.len(), 1);
+        assert_eq!(itens[0]["descricao"], json!("Texto corrigido."));
+        assert!(itens[0]["tipo_andamento_id"].is_null());
+        assert_eq!(itens[0]["registrado_por_id"], json!(conta));
+        assert_eq!(itens[0]["ocorrido_em"], json!("2026-03-04T12:00:00Z"));
+
+        let operacao: String = tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            sqlx::query_scalar(
+                "SELECT operacao FROM auditoria
+                  WHERE entidade = 'processo_andamentos' AND registro_id = $1",
+            )
+            .bind(&andamento_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        });
+        assert_eq!(operacao, "UPDATE");
+    });
+}
+
 /// O ciclo inteiro da substituição pelo IPC: criar, corrigir, desfazer — e a
 /// trilha de auditoria das DUAS designações que cada operação mexe.
 ///
