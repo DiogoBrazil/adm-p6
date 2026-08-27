@@ -389,7 +389,7 @@ fn editar_e_excluir_prorrogacao_passam_pelo_ipc_e_auditoria() {
 }
 
 #[test]
-fn encerramento_e_resultado_passam_pelo_ipc_e_auditoria() {
+fn datas_pos_cadastro_e_resultado_passam_pelo_ipc_e_auditoria() {
     com_app_e_banco("ipc_resultado", |app, webview, conta| {
         autenticar(&app, &conta, true);
         let (processo_id, envolvido_id, sugerida, decidida, penalidade) =
@@ -397,7 +397,9 @@ fn encerramento_e_resultado_passam_pelo_ipc_e_auditoria() {
                 let estado: tauri::State<'_, AppState> = app.state();
                 let pool = estado.pool().await.unwrap();
                 sqlx::query(
-                    "UPDATE apuratorios SET permite_punicao = true
+                    "UPDATE apuratorios
+                        SET permite_punicao = true, permite_remessa_comissao = true,
+                            permite_julgamento = true
                       WHERE id = (SELECT id FROM apuratorios ORDER BY id LIMIT 1)",
                 )
                 .execute(&pool)
@@ -460,11 +462,13 @@ fn encerramento_e_resultado_passam_pelo_ipc_e_auditoria() {
         assert_eq!(
             ok(&invocar(
                 &webview,
-                "proceedings_update_closure",
+                "proceedings_update_dates",
                 json!({ "request": {
                     "processo_id": processo_id,
-                    "data_remessa_encarregado": "2026-02-01",
-                    "data_conclusao": "2026-02-02"
+                    "data_remessa_encarregado": null,
+                    "data_remessa_comissao": "2026-02-02",
+                    "data_julgamento": "2026-02-03",
+                    "data_conclusao": "2026-02-04"
                 } }),
             )),
             &json!(true)

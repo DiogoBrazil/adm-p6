@@ -2545,6 +2545,40 @@ scroll do `.table-wrap`, e o `<body>` não rola na horizontal em 720px nem em 14
 
 ---
 
+### 8.16 ~~Datas de comissão e julgamento depois do cadastro~~ — **CONCLUÍDA**
+
+Remessa à comissão e Julgamento saíram do cadastro geral pelo mesmo motivo que já havia
+tirado Remessa do encarregado e Conclusão: são fatos posteriores à instauração. Agora o
+formulário de processo cuida apenas de Instauração e Recebimento; as quatro datas do fluxo
+ficam juntas na página de detalhes.
+
+O contrato também separa as responsabilidades. `SaveProceedingRequest` não carrega mais
+`data_remessa_comissao` nem `data_julgamento`, portanto editar número, local, envolvidos ou
+designações não consegue regravar essas datas. `UpdateProceedingDatesRequest`, chamado por
+`proceedings_update_dates`, recebe as quatro datas pós-cadastro numa operação auditada.
+
+| Campo no detalhe | Quando aparece |
+|---|---|
+| Remessa do encarregado | apuratórios sem comissão |
+| Remessa à comissão | `permite_remessa_comissao` — hoje CD, CJ e PAD; substitui a remessa do encarregado |
+| Julgamento | `permite_julgamento` — hoje CD, CJ, PAD, PADS e PADE |
+| Conclusão | todos os apuratórios, como antes |
+
+Os dois campos condicionais continuam dirigidos pelos atributos do apuratório, nunca por
+sigla no código. Se a configuração for desligada depois de existir uma data, o campo
+permanece visível e corrigível: configuração futura não reescreve fato passado. Remessas e
+julgamento podem ser limpos; conclusão só sai pela ação explícita **Reabrir**. Todas as
+datas recusam futuro e valor anterior à instauração tanto na tela quanto no backend.
+
+**A unificação das duas remessas.** Em CD, CJ e PAD, “Remessa do encarregado” e
+“Remessa à comissão” são o mesmo fato. O legado só possuía a primeira coluna, então a
+importação original deixou a coluna específica vazia. A `0010` transfere o valor para
+`data_remessa_comissao` e limpa `data_remessa_encarregado` nos apuratórios cujo atributo
+`permite_remessa_comissao` está ligado. A etapa 04 da importação faz a mesma escolha para
+restaurações futuras. Tela e backend recusam manter as duas fontes nesses ritos.
+
+---
+
 ## 9. Pontos a reavaliar (registrados, não bloqueantes)
 
 **Solução decidida: por envolvido ou por processo? — RESOLVIDO, e a importação mediu.**

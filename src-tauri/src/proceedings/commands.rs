@@ -7,7 +7,7 @@ use crate::error::AppError;
 use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, DashboardSummary, ProceedingDetail,
     ProceedingFilter, ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UpdateInvolvedOutcomeRequest, UpdateProceedingClosureRequest, UploadAttachmentRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
 };
 use crate::proceedings::repository;
 use crate::response::{from_result, ApiResponse};
@@ -131,9 +131,9 @@ pub async fn proceedings_reopen(
 }
 
 #[tauri::command]
-pub async fn proceedings_update_closure(
+pub async fn proceedings_update_dates(
     state: State<'_, AppState>,
-    request: UpdateProceedingClosureRequest,
+    request: UpdateProceedingDatesRequest,
 ) -> Result<ApiResponse<bool>, String> {
     Ok(from_result(
         async {
@@ -141,7 +141,7 @@ pub async fn proceedings_update_closure(
             request.validate().map_err(AppError::Domain)?;
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
-            repository::update_closure(&mut tx, &request).await?;
+            repository::update_dates(&mut tx, &request).await?;
             audit_repository::register_tx(
                 &mut tx,
                 "processos_procedimentos",

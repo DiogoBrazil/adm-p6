@@ -2382,6 +2382,14 @@ tr.atrasado {
   min-width: 62px;
 }
 
+/* As datas posteriores usam o mesmo controle do cadastro, dentro do formulário
+   contextual do detalhe. Cada campo conserva largura suficiente para data e
+   botão Limpar, mas continua quebrando de linha com a janela. */
+.linha-form--datas > .campo-data-posterior {
+  flex: 1 1 230px;
+  min-width: 230px;
+}
+
 .campo-efeito,
 .secao-ajuda,
 .hint {

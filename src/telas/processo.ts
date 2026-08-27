@@ -129,8 +129,6 @@ function rascunhoVazio(): Rascunho {
     natureza_fato_id: null,
     data_instauracao: new Date().toISOString().slice(0, 10),
     data_recebimento: null,
-    data_remessa_comissao: null,
-    data_julgamento: null,
     resumo_fatos: null,
     envolvidos: [],
     designacoes: [],
@@ -155,15 +153,6 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   const dados = new FormData(form);
   const texto = (campo: string) => String(dados.get(campo) ?? "").trim() || null;
 
-  // Campo que a configuração do apuratório pode esconder precisa deste, e não
-  // de `texto`: `FormData.get` devolve `null` tanto para "o usuário apagou"
-  // quanto para "o campo nem foi renderizado". Tratar os dois igual apagaria
-  // fato já registrado só porque a espécie deixou de prever aquele campo — o
-  // princípio 5 diz o contrário: configuração define comportamento futuro, não
-  // reescreve o que já foi gravado. `has()` separa os dois casos.
-  const textoSePresente = (campo: string, atual: string | null | undefined) =>
-    dados.has(campo) ? texto(campo) : (atual ?? null);
-
   rascunho.apuratorio_id = String(dados.get("apuratorio_id") ?? "");
   rascunho.documento_iniciador_id = String(dados.get("documento_iniciador_id") ?? "");
   rascunho.numero_documento = String(dados.get("numero_documento") ?? "").trim();
@@ -175,11 +164,6 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   rascunho.natureza_fato_id = texto("natureza_fato_id");
   rascunho.data_instauracao = String(dados.get("data_instauracao") ?? "");
   rascunho.data_recebimento = texto("data_recebimento");
-  rascunho.data_remessa_comissao = textoSePresente(
-    "data_remessa_comissao",
-    rascunho.data_remessa_comissao,
-  );
-  rascunho.data_julgamento = textoSePresente("data_julgamento", rascunho.data_julgamento);
   rascunho.resumo_fatos = texto("resumo_fatos");
 
   const deprecante = texto("cp_deprecante");
@@ -364,8 +348,6 @@ export async function renderFormularioProcesso(
         natureza_fato_id: d.natureza_fato_id,
         data_instauracao: d.data_instauracao,
         data_recebimento: d.data_recebimento,
-        data_remessa_comissao: d.data_remessa_comissao,
-        data_julgamento: d.data_julgamento,
         resumo_fatos: d.resumo_fatos,
         envolvidos: d.envolvidos.map((e, i) => ({
           policial_militar_id: e.policial_militar_id,
@@ -435,18 +417,6 @@ export async function renderFormularioProcesso(
   const ehCartaPrecatoria = config?.codigo_extensao === EXTENSAO_CARTA_PRECATORIA;
   const maxEnvolvidos = config?.max_envolvidos ?? null;
 
-  // Campo escondido não pode apagar fato já registrado (princípio 5). Se a
-  // configuração mudar depois de o processo existir, o valor gravado continua
-  // aparecendo — com nota dizendo por quê — em vez de sumir da tela e ser
-  // zerado no próximo salvamento. Mesma escolha de `selectMilitares`.
-  const mostrar = (permitido: boolean | undefined, valorGravado: string | null | undefined) =>
-    permitido === true || !!valorGravado;
-
-  const mostraJulgamento = mostrar(config?.permite_julgamento, rascunho.data_julgamento);
-  const mostraRemessaComissao = mostrar(
-    config?.permite_remessa_comissao,
-    rascunho.data_remessa_comissao,
-  );
   const documentos = (config?.documentos ?? []).filter((d) => d.ativo);
   const papeis = (config?.papeis ?? []).filter((p) => p.ativo);
 
@@ -514,26 +484,6 @@ export async function renderFormularioProcesso(
           ${campoData("data_recebimento", "Recebimento", r.data_recebimento, {
             ajuda: "Dispara o prazo inicial: sem ela, nenhum prazo nasce.",
           })}
-          ${
-            mostraRemessaComissao
-              ? campoData("data_remessa_comissao", "Remessa à comissão", r.data_remessa_comissao, {
-                  ajuda:
-                    config?.permite_remessa_comissao === false
-                      ? "Esta espécie não prevê comissão; o campo aparece porque já há data registrada."
-                      : undefined,
-                })
-              : ""
-          }
-          ${
-            mostraJulgamento
-              ? campoData("data_julgamento", "Julgamento", r.data_julgamento, {
-                  ajuda:
-                    config?.permite_julgamento === false
-                      ? "Esta espécie não é julgada; o campo aparece porque já há data registrada."
-                      : undefined,
-                })
-              : ""
-          }
         </fieldset>
 
         <fieldset>
@@ -1017,6 +967,37 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     (r) => r.data,
   );
 
+  // A configuração decide quais fatos novos a espécie aceita. Um valor antigo
+  // continua visível mesmo se o atributo for desligado depois: configuração
+  // futura não pode apagar nem esconder fato já registrado (princípio 5).
+  const mostrarData = (permitido: boolean | undefined, valor: string | null) =>
+    permitido === true || !!valor;
+  const usaRemessaComissao = config?.permite_remessa_comissao === true;
+  const remessaComissao =
+    d.data_remessa_comissao ?? (usaRemessaComissao ? d.data_remessa_encarregado : null);
+  const mostraRemessaComissao = mostrarData(
+    config?.permite_remessa_comissao,
+    remessaComissao,
+  );
+  const mostraJulgamento = mostrarData(config?.permite_julgamento, d.data_julgamento);
+
+  const campoDataPosterior = (
+    nome: string,
+    rotulo: string,
+    valor: string | null,
+    ajuda?: string,
+  ) => `<div class="campo campo-data-posterior">
+          <label for="detalhe-${escapeHtml(nome)}">${escapeHtml(rotulo)}</label>
+          <div class="campo-data-controle">
+            <input id="detalhe-${escapeHtml(nome)}" name="${escapeHtml(nome)}" type="date"
+              min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+              value="${escapeHtml(valor ?? "")}" />
+            <button type="button" class="ghost small campo-data-limpar"
+              data-limpar-data-detalhe="${escapeHtml(nome)}"${valor ? "" : " disabled"}>Limpar</button>
+          </div>
+          ${ajuda ? `<small class="campo-efeito">${escapeHtml(ajuda)}</small>` : ""}
+        </div>`;
+
   const podeEscrever = ctx.podeEscrever();
   const prazoVigente = prazos.find((prazo) => prazo.vigente) ?? null;
   const ultimaProrrogacao = prazos.find((prazo) => prazo.vigente && prazo.ordem > 0) ?? null;
@@ -1050,8 +1031,8 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Natureza do fato", d.natureza_fato)}
         ${linha("Instauração", d.data_instauracao)}
         ${linha("Recebimento", d.data_recebimento)}
-        ${linha("Remessa do encarregado", d.data_remessa_encarregado)}
-        ${linha("Remessa à comissão", d.data_remessa_comissao)}
+        ${usaRemessaComissao ? "" : linha("Remessa do encarregado", d.data_remessa_encarregado)}
+        ${linha("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
         ${linha("Julgamento", d.data_julgamento)}
         ${linha("Conclusão", d.data_conclusao)}
         ${linha("Responsável", d.responsavel_nome ? `${d.responsavel_nome} (${d.responsavel_papel})` : null)}
@@ -1068,13 +1049,41 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
       ${
         podeEscrever
-          ? `<h2>Remessa e conclusão</h2>
-             <form id="form-encerramento" class="linha-form">
-               <label>Remessa do encarregado
-                 <input name="data_remessa_encarregado" type="date"
-                   min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
-                   value="${escapeHtml(d.data_remessa_encarregado ?? "")}" />
-               </label>
+          ? `<h2>Datas posteriores ao cadastro</h2>
+             <form id="form-datas-processo" class="linha-form linha-form--datas">
+               ${
+                 usaRemessaComissao
+                   ? ""
+                   : campoDataPosterior(
+                       "data_remessa_encarregado",
+                       "Remessa do encarregado",
+                       d.data_remessa_encarregado,
+                     )
+               }
+               ${
+                 mostraRemessaComissao
+                   ? campoDataPosterior(
+                       "data_remessa_comissao",
+                       "Remessa da comissão",
+                       remessaComissao,
+                       config?.permite_remessa_comissao === false
+                         ? "O campo permanece disponível porque já há uma data registrada."
+                         : undefined,
+                     )
+                   : ""
+               }
+               ${
+                 mostraJulgamento
+                   ? campoDataPosterior(
+                       "data_julgamento",
+                       "Julgamento",
+                       d.data_julgamento,
+                       config?.permite_julgamento === false
+                         ? "O campo permanece disponível porque já há uma data registrada."
+                         : undefined,
+                     )
+                   : ""
+               }
                <label>Conclusão
                  <input name="data_conclusao" type="date"
                    min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
@@ -1082,7 +1091,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                </label>
                <button type="submit">Salvar datas</button>
              </form>
-             <p class="secao-ajuda">A remessa pode ser corrigida ou removida. Para remover uma conclusão já registrada, use <strong>Reabrir</strong>.</p>`
+             <p class="secao-ajuda">Remessas e julgamento podem ser corrigidos ou removidos. Para remover uma conclusão já registrada, use <strong>Reabrir</strong>.</p>`
           : ""
       }
 
@@ -1388,17 +1397,41 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
   if (!podeEscrever) return;
 
-  const formEncerramento = document.querySelector<HTMLFormElement>("#form-encerramento");
-  formEncerramento?.addEventListener("submit", async (evento) => {
+  const formDatas = document.querySelector<HTMLFormElement>("#form-datas-processo");
+  formDatas?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      const limpar = formDatas.querySelector<HTMLButtonElement>(
+        `[data-limpar-data-detalhe="${input.name}"]`,
+      );
+      if (limpar) limpar.disabled = input.value === "";
+      window.requestAnimationFrame(() => input.blur());
+    });
+  });
+  formDatas?.querySelectorAll<HTMLButtonElement>("[data-limpar-data-detalhe]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      const nome = botao.dataset.limparDataDetalhe;
+      if (!nome || !formDatas) return;
+      const input = formDatas.elements.namedItem(nome);
+      if (!(input instanceof HTMLInputElement)) return;
+      input.value = "";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+  formDatas?.addEventListener("submit", async (evento) => {
     evento.preventDefault();
-    const dados = new FormData(formEncerramento);
-    const remessa = String(dados.get("data_remessa_encarregado") ?? "") || null;
-    const conclusao = String(dados.get("data_conclusao") ?? "") || null;
-    const r = await call("proceedings_update_closure", {
+    const dados = new FormData(formDatas);
+    const data = (nome: string) => String(dados.get(nome) ?? "") || null;
+    const r = await call("proceedings_update_dates", {
       request: {
         processo_id: id,
-        data_remessa_encarregado: remessa,
-        data_conclusao: conclusao,
+        data_remessa_encarregado: usaRemessaComissao
+          ? null
+          : data("data_remessa_encarregado"),
+        data_remessa_comissao: mostraRemessaComissao
+          ? data("data_remessa_comissao")
+          : d.data_remessa_comissao,
+        data_julgamento: mostraJulgamento ? data("data_julgamento") : d.data_julgamento,
+        data_conclusao: data("data_conclusao"),
       },
     });
     if (r.ok) notificar("Datas atualizadas.", "sucesso");

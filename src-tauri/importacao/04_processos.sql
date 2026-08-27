@@ -20,8 +20,9 @@ BEGIN;
 INSERT INTO processos_procedimentos (
     id, apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
     processo_sei, numero_rgf, unidade_origem_id, municipio_fato_id, natureza_fato_id,
-    data_instauracao, data_recebimento, data_remessa_encarregado, data_julgamento,
-    data_conclusao, resumo_fatos, ativo, created_at, updated_at
+    data_instauracao, data_recebimento, data_remessa_encarregado,
+    data_remessa_comissao, data_julgamento, data_conclusao, resumo_fatos,
+    ativo, created_at, updated_at
 )
 SELECT l.id::uuid,
        a.id,
@@ -35,7 +36,10 @@ SELECT l.id::uuid,
        nf.id,
        l.data_instauracao,
        l.data_recebimento,
-       l.data_remessa_encarregado,
+       CASE WHEN a.permite_remessa_comissao THEN NULL
+            ELSE l.data_remessa_encarregado END,
+       CASE WHEN a.permite_remessa_comissao THEN l.data_remessa_encarregado
+            ELSE NULL END,
        l.data_julgamento,
        l.data_conclusao,
        l.resumo_fatos,
@@ -56,7 +60,8 @@ SELECT l.id::uuid,
   LEFT JOIN naturezas_fato nf ON lower(nf.nome) = lower(l.natureza_procedimento)
 ON CONFLICT DO NOTHING;
 
--- `data_remessa_comissao` fica NULL em todos: a coluna não existe no legado.
+-- O legado tinha uma única remessa. Nos ritos de comissão, o mesmo fato entra
+-- na coluna específica; nos demais, permanece como remessa do encarregado.
 
 -- ------------------------------------------- carta_precatoria_detalhes -------
 -- A única espécie com atributos realmente exclusivos. A aplicação descobre que

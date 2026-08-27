@@ -201,6 +201,18 @@ async fn as_oito_etapas_reproduzem_o_legado_sem_perder_nada() {
                 "andamento sem autor",
             ),
             (
+                "SELECT count(*) FROM processos_procedimentos p
+                   JOIN apuratorios a ON a.id = p.apuratorio_id
+                   JOIN legado.processos_procedimentos l ON l.id = p.id::text
+                  WHERE (a.permite_remessa_comissao AND
+                         (p.data_remessa_comissao IS DISTINCT FROM l.data_remessa_encarregado
+                          OR p.data_remessa_encarregado IS NOT NULL))
+                     OR (NOT a.permite_remessa_comissao AND
+                         (p.data_remessa_encarregado IS DISTINCT FROM l.data_remessa_encarregado
+                          OR p.data_remessa_comissao IS NOT NULL))",
+                "remessa gravada na coluna errada para o rito",
+            ),
+            (
                 "SELECT count(*) FROM processo_envolvidos x
                    JOIN legado.processos_procedimentos l ON l.id = x.processo_id::text
                   WHERE x.e_condutor

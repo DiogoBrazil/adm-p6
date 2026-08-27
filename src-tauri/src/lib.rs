@@ -65,7 +65,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             proceedings::commands::proceedings_save,
             proceedings::commands::proceedings_delete,
             proceedings::commands::proceedings_reopen,
-            proceedings::commands::proceedings_update_closure,
+            proceedings::commands::proceedings_update_dates,
             proceedings::commands::proceedings_update_involved_outcome,
             proceedings::commands::proceedings_substitute_designation,
             proceedings::commands::proceedings_update_substitution,

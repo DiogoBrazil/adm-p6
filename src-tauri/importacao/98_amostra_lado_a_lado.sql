@@ -101,7 +101,8 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
           ('numero_rgf',              l.numero_rgf::text,              v.numero_rgf::text),
           ('data_instauracao',        l.data_instauracao::text,        p.data_instauracao::text),
           ('data_recebimento',        l.data_recebimento::text,        p.data_recebimento::text),
-          ('data_remessa_encarregado',l.data_remessa_encarregado::text,p.data_remessa_encarregado::text),
+          ('data_remessa',l.data_remessa_encarregado::text,
+             COALESCE(p.data_remessa_comissao,p.data_remessa_encarregado)::text),
           ('data_julgamento',         l.data_julgamento::text,         p.data_julgamento::text),
           ('data_conclusao',          l.data_conclusao::text,          p.data_conclusao::text),
           ('resumo_fatos',            l.resumo_fatos::text,            p.resumo_fatos::text)

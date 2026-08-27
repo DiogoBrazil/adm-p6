@@ -108,7 +108,7 @@ import type {
   TransgressaoItem,
   UploadAttachmentRequest,
   UpdateInvolvedOutcomeRequest,
-  UpdateProceedingClosureRequest,
+  UpdateProceedingDatesRequest,
   UserAuthRow,
   UserFormSchema,
   UserListItem,
@@ -174,7 +174,7 @@ export interface Commands {
   proceedings_save: { args: { request: SaveProceedingRequest }; result: string };
   proceedings_delete: { args: { id: string }; result: boolean };
   proceedings_reopen: { args: { id: string }; result: boolean };
-  proceedings_update_closure: { args: { request: UpdateProceedingClosureRequest }; result: boolean };
+  proceedings_update_dates: { args: { request: UpdateProceedingDatesRequest }; result: boolean };
   proceedings_update_involved_outcome: { args: { request: UpdateInvolvedOutcomeRequest }; result: boolean };
   proceedings_substitute_designation: { args: { request: SubstituirDesignacaoRequest }; result: string };
   proceedings_update_substitution: { args: { request: AtualizarSubstituicaoRequest }; result: boolean };

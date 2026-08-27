@@ -15,7 +15,7 @@ use adm_p6_tauri_lib::deadlines::{
 use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
     PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UpdateInvolvedOutcomeRequest, UpdateProceedingClosureRequest, UploadAttachmentRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
 };
 use adm_p6_tauri_lib::proceedings::repository;
 use chrono::NaiveDate;
@@ -44,8 +44,6 @@ fn base(m: &Mundo, numero: &str) -> SaveProceedingRequest {
         natureza_fato_id: Some(m.natureza.clone()),
         data_instauracao: data(2026, 1, 10),
         data_recebimento: None,
-        data_remessa_comissao: None,
-        data_julgamento: None,
         resumo_fatos: None,
         envolvidos: vec![],
         designacoes: vec![designacao(m, &m.pm_um, &m.papel_encarregado)],
@@ -475,11 +473,16 @@ async fn penalidade_so_onde_a_solucao_permite_e_dias_so_onde_a_penalidade_usa() 
 async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
     util::com_banco_descartavel("proc_pos_cadastro", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
-        sqlx::query("UPDATE apuratorios SET permite_punicao = true WHERE id = $1::uuid")
-            .bind(&m.apuratorio)
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE apuratorios
+                SET permite_punicao = true, permite_remessa_comissao = true,
+                    permite_julgamento = true
+              WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
         let mut req = base(&m, "001");
         req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
         let id = salvar(&pool, &req).await.unwrap();
@@ -492,12 +495,48 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
             .clone();
 
         let mut tx = pool.begin().await.unwrap();
-        repository::update_closure(
+        let erro = repository::update_dates(
             &mut tx,
-            &UpdateProceedingClosureRequest {
+            &UpdateProceedingDatesRequest {
                 processo_id: id.clone(),
-                data_remessa_encarregado: Some(data(2026, 2, 1)),
-                data_conclusao: Some(data(2026, 2, 2)),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 1, 9)),
+                data_julgamento: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .expect_err("data posterior nao antecede a instauracao")
+        .message();
+        assert!(erro.contains("anterior à instauração"), "{erro}");
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: Some(data(2026, 2, 2)),
+                data_remessa_comissao: Some(data(2026, 2, 2)),
+                data_julgamento: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .expect_err("rito de comissao tem uma unica remessa")
+        .message();
+        assert!(erro.contains("somente a remessa à comissão"), "{erro}");
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 2, 2)),
+                data_julgamento: Some(data(2026, 2, 3)),
+                data_conclusao: Some(data(2026, 2, 4)),
             },
         )
         .await
@@ -523,30 +562,83 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
         salvar(&pool, &req).await.unwrap();
 
         let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
-        assert_eq!(detalhe.data_remessa_encarregado, Some(data(2026, 2, 1)));
-        assert_eq!(detalhe.cabecalho.data_conclusao, Some(data(2026, 2, 2)));
+        assert_eq!(detalhe.data_remessa_encarregado, None);
+        assert_eq!(detalhe.data_remessa_comissao, Some(data(2026, 2, 2)));
+        assert_eq!(detalhe.data_julgamento, Some(data(2026, 2, 3)));
+        assert_eq!(detalhe.cabecalho.data_conclusao, Some(data(2026, 2, 4)));
         assert_eq!(detalhe.envolvidos[0].penalidade_dias, Some(3));
 
-        // Remessa pode ser apagada, mas conclusão tem uma operação explícita.
+        // Desligar a configuração não apaga nem torna inacessível o fato já
+        // registrado. Ele ainda pode ser corrigido ou removido no detalhe.
+        sqlx::query(
+            "UPDATE apuratorios
+                SET permite_remessa_comissao = false, permite_julgamento = false
+              WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Remessas e julgamento podem ser apagados, mas conclusão tem uma
+        // operação explícita.
         let mut tx = pool.begin().await.unwrap();
-        repository::update_closure(
+        repository::update_dates(
             &mut tx,
-            &UpdateProceedingClosureRequest {
+            &UpdateProceedingDatesRequest {
                 processo_id: id.clone(),
                 data_remessa_encarregado: None,
-                data_conclusao: Some(data(2026, 2, 3)),
+                data_remessa_comissao: None,
+                data_julgamento: None,
+                data_conclusao: Some(data(2026, 2, 5)),
             },
         )
         .await
         .unwrap();
         tx.commit().await.unwrap();
 
+        // Depois de removido o fato histórico, a configuração volta a governar
+        // novas datas e recusa comissão ou julgamento onde não são previstos.
         let mut tx = pool.begin().await.unwrap();
-        let erro = repository::update_closure(
+        let erro = repository::update_dates(
             &mut tx,
-            &UpdateProceedingClosureRequest {
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 2, 6)),
+                data_julgamento: None,
+                data_conclusao: Some(data(2026, 2, 5)),
+            },
+        )
+        .await
+        .expect_err("comissao desligada nao aceita fato novo")
+        .message();
+        assert!(erro.contains("não prevê remessa"), "{erro}");
+
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: None,
+                data_julgamento: Some(data(2026, 2, 6)),
+                data_conclusao: Some(data(2026, 2, 5)),
+            },
+        )
+        .await
+        .expect_err("julgamento desligado nao aceita fato novo")
+        .message();
+        assert!(erro.contains("não prevê data de julgamento"), "{erro}");
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
                 processo_id: id,
                 data_remessa_encarregado: None,
+                data_remessa_comissao: None,
+                data_julgamento: None,
                 data_conclusao: None,
             },
         )
@@ -554,6 +646,37 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
         .expect_err("conclusao so sai por reabrir")
         .message();
         assert!(erro.contains("Reabrir"), "{erro}");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn remessa_do_encarregado_continua_nos_apuratorios_sem_comissao() {
+    util::com_banco_descartavel("proc_remessa_encarregado", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.apuratorio_id = m.apuratorio_livre;
+        req.natureza_fato_id = None;
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: Some(data(2026, 2, 1)),
+                data_remessa_comissao: None,
+                data_julgamento: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert_eq!(detalhe.data_remessa_encarregado, Some(data(2026, 2, 1)));
+        assert_eq!(detalhe.data_remessa_comissao, None);
     })
     .await;
 }
@@ -648,6 +771,15 @@ async fn validacoes_puras_do_request() {
         let mut req = base(&m, "001");
         req.data_instauracao = chrono::Utc::now().date_naive() + chrono::Duration::days(1);
         assert!(salvar(&pool, &req).await.unwrap_err().contains("futura"));
+
+        let datas = UpdateProceedingDatesRequest {
+            processo_id: "nao-importa-na-validacao-pura".to_string(),
+            data_remessa_encarregado: None,
+            data_remessa_comissao: None,
+            data_julgamento: Some(chrono::Utc::now().date_naive() + chrono::Duration::days(1)),
+            data_conclusao: None,
+        };
+        assert!(datas.validate().unwrap_err().contains("julgamento"));
     })
     .await;
 }
@@ -1435,11 +1567,13 @@ async fn cenario_de_listagem(pool: &PgPool, m: &Mundo) -> (String, String, Strin
     b.data_instauracao = data(2025, 6, 1);
     let b = salvar(pool, &b).await.unwrap();
     let mut tx = pool.begin().await.unwrap();
-    repository::update_closure(
+    repository::update_dates(
         &mut tx,
-        &UpdateProceedingClosureRequest {
+        &UpdateProceedingDatesRequest {
             processo_id: b.clone(),
             data_remessa_encarregado: None,
+            data_remessa_comissao: None,
+            data_julgamento: None,
             data_conclusao: Some(data(2025, 8, 1)),
         },
     )
@@ -1560,11 +1694,13 @@ async fn soft_delete_some_da_listagem_e_reopen_limpa_a_conclusao() {
         let req = base(&m, "001");
         let id = salvar(&pool, &req).await.unwrap();
         let mut tx = pool.begin().await.unwrap();
-        repository::update_closure(
+        repository::update_dates(
             &mut tx,
-            &UpdateProceedingClosureRequest {
+            &UpdateProceedingDatesRequest {
                 processo_id: id.clone(),
                 data_remessa_encarregado: None,
+                data_remessa_comissao: None,
+                data_julgamento: None,
                 data_conclusao: Some(data(2026, 3, 1)),
             },
         )

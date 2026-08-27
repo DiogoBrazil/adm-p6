@@ -9,7 +9,7 @@ use crate::proceedings::domain::{
     ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
     PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem, ProceedingListResult,
     SaveProceedingRequest, SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest,
-    UpdateProceedingClosureRequest, UploadAttachmentRequest, EXTENSAO_CARTA_PRECATORIA,
+    UpdateProceedingDatesRequest, UploadAttachmentRequest, EXTENSAO_CARTA_PRECATORIA,
     MOTIVO_DESIGNACAO_INICIAL,
 };
 
@@ -536,8 +536,7 @@ pub async fn save(
                      numero_rgf = $7, unidade_origem_id = $8::uuid,
                      municipio_fato_id = $9::uuid, natureza_fato_id = $10::uuid,
                      data_instauracao = $11, data_recebimento = $12,
-                     data_remessa_comissao = $13, data_julgamento = $14,
-                     resumo_fatos = $15,
+                     resumo_fatos = $13,
                      updated_at = now()
                  WHERE id = $1::uuid AND ativo
              RETURNING id::text",
@@ -554,8 +553,6 @@ pub async fn save(
         .bind(request.natureza_fato_id.as_deref())
         .bind(request.data_instauracao)
         .bind(request.data_recebimento)
-        .bind(request.data_remessa_comissao)
-        .bind(request.data_julgamento)
         .bind(request.resumo_fatos.as_deref())
         .fetch_optional(&mut **tx)
         .await?
@@ -565,10 +562,9 @@ pub async fn save(
                 "INSERT INTO processos_procedimentos
                      (apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
                       processo_sei, numero_rgf, unidade_origem_id, municipio_fato_id,
-                      natureza_fato_id, data_instauracao, data_recebimento,
-                      data_remessa_comissao, data_julgamento, resumo_fatos)
+                      natureza_fato_id, data_instauracao, data_recebimento, resumo_fatos)
                  VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid, $9::uuid,
-                         $10, $11, $12, $13, $14)
+                         $10, $11, $12)
              RETURNING id::text",
             )
             .bind(&request.apuratorio_id)
@@ -582,8 +578,6 @@ pub async fn save(
             .bind(request.natureza_fato_id.as_deref())
             .bind(request.data_instauracao)
             .bind(request.data_recebimento)
-            .bind(request.data_remessa_comissao)
-            .bind(request.data_julgamento)
             .bind(request.resumo_fatos.as_deref())
             .fetch_one(&mut **tx)
             .await?
@@ -1356,21 +1350,36 @@ fn texto_opcional(valor: Option<&str>) -> Option<String> {
 /// Atualiza somente as datas registradas depois do cadastro. Uma conclusão já
 /// gravada pode ser corrigida aqui, mas sua remoção continua sendo a operação
 /// explícita `reopen`, com autorização e auditoria próprias.
-pub async fn update_closure(
+pub async fn update_dates(
     tx: &mut Transaction<'_, Postgres>,
-    request: &UpdateProceedingClosureRequest,
+    request: &UpdateProceedingDatesRequest,
 ) -> Result<(), AppError> {
-    let (data_instauracao, conclusao_atual): (chrono::NaiveDate, Option<chrono::NaiveDate>) =
-        sqlx::query_as(
-            "SELECT data_instauracao, data_conclusao
-               FROM processos_procedimentos
-              WHERE id = $1::uuid AND ativo
+    let (
+        data_instauracao,
+        remessa_comissao_atual,
+        julgamento_atual,
+        conclusao_atual,
+        permite_remessa_comissao,
+        permite_julgamento,
+    ): (
+        chrono::NaiveDate,
+        Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
+        bool,
+        bool,
+    ) = sqlx::query_as(
+        "SELECT p.data_instauracao, p.data_remessa_comissao, p.data_julgamento,
+                    p.data_conclusao, a.permite_remessa_comissao, a.permite_julgamento
+               FROM processos_procedimentos p
+               JOIN apuratorios a ON a.id = p.apuratorio_id
+              WHERE p.id = $1::uuid AND p.ativo
               FOR UPDATE",
-        )
-        .bind(&request.processo_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+    )
+    .bind(&request.processo_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
 
     if request
         .data_remessa_encarregado
@@ -1378,6 +1387,22 @@ pub async fn update_closure(
     {
         return Err(AppError::Domain(
             "A remessa do encarregado não pode ser anterior à instauração.".to_string(),
+        ));
+    }
+    if request
+        .data_remessa_comissao
+        .is_some_and(|data| data < data_instauracao)
+    {
+        return Err(AppError::Domain(
+            "A remessa à comissão não pode ser anterior à instauração.".to_string(),
+        ));
+    }
+    if request
+        .data_julgamento
+        .is_some_and(|data| data < data_instauracao)
+    {
+        return Err(AppError::Domain(
+            "O julgamento não pode ser anterior à instauração.".to_string(),
         ));
     }
     if request
@@ -1393,14 +1418,38 @@ pub async fn update_closure(
             "Para remover a conclusão, use a ação Reabrir processo.".to_string(),
         ));
     }
+    if permite_remessa_comissao && request.data_remessa_encarregado.is_some() {
+        return Err(AppError::Domain(
+            "Neste apuratório, informe somente a remessa à comissão.".to_string(),
+        ));
+    }
+    // Configuração governa novos fatos. Se um dado histórico já existir depois
+    // de a configuração mudar, ele continua corrigível ou removível — não se
+    // apaga nem se torna inacessível em silêncio (princípio 5).
+    if !permite_remessa_comissao
+        && remessa_comissao_atual.is_none()
+        && request.data_remessa_comissao.is_some()
+    {
+        return Err(AppError::Domain(
+            "Este apuratório não prevê remessa à comissão.".to_string(),
+        ));
+    }
+    if !permite_julgamento && julgamento_atual.is_none() && request.data_julgamento.is_some() {
+        return Err(AppError::Domain(
+            "Este apuratório não prevê data de julgamento.".to_string(),
+        ));
+    }
 
     sqlx::query(
         "UPDATE processos_procedimentos
-            SET data_remessa_encarregado = $2, data_conclusao = $3, updated_at = now()
+            SET data_remessa_encarregado = $2, data_remessa_comissao = $3,
+                data_julgamento = $4, data_conclusao = $5, updated_at = now()
           WHERE id = $1::uuid AND ativo",
     )
     .bind(&request.processo_id)
     .bind(request.data_remessa_encarregado)
+    .bind(request.data_remessa_comissao)
+    .bind(request.data_julgamento)
     .bind(request.data_conclusao)
     .execute(&mut **tx)
     .await?;

@@ -312,8 +312,6 @@ pub struct SaveProceedingRequest {
     pub natureza_fato_id: Option<String>,
     pub data_instauracao: NaiveDate,
     pub data_recebimento: Option<NaiveDate>,
-    pub data_remessa_comissao: Option<NaiveDate>,
-    pub data_julgamento: Option<NaiveDate>,
     pub resumo_fatos: Option<String>,
     #[serde(default)]
     pub envolvidos: Vec<EnvolvidoRequest>,
@@ -375,20 +373,30 @@ impl SaveProceedingRequest {
     }
 }
 
-/// Datas que representam o encerramento da apuração e, por isso, só podem ser
-/// registradas depois que o processo já existe.
+/// Datas informadas somente depois que o processo já existe.
+///
+/// Elas ficam fora de `SaveProceedingRequest` para que uma correção nos dados
+/// gerais nunca apague ou regrave, por acidente, fatos posteriores do fluxo.
 #[derive(Debug, Deserialize)]
-pub struct UpdateProceedingClosureRequest {
+pub struct UpdateProceedingDatesRequest {
     pub processo_id: String,
     pub data_remessa_encarregado: Option<NaiveDate>,
+    pub data_remessa_comissao: Option<NaiveDate>,
+    pub data_julgamento: Option<NaiveDate>,
     pub data_conclusao: Option<NaiveDate>,
 }
 
-impl UpdateProceedingClosureRequest {
+impl UpdateProceedingDatesRequest {
     pub fn validate(&self) -> Result<(), String> {
         let hoje = Utc::now().date_naive();
         if self.data_remessa_encarregado.is_some_and(|d| d > hoje) {
             return Err("A data de remessa do encarregado não pode ser futura.".to_string());
+        }
+        if self.data_remessa_comissao.is_some_and(|d| d > hoje) {
+            return Err("A data de remessa à comissão não pode ser futura.".to_string());
+        }
+        if self.data_julgamento.is_some_and(|d| d > hoje) {
+            return Err("A data de julgamento não pode ser futura.".to_string());
         }
         if self.data_conclusao.is_some_and(|d| d > hoje) {
             return Err("A data de conclusão não pode ser futura.".to_string());

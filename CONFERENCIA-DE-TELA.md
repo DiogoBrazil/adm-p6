@@ -41,12 +41,12 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 
 - [ ] **Painel** (`/`) — os cartões trazem números, não zeros
 - [ ] **Procedimentos → lista** — a tabela lista processos
-- [ ] **Procedimentos → detalhe** — registrar/corrigir remessa e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
+- [ ] **Procedimentos → detalhe** — registrar/corrigir remessas, julgamento e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
 - [ ] Em um **IPM**, a linha de Escrivão mostra apenas **“-”** na coluna Documento e o formulário de substituição não pede tipo/número
 - [ ] Depois de concluir, desaparecem os controles de nova substituição, prorrogação e andamento; o aviso orienta usar **Reabrir**
 - [ ] Com o processo concluído, chamadas diretas desses três comandos devolvem mensagem amigável e não gravam nada
 - [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nos papéis, a alternância grava, e tornar o mesmo papel responsável logo depois **não** religa a flag
-- [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessa, conclusão, soluções e penalidade não aparecem antes do cadastro
+- [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessas, julgamento, conclusão, soluções e penalidade não aparecem antes do cadastro
 - [ ] **Indícios** — a partir do detalhe de um processo, num envolvido
 - [ ] **Prazos** — o painel carrega
 - [ ] **Usuários → lista**
@@ -144,9 +144,14 @@ alimentados por um comando paginado que trava em 200, e com 235 militares os 35
 A migration `0007` tornou condicionais os campos que antes apareciam nas dez espécies, e
 consertou o bloco de carta precatória, que **não renderizava havia dois ciclos**.
 
-### O que precisa aparecer, por espécie
+### O que precisa aparecer no detalhe, por espécie
 
-| Abra um… | Tem de mostrar | Não pode mostrar |
+Cadastre primeiro apenas Instauração e Recebimento. Remessas, Julgamento e Conclusão são
+fatos posteriores e não podem aparecer no formulário geral, nem ao criar nem ao editar.
+Em CD, CJ e PAD aparece somente **Remessa à comissão**; “Remessa do encarregado” não pode
+aparecer, pois nesses ritos as duas datas representam o mesmo fato.
+
+| Abra o detalhe de… | Tem de mostrar | Não pode mostrar |
 |---|---|---|
 | **IPM** | Escrivão (designação) | Julgamento · Remessa à comissão · Penalidade |
 | **SR** ou **SV** | — | Julgamento · Remessa à comissão · Penalidade |

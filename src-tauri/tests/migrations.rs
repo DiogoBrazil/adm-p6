@@ -267,6 +267,55 @@ async fn atributos_de_comportamento_do_apuratorio_nascem_desligados() {
     .await;
 }
 
+#[tokio::test]
+async fn remessa_legada_vira_remessa_da_comissao_quando_o_rito_usa_comissao() {
+    util::com_banco_descartavel("mig_remessa_comissao", |pool| async move {
+        let m = util::fixtures::mundo_configurado(&pool).await;
+        sqlx::query("UPDATE apuratorios SET permite_remessa_comissao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let id: String = sqlx::query_scalar(
+            "INSERT INTO processos_procedimentos
+                 (apuratorio_id, documento_iniciador_id, numero_documento,
+                  unidade_origem_id, municipio_fato_id, natureza_fato_id,
+                  data_instauracao, data_remessa_encarregado)
+             VALUES ($1::uuid, $2::uuid, 'REMESSA-LEGADA', $3::uuid, $4::uuid,
+                     $5::uuid, DATE '2026-01-10', DATE '2026-02-01')
+          RETURNING id::text",
+        )
+        .bind(&m.apuratorio)
+        .bind(&m.documento)
+        .bind(&m.unidade)
+        .bind(&m.municipio)
+        .bind(&m.natureza)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let migration = std::fs::read_to_string("migrations/0010_unificar_remessa_comissao.sql")
+            .expect("ler migration de remessa");
+        sqlx::raw_sql(&migration).execute(&pool).await.unwrap();
+
+        let datas: (Option<chrono::NaiveDate>, Option<chrono::NaiveDate>) = sqlx::query_as(
+            "SELECT data_remessa_encarregado, data_remessa_comissao
+               FROM processos_procedimentos WHERE id = $1::uuid",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(datas.0, None);
+        assert_eq!(
+            datas.1,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 2, 1).unwrap())
+        );
+    })
+    .await;
+}
+
 /// A view é contrato: quatro módulos leem dela. Uma coluna renomeada quebraria
 /// os quatro de uma vez, e só em runtime.
 #[tokio::test]
