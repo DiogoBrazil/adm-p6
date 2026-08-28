@@ -46,6 +46,13 @@ base64 = "0.22"
 dotenvy = "0.15"
 regex = "1"
 
+# A orientação da folha impressa não existe no CSS: o WebKitGTK ignora
+# `@page { size: … }` e só o `GtkPageSetup` decide. Ver src/print/commands.rs.
+# As duas já chegavam por `wry`; declaradas para que a versão não mude sem aviso.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
+
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

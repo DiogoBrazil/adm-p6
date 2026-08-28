@@ -12,6 +12,7 @@ import type {
   MovementItem,
   ProceedingDetail,
 } from "../api";
+import { call } from "../api";
 import { escapeHtml, formatarOrigem } from "../dom";
 
 const brasaoUrl = new URL("../../src-tauri/icons/icon.png", import.meta.url).href;
@@ -619,6 +620,29 @@ async function aguardarImagens(raiz: HTMLElement): Promise<void> {
   );
 }
 
+/**
+ * Declara a folha em paisagem enquanto o mapa está sendo impresso, e desfaz
+ * depois.
+ *
+ * A regra não pode morar no `styles.css`: uma `@page` anônima vale para o
+ * documento inteiro, e os outros relatórios têm de continuar saindo em retrato.
+ * E não pode ser um `<style>` interpolado no HTML, que a CSP recusa
+ * (`style-src 'self'`) — regra criada por CSSOM o CSP não alcança.
+ *
+ * No WebKitGTK, motor do Tauri no Linux, isto não faz efeito nenhum: lá a
+ * orientação vem do page setup, e quem a define é `print_landscape`. Serve aos
+ * motores que honram o `@page` — Chromium e WebView2 —, onde o comando não tem
+ * caminho específico e a impressão cai no `window.print()`.
+ */
+function comFolhaPaisagem(): () => void {
+  const folha = new CSSStyleSheet();
+  folha.insertRule("@page { size: A4 landscape; margin: 0; }");
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, folha];
+  return () => {
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((atual) => atual !== folha);
+  };
+}
+
 /** Insere, pagina e revela o documento somente durante a impressão. */
 export async function imprimirDocumentoMapa(html: string): Promise<void> {
   const raiz = document.createElement("div");
@@ -626,6 +650,7 @@ export async function imprimirDocumentoMapa(html: string): Promise<void> {
   raiz.innerHTML = html;
   document.body.append(raiz);
   document.documentElement.classList.add("mapa-pdf-ativo");
+  let soltarFolha: (() => void) | undefined;
   try {
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
     paginarDocumentoMapa(raiz);
@@ -642,8 +667,17 @@ export async function imprimirDocumentoMapa(html: string): Promise<void> {
     }
 
     raiz.classList.remove("mapa-pdf-root--medindo");
-    window.print();
+    soltarFolha = comFolhaPaisagem();
+
+    // `print_landscape` só retorna quando a impressão termina ou o diálogo é
+    // cancelado — o documento é desmontado no `finally` logo abaixo, e voltar
+    // antes imprimiria folha em branco.
+    const resposta = await call("print_landscape");
+    if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão do mapa.");
+    // `false` = plataforma sem caminho específico; aí o `@page` acima resolve.
+    if (!resposta.data) window.print();
   } finally {
+    soltarFolha?.();
     document.documentElement.classList.remove("mapa-pdf-ativo");
     raiz.remove();
   }

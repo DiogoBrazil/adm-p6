@@ -12,6 +12,7 @@ pub mod files;
 pub mod legal_catalogs;
 pub mod maps_reports;
 pub mod movements;
+pub mod print;
 pub mod proceedings;
 pub mod response;
 pub mod users;
@@ -112,6 +113,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             maps_reports::commands::reports_infracoes_penais,
             maps_reports::commands::reports_designations_matrix,
             files::commands::files_save_download,
+            print::commands::print_landscape,
             audit::commands::audit_list,
             audit::commands::audit_get,
             audit::commands::audit_by_record,

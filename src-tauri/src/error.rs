@@ -30,6 +30,11 @@ pub enum AppError {
     /// local, que por isso não pode ser exibido.
     #[error("Falha ao gravar arquivo: {0}")]
     Arquivo(String),
+    /// Falha do subsistema de impressão do sistema operacional: diálogo,
+    /// driver, ou gravação do arquivo escolhido lá dentro. O texto carregado
+    /// vem do GTK e cita caminho local e nome de impressora.
+    #[error("Falha ao imprimir: {0}")]
+    Impressao(String),
     /// Falha interna inesperada: hash de senha, decodificação, invariante
     /// quebrada. Nada disso é acionável pelo usuário, e o texto original pode
     /// carregar detalhe de implementação.
@@ -46,6 +51,10 @@ impl AppError {
             Self::Arquivo(_) => "Não foi possível gravar o arquivo no local escolhido. \
                  Verifique se você tem permissão nessa pasta e escolha outro local."
                 .to_string(),
+            Self::Impressao(_) => "Não foi possível concluir a impressão. \
+                 Verifique a impressora escolhida, ou a pasta do arquivo se você \
+                 mandou imprimir para arquivo, e tente de novo."
+                .to_string(),
             Self::Interno(_) => "Ocorreu um erro interno e nenhuma alteração foi salva. \
                  Se acontecer de novo, informe ao suporte o horário e a ação que você estava fazendo."
                 .to_string(),
@@ -59,7 +68,9 @@ impl AppError {
     pub fn detalhe_tecnico(&self) -> Option<String> {
         match self {
             Self::Database(error) => Some(format!("{error:?}")),
-            Self::Arquivo(detalhe) | Self::Interno(detalhe) => Some(detalhe.clone()),
+            Self::Arquivo(detalhe) | Self::Impressao(detalhe) | Self::Interno(detalhe) => {
+                Some(detalhe.clone())
+            }
             _ => None,
         }
     }

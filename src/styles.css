@@ -1032,11 +1032,6 @@ tr.atrasado {
   visibility: hidden;
 }
 
-@page mapa-mensal {
-  size: A4 landscape;
-  margin: 0;
-}
-
 .mapa-pdf-root {
   color: #172235;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -1049,7 +1044,6 @@ tr.atrasado {
 }
 
 .mapa-pdf-pagina {
-  page: mapa-mensal;
   box-sizing: border-box;
   display: flex;
   width: 297mm;

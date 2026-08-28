@@ -141,6 +141,7 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
             ("legal_catalogs_list", json!({ "catalogo": "apuratorios" })),
             ("proceedings_list", json!({})),
             ("reports_available_years", json!({})),
+            ("print_landscape", json!({})),
         ] {
             let envelope = invocar(&webview, comando, args);
             let mensagem = erro(&envelope);
@@ -149,6 +150,25 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
                 "{comando}: {mensagem}"
             );
         }
+    });
+}
+
+/// A impressão em paisagem responde pelo IPC sem prender a chamada.
+///
+/// `print_landscape` espera num canal que só é fechado quando a operação de
+/// impressão termina — e sob o `MockRuntime` `with_webview` é um no-op, de modo
+/// que o remetente é descartado sem sinal nenhum. Este teste trava esse caminho:
+/// se alguém trocar o `Err(_)` do canal por uma espera, ele deixa de terminar.
+///
+/// O `false` é o valor certo aqui: quem imprime em paisagem é o page setup do
+/// GTK, que o `MockRuntime` não tem, e nesse caso o frontend cai no
+/// `window.print()`. Ver `src/print/commands.rs`.
+#[test]
+fn impressao_em_paisagem_responde_pelo_ipc() {
+    com_app_e_banco("ipc_print", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+        let envelope = invocar(&webview, "print_landscape", json!({}));
+        assert_eq!(ok(&envelope), &json!(false), "{envelope}");
     });
 }
 

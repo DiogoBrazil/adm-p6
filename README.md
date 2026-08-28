@@ -28,7 +28,7 @@ Login inicial: `admin@sistema.com` / `123456` — **troque numa instalação rea
 ```bash
 cd src-tauri
 cargo fmt --check
-cargo test                    # 143 testes, em bancos descartáveis
+cargo test                    # 144 testes, em bancos descartáveis
 cd ..
 npm run typecheck             # é aqui que erro de comando aparece
 npm run build                 # typecheck + vite build

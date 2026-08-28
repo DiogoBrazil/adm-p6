@@ -235,6 +235,15 @@ export interface Commands {
   /** Abre o diálogo nativo de "salvar como". `null` = o usuário cancelou. */
   files_save_download: { args: { request: SaveFileRequest }; result: string | null };
 
+  // ── Impressão ─────────────────────────────────────────────────────
+  /**
+   * Imprime a janela com a folha em A4 paisagem, pelo diálogo do sistema.
+   * `false` = este caminho não deu conta (plataforma sem page setup, ou
+   * operação desfeita sem resposta); aí use `window.print()`.
+   * Ver `src-tauri/src/print/commands.rs` para o porquê de não ser só CSS.
+   */
+  print_landscape: { args: Record<string, never>; result: boolean };
+
   // ── Auditoria ─────────────────────────────────────────────────────
   audit_list: { args: { page?: number | null, perPage?: number | null, entidade?: string | null, operacao?: string | null, usuarioId?: string | null }; result: AuditPageResult };
   audit_get: { args: { id: string }; result: AuditDetailItem | null };
