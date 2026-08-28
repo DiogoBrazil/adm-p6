@@ -227,6 +227,7 @@ async fn impressao_do_mapa_respeita_periodo_escopo_e_selecao() {
             .unwrap();
         assert_eq!(completo.len(), 1);
         assert_eq!(completo[0].processo.cabecalho.id, incluido);
+        assert!(!completo[0].permite_remessa_comissao);
 
         let individual = repository::map_print_data(&pool, &pedido(Some(incluido.clone())))
             .await
@@ -273,6 +274,11 @@ async fn impressao_do_mapa_reune_os_dados_detalhados() {
             None,
         )
         .await;
+        sqlx::query("UPDATE apuratorios SET permite_remessa_comissao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
         envolvido(&pool, &m, &id, &m.pm_um, 1).await;
         designar(&pool, &id, &m.pm_um, &m.papel_encarregado).await;
         sqlx::query(
@@ -310,6 +316,7 @@ async fn impressao_do_mapa_reune_os_dados_detalhados() {
         assert_eq!(itens.len(), 1);
         let item = &itens[0];
         assert_eq!(item.processo.cabecalho.id, id);
+        assert!(item.permite_remessa_comissao);
         assert_eq!(item.processo.envolvidos.len(), 1);
         assert_eq!(item.processo.designacoes.len(), 1);
         assert_eq!(item.prazos.len(), 1);

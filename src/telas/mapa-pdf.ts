@@ -70,9 +70,9 @@ function secao(titulo: string, conteudo: string, classe = ""): string {
   </section>`;
 }
 
-function tabela(cabecalhos: string[], linhas: string[][], vazio: string): string {
+function tabela(cabecalhos: string[], linhas: string[][], vazio: string, classe = ""): string {
   if (!linhas.length) return `<p class="mapa-pdf-vazio">${escapeHtml(vazio)}</p>`;
-  return `<table class="mapa-pdf-tabela">
+  return `<table class="mapa-pdf-tabela${classe ? ` ${classe}` : ""}">
     <thead><tr>${cabecalhos.map((item) => `<th>${escapeHtml(item)}</th>`).join("")}</tr></thead>
     <tbody>${linhas
       .map(
@@ -82,25 +82,52 @@ function tabela(cabecalhos: string[], linhas: string[][], vazio: string): string
   </table>`;
 }
 
+function grupoEnquadramento(titulo: string, itens: string[]): string {
+  if (!itens.length) return "";
+  return `<div class="mapa-pdf-enquadramento-grupo">
+    <h3>${escapeHtml(titulo)}</h3>
+    <ul>${itens.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+  </div>`;
+}
+
 function enquadramentosDe(
   envolvidoId: string,
   itens: EnvolvidoComIndicios[],
 ): string {
   const dados = itens.find((item) => item.envolvido_id === envolvidoId)?.indicios;
-  if (!dados) return "Não registrado";
-  const linhas = [
-    ...dados.categorias.map((item) => `Categoria: ${item.nome}`),
-    ...dados.infracoes_penais.map(
-      (item) => `${item.rotulo} — esfera ${item.esfera_penal}: ${item.descricao}`,
+  if (!dados) return `<p class="mapa-pdf-vazio-celula">Não registrado</p>`;
+
+  // A espécie e a esfera já são rótulos vindos dos catálogos. Agrupar pela
+  // combinação produz “Crime Militar”, “Crime Comum” etc. sem transformar
+  // esses nomes administráveis em regra de negócio do frontend.
+  const penais = new Map<string, string[]>();
+  for (const item of dados.infracoes_penais) {
+    const titulo = `${item.especie} ${item.esfera_penal}`;
+    const grupo = penais.get(titulo) ?? [];
+    grupo.push(`${item.rotulo}: ${item.descricao}`);
+    penais.set(titulo, grupo);
+  }
+
+  const grupos = [
+    ...[...penais.entries()].map(([titulo, valores]) => grupoEnquadramento(titulo, valores)),
+    grupoEnquadramento(
+      "Transgressão disciplinar",
+      dados.transgressoes.map((item) => `${item.rotulo} — ${item.natureza}: ${item.texto}`),
     ),
-    ...dados.transgressoes.map(
-      (item) => `${item.rotulo} — ${item.natureza}: ${item.texto}`,
+    grupoEnquadramento(
+      "Infração do Estatuto",
+      dados.infracoes_estatuto.map(
+        (item) => `${item.rotulo} — analogia disciplinar: ${item.analogia_rotulo}`,
+      ),
     ),
-    ...dados.infracoes_estatuto.map(
-      (item) => `${item.rotulo} — analogia: ${item.analogia_rotulo}`,
+    grupoEnquadramento(
+      "Outros indícios / categorias",
+      dados.categorias.map((item) => item.nome),
     ),
-  ];
-  return linhas.length ? linhas.join(" • ") : "Não registrado";
+  ].filter(Boolean);
+  return grupos.length
+    ? `<div class="mapa-pdf-enquadramentos">${grupos.join("")}</div>`
+    : `<p class="mapa-pdf-vazio-celula">Não registrado</p>`;
 }
 
 function resultadoDoEnvolvido(item: ProceedingDetail["envolvidos"][number]): string {
@@ -166,12 +193,16 @@ function renderCabecalhoDados(processo: ProceedingDetail): string {
   </dl>`;
 }
 
-function renderDatas(processo: ProceedingDetail): string {
+function renderDatas(item: MapPrintItem): string {
+  const processo = item.processo;
   return `<dl class="mapa-pdf-grade-dados mapa-pdf-grade-dados--datas">
     ${campo("Instauração", data(processo.data_instauracao))}
     ${campo("Recebimento", data(processo.data_recebimento))}
     ${campo("Remessa do encarregado", data(processo.data_remessa_encarregado))}
-    ${campo("Remessa da comissão", data(processo.data_remessa_comissao))}
+    ${campo(
+      "Remessa da comissão",
+      item.permite_remessa_comissao ? data(processo.data_remessa_comissao) : "Não se aplica",
+    )}
     ${campo("Julgamento", data(processo.data_julgamento))}
     ${campo("Conclusão", data(processo.data_conclusao))}
     ${campo("Prazo vigente", data(processo.prazo_vencimento))}
@@ -187,16 +218,24 @@ function renderDatas(processo: ProceedingDetail): string {
 }
 
 function renderEnvolvidos(item: MapPrintItem): string {
-  return tabela(
-    ["Militar", "Situação", "Enquadramentos e indícios", "Resultado"],
-    item.processo.envolvidos.map((envolvido) => [
-      `${qualificacao(envolvido.posto_graduacao, envolvido.matricula, envolvido.nome)}${envolvido.e_condutor ? " — condutor" : ""}`,
-      envolvido.status_envolvido,
-      enquadramentosDe(envolvido.id, item.enquadramentos),
-      resultadoDoEnvolvido(envolvido),
-    ]),
-    "Nenhum envolvido registrado.",
-  );
+  if (!item.processo.envolvidos.length) {
+    return `<p class="mapa-pdf-vazio">Nenhum envolvido registrado.</p>`;
+  }
+  return `<table class="mapa-pdf-tabela mapa-pdf-tabela--envolvidos">
+    <thead><tr><th>Militar</th><th>Situação</th><th>Enquadramentos e indícios</th><th>Resultado</th></tr></thead>
+    <tbody>${item.processo.envolvidos
+      .map(
+        (envolvido) => `<tr>
+          <td>${escapeHtml(
+            `${qualificacao(envolvido.posto_graduacao, envolvido.matricula, envolvido.nome)}${envolvido.e_condutor ? " — condutor" : ""}`,
+          )}</td>
+          <td>${escapeHtml(envolvido.status_envolvido)}</td>
+          <td>${enquadramentosDe(envolvido.id, item.enquadramentos)}</td>
+          <td>${escapeHtml(resultadoDoEnvolvido(envolvido))}</td>
+        </tr>`,
+      )
+      .join("")}</tbody>
+  </table>`;
 }
 
 function renderDesignacoes(processo: ProceedingDetail): string {
@@ -211,6 +250,7 @@ function renderDesignacoes(processo: ProceedingDetail): string {
       item.motivo ?? "Não informado",
     ]),
     "Nenhuma designação registrada.",
+    "mapa-pdf-tabela--designacoes",
   );
 }
 
@@ -226,6 +266,7 @@ function renderPrazos(itens: DeadlineItem[]): string {
       item.ordem === 0 ? "Prazo inicial" : (item.motivo ?? "Não informado"),
     ]),
     "Nenhum prazo registrado.",
+    "mapa-pdf-tabela--prazos",
   );
 }
 
@@ -239,13 +280,14 @@ function renderAndamentos(itens: MovementItem[]): string {
       item.descricao,
     ]),
     "Nenhum andamento registrado.",
+    "mapa-pdf-tabela--andamentos",
   );
 }
 
-function renderFicha(item: MapPrintItem, contexto: ContextoPdfMapa): string {
+function renderFicha(item: MapPrintItem): string {
   const processo = item.processo;
   const situacao = processo.concluido ? "Concluído" : "Em andamento";
-  return `<article class="mapa-pdf-pagina mapa-pdf-ficha">
+  return `<article class="mapa-pdf-ficha" data-rotulo="${escapeHtml(processo.rotulo)}">
     <header class="mapa-pdf-cabecalho-ficha">
       <img src="${escapeHtml(brasaoUrl)}" alt="Brasão da Polícia Militar de Rondônia" />
       <div>
@@ -257,7 +299,7 @@ function renderFicha(item: MapPrintItem, contexto: ContextoPdfMapa): string {
     </header>
     <main class="mapa-pdf-corpo-ficha">
       ${secao("Identificação e dados cadastrais", renderCabecalhoDados(processo), "mapa-pdf-secao--destaque")}
-      ${secao("Datas e tramitação", renderDatas(processo))}
+      ${secao("Datas e tramitação", renderDatas(item))}
       ${secao("Envolvidos, enquadramentos e resultados", renderEnvolvidos(item), "mapa-pdf-secao--fluida")}
       ${secao(
         "Ofendidos/Vítimas",
@@ -292,6 +334,7 @@ function renderFicha(item: MapPrintItem, contexto: ContextoPdfMapa): string {
             dataHora(anexo.created_at),
           ]),
           "Nenhum anexo registrado.",
+          "mapa-pdf-tabela--anexos",
         ),
         "mapa-pdf-secao--fluida",
       )}
@@ -301,10 +344,7 @@ function renderFicha(item: MapPrintItem, contexto: ContextoPdfMapa): string {
         "mapa-pdf-secao--fluida",
       )}
     </main>
-    <footer class="mapa-pdf-rodape">
-      <span>ADM-P6 · Mapa Mensal — ${escapeHtml(contexto.mes)}/${escapeHtml(contexto.ano)}</span>
-      <span>${escapeHtml(processo.rotulo)}</span>
-    </footer>
+    <div class="mapa-pdf-fim">Fim do ${escapeHtml(processo.rotulo)}</div>
   </article>`;
 }
 
@@ -314,12 +354,10 @@ function renderCapa(grupo: MapPrintItem[], contexto: ContextoPdfMapa): string {
   const andamento = grupo.length - concluidos;
   const geradoEm = contexto.geradoEm ?? new Date();
   return `<article class="mapa-pdf-pagina mapa-pdf-capa">
-    <div class="mapa-pdf-faixa"></div>
     <header>
       <img src="${escapeHtml(brasaoUrl)}" alt="Brasão da Polícia Militar de Rondônia" />
       <p>Polícia Militar do Estado de Rondônia</p>
-      <strong>7º Batalhão de Polícia Militar</strong>
-      <span></span>
+      <strong>7ºBPM</strong>
     </header>
     <main>
       <p>Mapa Mensal</p>
@@ -350,30 +388,260 @@ export function renderDocumentoMapa(itens: MapPrintItem[], contexto: ContextoPdf
   }
   return `<section class="mapa-pdf-documento" aria-label="Mapa mensal detalhado">
     ${[...grupos.values()]
-      .map((grupo) => `${renderCapa(grupo, contexto)}${grupo.map((item) => renderFicha(item, contexto)).join("")}`)
+      .map((grupo) => {
+        const processo = grupo[0]!.processo;
+        return `<section class="mapa-pdf-grupo"
+          data-rodape-esquerdo="${escapeHtml(`ADM-P6 · Mapa Mensal — ${contexto.mes}/${contexto.ano}`)}"
+          data-rodape-direito="${escapeHtml(processo.apuratorio_sigla)}">
+          ${renderCapa(grupo, contexto)}
+          <div class="mapa-pdf-fluxo-fonte">${grupo.map((item) => renderFicha(item)).join("")}</div>
+        </section>`;
+      })
       .join("")}
   </section>`;
 }
 
-/** Insere o documento apenas durante a impressão e garante que o brasão carregou. */
+type EstadoPaginacao = {
+  grupo: HTMLElement;
+  paginas: HTMLElement;
+  pagina: HTMLElement;
+  corpo: HTMLElement;
+};
+
+function criarPaginaConteudo(grupo: HTMLElement, rotuloContinuacao?: string): EstadoPaginacao {
+  const paginas = grupo.querySelector<HTMLElement>(".mapa-pdf-paginas")!;
+  const pagina = document.createElement("article");
+  pagina.className = "mapa-pdf-pagina mapa-pdf-pagina-conteudo";
+
+  const corpo = document.createElement("main");
+  corpo.className = "mapa-pdf-corpo-pagina";
+  if (rotuloContinuacao) {
+    const continuacao = document.createElement("header");
+    continuacao.className = "mapa-pdf-continuacao";
+    continuacao.textContent = `Continuação do ${rotuloContinuacao}`;
+    corpo.append(continuacao);
+  }
+
+  const rodape = document.createElement("footer");
+  rodape.className = "mapa-pdf-rodape";
+  const esquerdo = document.createElement("span");
+  esquerdo.textContent = grupo.dataset.rodapeEsquerdo ?? "ADM-P6 · Mapa Mensal";
+  const direito = document.createElement("span");
+  direito.textContent = grupo.dataset.rodapeDireito ?? "";
+  rodape.append(esquerdo, direito);
+  pagina.append(corpo, rodape);
+  paginas.append(pagina);
+  return { grupo, paginas, pagina, corpo };
+}
+
+function cabeNaPagina(corpo: HTMLElement): boolean {
+  return corpo.scrollHeight <= corpo.clientHeight + 1;
+}
+
+function paginaTemConteudo(corpo: HTMLElement): boolean {
+  return !!corpo.querySelector(
+    ".mapa-pdf-cabecalho-ficha, .mapa-pdf-secao, .mapa-pdf-fim",
+  );
+}
+
+function novaPagina(estado: EstadoPaginacao, rotuloContinuacao?: string): void {
+  const novo = criarPaginaConteudo(estado.grupo, rotuloContinuacao);
+  estado.pagina = novo.pagina;
+  estado.corpo = novo.corpo;
+}
+
+function tentarAdicionar(estado: EstadoPaginacao, elemento: HTMLElement): boolean {
+  estado.corpo.append(elemento);
+  if (cabeNaPagina(estado.corpo)) return true;
+  elemento.remove();
+  return false;
+}
+
+function fragmentoTabela(secao: HTMLElement, continuacao: boolean): HTMLElement {
+  const fragmento = secao.cloneNode(true) as HTMLElement;
+  fragmento.querySelector("tbody")?.replaceChildren();
+  if (continuacao) {
+    const titulo = fragmento.querySelector("h2");
+    if (titulo) titulo.textContent = `${titulo.textContent ?? "Seção"} (continuação)`;
+  }
+  return fragmento;
+}
+
+function adicionarTabelaPaginada(
+  estado: EstadoPaginacao,
+  secao: HTMLElement,
+  rotulo: string,
+): void {
+  const linhas = [...secao.querySelectorAll<HTMLTableRowElement>("tbody > tr")];
+  let continuacaoDaSecao = false;
+  let fragmento = fragmentoTabela(secao, continuacaoDaSecao);
+
+  if (!tentarAdicionar(estado, fragmento)) {
+    novaPagina(estado, rotulo);
+    continuacaoDaSecao = true;
+    fragmento = fragmentoTabela(secao, continuacaoDaSecao);
+    estado.corpo.append(fragmento);
+  }
+
+  for (const linha of linhas) {
+    let corpoTabela = fragmento.querySelector<HTMLTableSectionElement>("tbody")!;
+    let copia = linha.cloneNode(true) as HTMLTableRowElement;
+    corpoTabela.append(copia);
+    if (cabeNaPagina(estado.corpo)) continue;
+
+    copia.remove();
+    if (corpoTabela.children.length === 0) fragmento.remove();
+
+    novaPagina(estado, rotulo);
+    continuacaoDaSecao = true;
+    fragmento = fragmentoTabela(secao, continuacaoDaSecao);
+    estado.corpo.append(fragmento);
+    corpoTabela = fragmento.querySelector<HTMLTableSectionElement>("tbody")!;
+    copia = linha.cloneNode(true) as HTMLTableRowElement;
+    corpoTabela.append(copia);
+
+    // Uma única linha maior que toda a área útil é excepcional, mas não pode
+    // ser descartada. A classe permite ao motor de impressão fragmentá-la.
+    if (!cabeNaPagina(estado.corpo)) copia.classList.add("mapa-pdf-linha-longa");
+  }
+}
+
+function adicionarTextoPaginado(
+  estado: EstadoPaginacao,
+  secao: HTMLElement,
+  rotulo: string,
+): void {
+  const original = secao.querySelector<HTMLElement>(".mapa-pdf-texto-livre");
+  const partes = original?.textContent?.match(/\S+\s*/g) ?? [];
+  let fragmento = secao.cloneNode(true) as HTMLElement;
+  let texto = fragmento.querySelector<HTMLElement>(".mapa-pdf-texto-livre")!;
+  texto.textContent = "";
+
+  if (!tentarAdicionar(estado, fragmento)) {
+    novaPagina(estado, rotulo);
+    estado.corpo.append(fragmento);
+  }
+
+  let acumulado = "";
+  for (const parte of partes) {
+    texto.textContent = acumulado + parte;
+    if (cabeNaPagina(estado.corpo)) {
+      acumulado += parte;
+      continue;
+    }
+    texto.textContent = acumulado.trimEnd();
+    novaPagina(estado, rotulo);
+    fragmento = secao.cloneNode(true) as HTMLElement;
+    const titulo = fragmento.querySelector("h2");
+    if (titulo) titulo.textContent = `${titulo.textContent ?? "Resumo dos fatos"} (continuação)`;
+    texto = fragmento.querySelector<HTMLElement>(".mapa-pdf-texto-livre")!;
+    acumulado = parte;
+    texto.textContent = acumulado;
+    estado.corpo.append(fragmento);
+  }
+}
+
+function adicionarSecao(
+  estado: EstadoPaginacao,
+  secao: HTMLElement,
+  rotulo: string,
+): void {
+  const copia = secao.cloneNode(true) as HTMLElement;
+  if (tentarAdicionar(estado, copia)) return;
+  if (secao.querySelector("table")) {
+    adicionarTabelaPaginada(estado, secao, rotulo);
+    return;
+  }
+  if (secao.querySelector(".mapa-pdf-texto-livre")) {
+    adicionarTextoPaginado(estado, secao, rotulo);
+    return;
+  }
+  novaPagina(estado, rotulo);
+  estado.corpo.append(copia);
+}
+
+function paginarFicha(estado: EstadoPaginacao, ficha: HTMLElement): void {
+  const rotulo = ficha.dataset.rotulo ?? "processo ou procedimento";
+  const cabecalho = ficha.querySelector<HTMLElement>(":scope > .mapa-pdf-cabecalho-ficha")!;
+  const secoes = [
+    ...ficha.querySelectorAll<HTMLElement>(":scope > .mapa-pdf-corpo-ficha > .mapa-pdf-secao"),
+  ];
+  const primeiraSecao = secoes.shift();
+
+  const inicial = document.createElement("div");
+  inicial.className = "mapa-pdf-inicio-ficha";
+  inicial.append(cabecalho.cloneNode(true));
+  if (primeiraSecao) inicial.append(primeiraSecao.cloneNode(true));
+
+  if (!tentarAdicionar(estado, inicial)) {
+    if (paginaTemConteudo(estado.corpo)) novaPagina(estado);
+    if (!tentarAdicionar(estado, inicial)) {
+      estado.corpo.append(cabecalho.cloneNode(true));
+      if (primeiraSecao) adicionarSecao(estado, primeiraSecao, rotulo);
+    }
+  }
+
+  for (const secao of secoes) adicionarSecao(estado, secao, rotulo);
+
+  const fim = ficha.querySelector<HTMLElement>(":scope > .mapa-pdf-fim")!.cloneNode(true) as HTMLElement;
+  if (!tentarAdicionar(estado, fim)) {
+    novaPagina(estado, rotulo);
+    estado.corpo.append(fim);
+  }
+}
+
+function paginarGrupo(grupo: HTMLElement): void {
+  const fonte = grupo.querySelector<HTMLElement>(":scope > .mapa-pdf-fluxo-fonte")!;
+  const fichas = [...fonte.querySelectorAll<HTMLElement>(":scope > .mapa-pdf-ficha")];
+  const paginas = document.createElement("div");
+  paginas.className = "mapa-pdf-paginas";
+  grupo.insertBefore(paginas, fonte);
+  const estado = criarPaginaConteudo(grupo);
+  for (const ficha of fichas) paginarFicha(estado, ficha);
+  fonte.remove();
+}
+
+function paginarDocumentoMapa(raiz: HTMLElement): void {
+  for (const grupo of raiz.querySelectorAll<HTMLElement>(".mapa-pdf-grupo")) {
+    paginarGrupo(grupo);
+  }
+}
+
+async function aguardarImagens(raiz: HTMLElement): Promise<void> {
+  await Promise.all(
+    [...raiz.querySelectorAll<HTMLImageElement>("img")].map(async (imagem) => {
+      try {
+        await imagem.decode();
+      } catch {
+        throw new Error("Não foi possível carregar o brasão para o PDF. Tente novamente.");
+      }
+    }),
+  );
+}
+
+/** Insere, pagina e revela o documento somente durante a impressão. */
 export async function imprimirDocumentoMapa(html: string): Promise<void> {
   const raiz = document.createElement("div");
-  raiz.className = "mapa-pdf-root";
+  raiz.className = "mapa-pdf-root mapa-pdf-root--medindo";
   raiz.innerHTML = html;
   document.body.append(raiz);
   document.documentElement.classList.add("mapa-pdf-ativo");
   try {
-    const imagens = [...raiz.querySelectorAll<HTMLImageElement>("img")];
-    await Promise.all(
-      imagens.map(async (imagem) => {
-        try {
-          await imagem.decode();
-        } catch {
-          throw new Error("Não foi possível carregar o brasão para o PDF. Tente novamente.");
-        }
-      }),
-    );
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+    paginarDocumentoMapa(raiz);
+    await aguardarImagens(raiz);
+    await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+
+    const transbordou = [...raiz.querySelectorAll<HTMLElement>(".mapa-pdf-corpo-pagina")].some(
+      (corpo) => corpo.scrollHeight > corpo.clientHeight + 1,
+    );
+    if (transbordou) {
+      throw new Error(
+        "Uma informação é maior que a área útil da folha e não pôde ser paginada. Revise os dados e tente novamente.",
+      );
+    }
+
+    raiz.classList.remove("mapa-pdf-root--medindo");
     window.print();
   } finally {
     document.documentElement.classList.remove("mapa-pdf-ativo");

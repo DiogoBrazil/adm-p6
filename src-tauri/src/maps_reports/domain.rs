@@ -112,6 +112,9 @@ pub struct MapRow {
 #[derive(Debug, Serialize)]
 pub struct MapPrintItem {
     pub processo: ProceedingDetail,
+    /// A apresentação da data segue a configuração administrável da espécie;
+    /// o frontend nunca decide por sigla se a remessa se aplica.
+    pub permite_remessa_comissao: bool,
     pub prazos: Vec<DeadlineItem>,
     pub andamentos: Vec<MovementItem>,
     pub enquadramentos: Vec<EnvolvidoComIndicios>,

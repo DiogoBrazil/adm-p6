@@ -6,11 +6,12 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 
 ## Estrutura do documento
 
-- A4 retrato, 210 × 297 mm.
+- A4 paisagem, 297 × 210 mm.
 - Uma capa inteira por espécie de apuratório encontrada.
-- Depois da capa, cada processo/procedimento começa em nova página.
-- Registros extensos podem continuar em páginas seguintes; nunca cortar informação nem comprimir tipografia até ficar ilegível.
-- Capa: brasão oficial, Polícia Militar do Estado de Rondônia, 7º Batalhão de Polícia Militar, espécie e sigla, mês/ano e resumo quantitativo.
+- Depois da capa, processos e procedimentos seguem em fluxo contínuo e podem compartilhar a mesma página.
+- Cada registro começa com cabeçalho institucional inequívoco, termina com marcador “Fim do …” e, quando atravessa uma página, recebe “Continuação do …” no topo da seguinte.
+- Registros extensos podem continuar em páginas seguintes; nunca cortar informação nem comprimir tipografia até ficar ilegível. Cabeçalhos de tabelas se repetem quando a coleção é fragmentada.
+- Capa: brasão oficial, Polícia Militar do Estado de Rondônia, 7ºBPM, espécie e sigla, mês/ano e resumo quantitativo, sem faixa decorativa lateral ou superior.
 - Ficha: cabeçalho compacto com identificação e situação; grade de dados cadastrais; seções para pessoas, enquadramentos, designações, prazos, andamentos, anexos e resumo dos fatos.
 - Repetir cabeçalho de tabela quando uma coleção atravessar páginas; impedir quebra dentro de uma linha.
 
@@ -35,7 +36,6 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 
 ## Componentes de documento
 
-- Faixa institucional fina no topo, sem aparência de aplicativo.
 - Brasão com área de respiro e proporção preservada.
 - Chips de situação com contorno, legíveis em escala de cinza.
 - Grade de pares rótulo/valor em duas ou três colunas conforme o conteúdo.
@@ -45,11 +45,12 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 
 ## Impressão e responsividade
 
-- `@page { size: A4 portrait; margin: 12mm; }`.
+- `@page { size: A4 landscape; margin: 0; }`, com margens físicas controladas pelas páginas explícitas do documento.
 - Usar unidades físicas no layout impresso; controles na tela podem se adaptar a 900px e 600px.
 - `print-color-adjust: exact` apenas onde necessário.
-- `break-before: page` em capas e fichas; `break-inside: avoid` em linhas, cards curtos e blocos atômicos.
-- Conteúdo extenso deve fluir verticalmente; não usar alturas fixas na ficha.
+- `break-before: page` somente em capas e páginas explícitas; `break-inside: avoid` em linhas, cards curtos e blocos atômicos.
+- O próximo registro aproveita o espaço restante quando couber seu cabeçalho com o primeiro bloco; caso contrário, começa na próxima página.
+- Conteúdo extenso deve ser repartido pela paginação do documento; não truncar nem esconder overflow.
 - Não imprimir sidebar, topbar, filtros, botões, tabela resumida nem notificações.
 
 ## Restrições
@@ -59,4 +60,3 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 - A unidade institucional da capa é sempre 7º BPM; a origem cadastrada permanece na ficha.
 - Nomes e siglas de apuratório vêm dos dados, nunca de hardcode.
 - O resultado precisa funcionar no WebView/Tauri sob CSP restritiva.
-

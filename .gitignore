@@ -8,3 +8,6 @@ adm-p6.sql
 
 # Build do Vite: artefato, regenerado por `npm run build`.
 dist
+
+# Arquivos temporários usados para revisar drafts do Superdesign.
+.superdesign/tmp/

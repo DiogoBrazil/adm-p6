@@ -1023,16 +1023,445 @@ tr.atrasado {
   display: none;
 }
 
+.mapa-pdf-root--medindo {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  display: block;
+  width: 297mm;
+  visibility: hidden;
+}
+
 @page mapa-mensal {
-  size: A4 portrait;
+  size: A4 landscape;
   margin: 0;
+}
+
+.mapa-pdf-root {
+  color: #172235;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 8pt;
+  line-height: 1.3;
+}
+
+.mapa-pdf-fluxo-fonte {
+  display: none;
+}
+
+.mapa-pdf-pagina {
+  page: mapa-mensal;
+  box-sizing: border-box;
+  display: flex;
+  width: 297mm;
+  height: 210mm;
+  margin: 0;
+  padding: 9mm 10mm 8mm;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.mapa-pdf-capa {
+  break-before: page;
+  break-after: page;
+}
+
+.mapa-pdf-capa > header {
+  display: flex;
+  padding-top: 5mm;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.mapa-pdf-capa > header img {
+  width: 38mm;
+  height: 38mm;
+  object-fit: contain;
+}
+
+.mapa-pdf-capa > header p {
+  margin: 5mm 0 0.8mm;
+  color: #5e6876;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-capa > header strong {
+  color: #0b2748;
+  font-size: 15pt;
+}
+
+.mapa-pdf-capa > main {
+  display: flex;
+  padding-bottom: 6mm;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.mapa-pdf-capa > main > p:first-child {
+  margin: 0 0 3mm;
+  color: #b59042;
+  font-size: 10pt;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-capa > main h1 {
+  margin: 0;
+  color: #0b2748;
+  font-size: 34pt;
+  line-height: 1;
+}
+
+.mapa-pdf-capa > main h2 {
+  max-width: 220mm;
+  margin: 2mm 0 0;
+  color: #303b4a;
+  font-size: 14pt;
+  font-weight: 600;
+}
+
+.mapa-pdf-capa > main h3 {
+  margin: 5mm 0 4mm;
+  color: #0b2748;
+  font-size: 17pt;
+  font-weight: 600;
+}
+
+.mapa-pdf-capa > main .mapa-pdf-periodo {
+  margin: -2mm 0 5mm;
+  color: #65707e;
+  font-size: 8pt;
+  font-weight: 600;
+}
+
+.mapa-pdf-metricas {
+  display: grid;
+  width: 135mm;
+  margin: 0;
+  grid-template-columns: repeat(3, 1fr);
+  border: 0.3mm solid #ccd3dc;
+  border-radius: 2mm;
+  overflow: hidden;
+}
+
+.mapa-pdf-metricas .mapa-pdf-campo {
+  min-height: 15mm;
+  padding: 2.5mm 3mm;
+  border: 0;
+  border-right: 0.3mm solid #ccd3dc;
+  background: #f4f6f8;
+}
+
+.mapa-pdf-metricas .mapa-pdf-campo:last-child {
+  border-right: 0;
+}
+
+.mapa-pdf-metricas dd {
+  margin-top: 1mm;
+  color: #0b2748;
+  font-size: 17pt;
+  font-weight: 800;
+}
+
+.mapa-pdf-pagina-conteudo {
+  break-after: page;
+}
+
+.mapa-pdf-corpo-pagina {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.mapa-pdf-corpo-pagina > .mapa-pdf-inicio-ficha:not(:first-child) {
+  margin-top: 5mm;
+}
+
+.mapa-pdf-continuacao {
+  margin: 0 0 3mm;
+  padding: 1.8mm 2.4mm;
+  border-bottom: 0.3mm solid #cbd1d9;
+  color: #0b2748;
+  background: #f4f6f8;
+  font-size: 8pt;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-cabecalho-ficha {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 15mm 1fr auto;
+  gap: 3mm;
+  padding: 2mm 0 2.5mm;
+  border-top: 0.9mm solid #0b2748;
+  border-bottom: 0.25mm solid #cbd1d9;
+}
+
+.mapa-pdf-cabecalho-ficha img {
+  width: 14mm;
+  height: 14mm;
+  object-fit: contain;
+}
+
+.mapa-pdf-cabecalho-ficha p,
+.mapa-pdf-cabecalho-ficha h1,
+.mapa-pdf-cabecalho-ficha span {
+  margin: 0;
+}
+
+.mapa-pdf-cabecalho-ficha p {
+  color: #697381;
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-cabecalho-ficha h1 {
+  margin: 0.5mm 0;
+  color: #0b2748;
+  font-size: 14pt;
+  line-height: 1.1;
+}
+
+.mapa-pdf-cabecalho-ficha span {
+  color: #4f5b69;
+  font-size: 7.2pt;
+}
+
+.mapa-pdf-situacao {
+  padding: 1.5mm 2.5mm;
+  border: 0.3mm solid #b59042;
+  border-radius: 99px;
+  color: #70551d;
+  background: #fbf6e8;
+  font-size: 7pt;
+  white-space: nowrap;
+}
+
+.mapa-pdf-situacao.is-concluido {
+  border-color: #66937d;
+  color: #235c45;
+  background: #edf7f1;
+}
+
+.mapa-pdf-corpo-ficha {
+  padding-top: 2.5mm;
+}
+
+.mapa-pdf-secao {
+  margin: 0 0 2.5mm;
+  break-inside: avoid;
+}
+
+.mapa-pdf-secao--fluida {
+  break-inside: auto;
+}
+
+.mapa-pdf-secao h2 {
+  margin: 0 0 1.2mm;
+  padding: 1.15mm 2mm;
+  border-left: 1mm solid #b59042;
+  color: #fff;
+  background: #0b2748;
+  font-size: 7.5pt;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-grade-dados {
+  display: grid;
+  margin: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 0.25mm solid #d5dae1;
+  border-left: 0.25mm solid #d5dae1;
+}
+
+.mapa-pdf-grade-dados--datas {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mapa-pdf-campo {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 1.45mm 1.8mm;
+  border-right: 0.25mm solid #d5dae1;
+  border-bottom: 0.25mm solid #d5dae1;
+}
+
+.mapa-pdf-campo dt {
+  margin: 0 0 0.45mm;
+  color: #67717e;
+  font-size: 5.9pt;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-campo dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #1e2938;
+  font-size: 7.3pt;
+  font-weight: 600;
+}
+
+.mapa-pdf-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 7pt;
+}
+
+.mapa-pdf-tabela thead {
+  display: table-header-group;
+}
+
+.mapa-pdf-tabela tr {
+  break-inside: avoid;
+}
+
+.mapa-pdf-tabela .mapa-pdf-linha-longa {
+  break-inside: auto;
+}
+
+.mapa-pdf-tabela th,
+.mapa-pdf-tabela td {
+  padding: 1.3mm 1.6mm;
+  border: 0.25mm solid #cdd3dc;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.mapa-pdf-tabela th {
+  color: #fff;
+  background: #33465d;
+  font-size: 6pt;
+  letter-spacing: 0.025em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-tabela tbody tr:nth-child(even) {
+  background: #f4f6f8;
+}
+
+.mapa-pdf-tabela--envolvidos th:nth-child(1) { width: 25%; }
+.mapa-pdf-tabela--envolvidos th:nth-child(2) { width: 12%; }
+.mapa-pdf-tabela--envolvidos th:nth-child(3) { width: 48%; }
+.mapa-pdf-tabela--envolvidos th:nth-child(4) { width: 15%; }
+.mapa-pdf-tabela--designacoes th:nth-child(1) { width: 13%; }
+.mapa-pdf-tabela--designacoes th:nth-child(2) { width: 24%; }
+.mapa-pdf-tabela--designacoes th:nth-child(3),
+.mapa-pdf-tabela--designacoes th:nth-child(4) { width: 9%; }
+.mapa-pdf-tabela--designacoes th:nth-child(5) { width: 22%; }
+.mapa-pdf-tabela--prazos th:nth-child(1) { width: 15%; }
+.mapa-pdf-tabela--prazos th:nth-child(2),
+.mapa-pdf-tabela--prazos th:nth-child(4) { width: 11%; }
+.mapa-pdf-tabela--prazos th:nth-child(3) { width: 7%; }
+.mapa-pdf-tabela--prazos th:nth-child(5) { width: 29%; }
+.mapa-pdf-tabela--andamentos th:nth-child(1) { width: 15%; }
+.mapa-pdf-tabela--andamentos th:nth-child(2) { width: 17%; }
+.mapa-pdf-tabela--andamentos th:nth-child(3) { width: 20%; }
+.mapa-pdf-tabela--anexos th:nth-child(1) { width: 31%; }
+.mapa-pdf-tabela--anexos th:nth-child(2) { width: 16%; }
+.mapa-pdf-tabela--anexos th:nth-child(3) { width: 10%; }
+.mapa-pdf-tabela--anexos th:nth-child(4) { width: 25%; }
+
+.mapa-pdf-enquadramentos {
+  display: grid;
+  gap: 1.1mm;
+}
+
+.mapa-pdf-enquadramento-grupo {
+  padding: 1mm 1.4mm;
+  border-left: 0.7mm solid #b59042;
+  background: #f7f8fa;
+}
+
+.mapa-pdf-enquadramento-grupo h3 {
+  margin: 0 0 0.5mm;
+  color: #173b67;
+  font-size: 6.3pt;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-enquadramento-grupo ul {
+  margin: 0;
+  padding-left: 3.5mm;
+}
+
+.mapa-pdf-enquadramento-grupo li + li {
+  margin-top: 0.5mm;
+}
+
+.mapa-pdf-vazio,
+.mapa-pdf-texto-livre {
+  margin: 0;
+  padding: 1.8mm 2mm;
+  border: 0.25mm solid #d5dae1;
+  color: #475363;
+  background: #fafbfc;
+}
+
+.mapa-pdf-vazio,
+.mapa-pdf-vazio-celula {
+  font-style: italic;
+}
+
+.mapa-pdf-vazio-celula {
+  margin: 0;
+  color: #65707e;
+}
+
+.mapa-pdf-texto-livre {
+  white-space: pre-wrap;
+}
+
+.mapa-pdf-fim {
+  margin: 1mm 0 3mm;
+  padding: 1mm 3mm;
+  border: 0.25mm solid #cbd1d9;
+  border-radius: 1mm;
+  color: #526074;
+  background: #f4f6f8;
+  font-size: 6.5pt;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  break-inside: avoid;
+}
+
+.mapa-pdf-rodape {
+  display: flex;
+  padding-top: 2mm;
+  border-top: 0.25mm solid #cbd1d9;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  color: #65707e;
+  font-size: 6.2pt;
 }
 
 @media print {
   html.mapa-pdf-ativo,
   html.mapa-pdf-ativo body {
-    width: 210mm;
-    min-width: 210mm;
+    width: 297mm;
+    min-width: 297mm;
     margin: 0;
     padding: 0;
     background: #fff;
@@ -1044,347 +1473,12 @@ tr.atrasado {
 
   html.mapa-pdf-ativo .mapa-pdf-root {
     display: block !important;
-    color: #172235;
-    font-family: "Inter", "Segoe UI", Arial, sans-serif;
-    font-size: 8.3pt;
-    line-height: 1.38;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
 
-  .mapa-pdf-documento {
-    display: block;
-  }
-
   .mapa-pdf-pagina {
-    page: mapa-mensal;
-    box-sizing: border-box;
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0;
-    padding: 11mm 12mm 10mm;
-    background: #fff;
-  }
-
-  .mapa-pdf-capa {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    break-before: page;
     break-after: page;
-  }
-
-  .mapa-pdf-capa .mapa-pdf-faixa {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: 7mm;
-    background: linear-gradient(180deg, #0b2748 0 72%, #b59042 72% 100%);
-  }
-
-  .mapa-pdf-capa > header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 12mm;
-    text-align: center;
-  }
-
-  .mapa-pdf-capa > header img {
-    width: 43mm;
-    height: 43mm;
-    object-fit: contain;
-  }
-
-  .mapa-pdf-capa > header p {
-    margin: 7mm 0 1mm;
-    color: #5e6876;
-    font-size: 9pt;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-capa > header strong {
-    color: #0b2748;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 15pt;
-  }
-
-  .mapa-pdf-capa > header span:first-of-type {
-    width: 48mm;
-    margin-top: 5mm;
-    border-top: 1.2mm solid #b59042;
-  }
-
-  .mapa-pdf-capa > main {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 8mm 8mm 18mm 15mm;
-    text-align: center;
-  }
-
-  .mapa-pdf-capa > main > p:first-child {
-    margin: 0 0 4mm;
-    color: #b59042;
-    font-size: 10pt;
-    font-weight: 800;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-capa > main h1 {
-    margin: 0;
-    color: #0b2748;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 38pt;
-    line-height: 1;
-  }
-
-  .mapa-pdf-capa > main h2 {
-    max-width: 150mm;
-    margin: 3mm 0 0;
-    color: #303b4a;
-    font-size: 14pt;
-    font-weight: 600;
-  }
-
-  .mapa-pdf-capa > main h3 {
-    margin: 8mm 0 7mm;
-    color: #0b2748;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 19pt;
-    font-weight: 500;
-  }
-
-  .mapa-pdf-capa > main .mapa-pdf-periodo {
-    margin: -4mm 0 7mm;
-    color: #65707e;
-    font-size: 8pt;
-    font-weight: 600;
-  }
-
-  .mapa-pdf-metricas {
-    display: grid;
-    width: 130mm;
-    margin: 0;
-    grid-template-columns: repeat(3, 1fr);
-    border: 0.3mm solid #ccd3dc;
-    border-radius: 2mm;
-  }
-
-  .mapa-pdf-metricas .mapa-pdf-campo {
-    min-height: 17mm;
-    padding: 3mm;
-    border: 0;
-    border-right: 0.3mm solid #ccd3dc;
-    background: #f4f6f8;
-  }
-
-  .mapa-pdf-metricas .mapa-pdf-campo:last-child {
-    border-right: 0;
-  }
-
-  .mapa-pdf-metricas dd {
-    margin-top: 1mm;
-    color: #0b2748;
-    font-size: 17pt;
-    font-weight: 800;
-  }
-
-  .mapa-pdf-ficha {
-    break-before: page;
-  }
-
-  .mapa-pdf-cabecalho-ficha {
-    display: grid;
-    align-items: center;
-    grid-template-columns: 18mm 1fr auto;
-    gap: 4mm;
-    padding-bottom: 4mm;
-    border-bottom: 1.2mm solid #0b2748;
-  }
-
-  .mapa-pdf-cabecalho-ficha img {
-    width: 17mm;
-    height: 17mm;
-    object-fit: contain;
-  }
-
-  .mapa-pdf-cabecalho-ficha p,
-  .mapa-pdf-cabecalho-ficha h1,
-  .mapa-pdf-cabecalho-ficha span {
-    margin: 0;
-  }
-
-  .mapa-pdf-cabecalho-ficha p {
-    color: #697381;
-    font-size: 6.8pt;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-cabecalho-ficha h1 {
-    margin: 0.7mm 0;
-    color: #0b2748;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 17pt;
-    line-height: 1.12;
-  }
-
-  .mapa-pdf-cabecalho-ficha span {
-    color: #4f5b69;
-    font-size: 7.5pt;
-  }
-
-  .mapa-pdf-situacao {
-    padding: 2mm 3mm;
-    border: 0.3mm solid #b59042;
-    border-radius: 99px;
-    color: #70551d;
-    background: #fbf6e8;
-    font-size: 7pt;
-    white-space: nowrap;
-  }
-
-  .mapa-pdf-situacao.is-concluido {
-    border-color: #66937d;
-    color: #235c45;
-    background: #edf7f1;
-  }
-
-  .mapa-pdf-corpo-ficha {
-    padding-top: 4mm;
-  }
-
-  .mapa-pdf-secao {
-    margin: 0 0 3.5mm;
-    break-inside: avoid;
-  }
-
-  .mapa-pdf-secao--fluida {
-    break-inside: auto;
-  }
-
-  .mapa-pdf-secao h2 {
-    margin: 0 0 1.7mm;
-    padding: 1.4mm 2.2mm;
-    border-left: 1.1mm solid #b59042;
-    color: #fff;
-    background: #0b2748;
-    font-size: 8pt;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-grade-dados {
-    display: grid;
-    margin: 0;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: 0.25mm solid #d5dae1;
-    border-left: 0.25mm solid #d5dae1;
-  }
-
-  .mapa-pdf-grade-dados--datas {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .mapa-pdf-campo {
-    box-sizing: border-box;
-    min-width: 0;
-    padding: 2mm 2.2mm;
-    border-right: 0.25mm solid #d5dae1;
-    border-bottom: 0.25mm solid #d5dae1;
-  }
-
-  .mapa-pdf-campo dt {
-    margin: 0 0 0.6mm;
-    color: #67717e;
-    font-size: 6.3pt;
-    font-weight: 800;
-    letter-spacing: 0.035em;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-campo dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-    color: #1e2938;
-    font-size: 8pt;
-    font-weight: 600;
-  }
-
-  .mapa-pdf-tabela {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: auto;
-    font-size: 7.1pt;
-  }
-
-  .mapa-pdf-tabela thead {
-    display: table-header-group;
-  }
-
-  .mapa-pdf-tabela tr {
-    break-inside: avoid;
-  }
-
-  .mapa-pdf-tabela th,
-  .mapa-pdf-tabela td {
-    padding: 1.6mm 1.8mm;
-    border: 0.25mm solid #cdd3dc;
-    overflow-wrap: anywhere;
-    vertical-align: top;
-  }
-
-  .mapa-pdf-tabela th {
-    color: #fff;
-    background: #33465d;
-    font-size: 6.3pt;
-    letter-spacing: 0.025em;
-    text-align: left;
-    text-transform: uppercase;
-  }
-
-  .mapa-pdf-tabela tbody tr:nth-child(even) {
-    background: #f4f6f8;
-  }
-
-  .mapa-pdf-vazio,
-  .mapa-pdf-texto-livre {
-    margin: 0;
-    padding: 2.2mm;
-    border: 0.25mm solid #d5dae1;
-    color: #475363;
-    background: #fafbfc;
-  }
-
-  .mapa-pdf-vazio {
-    font-style: italic;
-  }
-
-  .mapa-pdf-texto-livre {
-    white-space: pre-wrap;
-  }
-
-  .mapa-pdf-rodape {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: auto;
-    padding-top: 3mm;
-    border-top: 0.25mm solid #cbd1d9;
-    color: #65707e;
-    font-size: 6.5pt;
-  }
-
-  .mapa-pdf-ficha > .mapa-pdf-rodape {
-    margin-top: 4mm;
   }
 }
 

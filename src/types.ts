@@ -505,6 +505,8 @@ export interface MapRow {
 /** `maps_reports` — todas as fontes necessárias para uma ficha A4 do mapa. */
 export interface MapPrintItem {
   processo: ProceedingDetail;
+  /** A espécie define se a remessa à comissão se aplica; nunca a sigla. */
+  permite_remessa_comissao: boolean;
   prazos: DeadlineItem[];
   andamentos: MovementItem[];
   enquadramentos: EnvolvidoComIndicios[];

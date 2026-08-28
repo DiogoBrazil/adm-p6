@@ -135,9 +135,19 @@ pub async fn map_print_data(
                 AppError::Domain(
                     "Um processo do mapa não foi encontrado. Gere o mapa novamente antes de imprimir."
                         .to_string(),
-                )
+                    )
             })?;
+        let permite_remessa_comissao: bool = sqlx::query_scalar(
+            "SELECT a.permite_remessa_comissao
+               FROM processos_procedimentos p
+               JOIN apuratorios a ON a.id = p.apuratorio_id
+              WHERE p.id = $1::uuid",
+        )
+        .bind(&linha.processo_id)
+        .fetch_one(pool)
+        .await?;
         itens.push(MapPrintItem {
+            permite_remessa_comissao,
             prazos: deadlines::repository::list(pool, &linha.processo_id).await?,
             andamentos: movements::repository::list(pool, &linha.processo_id).await?,
             enquadramentos: evidence::repository::list_for_proceeding(pool, &linha.processo_id)
