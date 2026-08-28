@@ -467,6 +467,12 @@ export interface MapPeriodRequest {
   apuratorio_ids?: string[] | null;
 }
 
+/** `maps_reports` — recorte do mapa que será preparado para impressão detalhada. */
+export interface MapPrintRequest extends MapPeriodRequest {
+  /** Ausente = documento completo; preenchido = somente esta ficha, se ela pertencer ao mapa. */
+  processo_id?: string | null;
+}
+
 /** `maps_reports` */
 export interface SaveMapRequest {
   titulo: string;
@@ -494,6 +500,14 @@ export interface MapRow {
   prazo_vencimento: string | null;
   ultimo_andamento: string | null;
   ultimo_andamento_em: string | null;
+}
+
+/** `maps_reports` — todas as fontes necessárias para uma ficha A4 do mapa. */
+export interface MapPrintItem {
+  processo: ProceedingDetail;
+  prazos: DeadlineItem[];
+  andamentos: MovementItem[];
+  enquadramentos: EnvolvidoComIndicios[];
 }
 
 /** `maps_reports` */

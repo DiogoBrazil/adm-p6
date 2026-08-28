@@ -1,0 +1,62 @@
+# Design System — PDF de Mapas Mensais
+
+## Produto e objetivo
+
+ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO. O novo alvo é um documento A4 institucional, gerado a partir do mapa mensal, para consulta, organização e arquivamento de processos e procedimentos.
+
+## Estrutura do documento
+
+- A4 retrato, 210 × 297 mm.
+- Uma capa inteira por espécie de apuratório encontrada.
+- Depois da capa, cada processo/procedimento começa em nova página.
+- Registros extensos podem continuar em páginas seguintes; nunca cortar informação nem comprimir tipografia até ficar ilegível.
+- Capa: brasão oficial, Polícia Militar do Estado de Rondônia, 7º Batalhão de Polícia Militar, espécie e sigla, mês/ano e resumo quantitativo.
+- Ficha: cabeçalho compacto com identificação e situação; grade de dados cadastrais; seções para pessoas, enquadramentos, designações, prazos, andamentos, anexos e resumo dos fatos.
+- Repetir cabeçalho de tabela quando uma coleção atravessar páginas; impedir quebra dentro de uma linha.
+
+## Identidade visual institucional
+
+- Usar obrigatoriamente o brasão real fornecido como Brand Asset em todas as posições de logomarca. Não inventar símbolos, iniciais, SVGs ou substitutos.
+- Azul-marinho principal: `#0b1f3a`.
+- Azul institucional secundário: `#173b67`.
+- Dourado discreto: `#b28a2e`; nunca usar grandes massas douradas.
+- Verde PMRO apenas como acento pontual: `#2f6b4f`.
+- Texto: `#172033`; secundário: `#526074`.
+- Bordas: `#cfd6df`; superfícies suaves: `#f4f6f8`; papel: `#ffffff`.
+- Preto e branco deve continuar legível: cor nunca pode ser a única indicação de situação.
+
+## Tipografia
+
+- Usar exclusivamente Segoe UI, Tahoma, Geneva, Verdana ou sans-serif do sistema.
+- Capa: título 24–30pt, subtítulo 13–16pt, metadados 10–12pt.
+- Ficha: título 14–17pt; títulos de seção 9–11pt; corpo 8.5–10pt.
+- Números e datas com alinhamento e espaçamento consistentes.
+- Evitar caixa alta em parágrafos; reservar para micro-rótulos institucionais e títulos curtos.
+
+## Componentes de documento
+
+- Faixa institucional fina no topo, sem aparência de aplicativo.
+- Brasão com área de respiro e proporção preservada.
+- Chips de situação com contorno, legíveis em escala de cinza.
+- Grade de pares rótulo/valor em duas ou três colunas conforme o conteúdo.
+- Tabelas densas, com divisores claros, cabeçalho azul-marinho e corpo branco/cinza alternado.
+- Seções vazias devem indicar “Não registrado” sem ocupar espaço excessivo.
+- Rodapé discreto com identificação do documento e data de geração; não depender de contador de página do navegador.
+
+## Impressão e responsividade
+
+- `@page { size: A4 portrait; margin: 12mm; }`.
+- Usar unidades físicas no layout impresso; controles na tela podem se adaptar a 900px e 600px.
+- `print-color-adjust: exact` apenas onde necessário.
+- `break-before: page` em capas e fichas; `break-inside: avoid` em linhas, cards curtos e blocos atômicos.
+- Conteúdo extenso deve fluir verticalmente; não usar alturas fixas na ficha.
+- Não imprimir sidebar, topbar, filtros, botões, tabela resumida nem notificações.
+
+## Restrições
+
+- Não adicionar fontes externas, gradientes decorativos, fotografias, glassmorphism ou aparência de landing page.
+- Não incorporar o conteúdo binário dos anexos; listar metadados.
+- A unidade institucional da capa é sempre 7º BPM; a origem cadastrada permanece na ficha.
+- Nomes e siglas de apuratório vêm dos dados, nunca de hardcode.
+- O resultado precisa funcionar no WebView/Tauri sob CSP restritiva.
+

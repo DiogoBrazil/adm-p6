@@ -5,9 +5,11 @@ use crate::db::paginacao::Recorte;
 use crate::error::AppError;
 use crate::maps_reports::domain::{
     ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
-    EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
-    SavedMapListItem, SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
+    EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest, MapRow, ReportFilter,
+    SaveMapRequest, SavedMapFull, SavedMapListItem, SavedMapListResult, SolucoesResumo,
+    StatusPorApuratorio,
 };
+use crate::{deadlines, evidence, movements, proceedings};
 
 /// Lista de escopo vazia significa "todos", não "nenhum".
 ///
@@ -88,7 +90,7 @@ pub async fn map_rows(
            AND (   (v.data_conclusao IS NULL     AND v.data_instauracao <= $2)
                 OR (v.data_conclusao IS NOT NULL AND v.data_conclusao BETWEEN $1 AND $2) )
            AND ($3::uuid[] IS NULL OR v.apuratorio_id = ANY($3::uuid[]))
-         ORDER BY v.apuratorio_sigla, v.data_instauracao
+         ORDER BY v.apuratorio_sigla, v.data_instauracao, v.rotulo, v.id
         "#,
     )
     .bind(request.periodo_inicio)
@@ -96,6 +98,55 @@ pub async fn map_rows(
     .bind(escopo(&request.apuratorio_ids))
     .fetch_all(pool)
     .await
+}
+
+/// Dados completos do mapa atual para o documento A4.
+///
+/// A lista nasce obrigatoriamente de `map_rows`: além de manter uma única regra
+/// para o mês, isto impede que um `processo_id` enviado por IPC imprima uma
+/// ficha que não pertence ao filtro visível. As leituras detalhadas reutilizam
+/// os quatro repositórios da tela de processo em vez de duplicar seus JOINs.
+pub async fn map_print_data(
+    pool: &PgPool,
+    request: &MapPrintRequest,
+) -> Result<Vec<MapPrintItem>, AppError> {
+    if request.periodo_fim < request.periodo_inicio {
+        return Err(AppError::Domain(
+            "A data final do mapa não pode ser anterior à data inicial.".to_string(),
+        ));
+    }
+
+    let mut linhas = map_rows(pool, &request.periodo()).await?;
+    if let Some(processo_id) = request.processo_id.as_deref() {
+        if !linhas.iter().any(|linha| linha.processo_id == processo_id) {
+            return Err(AppError::Domain(
+                "O processo escolhido não pertence ao mês e aos apuratórios deste mapa. Gere o mapa novamente e selecione uma ficha da lista."
+                    .to_string(),
+            ));
+        }
+        linhas.retain(|linha| linha.processo_id == processo_id);
+    }
+
+    let mut itens = Vec::with_capacity(linhas.len());
+    for linha in linhas {
+        let processo = proceedings::repository::get(pool, &linha.processo_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::Domain(
+                    "Um processo do mapa não foi encontrado. Gere o mapa novamente antes de imprimir."
+                        .to_string(),
+                )
+            })?;
+        itens.push(MapPrintItem {
+            prazos: deadlines::repository::list(pool, &linha.processo_id).await?,
+            andamentos: movements::repository::list(pool, &linha.processo_id).await?,
+            enquadramentos: evidence::repository::list_for_proceeding(pool, &linha.processo_id)
+                .await?,
+            processo,
+        });
+    }
+
+    Ok(itens)
 }
 
 pub async fn save_map(

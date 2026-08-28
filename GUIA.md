@@ -26,10 +26,10 @@ sobre remover o schema `legado`.
 | Código | |
 |---|---:|
 | Migrations (`0001`–`0014`) | **14** |
-| Comandos Tauri, todos no cliente tipado | **83** |
-| Testes | **141** |
-| Módulos Rust · linhas de Rust | 12 · 9.559 |
-| Arquivos de frontend · linhas de TS/CSS | 17 · 10.933 |
+| Comandos Tauri, todos no cliente tipado | **84** |
+| Testes | **143** |
+| Módulos Rust · linhas de Rust | 12 · 9.817 |
+| Arquivos de frontend · linhas de TS/CSS | 18 · 11.991 |
 | Catálogos administráveis | 26 |
 | Comandos que o frontend invoca e não existem | **0** |
 | Chamadas fora do cliente tipado | **0** |
@@ -55,7 +55,7 @@ sai só quando ela fechar.
 |---|---|---|---|
 | 1 | **Percorrer as telas com o binário de produção**, console aberto (F12). É o único que exerce a CSP restritiva | seção **11** | **Sim**, antes do uso real |
 | 2 | **Criar uma carta precatória de ponta a ponta** | seção 11, item (f) | **Sim** |
-| 3 | **Conferir Ofendido/Vítima e o Resumo dos fatos na tela** — é a rodada mais recente e a que menos foi vista por olho humano | seção 11, item (i) | **Sim** |
+| 3 | **Conferir Ofendido/Vítima e o Resumo dos fatos na tela** — segue entre as áreas menos vistas por olho humano | seção 11, item (i) | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -77,7 +77,7 @@ Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão 
 ### Antes de tocar em qualquer coisa, leia
 
 - **Seção 2** — os 6 princípios do modelo. Toda decisão futura tem de caber neles.
-- **Seção 3** — as 49 decisões já tomadas. Não reabra sem motivo novo.
+- **Seção 3** — as 50 decisões já tomadas. Não reabra sem motivo novo.
 - **Seção 7** — as armadilhas. Cada uma já custou tempo pelo menos uma vez.
 - **Acabou o `docker compose down -v`.** Com dado real dentro, recriar o volume apaga
   8 anos de registro. Mudança de schema agora é migration incremental (seção 5).
@@ -110,7 +110,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 141 testes, bancos descartáveis
+cargo test                           # 143 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -251,6 +251,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 46 | Quem registra Ofendido/Vítima, e onde ele mora | **Todo procedimento — CP, FP, IPM, SR e SV —, e em tabela própria.** Três escolhas numa. (a) **Vítima deixa de ser papel de pessoa.** Era uma linha de `papeis_pessoa` escolhida num `<select>`; virou `processo_vitimas`, relação do procedimento como `processo_envolvidos` (princípio 3). O motivo é concreto: `papeis_pessoa` é catálogo **operacional** e nasce vazio, então uma seção que dependesse dele sumiria numa instalação nova — a forma exata do defeito da carta precatória (a seção 12, rodada 10). Sem catálogo no caminho, não há o que cadastrar nem o que renomear. (b) **Quem decide é `apuratorios.permite_cadastro_vitima`**, ligado pela `0012` em todo apuratório cujo tipo é `procedimento`; os cinco processos disciplinares ficam de fora, porque são instaurados **contra** um militar, e não para apurar um fato. Carga única, como `permite_indicios` (decisão 31). (c) **O atributo NÃO entra no registro de Catálogos** — desvio deliberado da seção 5, por decisão do responsável: registrar ofendido é capacidade da espécie, não escolha de administrador. Fica no mesmo caso de `codigo_extensao`. É opcional (zero, um ou vários), e o bloco genérico do formulário virou **"Pessoas inquiridas"**. |
 | 47 | Qual é a ordem das datas do fluxo? | **Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão**, comparando somente as etapas preenchidas. Datas iguais são válidas; uma etapa ausente não torna as posteriores obrigatórias. `data_remessa_encarregado` e `data_remessa_comissao` são alternativas na mesma posição e não se comparam entre si. A aplicação devolve a incompatibilidade por nome e data, e a migration `0013` repete a regra no banco. |
 | 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e CSV, sem reescrever snapshots de mapas já salvos. |
+| 49 | Como é emitido o PDF detalhado do mapa mensal? | **A partir do mapa corrente, pela impressão do sistema, sem crate de PDF.** Pode emitir todas as fichas do filtro ou somente uma; nos dois casos o backend reaplica mês e apuratórios antes de aceitar o processo. Há uma capa institucional por espécie de apuratório, com mês/ano e unidade fixa 7º BPM. Cada processo/procedimento começa em página nova, mas pode continuar nas seguintes para não cortar informação. A ficha reúne o detalhe cadastral, envolvidos, enquadramentos, resultados, vítimas, inquiridos, designações, prazos/prorrogações, andamentos e metadados dos anexos; o conteúdo binário dos anexos não entra. Mapas salvos continuam snapshots e ficam fora desta primeira versão. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -746,7 +747,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (a seção 4) |
-| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **83 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
+| CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **84 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
 | **Largura de coluna num `<col style="">`** | É `style` como qualquer outro, e a CSP recusa igual: o `<col>` fica sem largura e a tabela volta a se dimensionar pelo conteúdo, **sem erro de build e sem erro de console que aponte a tabela** | A largura sai em `data-largura` e é aplicada pela CSSOM em `dom.ts::aplicarLarguras`, chamada de `main.ts::shell()` |
 | **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a seção 12, rodada 14 provou que a listagem de processos não mudou |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Larguras calculadas de coluna vão em `data-*` e são aplicadas por `aplicarLarguras()` em `shell()` |
@@ -1045,7 +1046,8 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Designações por Militar**
 - [ ] **Estatísticas de Processos** — tabelas centralizadas, somente rótulo e quantidade
 - [ ] **Estatísticas de Procedimentos** — idem, sem barras percentuais
-- [ ] **Mapa do Período**
+- [ ] **Mapa do Período** — gerar o mês sem apuratório marcado e com uma espécie marcada; os registros devem obedecer à mesma regra da tabela
+- [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7º BPM, mês/ano, cada ficha em página nova e tabelas longas continuando sem perda
 - [ ] **Mapas Salvos**
 - [ ] **Relatório Anual**
 
@@ -1250,7 +1252,7 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
 
 ### h) Substituição de designações e mensagens (seção 12, rodada 15)
 
-É a rodada mais recente. Mexe em duas coisas que só a tela conta se estão certas:
+Esta rodada mexe em duas coisas que só a tela conta se estão certas:
 o fluxo de substituição, que envolve duas linhas por operação, e o texto que o
 usuário lê quando alguma coisa é recusada.
 
@@ -1477,7 +1479,7 @@ etapa correspondente em `src-tauri/importacao/` e rode o roteiro do zero.
 
 ---
 
-## 12. Changelog — as 17 rodadas
+## 12. Changelog — as 20 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1503,8 +1505,10 @@ A narrativa completa de cada uma está no histórico do git.
 | 16 | Datas pós-cadastro | remessa e julgamento saíram do cadastro para o detalhe; as duas remessas unificadas |
 | 17 | **Ofendido/Vítima** | tabela própria `processo_vitimas`, atributo por apuratório, e os blocos do detalhe. Detalhe abaixo |
 | 18 | Datas do fluxo | cadeia Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão, com etapas opcionais e proteção no formulário, backend e banco |
+| 19 | Origem detalhada | catálogo de Subunidade/Seção, vínculo opcional à unidade e novo escopo de numeração |
+| 20 | PDF do mapa mensal | impressão A4 institucional do mapa corrente, completa ou individual, com capa por apuratório e ficha detalhada por processo |
 
-### A rodada 17, em detalhe — é a mais recente
+### A rodada 17, em detalhe
 
 Pedido: o procedimento passa a registrar **Ofendido/Vítima**, opcional e em qualquer
 quantidade. Três escolhas, todas do responsável, e a segunda evitou um defeito:

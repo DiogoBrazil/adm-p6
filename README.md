@@ -28,7 +28,7 @@ Login inicial: `admin@sistema.com` / `123456` — **troque numa instalação rea
 ```bash
 cd src-tauri
 cargo fmt --check
-cargo test                    # 141 testes, em bancos descartáveis
+cargo test                    # 143 testes, em bancos descartáveis
 cd ..
 npm run typecheck             # é aqui que erro de comando aparece
 npm run build                 # typecheck + vite build
@@ -49,7 +49,7 @@ quebra o startup seguinte com `VersionMismatch`.
 
 **[`GUIA.md`](GUIA.md) é a fonte de verdade** deste projeto e o lugar por onde
 começar. Ele traz o estado atual, o modelo de dados e o porquê de cada decisão,
-as 49 decisões de negócio já tomadas, as receitas para mexer sem quebrar, o
+as 50 decisões de negócio já tomadas, as receitas para mexer sem quebrar, o
 roteiro da importação, as armadilhas conhecidas e a lista do que ainda falta
 conferir na tela.
 

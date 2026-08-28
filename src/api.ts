@@ -73,6 +73,8 @@ import type {
   InfracaoPenalItem,
   InfracaoPenalVinculo,
   MapPeriodRequest,
+  MapPrintItem,
+  MapPrintRequest,
   MapRow,
   MovementItem,
   PapelItem,
@@ -211,6 +213,7 @@ export interface Commands {
 
   // ── Mapas e relatórios ────────────────────────────────────────────
   reports_map_rows: { args: { request: MapPeriodRequest }; result: MapRow[] };
+  reports_map_print_data: { args: { request: MapPrintRequest }; result: MapPrintItem[] };
   reports_save_map: { args: { request: SaveMapRequest }; result: string };
   reports_saved_maps: { args: { page?: number | null, perPage?: number | null }; result: SavedMapListResult };
   reports_get_saved_map: { args: { id: string }; result: SavedMapFull | null };

@@ -6,8 +6,8 @@ use crate::auth::guards::{require_admin, require_session};
 use crate::db::paginacao::Recorte;
 use crate::maps_reports::domain::{
     ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
-    EnquadramentoContagem, MapPeriodRequest, MapRow, ReportFilter, SaveMapRequest, SavedMapFull,
-    SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
+    EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest, MapRow, ReportFilter,
+    SaveMapRequest, SavedMapFull, SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
 };
 use crate::maps_reports::repository;
 use crate::response::{from_result, ApiResponse};
@@ -22,6 +22,22 @@ pub async fn reports_map_rows(
             require_session(&state).await?;
             let pool = state.pool().await?;
             Ok(repository::map_rows(&pool, &request).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_map_print_data(
+    state: State<'_, AppState>,
+    request: MapPrintRequest,
+) -> Result<ApiResponse<Vec<MapPrintItem>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            repository::map_print_data(&pool, &request).await
         }
         .await,
     )

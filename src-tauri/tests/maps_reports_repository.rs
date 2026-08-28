@@ -9,7 +9,7 @@
 
 use adm_p6_tauri_lib::db::paginacao::Recorte;
 use adm_p6_tauri_lib::maps_reports::domain::{
-    DesignacaoMatrizFiltro, MapPeriodRequest, ReportFilter,
+    DesignacaoMatrizFiltro, MapPeriodRequest, MapPrintRequest, ReportFilter,
 };
 use adm_p6_tauri_lib::maps_reports::repository;
 use base64::Engine;
@@ -185,6 +185,140 @@ async fn mapa_e_csv_exibem_a_origem_com_subunidade() {
             .unwrap();
         let csv = String::from_utf8(bytes).unwrap();
         assert!(csv.contains("Unidade Teste / 1ª CIA Teste"), "{csv}");
+    })
+    .await;
+}
+
+/// A impressão não recebe um id solto: a ficha só pode sair se estiver no
+/// mesmo recorte mensal e no mesmo escopo que o usuário acabou de gerar.
+#[tokio::test]
+async fn impressao_do_mapa_respeita_periodo_escopo_e_selecao() {
+    util::com_banco_descartavel("mapa_impressao_escopo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let incluido = processo(&pool, &m, &m.apuratorio, "PDF-001", data(2025, 1, 10), None).await;
+        let outro_apuratorio = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "PDF-002",
+            data(2026, 3, 4),
+            None,
+        )
+        .await;
+        let encerrado_antes = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "PDF-003",
+            data(2026, 1, 4),
+            Some(data(2026, 2, 20)),
+        )
+        .await;
+
+        let pedido = |processo_id: Option<String>| MapPrintRequest {
+            periodo_inicio: data(2026, 3, 1),
+            periodo_fim: data(2026, 3, 31),
+            apuratorio_ids: Some(vec![m.apuratorio.clone()]),
+            processo_id,
+        };
+
+        let completo = repository::map_print_data(&pool, &pedido(None))
+            .await
+            .unwrap();
+        assert_eq!(completo.len(), 1);
+        assert_eq!(completo[0].processo.cabecalho.id, incluido);
+
+        let individual = repository::map_print_data(&pool, &pedido(Some(incluido.clone())))
+            .await
+            .unwrap();
+        assert_eq!(individual.len(), 1);
+        assert_eq!(individual[0].processo.cabecalho.id, incluido);
+
+        for fora_do_recorte in [outro_apuratorio, encerrado_antes] {
+            let erro = repository::map_print_data(&pool, &pedido(Some(fora_do_recorte)))
+                .await
+                .unwrap_err();
+            assert!(erro.message().contains("não pertence"), "{erro}");
+        }
+
+        let erro = repository::map_print_data(
+            &pool,
+            &MapPrintRequest {
+                periodo_inicio: data(2026, 4, 1),
+                periodo_fim: data(2026, 3, 31),
+                apuratorio_ids: None,
+                processo_id: None,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(erro.message().contains("data final"), "{erro}");
+    })
+    .await;
+}
+
+/// A ficha é composta pelas fontes do detalhe, não pela linha resumida do
+/// mapa. Este cenário protege especialmente envolvidos, designações, prazo e
+/// andamento, que seriam fáceis de esquecer numa consulta nova.
+#[tokio::test]
+async fn impressao_do_mapa_reune_os_dados_detalhados() {
+    util::com_banco_descartavel("mapa_impressao_detalhe", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "PDF-DETALHE",
+            data(2026, 3, 5),
+            None,
+        )
+        .await;
+        envolvido(&pool, &m, &id, &m.pm_um, 1).await;
+        designar(&pool, &id, &m.pm_um, &m.papel_encarregado).await;
+        sqlx::query(
+            "INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+             VALUES ($1::uuid, 0, '2026-03-05', 30)",
+        )
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO processo_andamentos
+                 (processo_id, tipo_andamento_id, descricao, ocorrido_em)
+             VALUES ($1::uuid, $2::uuid, 'Diligência registrada para o PDF',
+                     '2026-03-12T14:30:00Z')",
+        )
+        .bind(&id)
+        .bind(&m.tipo_andamento)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let itens = repository::map_print_data(
+            &pool,
+            &MapPrintRequest {
+                periodo_inicio: data(2026, 3, 1),
+                periodo_fim: data(2026, 3, 31),
+                apuratorio_ids: None,
+                processo_id: Some(id.clone()),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(itens.len(), 1);
+        let item = &itens[0];
+        assert_eq!(item.processo.cabecalho.id, id);
+        assert_eq!(item.processo.envolvidos.len(), 1);
+        assert_eq!(item.processo.designacoes.len(), 1);
+        assert_eq!(item.prazos.len(), 1);
+        assert_eq!(item.andamentos.len(), 1);
+        assert_eq!(
+            item.andamentos[0].descricao,
+            "Diligência registrada para o PDF"
+        );
+        assert_eq!(item.enquadramentos.len(), 1);
     })
     .await;
 }

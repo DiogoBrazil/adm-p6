@@ -94,6 +94,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             evidence::commands::evidence_search_transgressoes,
             evidence::commands::evidence_search_infracoes_estatuto,
             maps_reports::commands::reports_map_rows,
+            maps_reports::commands::reports_map_print_data,
             maps_reports::commands::reports_save_map,
             maps_reports::commands::reports_saved_maps,
             maps_reports::commands::reports_get_saved_map,

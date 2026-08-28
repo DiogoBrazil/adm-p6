@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "mapas-mensais-pdf": {
+      "targetKind": "new-ui",
+      "projectId": "50a5d9a8-af9f-4fa0-a930-810820737e93",
+      "activeDraftId": "d58adefd-c2dc-4350-b02a-5f6cc12c68ae",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "src-tauri-icons-icon.png"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "src-tauri-icons-icon.png",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/50a5d9a8-af9f-4fa0-a930-810820737e93/brand-assets/src-tauri-icons-icon.png/icon.png",
+          "sourcePath": "src-tauri/icons/icon.png"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md:1:30",
+        "src/telas/mapas.ts",
+        "src/telas/processo.ts:1490:2033",
+        "src/dom.ts",
+        "src/styles.css:1:220",
+        "src/styles.css:930:1010",
+        "src/styles.css:1900:2110",
+        "src/types.ts:430:520",
+        "src/types.ts:620:835"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "fb5842543808c201dc232f5266fa951a2524a828898146629547e5c14cbc0090",
+        ".superdesign/init/theme.md": "2b68df698383f243cd3e5d8ff455037f94abe1ce4f7b8c8af58cf475ac1e783c",
+        "src/telas/mapas.ts": "8be9d939473de7a94a52ae397c0ade9a456d97984e26955b4e1ae6052abb405d",
+        "src/telas/processo.ts": "f8ebf3adc0aabc078f4ea1156c066decbbd34f882adfe1e4378317e370831c28",
+        "src/dom.ts": "db246e67d181825912bead991e40c10fde9329169319e7240b11471dd5983599",
+        "src/styles.css": "fa4e66b86c6bbffd184d677ea43db05f12eff3ddac8b16b0e522cac38f31cdb9",
+        "src/types.ts": "9345a27b938b2c71a8305a189e1607d67267505abfd2180168b695586c3f067f"
+      },
+      "components": [],
+      "drafts": {
+        "d58adefd-c2dc-4350-b02a-5f6cc12c68ae": {
+          "title": "Preview A4 — Mapa Mensal IPM",
+          "visualDirection": "documento institucional PMRO em A4, com capa por apuratório e ficha detalhada",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-08-28T15:47:04Z"
+    }
+  }
+}

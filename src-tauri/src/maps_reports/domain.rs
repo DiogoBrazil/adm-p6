@@ -2,6 +2,11 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::deadlines::domain::DeadlineItem;
+use crate::evidence::domain::EnvolvidoComIndicios;
+use crate::movements::domain::MovementItem;
+use crate::proceedings::domain::ProceedingDetail;
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct SavedMapListItem {
     pub id: String,
@@ -46,6 +51,29 @@ pub struct MapPeriodRequest {
     pub apuratorio_ids: Option<Vec<String>>,
 }
 
+/// Recorte do mapa mensal que será preparado para impressão detalhada.
+///
+/// O processo opcional não é uma leitura livre por id: o repositório primeiro
+/// reaplica a regra do período e só então aceita a seleção. Assim o PDF de uma
+/// ficha nunca escapa do mês e dos apuratórios que o operador escolheu.
+#[derive(Debug, Deserialize)]
+pub struct MapPrintRequest {
+    pub periodo_inicio: NaiveDate,
+    pub periodo_fim: NaiveDate,
+    pub apuratorio_ids: Option<Vec<String>>,
+    pub processo_id: Option<String>,
+}
+
+impl MapPrintRequest {
+    pub fn periodo(&self) -> MapPeriodRequest {
+        MapPeriodRequest {
+            periodo_inicio: self.periodo_inicio,
+            periodo_fim: self.periodo_fim,
+            apuratorio_ids: self.apuratorio_ids.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SaveMapRequest {
     pub titulo: String,
@@ -74,6 +102,19 @@ pub struct MapRow {
     pub prazo_vencimento: Option<NaiveDate>,
     pub ultimo_andamento: Option<String>,
     pub ultimo_andamento_em: Option<DateTime<Utc>>,
+}
+
+/// Ficha completa de um processo do mapa mensal.
+///
+/// Reúne num único IPC as mesmas fontes usadas pela tela de detalhe. O PDF não
+/// cria uma segunda interpretação dos fatos: cabeçalho, coleções, prazos,
+/// andamentos e enquadramentos continuam vindo dos respectivos repositórios.
+#[derive(Debug, Serialize)]
+pub struct MapPrintItem {
+    pub processo: ProceedingDetail,
+    pub prazos: Vec<DeadlineItem>,
+    pub andamentos: Vec<MovementItem>,
+    pub enquadramentos: Vec<EnvolvidoComIndicios>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

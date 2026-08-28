@@ -31,6 +31,7 @@ import {
   type Coluna,
 } from "../dom";
 import type { ContextoTela } from "./catalogos";
+import { imprimirDocumentoMapa, renderDocumentoMapa } from "./mapa-pdf";
 
 export const ROTA_MENSAL = "/mapas/mensal";
 export const ROTA_SALVOS = "/mapas/anteriores";
@@ -111,6 +112,22 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
           <p>${linhasGeradas.length} no período · ${andamento} em andamento · ${concluidos} concluídos no mês</p>
         </div>
         <div class="page-head-right">
+          <div class="mapa-pdf-controles">
+            <label>Conteúdo do PDF
+              <select id="pdf-processo">
+                <option value="">Mapa completo (${linhasGeradas.length})</option>
+                ${linhasGeradas
+                  .map(
+                    (linha) =>
+                      `<option value="${escapeHtml(linha.processo_id)}">${escapeHtml(
+                        `${linha.apuratorio_sigla} · ${linha.rotulo}`,
+                      )}</option>`,
+                  )
+                  .join("")}
+              </select>
+            </label>
+            <button id="btn-gerar-pdf" class="outline small" type="button">Gerar PDF</button>
+          </div>
           ${ctx.podeEscrever() ? `<button id="btn-salvar-mapa" class="small">Salvar este mapa</button>` : ""}
         </div>
       </div>
@@ -128,7 +145,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
             anos anteriores — mais o concluído dentro dele.
           </p>
         </div>
-        <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: !!linhasGeradas })}</div>
+        <div class="page-head-right">${barraDeExportacao({ csv: !!linhasGeradas })}</div>
       </div>
 
       <form id="filtro-mapa" class="filtro-bar">
@@ -202,6 +219,52 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       resposta.ok ? "Mapa salvo." : (resposta.error ?? "Falha ao salvar."),
       resposta.ok ? "sucesso" : "erro",
     );
+  });
+
+  document.querySelector<HTMLButtonElement>("#btn-gerar-pdf")?.addEventListener("click", async (evento) => {
+    if (!linhasGeradas) return;
+    const botao = evento.currentTarget as HTMLButtonElement;
+    const textoOriginal = botao.textContent ?? "Gerar PDF";
+    botao.disabled = true;
+    botao.textContent = "Preparando…";
+
+    try {
+      const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
+      const processoId = document.querySelector<HTMLSelectElement>("#pdf-processo")?.value;
+      const resposta = await call("reports_map_print_data", {
+        request: {
+          periodo_inicio: inicio,
+          periodo_fim: fim,
+          apuratorio_ids: apuratoriosSelecionados,
+          processo_id: processoId || null,
+        },
+      });
+      if (!resposta.ok) {
+        notificar(resposta.error ?? "Falha ao preparar o PDF.", "erro");
+        return;
+      }
+      const itens = resposta.data ?? [];
+      if (!itens.length) {
+        notificar("Nenhum processo ou procedimento pertence a este mapa.", "erro");
+        return;
+      }
+
+      const documento = renderDocumentoMapa(itens, {
+        mes: MESES[mesSelecionado - 1]!,
+        ano: anoSelecionado,
+        periodoInicio: inicio,
+        periodoFim: fim,
+      });
+      await imprimirDocumentoMapa(documento);
+    } catch (erro) {
+      notificar(
+        erro instanceof Error ? erro.message : "Falha ao abrir a impressão do mapa.",
+        "erro",
+      );
+    } finally {
+      botao.disabled = false;
+      botao.textContent = textoOriginal;
+    }
   });
 
   ligarExportacao(async () => {
