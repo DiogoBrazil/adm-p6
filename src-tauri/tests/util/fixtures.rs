@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! circulos → postos → policiais_militares
-//! municipios → unidades_pm
+//! municipios → unidades_pm → subunidades_secoes
 //! tipos_apuratorio → apuratorios
 //! tipos_documento  → apuratorio_documentos_iniciadores  ← sem isto não há processo
 //! papeis_processo  → apuratorio_papeis                  ← sem isto não há designação
@@ -43,6 +43,8 @@ pub struct Mundo {
 
     pub unidade: String,
     pub unidade_deprecada: String,
+    pub subunidade: String,
+    pub subunidade_outra_unidade: String,
     pub municipio: String,
 
     pub pm_um: String,
@@ -89,6 +91,8 @@ pub async fn mundo_configurado(pool: &PgPool) -> Mundo {
         unidade: id("ff000000", 1),
         unidade_deprecada: id("ff000000", 2),
         municipio: id("ff000000", 3),
+        subunidade: id("ff000000", 4),
+        subunidade_outra_unidade: id("ff000000", 5),
         pm_um: id("11100000", 1),
         pm_dois: id("11100000", 2),
         pm_tres: id("11100000", 3),
@@ -123,6 +127,9 @@ INSERT INTO municipios_distritos (id, nome, e_distrito) VALUES ('{municipio}', '
 INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
     ('{unidade}',           'Unidade Teste',    '{municipio}'),
     ('{unidade_deprecada}', 'Unidade Deprecada','{municipio}');
+INSERT INTO subunidades_secoes (id, unidade_pm_id, nome) VALUES
+    ('{subunidade}',               '{unidade}',           '1ª CIA Teste'),
+    ('{subunidade_outra_unidade}', '{unidade_deprecada}', 'Seção Teste');
 
 INSERT INTO tipos_apuratorio (id, nome) VALUES ('{tipo_apuratorio}', 'procedimento');
 INSERT INTO apuratorios
@@ -182,6 +189,8 @@ INSERT INTO tipos_andamento (id, nome) VALUES ('{andamento}', 'Despacho Teste');
         municipio = m.municipio,
         unidade = m.unidade,
         unidade_deprecada = m.unidade_deprecada,
+        subunidade = m.subunidade,
+        subunidade_outra_unidade = m.subunidade_outra_unidade,
         apuratorio = m.apuratorio,
         apuratorio_livre = m.apuratorio_livre,
         apuratorio_cp = m.apuratorio_cp,

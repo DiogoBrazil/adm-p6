@@ -430,6 +430,16 @@ async fn blocos_de_prazo_sao_exclusivos() {
         .execute(&pool)
         .await
         .unwrap();
+        sqlx::query(
+            "UPDATE processos_procedimentos
+                SET subunidade_secao_origem_id = $2::uuid
+              WHERE id = $1::uuid",
+        )
+        .bind(&hoje)
+        .bind(&m.subunidade)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let vencidos = repository::report(
             &pool,
@@ -474,6 +484,10 @@ async fn blocos_de_prazo_sao_exclusivos() {
         assert_eq!(
             qualificado.responsavel_posto_graduacao.as_deref(),
             Some("TST PM")
+        );
+        assert_eq!(
+            qualificado.subunidade_secao_origem.as_deref(),
+            Some("1ª CIA Teste")
         );
 
         // A interseção é o defeito: se um id estiver nos dois, a tela repete.

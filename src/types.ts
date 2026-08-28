@@ -214,6 +214,7 @@ export interface DeadlineReportItem {
   apuratorio_sigla: string;
   numero_controle: string;
   unidade_origem: string;
+  subunidade_secao_origem: string | null;
   responsavel_nome: string | null;
   responsavel_matricula: string | null;
   responsavel_posto_graduacao: string | null;
@@ -484,6 +485,7 @@ export interface MapRow {
   apuratorio_sigla: string;
   rotulo: string;
   unidade_origem: string;
+  subunidade_secao_origem: string | null;
   natureza_fato: string | null;
   data_instauracao: string;
   data_conclusao: string | null;
@@ -647,7 +649,7 @@ export interface ProceedingListItem {
   numero_controle: string;
   processo_sei: string | null;
   /** Rótulo montado a partir do dado, no formato usado pela Seção: */
-  /** `SIGLA nº CONTROLE/UNIDADE/ANO`. */
+  /** `SIGLA nº CONTROLE/ANO/UNIDADE[/SUBUNIDADE]`. */
   rotulo: string;
   /** Os ids acompanham os rótulos porque o formulário de edição precisa */
   /** repopular os selects. Resolver por nome falharia justamente no caso que */
@@ -655,6 +657,8 @@ export interface ProceedingListItem {
   /** e o processo antigo perderia o vínculo em silêncio. */
   unidade_origem_id: string;
   unidade_origem: string;
+  subunidade_secao_origem_id: string | null;
+  subunidade_secao_origem: string | null;
   municipio_fato_id: string;
   municipio_fato: string;
   natureza_fato_id: string | null;
@@ -869,6 +873,7 @@ export interface SaveProceedingRequest {
   processo_sei?: string | null;
   numero_rgf?: string | null;
   unidade_origem_id: string;
+  subunidade_secao_origem_id?: string | null;
   municipio_fato_id: string;
   natureza_fato_id?: string | null;
   data_instauracao: string;

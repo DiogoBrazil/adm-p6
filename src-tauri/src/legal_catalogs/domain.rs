@@ -433,6 +433,16 @@ pub const CATALOGOS: &[Catalogo] = &[
         ordenacao: "nome",
     },
     Catalogo {
+        chave: "subunidades_secoes",
+        tabela: "subunidades_secoes",
+        rotulo: "Subunidades/Seções de origem",
+        colunas: &[
+            centralizada(referencia("unidade_pm_id", "Unidade PM", "unidades_pm")),
+            centralizada(texto("nome", "Nome")),
+        ],
+        ordenacao: "unidade_pm_id, nome",
+    },
+    Catalogo {
         chave: "circulos_hierarquicos",
         tabela: "circulos_hierarquicos",
         rotulo: "Círculos hierárquicos",

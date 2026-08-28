@@ -39,6 +39,7 @@ import {
   baixarArquivoBase64,
   botaoIcone,
   escapeHtml,
+  formatarOrigem,
   formatarQualificacaoMilitar,
   ligarPaginacao,
   limparFormularioPendente,
@@ -62,6 +63,7 @@ type Opcao = { id: string; rotulo: string; extra?: Record<string, unknown> };
 type Catalogos = {
   apuratorios: Opcao[];
   unidades: Opcao[];
+  subunidades: Opcao[];
   municipios: Opcao[];
   naturezas: Opcao[];
   status: Opcao[];
@@ -86,6 +88,7 @@ async function carregarCatalogos(): Promise<Catalogos> {
   const [
     apuratorios,
     unidades,
+    subunidades,
     municipios,
     naturezas,
     status,
@@ -94,6 +97,7 @@ async function carregarCatalogos(): Promise<Catalogos> {
   ] = await Promise.all([
     catalogo("apuratorios", ["sigla", "nome"]),
     catalogo("unidades_pm", ["nome"]),
+    catalogo("subunidades_secoes", ["nome"]),
     catalogo("municipios_distritos", ["nome"]),
     catalogo("naturezas_fato", ["nome"]),
     catalogo("status_envolvido", ["nome"]),
@@ -103,6 +107,7 @@ async function carregarCatalogos(): Promise<Catalogos> {
   return {
     apuratorios,
     unidades,
+    subunidades,
     municipios,
     naturezas,
     status,
@@ -147,6 +152,11 @@ const datasPosterioresVazias = (): DatasPosteriores => ({
 // exclusivo da tela e sobrevivem aos re-renders provocados pelo formulário.
 let datasPosterioresEdicao = datasPosterioresVazias();
 
+// Opção histórica inativa. Fica fora do request, mas sobrevive aos re-renders
+// estruturais do formulário para que uma mudança em outro campo não apague o
+// vínculo em silêncio.
+let subunidadeHistorica: Opcao | null = null;
+
 function acusacoesVazias(): AcusacoesFormulario {
   return {
     infracoes_penais: [],
@@ -179,6 +189,7 @@ function rascunhoVazio(): Rascunho {
     processo_sei: null,
     numero_rgf: null,
     unidade_origem_id: "",
+    subunidade_secao_origem_id: null,
     municipio_fato_id: "",
     natureza_fato_id: null,
     data_instauracao: hojeIso(),
@@ -215,6 +226,7 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
   rascunho.processo_sei = texto("processo_sei");
   rascunho.numero_rgf = texto("numero_rgf");
   rascunho.unidade_origem_id = String(dados.get("unidade_origem_id") ?? "");
+  rascunho.subunidade_secao_origem_id = texto("subunidade_secao_origem_id");
   rascunho.municipio_fato_id = String(dados.get("municipio_fato_id") ?? "");
   rascunho.natureza_fato_id = texto("natureza_fato_id");
   rascunho.data_instauracao = String(dados.get("data_instauracao") ?? "");
@@ -478,6 +490,7 @@ export async function renderFormularioProcesso(
   if (!rascunhoAtual) {
     limparFormularioPendente();
     datasPosterioresEdicao = datasPosterioresVazias();
+    subunidadeHistorica = null;
   }
   const cats = await carregarCatalogos();
   let rascunho = rascunhoAtual;
@@ -513,6 +526,7 @@ export async function renderFormularioProcesso(
         processo_sei: d.processo_sei,
         numero_rgf: d.numero_rgf,
         unidade_origem_id: d.unidade_origem_id,
+        subunidade_secao_origem_id: d.subunidade_secao_origem_id,
         municipio_fato_id: d.municipio_fato_id,
         natureza_fato_id: d.natureza_fato_id,
         data_instauracao: d.data_instauracao,
@@ -569,6 +583,16 @@ export async function renderFormularioProcesso(
             }
           : null,
       };
+      if (
+        d.subunidade_secao_origem_id &&
+        !cats.subunidades.some((subunidade) => subunidade.id === d.subunidade_secao_origem_id)
+      ) {
+        subunidadeHistorica = {
+          id: d.subunidade_secao_origem_id,
+          rotulo: `${d.subunidade_secao_origem ?? "Subunidade/Seção"} (inativa — vínculo preservado)`,
+          extra: { unidade_pm_id: d.unidade_origem_id },
+        };
+      }
 
       // Quem já tem substituição sai do alcance do cadastro. A tela mostra a
       // linha bloqueada, com a orientação de onde a troca acontece; o backend
@@ -582,6 +606,14 @@ export async function renderFormularioProcesso(
         }
       }
     }
+  }
+
+  if (
+    subunidadeHistorica &&
+    rascunho.subunidade_secao_origem_id === subunidadeHistorica.id &&
+    !cats.subunidades.some((subunidade) => subunidade.id === subunidadeHistorica?.id)
+  ) {
+    cats.subunidades.push(subunidadeHistorica);
   }
 
   if (!rascunho.apuratorio_id && cats.apuratorios[0]) {
@@ -634,6 +666,9 @@ export async function renderFormularioProcesso(
   const exigeCondutor = natureza?.extra?.exige_condutor === true;
 
   const r = rascunho;
+  const subunidadesDaUnidade = cats.subunidades.filter(
+    (subunidade) => String(subunidade.extra?.unidade_pm_id ?? "") === r.unidade_origem_id,
+  );
   const podeAdicionarEnvolvido = maxEnvolvidos === null || r.envolvidos.length < maxEnvolvidos;
 
   ctx.shell(`
@@ -666,6 +701,8 @@ export async function renderFormularioProcesso(
         <fieldset>
           <legend>Localização</legend>
           <div class="campo"><label>Unidade de origem ${selectOpcoes("unidade_origem_id", cats.unidades, r.unidade_origem_id, true)}</label></div>
+          <div class="campo"><label>Subunidade/Seção de origem ${selectOpcoes("subunidade_secao_origem_id", subunidadesDaUnidade, r.subunidade_secao_origem_id ?? "")}
+            <small class="campo-efeito">Opcional. As opções pertencem à unidade selecionada.</small></label></div>
           <div class="campo"><label>Município do fato ${selectOpcoes("municipio_fato_id", cats.municipios, r.municipio_fato_id, true)}</label></div>
           <div class="campo"><label>Natureza do fato ${selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza)}
             ${exigeNatureza ? `<small class="campo-efeito">Obrigatória para este apuratório.</small>` : ""}</label></div>
@@ -1043,10 +1080,25 @@ export async function renderFormularioProcesso(
     void renderListaProcessos(ctx);
   });
 
-  // Trocar apuratório ou natureza muda os campos configurados do cadastro.
+  // Trocar apuratório, natureza ou unidade muda campos/opções do cadastro.
   for (const seletor of ['[name="apuratorio_id"]', '[name="natureza_fato_id"]']) {
     form.querySelector<HTMLSelectElement>(seletor)?.addEventListener("change", () => rerender(() => {}));
   }
+  form.querySelector<HTMLSelectElement>('[name="unidade_origem_id"]')?.addEventListener(
+    "change",
+    () =>
+      rerender(() => {
+        const selecionada = cats.subunidades.find(
+          (subunidade) => subunidade.id === r.subunidade_secao_origem_id,
+        );
+        if (
+          selecionada &&
+          String(selecionada.extra?.unidade_pm_id ?? "") !== r.unidade_origem_id
+        ) {
+          r.subunidade_secao_origem_id = null;
+        }
+      }),
+  );
   document.querySelector("#add-des")?.addEventListener("click", () =>
     rerender(() =>
       r.designacoes.push({ id: null, policial_militar_id: "", papel_id: "" }),
@@ -1314,7 +1366,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                     <td class="col-tipo">${escapeHtml(p.apuratorio_sigla)}</td>
                     <td class="col-ano">${escapeHtml(p.data_instauracao.slice(0, 4))}</td>
                     <td class="col-numero-processo" title="${escapeHtml(p.numero_controle)}">${escapeHtml(p.numero_controle)}</td>
-                    <td class="col-origem" title="${escapeHtml(p.unidade_origem)}">${escapeHtml(p.unidade_origem)}</td>
+                    <td class="col-origem" title="${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}">${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}</td>
                     <td class="col-sei" title="${escapeHtml(p.processo_sei ?? "")}">${escapeHtml(p.processo_sei ?? "—")}</td>
                     <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
                     <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
@@ -1560,6 +1612,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Processo SEI", d.processo_sei)}
         ${linha("Nº RGF", d.numero_rgf)}
         ${linha("Unidade de origem", d.unidade_origem)}
+        ${linha("Subunidade/Seção de origem", d.subunidade_secao_origem)}
         ${linha("Município do fato", d.municipio_fato)}
         ${linha("Natureza do fato", d.natureza_fato)}
         ${linha("Instauração", d.data_instauracao)}

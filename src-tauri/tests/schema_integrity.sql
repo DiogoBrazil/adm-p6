@@ -53,7 +53,12 @@ INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id) VALUES
 INSERT INTO municipios_distritos (id, nome, e_distrito) VALUES
     ('33333333-0000-0000-0000-000000000001', 'Cidade Teste', false);
 INSERT INTO unidades_pm (id, nome, municipio_id) VALUES
-    ('33333333-0000-0000-0000-000000000002', 'Unidade Teste', '33333333-0000-0000-0000-000000000001');
+    ('33333333-0000-0000-0000-000000000002', 'Unidade Teste', '33333333-0000-0000-0000-000000000001'),
+    ('33333333-0000-0000-0000-000000000003', 'Outra Unidade', '33333333-0000-0000-0000-000000000001');
+INSERT INTO subunidades_secoes (id, unidade_pm_id, nome) VALUES
+    ('33333333-0000-0000-0000-000000000004', '33333333-0000-0000-0000-000000000002', '1ª CIA'),
+    ('33333333-0000-0000-0000-000000000005', '33333333-0000-0000-0000-000000000002', '2ª CIA'),
+    ('33333333-0000-0000-0000-000000000006', '33333333-0000-0000-0000-000000000003', 'Seção');
 
 INSERT INTO tipos_apuratorio (id, nome) VALUES
     ('44444444-0000-0000-0000-000000000001', 'procedimento');
@@ -269,6 +274,34 @@ INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('numero_c
     numero_controle, unidade_origem_id, municipio_fato_id, data_instauracao)
   VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','99',
           '1','33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000001', DATE '2026-05-05')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo numero com subunidade e permitido', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, subunidade_secao_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000004',
+          '33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('mesmo numero e mesma subunidade duplicam', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, subunidade_secao_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000004',
+          '33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('mesmo numero em subunidades diferentes e permitido', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, subunidade_secao_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','1',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000005',
+          '33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('subunidade precisa pertencer a unidade de origem', $$
+  INSERT INTO processos_procedimentos (apuratorio_id, documento_iniciador_id, numero_documento,
+    unidade_origem_id, subunidade_secao_origem_id, municipio_fato_id, data_instauracao)
+  VALUES ('44444444-0000-0000-0000-000000000002','55555555-0000-0000-0000-000000000001','SUB-INVALIDA',
+          '33333333-0000-0000-0000-000000000002','33333333-0000-0000-0000-000000000006',
+          '33333333-0000-0000-0000-000000000001', DATE '2026-01-10')$$);
 
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('data_conclusao anterior a instauracao', $$
   UPDATE processos_procedimentos SET data_conclusao = DATE '2025-01-01'

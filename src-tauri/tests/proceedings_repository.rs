@@ -42,6 +42,7 @@ fn base(m: &Mundo, numero: &str) -> SaveProceedingRequest {
         processo_sei: None,
         numero_rgf: None,
         unidade_origem_id: m.unidade.clone(),
+        subunidade_secao_origem_id: None,
         municipio_fato_id: m.municipio.clone(),
         natureza_fato_id: Some(m.natureza.clone()),
         data_instauracao: data(2026, 1, 10),
@@ -1237,6 +1238,71 @@ async fn numeracao_e_unica_entre_processos_ativos() {
             .expect_err("controle colide com o numero de documento existente");
         assert!(erro.contains("este número de controle"), "{erro}");
         assert!(!erro.contains("uq_processo") && !erro.contains("duplicate"));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn subunidade_compõe_numeracao_origem_e_integridade() {
+    util::com_banco_descartavel("proc_subunidade", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let sem_subunidade = salvar(&pool, &base(&m, "SUB-001")).await.unwrap();
+
+        let mut com_subunidade = base(&m, "SUB-001");
+        com_subunidade.subunidade_secao_origem_id = Some(m.subunidade.clone());
+        let com_subunidade_id = salvar(&pool, &com_subunidade)
+            .await
+            .expect("NULL e subunidade sao escopos diferentes");
+
+        let erro = salvar(&pool, &com_subunidade)
+            .await
+            .expect_err("mesma subunidade colide");
+        assert!(erro.contains("mesma unidade/subunidade"), "{erro}");
+
+        let segunda: String = sqlx::query_scalar(
+            "INSERT INTO subunidades_secoes (unidade_pm_id, nome)
+             VALUES ($1::uuid, '2ª CIA Teste') RETURNING id::text",
+        )
+        .bind(&m.unidade)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let mut outra_subunidade = base(&m, "SUB-001");
+        outra_subunidade.subunidade_secao_origem_id = Some(segunda);
+        salvar(&pool, &outra_subunidade)
+            .await
+            .expect("subunidades diferentes nao colidem");
+
+        let detalhe_sem = repository::get(&pool, &sem_subunidade)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(detalhe_sem.cabecalho.subunidade_secao_origem, None);
+        assert_eq!(
+            detalhe_sem.cabecalho.rotulo,
+            "TST-A nº SUB-001/2026/Unidade Teste"
+        );
+
+        let detalhe_com = repository::get(&pool, &com_subunidade_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            detalhe_com.cabecalho.subunidade_secao_origem.as_deref(),
+            Some("1ª CIA Teste")
+        );
+        assert_eq!(
+            detalhe_com.cabecalho.rotulo,
+            "TST-A nº SUB-001/2026/Unidade Teste/1ª CIA Teste"
+        );
+
+        let mut incompativel = base(&m, "SUB-002");
+        incompativel.subunidade_secao_origem_id = Some(m.subunidade_outra_unidade.clone());
+        let erro = salvar(&pool, &incompativel)
+            .await
+            .expect_err("subunidade de outra unidade");
+        assert!(erro.contains("não pertence à unidade"), "{erro}");
     })
     .await;
 }

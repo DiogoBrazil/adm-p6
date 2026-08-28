@@ -15,10 +15,10 @@ entender X → olhe em Y".
   volume apaga oito anos de registro.
 - **Editar migration já aplicada.** `sqlx` guarda checksum por versão e o
   startup seguinte quebra com `VersionMismatch`. Mudança de schema é migration
-  nova (`0014`…).
+  nova (`0015`…).
 - **Tocar em `adm-p6.sql`.** Dump de produção, 44 MB, somente leitura, fora do
   git — e com dados pessoais de 235 militares.
-- **Reabrir uma decisão da seção 3 sem motivo novo.** São 48, todas decididas pelo
+- **Reabrir uma decisão da seção 3 sem motivo novo.** São 49, todas decididas pelo
   responsável e implementadas.
 
 ## Princípios do modelo, que valem para toda mudança
@@ -62,7 +62,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 138 testes
+cd src-tauri && cargo fmt --check && cargo test   # 141 testes
 cd .. && npm run typecheck
 ```
 

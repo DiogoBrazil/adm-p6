@@ -60,6 +60,7 @@ pub async fn map_rows(
                v.apuratorio_sigla  AS apuratorio_sigla,
                v.rotulo            AS rotulo,
                v.unidade_origem    AS unidade_origem,
+               v.subunidade_secao_origem AS subunidade_secao_origem,
                v.natureza_fato     AS natureza_fato,
                v.data_instauracao  AS data_instauracao,
                v.data_conclusao    AS data_conclusao,
@@ -305,6 +306,12 @@ pub async fn export_csv(
     fn opt(valor: &Option<String>) -> String {
         escapar(valor.as_deref().unwrap_or(""))
     }
+    fn origem(unidade: &str, subunidade: &Option<String>) -> String {
+        subunidade
+            .as_deref()
+            .map(|sub| format!("{unidade} / {sub}"))
+            .unwrap_or_else(|| unidade.to_string())
+    }
 
     let mut csv = String::from(
         "Apuratorio;Numero;Unidade;Natureza;Instauracao;Conclusao;Responsavel;Envolvidos;Vencimento;Ultimo andamento\n",
@@ -314,7 +321,7 @@ pub async fn export_csv(
             "{};{};{};{};{};{};{};{};{};{}\n",
             escapar(&l.apuratorio_sigla),
             escapar(&l.rotulo),
-            escapar(&l.unidade_origem),
+            escapar(&origem(&l.unidade_origem, &l.subunidade_secao_origem)),
             opt(&l.natureza_fato),
             l.data_instauracao,
             l.data_conclusao.map(|d| d.to_string()).unwrap_or_default(),

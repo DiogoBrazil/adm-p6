@@ -18,6 +18,7 @@ import {
   baixarCsv,
   carregarTudo,
   escapeHtml,
+  formatarOrigem,
   formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarExportacao,
@@ -89,7 +90,7 @@ function linhas(itens: DeadlineReportItem[]): Linha[] {
     classe: i.dias_restantes < 0 ? "atrasado" : "",
     celulas: [
       identificacao(i),
-      i.unidade_origem,
+      formatarOrigem(i.unidade_origem, i.subunidade_secao_origem),
       responsavel(i),
       i.data_vencimento,
       { texto: situacao(i), numerica: true },
@@ -202,7 +203,7 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
       const linha = (i: DeadlineReportItem, bloco: string) => [
         bloco,
         identificacao(i),
-        i.unidade_origem,
+        formatarOrigem(i.unidade_origem, i.subunidade_secao_origem),
         responsavel(i),
         i.data_vencimento,
         i.dias_restantes,

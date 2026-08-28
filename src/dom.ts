@@ -38,6 +38,14 @@ export function formatarQualificacaoMilitar(
   return [posto, matricula, nome].filter((parte): parte is string => Boolean(parte)).join(" ") || "—";
 }
 
+/** Origem compacta usada nas listagens e relatórios. */
+export function formatarOrigem(
+  unidade: string,
+  subunidade?: string | null,
+): string {
+  return subunidade ? `${unidade} / ${subunidade}` : unidade;
+}
+
 export type IconeAcao =
   | "abrir"
   | "editar"

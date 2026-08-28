@@ -409,6 +409,7 @@ pub async fn report(
                v.apuratorio_sigla    AS apuratorio_sigla,
                v.numero_controle     AS numero_controle,
                v.unidade_origem      AS unidade_origem,
+               v.subunidade_secao_origem AS subunidade_secao_origem,
                v.responsavel_nome    AS responsavel_nome,
                responsavel_pm.matricula AS responsavel_matricula,
                responsavel_posto.sigla AS responsavel_posto_graduacao,

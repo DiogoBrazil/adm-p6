@@ -1,4 +1,4 @@
-//! CRUD genérico dos 25 catálogos.
+//! CRUD genérico dos 26 catálogos.
 //!
 //! Este módulo monta SQL com **nome de tabela e de coluna interpolados**. Isso
 //! só é seguro porque esses nomes vêm sempre do registro `domain::CATALOGOS`,
@@ -66,6 +66,8 @@ fn metadados_centralizam_as_colunas_definidas_pela_interface() {
         ("municipios_distritos", "municipio_pai_id"),
         ("unidades_pm", "nome"),
         ("unidades_pm", "municipio_id"),
+        ("subunidades_secoes", "unidade_pm_id"),
+        ("subunidades_secoes", "nome"),
         ("circulos_hierarquicos", "nome"),
         ("postos_graduacoes", "sigla"),
         ("postos_graduacoes", "nome"),
@@ -98,7 +100,7 @@ fn metadados_centralizam_as_colunas_definidas_pela_interface() {
 #[tokio::test]
 async fn todo_catalogo_do_registro_existe_no_banco() {
     util::com_banco_descartavel("cat_registro", |pool| async move {
-        assert_eq!(CATALOGOS.len(), 25, "o guia fala em 25 catalogos");
+        assert_eq!(CATALOGOS.len(), 26, "o guia fala em 26 catalogos");
 
         for cat in CATALOGOS {
             // `list` monta o SELECT com todas as colunas declaradas: se alguma
@@ -131,6 +133,47 @@ async fn todo_catalogo_do_registro_existe_no_banco() {
                 }
             }
         }
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn subunidade_tem_nome_unico_dentro_da_unidade() {
+    util::com_banco_descartavel("cat_subunidade", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let id = gravar(
+            &pool,
+            "subunidades_secoes",
+            None,
+            json!({ "unidade_pm_id": m.unidade, "nome": "2ª CIA" }),
+        )
+        .await;
+        let linha = repository::get(&pool, catalogo("subunidades_secoes").unwrap(), &id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(linha["unidade_pm_id"], json!(m.unidade));
+
+        let mut tx = pool.begin().await.unwrap();
+        let duplicada = repository::save(
+            &mut tx,
+            catalogo("subunidades_secoes").unwrap(),
+            None,
+            &valores(json!({ "unidade_pm_id": m.unidade, "nome": "2ª cia" })),
+        )
+        .await
+        .expect_err("nome repetido na mesma unidade");
+        assert!(duplicada.message().contains("Já existe um registro"));
+        tx.rollback().await.unwrap();
+
+        gravar(
+            &pool,
+            "subunidades_secoes",
+            None,
+            json!({ "unidade_pm_id": m.unidade_deprecada, "nome": "2ª CIA" }),
+        )
+        .await;
     })
     .await;
 }

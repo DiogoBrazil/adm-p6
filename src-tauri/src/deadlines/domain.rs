@@ -36,6 +36,7 @@ pub struct DeadlineReportItem {
     pub apuratorio_sigla: String,
     pub numero_controle: String,
     pub unidade_origem: String,
+    pub subunidade_secao_origem: Option<String>,
     pub responsavel_nome: Option<String>,
     pub responsavel_matricula: Option<String>,
     pub responsavel_posto_graduacao: Option<String>,

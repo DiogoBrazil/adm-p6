@@ -12,6 +12,7 @@ use adm_p6_tauri_lib::maps_reports::domain::{
     DesignacaoMatrizFiltro, MapPeriodRequest, ReportFilter,
 };
 use adm_p6_tauri_lib::maps_reports::repository;
+use base64::Engine;
 use chrono::NaiveDate;
 use sqlx::PgPool;
 
@@ -142,6 +143,48 @@ async fn mapa_acumula_o_que_estava_aberto_no_periodo() {
             "instaurado depois do período não entra"
         );
         assert_eq!(linhas.len(), 2);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn mapa_e_csv_exibem_a_origem_com_subunidade() {
+    util::com_banco_descartavel("mapa_subunidade", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = processo(&pool, &m, &m.apuratorio, "SUB-001", data(2026, 3, 5), None).await;
+        sqlx::query(
+            "UPDATE processos_procedimentos
+                SET subunidade_secao_origem_id = $2::uuid
+              WHERE id = $1::uuid",
+        )
+        .bind(&id)
+        .bind(&m.subunidade)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let pedido = MapPeriodRequest {
+            periodo_inicio: data(2026, 3, 1),
+            periodo_fim: data(2026, 3, 31),
+            apuratorio_ids: None,
+        };
+        let linhas = repository::map_rows(&pool, &pedido).await.unwrap();
+        assert_eq!(linhas[0].unidade_origem, "Unidade Teste");
+        assert_eq!(
+            linhas[0].subunidade_secao_origem.as_deref(),
+            Some("1ª CIA Teste")
+        );
+        assert_eq!(
+            linhas[0].rotulo,
+            "TST-A nº SUB-001/2026/Unidade Teste/1ª CIA Teste"
+        );
+
+        let exportado = repository::export_csv(&pool, &pedido).await.unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(exportado.conteudo)
+            .unwrap();
+        let csv = String::from_utf8(bytes).unwrap();
+        assert!(csv.contains("Unidade Teste / 1ª CIA Teste"), "{csv}");
     })
     .await;
 }

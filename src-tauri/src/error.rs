@@ -125,11 +125,11 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         // ── Duplicidade ──────────────────────────────────────────────────────
         "uq_processo_numero_documento" => {
             "Já existe um processo ou procedimento ativo com este número de documento para a \
-             mesma unidade, ano, apuratório e documento iniciador."
+             mesma unidade/subunidade, ano, apuratório e documento iniciador."
         }
         "uq_processo_numero_controle" => {
             "Já existe um processo ou procedimento ativo com este número de controle para a \
-             mesma unidade, ano e apuratório."
+             mesma unidade/subunidade, ano e apuratório."
         }
         "uq_pm_matricula" => "Já existe um militar cadastrado com esta matrícula.",
         "uq_usuarios_email" => "Já existe uma conta de acesso com este e-mail.",
@@ -186,6 +186,9 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         }
         "fk_designacao_processo" => {
             "A espécie do apuratório não confere com a das designações já registradas."
+        }
+        "fk_processo_subunidade_unidade" => {
+            "Esta subunidade/seção já está vinculada a processos. Preserve a Unidade PM atual ou cadastre outra subunidade/seção."
         }
 
         // ── Campo obrigatório ────────────────────────────────────────────────

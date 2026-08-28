@@ -25,18 +25,18 @@ sobre remover o schema `legado`.
 
 | Código | |
 |---|---:|
-| Migrations (`0001`–`0013`) | **13** |
+| Migrations (`0001`–`0014`) | **14** |
 | Comandos Tauri, todos no cliente tipado | **83** |
-| Testes | **138** |
+| Testes | **141** |
 | Módulos Rust · linhas de Rust | 12 · 9.559 |
 | Arquivos de frontend · linhas de TS/CSS | 17 · 10.933 |
-| Catálogos administráveis | 25 |
+| Catálogos administráveis | 26 |
 | Comandos que o frontend invoca e não existem | **0** |
 | Chamadas fora do cliente tipado | **0** |
 
 | Schema | |
 |---|---:|
-| Tabelas · FKs · CHECKs · EXCLUDEs · triggers · views | **45 · 57 · 29 · 2 · 3 · 1** |
+| Tabelas · FKs · CHECKs · EXCLUDEs · triggers · views | **46 · 59 · 29 · 2 · 3 · 1** |
 
 | No banco agora | |
 |---|---:|
@@ -77,7 +77,7 @@ Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão 
 ### Antes de tocar em qualquer coisa, leia
 
 - **Seção 2** — os 6 princípios do modelo. Toda decisão futura tem de caber neles.
-- **Seção 3** — as 48 decisões já tomadas. Não reabra sem motivo novo.
+- **Seção 3** — as 49 decisões já tomadas. Não reabra sem motivo novo.
 - **Seção 7** — as armadilhas. Cada uma já custou tempo pelo menos uma vez.
 - **Acabou o `docker compose down -v`.** Com dado real dentro, recriar o volume apaga
   8 anos de registro. Mudança de schema agora é migration incremental (seção 5).
@@ -110,7 +110,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 138 testes, bancos descartáveis
+cargo test                           # 141 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -162,7 +162,7 @@ valia enquanto o banco estava vazio — "editou migration, recria o banco" — n
 
 O `sqlx::migrate!` guarda um checksum por versão: editar um `.sql` já aplicado gera
 `VersionMismatch` no próximo startup. A partir de agora **toda mudança de schema é uma
-migration nova** (`0014`…), e todas as migrations já aplicadas são imutáveis.
+migration nova** (`0015`…), e todas as migrations já aplicadas são imutáveis.
 
 Se ainda assim for preciso recomeçar do zero — numa máquina de desenvolvimento, por
 exemplo — o caminho completo é: recriar o volume, aplicar as migrations, restaurar o
@@ -209,7 +209,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 4 | Crime militar × comum é do artigo ou do caso? | **Do caso** (art. 9º do CPM). A esfera é escolhida **no vínculo** envolvido↔artigo. Crime × Contravenção, esse sim, é atributo do artigo. |
 | 5 | A analogia com o RDPM é obrigatória para toda infração estatutária? | **Sim, regra universal.** `analogia_transgressao_id` é `NOT NULL`. |
 | 6 | O que significa `data_fim` de uma designação? | **O dia da troca, exclusivo.** O sucessor começa exatamente nesse dia. Intervalo semiaberto `[)`. |
-| 7 | Qual o escopo de unicidade do número de controle? | **Sequencial por unidade, ano e apuratório.** |
+| 7 | Qual o escopo de unicidade do número de controle? | **Sequencial por unidade, subunidade/seção opcional, ano e apuratório.** Dois registros sem subunidade continuam no mesmo escopo; sem subunidade e com subunidade são escopos distintos. |
 | 8 | Condutor (motorista) em sinistro | **No máximo um por processo, sempre entre os envolvidos.** É papel do envolvido, não outra pessoa. |
 | 9 | Papéis obrigatórios bloqueiam o salvamento? | **Sim.** Um `obrigatorio` que não bloqueia não significa nada. Para permitir a ausência, desmarque `obrigatorio` naquele apuratório — quem decide é a configuração. |
 | 10 | Que catálogos vêm semeados? | **Só o que é lei** e não varia por instalação (migration `0003`). O operacional por unidade fica com o administrador. |
@@ -217,7 +217,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 12 | Rumo do frontend | Vanilla TS **dividido em módulos**, sem dependência nova, migrando tela por tela. |
 | 13 | Quantos envolvidos cada apuratório aceita? | **Vem do tipo, não de uma lista à mão.** `procedimento` (CP, FP, IPM, SR, SV) fica **sem limite**; `processo` (CD, CJ, PAD, PADE, PADS) fica com **1**. Um processo disciplinar é instaurado contra um militar; um procedimento apura um fato e alcança quantos alcançar. Espécie nova herda a regra do tipo. |
 | 14 | Os 37 processos sem envolvido na importação | **Criar o envolvido.** Não é inventar fato: os 37 têm `nome_pm_id` e `status_pm` preenchidos, e 13 têm solução e 7 têm penalidade. Como essas três informações só existem em `processo_envolvidos` no schema novo, não criar significaria **perdê-las**. |
-| 15 | As unidades além do 7ºBPM | **São unidades de verdade.** CORREGEPOM (16 processos), 9ºBPM (2) e 11ºBPM (1) entram em `unidades_pm`. Importa para a numeração, que é única por unidade. |
+| 15 | As unidades além do 7ºBPM | **São unidades de verdade.** CORREGEPOM (16 processos), 9ºBPM (2) e 11ºBPM (1) entram em `unidades_pm`. Importa para a numeração, que é única por unidade e pela subunidade/seção opcional. |
 | 16 | Histórico de mapas salvos e de auditoria | **Não é importado.** Os 107 mapas são snapshots no formato antigo, que a tela nova não sabe renderizar como tabela; as 448 linhas de auditoria são do sistema anterior. Ficam no dump. |
 | 17 | A prorrogação começa no dia do vencimento anterior, ou no seguinte? | **No mesmo dia** — 97/97 no histórico. A migration `0005` passou a comparar a *ocupação* como `[data_inicio, data_inicio + dias)`, e `deadlines::add_extension` foi alinhado. `data_vencimento` continua sendo o último dia válido. |
 | 18 | As 58 prorrogações sem motivo | **Texto reconhecível:** `'Motivo não registrado no sistema anterior'`. Não mexe no schema, e diz exatamente o que aconteceu. |
@@ -250,6 +250,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 45 | Toda designação cita documento? | **Não.** A relação `apuratorio_papeis.usa_documento_designacao` decide. No IPM, o Escrivão tem a flag desligada: documento e número não são gravados nem pedidos, e a tabela mostra “-”. A retroalimentação por nomes acontece uma vez na migration; o código lê apenas o booleano. E, como todo conceito de negócio, é **cadastro administrável**: a flag é uma coluna da tabela de papéis em Catálogos → Apuratórios, com alternância própria — outra espécie que dispense a citação não precisa de migration nova. |
 | 46 | Quem registra Ofendido/Vítima, e onde ele mora | **Todo procedimento — CP, FP, IPM, SR e SV —, e em tabela própria.** Três escolhas numa. (a) **Vítima deixa de ser papel de pessoa.** Era uma linha de `papeis_pessoa` escolhida num `<select>`; virou `processo_vitimas`, relação do procedimento como `processo_envolvidos` (princípio 3). O motivo é concreto: `papeis_pessoa` é catálogo **operacional** e nasce vazio, então uma seção que dependesse dele sumiria numa instalação nova — a forma exata do defeito da carta precatória (a seção 12, rodada 10). Sem catálogo no caminho, não há o que cadastrar nem o que renomear. (b) **Quem decide é `apuratorios.permite_cadastro_vitima`**, ligado pela `0012` em todo apuratório cujo tipo é `procedimento`; os cinco processos disciplinares ficam de fora, porque são instaurados **contra** um militar, e não para apurar um fato. Carga única, como `permite_indicios` (decisão 31). (c) **O atributo NÃO entra no registro de Catálogos** — desvio deliberado da seção 5, por decisão do responsável: registrar ofendido é capacidade da espécie, não escolha de administrador. Fica no mesmo caso de `codigo_extensao`. É opcional (zero, um ou vários), e o bloco genérico do formulário virou **"Pessoas inquiridas"**. |
 | 47 | Qual é a ordem das datas do fluxo? | **Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão**, comparando somente as etapas preenchidas. Datas iguais são válidas; uma etapa ausente não torna as posteriores obrigatórias. `data_remessa_encarregado` e `data_remessa_comissao` são alternativas na mesma posição e não se comparam entre si. A aplicação devolve a incompatibilidade por nome e data, e a migration `0013` repete a regra no banco. |
+| 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e CSV, sem reescrever snapshots de mapas já salvos. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -293,7 +294,7 @@ tipos_apuratorio ──► apuratorios ──┬─► apuratorio_documentos_ini
                               └───────────────── processo_envolvidos
 ```
 
-### 4.2 Configurabilidade — 25 catálogos + 2 tabelas de configuração
+### 4.2 Configurabilidade — 26 catálogos + 2 tabelas de configuração
 
 Os atributos semânticos abaixo são o que substitui o hardcode:
 
@@ -378,7 +379,7 @@ docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
 **O que os testes cobrem sozinhos**, e por isso vale rodá-los antes de aplicar:
 `migrations.rs` confere que as migrations aplicam do zero **e são idempotentes**, que
 nenhuma FK ficou sem `ON DELETE`, que JSONB só existe nas 2 colunas justificadas e que o
-contrato de 32 colunas de `v_processos_detalhados` continua de pé — quatro módulos leem
+contrato de 34 colunas de `v_processos_detalhados` continua de pé — quatro módulos leem
 dessa view, e uma coluna renomeada quebraria os quatro só em runtime.
 
 **Se a mudança afetar a importação** — renomear uma coluna que `src-tauri/importacao/` usa,
@@ -861,7 +862,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | como montar um cenário de teste com processo | `src-tauri/tests/util/fixtures.rs` |
 | como chamar um comando como o frontend chama | `src-tauri/tests/commands_ipc.rs` |
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
-| a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
+| a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql`, sua ampliação na `0014_subunidade_secao_origem.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
 | o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 78 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |

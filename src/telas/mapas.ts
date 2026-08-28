@@ -19,6 +19,7 @@ import {
   barraDeExportacao,
   baixarCsvBase64,
   escapeHtml,
+  formatarOrigem,
   ITENS_POR_PAGINA,
   ligarExportacao,
   ligarPaginacao,
@@ -76,7 +77,7 @@ const COLUNAS_MAPA = [
 const linhaMapa = (l: MapRow) => [
   l.apuratorio_sigla,
   l.rotulo,
-  l.unidade_origem,
+  formatarOrigem(l.unidade_origem, l.subunidade_secao_origem),
   l.natureza_fato ?? "—",
   l.data_instauracao,
   l.data_conclusao ?? "em andamento",

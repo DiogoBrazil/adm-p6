@@ -65,6 +65,7 @@ pub struct MapRow {
     pub apuratorio_sigla: String,
     pub rotulo: String,
     pub unidade_origem: String,
+    pub subunidade_secao_origem: Option<String>,
     pub natureza_fato: Option<String>,
     pub data_instauracao: NaiveDate,
     pub data_conclusao: Option<NaiveDate>,

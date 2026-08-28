@@ -320,7 +320,8 @@ pub async fn statistics(pool: &PgPool, policial_id: &str) -> Result<UserStatisti
 }
 
 /// Colunas de processo das duas listagens abaixo. Saem de
-/// `v_processos_detalhados` (migration 0004), que já resolve os catálogos —
+/// `v_processos_detalhados` (criada na 0004 e ampliada na 0014), que já resolve
+/// os catálogos —
 /// antes esta composição estava escrita aqui, em `proceedings`, em
 /// `maps_reports` e em `deadlines`.
 const COLUNAS_PROCESSO: &str = r#"

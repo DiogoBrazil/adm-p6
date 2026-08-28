@@ -18,7 +18,8 @@ use crate::proceedings::domain::{
 /// memória é cerca de 1/3 maior.
 const MAX_ANEXO_BYTES: usize = 100 * 1024 * 1024;
 
-/// Colunas da listagem. Saem de `v_processos_detalhados` (migration 0004), que
+/// Colunas da listagem. Saem de `v_processos_detalhados` (criada na 0004 e
+/// ampliada na 0014), que
 /// já resolve os catálogos, o responsável vigente, o prazo vigente e a contagem
 /// de envolvidos. Antes esta composição estava escrita aqui, em `maps_reports`,
 /// em `deadlines` e em `users` — quatro cópias que podiam divergir, e duas já
@@ -39,6 +40,8 @@ const COLUNAS_LISTA: &str = r#"
     v.rotulo,
     v.unidade_origem_id::text      AS unidade_origem_id,
     v.unidade_origem,
+    v.subunidade_secao_origem_id::text AS subunidade_secao_origem_id,
+    v.subunidade_secao_origem,
     v.municipio_fato_id::text      AS municipio_fato_id,
     v.municipio_fato,
     v.natureza_fato_id::text       AS natureza_fato_id,
@@ -616,6 +619,25 @@ pub async fn save(
     let config = config_apuratorio(tx, &request.apuratorio_id).await?;
     validar_contra_configuracao(tx, request, &config).await?;
 
+    if let Some(subunidade_id) = request.subunidade_secao_origem_id.as_deref() {
+        let pertence: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                 SELECT 1 FROM subunidades_secoes
+                  WHERE id = $1::uuid AND unidade_pm_id = $2::uuid
+             )",
+        )
+        .bind(subunidade_id)
+        .bind(&request.unidade_origem_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !pertence {
+            return Err(AppError::Domain(
+                "A subunidade/seção escolhida não pertence à unidade de origem informada."
+                    .to_string(),
+            ));
+        }
+    }
+
     let numero_controle = request
         .numero_controle
         .as_deref()
@@ -710,9 +732,10 @@ pub async fn save(
                      apuratorio_id = $2::uuid, documento_iniciador_id = $3::uuid,
                      numero_documento = $4, numero_controle = $5, processo_sei = $6,
                      numero_rgf = $7, unidade_origem_id = $8::uuid,
-                     municipio_fato_id = $9::uuid, natureza_fato_id = $10::uuid,
-                     data_instauracao = $11, data_recebimento = $12,
-                     resumo_fatos = $13,
+                     subunidade_secao_origem_id = $9::uuid,
+                     municipio_fato_id = $10::uuid, natureza_fato_id = $11::uuid,
+                     data_instauracao = $12, data_recebimento = $13,
+                     resumo_fatos = $14,
                      updated_at = now()
                  WHERE id = $1::uuid AND ativo
              RETURNING id::text",
@@ -725,6 +748,7 @@ pub async fn save(
         .bind(request.processo_sei.as_deref())
         .bind(request.numero_rgf.as_deref())
         .bind(&request.unidade_origem_id)
+        .bind(request.subunidade_secao_origem_id.as_deref())
         .bind(&request.municipio_fato_id)
         .bind(request.natureza_fato_id.as_deref())
         .bind(request.data_instauracao)
@@ -737,10 +761,11 @@ pub async fn save(
             sqlx::query_scalar(
                 "INSERT INTO processos_procedimentos
                      (apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
-                      processo_sei, numero_rgf, unidade_origem_id, municipio_fato_id,
+                      processo_sei, numero_rgf, unidade_origem_id,
+                      subunidade_secao_origem_id, municipio_fato_id,
                       natureza_fato_id, data_instauracao, data_recebimento, resumo_fatos)
-                 VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid, $9::uuid,
-                         $10, $11, $12)
+                 VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid,
+                         $9::uuid, $10::uuid, $11, $12, $13)
              RETURNING id::text",
             )
             .bind(&request.apuratorio_id)
@@ -750,6 +775,7 @@ pub async fn save(
             .bind(request.processo_sei.as_deref())
             .bind(request.numero_rgf.as_deref())
             .bind(&request.unidade_origem_id)
+            .bind(request.subunidade_secao_origem_id.as_deref())
             .bind(&request.municipio_fato_id)
             .bind(request.natureza_fato_id.as_deref())
             .bind(request.data_instauracao)

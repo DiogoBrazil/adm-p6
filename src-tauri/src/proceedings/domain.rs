@@ -29,7 +29,7 @@ pub struct ProceedingListItem {
     pub numero_controle: String,
     pub processo_sei: Option<String>,
     /// Rótulo montado a partir do dado, no formato usado pela Seção:
-    /// `SIGLA nº CONTROLE/UNIDADE/ANO`.
+    /// `SIGLA nº CONTROLE/ANO/UNIDADE[/SUBUNIDADE]`.
     pub rotulo: String,
     /// Os ids acompanham os rótulos porque o formulário de edição precisa
     /// repopular os selects. Resolver por nome falharia justamente no caso que
@@ -37,6 +37,8 @@ pub struct ProceedingListItem {
     /// e o processo antigo perderia o vínculo em silêncio.
     pub unidade_origem_id: String,
     pub unidade_origem: String,
+    pub subunidade_secao_origem_id: Option<String>,
+    pub subunidade_secao_origem: Option<String>,
     pub municipio_fato_id: String,
     pub municipio_fato: String,
     pub natureza_fato_id: Option<String>,
@@ -330,6 +332,7 @@ pub struct SaveProceedingRequest {
     pub processo_sei: Option<String>,
     pub numero_rgf: Option<String>,
     pub unidade_origem_id: String,
+    pub subunidade_secao_origem_id: Option<String>,
     pub municipio_fato_id: String,
     pub natureza_fato_id: Option<String>,
     pub data_instauracao: NaiveDate,
