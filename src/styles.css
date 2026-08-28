@@ -1978,10 +1978,10 @@ tr.atrasado {
   vertical-align: middle;
 }
 
-/* Grade leve para listagens e tabelas administrativas que aderem ao padrão.
-   A classe separada impede que fichas, relatórios e matrizes herdem divisórias
-   ou alinhamento por acidente. `border-inline-end` respeita a direção do texto
-   e, com `border-box`, não aumenta os 100% distribuídos pelo `<colgroup>`. */
+/* Grade leve para listagens, relatórios e tabelas administrativas que aderem ao
+   padrão. A classe separada impede que fichas e matrizes que não optaram pela
+   grade herdem divisórias por acidente. `border-inline-end` respeita a direção
+   do texto e, com `border-box`, não aumenta os 100% do `<colgroup>`. */
 .tabela-dados.tabela-dados--listagem :is(th, td):not(:last-child) {
   border-inline-end: 1px solid var(--border);
 }

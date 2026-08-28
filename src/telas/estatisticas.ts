@@ -31,7 +31,7 @@ export function painelContagem(
     ],
     linhas,
     "Nada registrado neste escopo.",
-    { listagem: opcoes.listagem ?? false },
+    { listagem: opcoes.listagem ?? true },
   );
   return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
 }
@@ -159,10 +159,11 @@ function painelEnquadramento(
         { rotulo: rotuloColuna, largura: 18, truncar: true },
         { rotulo: "Classificação", largura: 16, truncar: true },
         { rotulo: "Descrição", largura: 58, truncar: true },
-        { rotulo: "Qtd.", largura: 8, alinhamento: "direita", nowrap: true },
+        { rotulo: "Qtd.", largura: 8, alinhamento: "centro", nowrap: true },
       ],
       linhas,
       "Nada registrado neste escopo.",
+      { listagem: true },
     )}
   </section>`;
 }
@@ -228,12 +229,13 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
           [
             { rotulo: "Apuratório", largura: 34, truncar: true },
             { rotulo: "Tipo", largura: 26, truncar: true },
-            { rotulo: "Em andamento", largura: 14, alinhamento: "direita", nowrap: true },
-            { rotulo: "Concluídos", largura: 13, alinhamento: "direita", nowrap: true },
-            { rotulo: "Total", largura: 13, alinhamento: "direita", nowrap: true },
+            { rotulo: "Em andamento", largura: 14, alinhamento: "centro", nowrap: true },
+            { rotulo: "Concluídos", largura: 13, alinhamento: "centro", nowrap: true },
+            { rotulo: "Total", largura: 13, alinhamento: "centro", nowrap: true },
           ],
           situacaoLinhas,
           "Nenhum processo neste escopo.",
+          { listagem: true },
         )}
       </section>
 
@@ -250,10 +252,11 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
         ${tabela(
           [
             { rotulo: "Militar", largura: 80, truncar: true },
-            { rotulo: "Ocorrências", largura: 20, alinhamento: "direita", nowrap: true },
+            { rotulo: "Ocorrências", largura: 20, alinhamento: "centro", nowrap: true },
           ],
           condutoresLinhas,
           "Nenhum condutor registrado neste escopo.",
+          { listagem: true },
         )}
       </section>
 

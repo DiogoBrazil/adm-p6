@@ -138,14 +138,14 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
             { rotulo: "Militar", truncar: true },
             ...colunasComDado.map((a) => ({
               rotulo: a.rotulo,
-              alinhamento: "direita" as const,
+              alinhamento: "centro" as const,
               nowrap: true,
             })),
-            { rotulo: "Total", alinhamento: "direita" as const, nowrap: true },
+            { rotulo: "Total", alinhamento: "centro" as const, nowrap: true },
           ],
           [...corpo, ...rodape.map((celulas) => ({ celulas, classe: "linha-total" }))],
           "Nenhuma designação neste escopo.",
-          { larga: true },
+          { larga: true, listagem: true },
         )
       }
     </section>
