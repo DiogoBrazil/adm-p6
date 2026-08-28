@@ -803,7 +803,7 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
             &UpdateProceedingDatesRequest {
                 processo_id: id.clone(),
                 data_remessa_encarregado: None,
-                data_remessa_comissao: Some(data(2026, 2, 6)),
+                data_remessa_comissao: Some(data(2026, 2, 4)),
                 data_julgamento: None,
                 data_conclusao: Some(data(2026, 2, 5)),
             },
@@ -819,7 +819,7 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
                 processo_id: id.clone(),
                 data_remessa_encarregado: None,
                 data_remessa_comissao: None,
-                data_julgamento: Some(data(2026, 2, 6)),
+                data_julgamento: Some(data(2026, 2, 4)),
                 data_conclusao: Some(data(2026, 2, 5)),
             },
         )
@@ -844,6 +844,150 @@ async fn dados_pos_cadastro_sao_corrigidos_sem_o_save_geral_apaga_los() {
         .expect_err("conclusao so sai por reabrir")
         .message();
         assert!(erro.contains("Reabrir"), "{erro}");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn datas_do_fluxo_respeitam_ordem_sem_tornar_etapas_obrigatorias() {
+    util::com_banco_descartavel("proc_ordem_datas", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        sqlx::query(
+            "UPDATE apuratorios
+                SET permite_remessa_comissao = true, permite_julgamento = true
+              WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let mut invertido = base(&m, "001");
+        invertido.data_recebimento = Some(data(2026, 1, 9));
+        let erro = salvar(&pool, &invertido).await.unwrap_err();
+        assert!(
+            erro.contains("recebimento") && erro.contains("instauração"),
+            "{erro}"
+        );
+
+        let mut req = base(&m, "002");
+        req.data_recebimento = Some(data(2026, 1, 12));
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 1, 11)),
+                data_julgamento: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .unwrap_err()
+        .message();
+        assert!(
+            erro.contains("remessa à comissão") && erro.contains("recebimento"),
+            "{erro}"
+        );
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 1, 14)),
+                data_julgamento: Some(data(2026, 1, 13)),
+                data_conclusao: None,
+            },
+        )
+        .await
+        .unwrap_err()
+        .message();
+        assert!(
+            erro.contains("julgamento") && erro.contains("remessa à comissão"),
+            "{erro}"
+        );
+        tx.rollback().await.unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 1, 13)),
+                data_julgamento: Some(data(2026, 1, 15)),
+                data_conclusao: Some(data(2026, 1, 14)),
+            },
+        )
+        .await
+        .unwrap_err()
+        .message();
+        assert!(
+            erro.contains("conclusão") && erro.contains("julgamento"),
+            "{erro}"
+        );
+        tx.rollback().await.unwrap();
+
+        // Igualdade é válida em toda a cadeia.
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: None,
+                data_remessa_comissao: Some(data(2026, 1, 12)),
+                data_julgamento: Some(data(2026, 1, 12)),
+                data_conclusao: Some(data(2026, 1, 12)),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        // O cabeçalho não pode ser movido para depois dos fatos que a tela de
+        // edição geral não exibe.
+        req.id = Some(id.clone());
+        sincronizar_designacoes(&pool, &mut req, &id).await;
+        req.data_recebimento = Some(data(2026, 1, 13));
+        let erro = salvar(&pool, &req).await.unwrap_err();
+        assert!(
+            erro.contains("remessa à comissão") && erro.contains("recebimento"),
+            "{erro}"
+        );
+
+        req.data_recebimento = None;
+        req.data_instauracao = data(2026, 1, 13);
+        let erro = salvar(&pool, &req).await.unwrap_err();
+        assert!(
+            erro.contains("remessa à comissão") && erro.contains("instauração"),
+            "{erro}"
+        );
+
+        // A ausência de Recebimento e Remessa não impede uma Conclusão; apenas
+        // as datas que existem participam da comparação.
+        let mut opcional = base(&m, "003");
+        opcional.data_recebimento = None;
+        let opcional_id = salvar(&pool, &opcional).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: opcional_id,
+                data_remessa_encarregado: None,
+                data_remessa_comissao: None,
+                data_julgamento: None,
+                data_conclusao: Some(data(2026, 1, 10)),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
     })
     .await;
 }
@@ -967,14 +1111,14 @@ async fn validacoes_puras_do_request() {
         assert!(salvar(&pool, &req).await.unwrap_err().contains("condutor"));
 
         let mut req = base(&m, "001");
-        req.data_instauracao = chrono::Utc::now().date_naive() + chrono::Duration::days(1);
+        req.data_instauracao = chrono::Local::now().date_naive() + chrono::Duration::days(1);
         assert!(salvar(&pool, &req).await.unwrap_err().contains("futura"));
 
         let datas = UpdateProceedingDatesRequest {
             processo_id: "nao-importa-na-validacao-pura".to_string(),
             data_remessa_encarregado: None,
             data_remessa_comissao: None,
-            data_julgamento: Some(chrono::Utc::now().date_naive() + chrono::Duration::days(1)),
+            data_julgamento: Some(chrono::Local::now().date_naive() + chrono::Duration::days(1)),
             data_conclusao: None,
         };
         assert!(datas.validate().unwrap_err().contains("julgamento"));
@@ -1457,7 +1601,7 @@ async fn substituicao_recusa_cada_entrada_invalida_com_mensagem_propria() {
             (
                 "data futura",
                 Box::new(|r| {
-                    r.data_troca = chrono::Utc::now().date_naive() + chrono::Duration::days(1)
+                    r.data_troca = chrono::Local::now().date_naive() + chrono::Duration::days(1)
                 }),
                 "não pode ser futura",
             ),

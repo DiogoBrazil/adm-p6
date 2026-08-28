@@ -164,11 +164,15 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
             "O prazo precisa de uma quantidade de dias maior que zero."
         }
         "ck_mapa_periodo" => "A data final do período não pode ser anterior à inicial.",
-        "ck_processo_conclusao" => "A data de conclusão não pode ser anterior à instauração.",
+        "ck_processo_conclusao" => {
+            "A conclusão não pode ser anterior à instauração, ao recebimento, à remessa ou ao julgamento."
+        }
         "ck_processo_recebimento" => "A data de recebimento não pode ser anterior à instauração.",
-        "ck_processo_julgamento" => "A data de julgamento não pode ser anterior à instauração.",
+        "ck_processo_julgamento" => {
+            "O julgamento não pode ser anterior à instauração, ao recebimento ou à remessa."
+        }
         "ck_processo_remessa_enc" | "ck_processo_remessa_com" => {
-            "A data de remessa não pode ser anterior à instauração."
+            "A data de remessa não pode ser anterior à instauração ou ao recebimento."
         }
 
         // ── Vínculo com outro cadastro ───────────────────────────────────────

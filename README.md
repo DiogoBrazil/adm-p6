@@ -28,7 +28,7 @@ Login inicial: `admin@sistema.com` / `123456` — **troque numa instalação rea
 ```bash
 cd src-tauri
 cargo fmt --check
-cargo test                    # 88 testes de integração, em bancos descartáveis
+cargo test                    # 138 testes, em bancos descartáveis
 cd ..
 npm run typecheck             # é aqui que erro de comando aparece
 npm run build                 # typecheck + vite build
@@ -41,15 +41,15 @@ Os testes sobem e derrubam o próprio banco; não tocam no de desenvolvimento.
 **Não rode `docker compose down -v`.** O banco de desenvolvimento tem os dados
 de produção dentro, e recriar o volume apaga oito anos de registro.
 
-Mudança de schema agora é **migration nova** (`0006`, `0007`…) — os cinco
-arquivos de `src-tauri/migrations/` são imutáveis, e editar um já aplicado
+Mudança de schema agora é **migration nova** (`0014`…) — os arquivos existentes
+de `src-tauri/migrations/` são imutáveis, e editar um já aplicado
 quebra o startup seguinte com `VersionMismatch`.
 
 ## Onde está o resto
 
 **[`GUIA.md`](GUIA.md) é a fonte de verdade** deste projeto e o lugar por onde
 começar. Ele traz o estado atual, o modelo de dados e o porquê de cada decisão,
-as 47 decisões de negócio já tomadas, as receitas para mexer sem quebrar, o
+as 48 decisões de negócio já tomadas, as receitas para mexer sem quebrar, o
 roteiro da importação, as armadilhas conhecidas e a lista do que ainda falta
 conferir na tela.
 

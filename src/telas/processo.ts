@@ -128,6 +128,25 @@ type Rascunho = Omit<SaveProceedingRequest, "envolvidos"> & {
   vitimas: VitimaRequest[];
 };
 
+type DatasPosteriores = {
+  data_remessa_encarregado: string | null;
+  data_remessa_comissao: string | null;
+  data_julgamento: string | null;
+  data_conclusao: string | null;
+};
+
+const datasPosterioresVazias = (): DatasPosteriores => ({
+  data_remessa_encarregado: null,
+  data_remessa_comissao: null,
+  data_julgamento: null,
+  data_conclusao: null,
+});
+
+// As datas pós-cadastro não viajam em `SaveProceedingRequest`, mas precisam
+// limitar Instauração e Recebimento ao editar o cabeçalho. Ficam como estado
+// exclusivo da tela e sobrevivem aos re-renders provocados pelo formulário.
+let datasPosterioresEdicao = datasPosterioresVazias();
+
 function acusacoesVazias(): AcusacoesFormulario {
   return {
     infracoes_penais: [],
@@ -162,7 +181,7 @@ function rascunhoVazio(): Rascunho {
     unidade_origem_id: "",
     municipio_fato_id: "",
     natureza_fato_id: null,
-    data_instauracao: new Date().toISOString().slice(0, 10),
+    data_instauracao: hojeIso(),
     data_recebimento: null,
     resumo_fatos: null,
     envolvidos: [],
@@ -286,14 +305,16 @@ function campoData(
   nome: string,
   rotulo: string,
   valor: string | null | undefined,
-  opcoes: { obrigatorio?: boolean; ajuda?: string } = {},
+  opcoes: { obrigatorio?: boolean; ajuda?: string; min?: string; max?: string } = {},
 ): string {
   const obrigatorio = opcoes.obrigatorio === true;
   const id = `campo-${nome}`;
   return `<div class="campo">
     <label for="${id}">${escapeHtml(rotulo)}</label>
     <div class="campo-data-controle">
-      <input id="${id}" name="${escapeHtml(nome)}" type="date" value="${escapeHtml(valor ?? "")}"${obrigatorio ? " required" : ""} />
+      <input id="${id}" name="${escapeHtml(nome)}" type="date" value="${escapeHtml(valor ?? "")}"
+        ${opcoes.min ? `min="${escapeHtml(opcoes.min)}"` : ""}
+        ${opcoes.max ? `max="${escapeHtml(opcoes.max)}"` : ""}${obrigatorio ? " required" : ""} />
       ${
         obrigatorio
           ? ""
@@ -454,7 +475,10 @@ export async function renderFormularioProcesso(
   erro = "",
   rascunhoAtual?: Rascunho,
 ): Promise<void> {
-  if (!rascunhoAtual) limparFormularioPendente();
+  if (!rascunhoAtual) {
+    limparFormularioPendente();
+    datasPosterioresEdicao = datasPosterioresVazias();
+  }
   const cats = await carregarCatalogos();
   let rascunho = rascunhoAtual;
 
@@ -471,6 +495,12 @@ export async function renderFormularioProcesso(
         ctx.shell(`<section class="panel"><p class="error">Processo não encontrado.</p></section>`);
         return;
       }
+      datasPosterioresEdicao = {
+        data_remessa_encarregado: d.data_remessa_encarregado,
+        data_remessa_comissao: d.data_remessa_comissao,
+        data_julgamento: d.data_julgamento,
+        data_conclusao: d.data_conclusao,
+      };
       const evidenciasPorMilitar = new Map(
         (evidenciasResp.data ?? []).map((item) => [item.policial_militar_id, item.indicios]),
       );
@@ -653,9 +683,18 @@ export async function renderFormularioProcesso(
 
         <fieldset>
           <legend>Datas</legend>
-          ${campoData("data_instauracao", "Instauração", r.data_instauracao, { obrigatorio: true })}
+          ${campoData("data_instauracao", "Instauração", r.data_instauracao, {
+            obrigatorio: true,
+            max: menorDataIso([
+              hojeIso(),
+              r.data_recebimento,
+              ...Object.values(datasPosterioresEdicao),
+            ]),
+          })}
           ${campoData("data_recebimento", "Recebimento", r.data_recebimento, {
             ajuda: "Dispara o prazo inicial: sem ela, nenhum prazo nasce.",
+            min: r.data_instauracao,
+            max: menorDataIso([hojeIso(), ...Object.values(datasPosterioresEdicao)]),
           })}
         </fieldset>
 
@@ -778,11 +817,32 @@ export async function renderFormularioProcesso(
   const form = document.querySelector<HTMLFormElement>("#form-processo")!;
   protegerFormulario(form);
 
+  const atualizarLimitesCabecalho = () => {
+    const instauracao = form.elements.namedItem("data_instauracao");
+    const recebimento = form.elements.namedItem("data_recebimento");
+    if (!(instauracao instanceof HTMLInputElement) || !(recebimento instanceof HTMLInputElement)) {
+      return;
+    }
+    const posteriores = Object.values(datasPosterioresEdicao);
+    aplicarIntervaloData(
+      instauracao,
+      "",
+      menorDataIso([hojeIso(), recebimento.value || null, ...posteriores]),
+    );
+    aplicarIntervaloData(
+      recebimento,
+      instauracao.value,
+      menorDataIso([hojeIso(), ...posteriores]),
+    );
+  };
+  atualizarLimitesCabecalho();
+
   // O seletor nativo do WebView permanece aberto depois da escolha em algumas
   // plataformas. Tirar o foco no quadro seguinte fecha o popover sem substituir
   // o controle nativo nem introduzir uma dependência de calendário.
   form.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
     input.addEventListener("change", () => {
+      atualizarLimitesCabecalho();
       const limpar = form.querySelector<HTMLButtonElement>(
         `[data-limpar-data="${input.name}"]`,
       );
@@ -1343,7 +1403,27 @@ function dataParaExibicao(dataIso: string): string {
 
 /** Hoje em ISO, para o `max` dos campos que não aceitam data futura. */
 function hojeIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  const dia = String(hoje.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+function menorDataIso(datas: Array<string | null | undefined>): string {
+  return datas.filter((data): data is string => !!data).sort()[0] ?? "";
+}
+
+function maiorDataIso(datas: Array<string | null | undefined>): string {
+  return datas.filter((data): data is string => !!data).sort().at(-1) ?? "";
+}
+
+function aplicarIntervaloData(input: HTMLInputElement | null, min: string, max: string): void {
+  if (!input) return;
+  if (min) input.min = min;
+  else input.removeAttribute("min");
+  if (max) input.max = max;
+  else input.removeAttribute("max");
 }
 
 /** O ato que autorizou a designação, como a Seção o escreve. */
@@ -1927,8 +2007,54 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   if (!podeEscrever) return;
 
   const formDatas = document.querySelector<HTMLFormElement>("#form-datas-processo");
+  const atualizarLimitesDatasPosteriores = () => {
+    if (!formDatas) return;
+    const input = (nome: string) =>
+      formDatas.elements.namedItem(nome) instanceof HTMLInputElement
+        ? (formDatas.elements.namedItem(nome) as HTMLInputElement)
+        : null;
+    const remessaEncarregado = input("data_remessa_encarregado");
+    const remessaComissaoInput = input("data_remessa_comissao");
+    const julgamento = input("data_julgamento");
+    const conclusao = input("data_conclusao");
+    const valor = (campo: HTMLInputElement | null, gravado: string | null) =>
+      campo ? campo.value || null : gravado;
+    const recebimento = d.data_recebimento;
+    const valorRemessaEncarregado = valor(remessaEncarregado, d.data_remessa_encarregado);
+    const valorRemessaComissao = valor(remessaComissaoInput, d.data_remessa_comissao);
+    const valorJulgamento = valor(julgamento, d.data_julgamento);
+    const valorConclusao = valor(conclusao, d.data_conclusao);
+    const antesDaRemessa = maiorDataIso([d.data_instauracao, recebimento]);
+    const depoisDaRemessa = menorDataIso([hojeIso(), valorJulgamento, valorConclusao]);
+
+    aplicarIntervaloData(remessaEncarregado, antesDaRemessa, depoisDaRemessa);
+    aplicarIntervaloData(remessaComissaoInput, antesDaRemessa, depoisDaRemessa);
+    aplicarIntervaloData(
+      julgamento,
+      maiorDataIso([
+        d.data_instauracao,
+        recebimento,
+        valorRemessaEncarregado,
+        valorRemessaComissao,
+      ]),
+      menorDataIso([hojeIso(), valorConclusao]),
+    );
+    aplicarIntervaloData(
+      conclusao,
+      maiorDataIso([
+        d.data_instauracao,
+        recebimento,
+        valorRemessaEncarregado,
+        valorRemessaComissao,
+        valorJulgamento,
+      ]),
+      hojeIso(),
+    );
+  };
+  atualizarLimitesDatasPosteriores();
   formDatas?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
     input.addEventListener("change", () => {
+      atualizarLimitesDatasPosteriores();
       const limpar = formDatas.querySelector<HTMLButtonElement>(
         `[data-limpar-data-detalhe="${input.name}"]`,
       );

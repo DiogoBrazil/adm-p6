@@ -25,9 +25,9 @@ sobre remover o schema `legado`.
 
 | Código | |
 |---|---:|
-| Migrations (`0001`–`0012`) | **12** |
+| Migrations (`0001`–`0013`) | **13** |
 | Comandos Tauri, todos no cliente tipado | **83** |
-| Testes de integração | **137** |
+| Testes | **138** |
 | Módulos Rust · linhas de Rust | 12 · 9.559 |
 | Arquivos de frontend · linhas de TS/CSS | 17 · 10.933 |
 | Catálogos administráveis | 25 |
@@ -77,7 +77,7 @@ Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão 
 ### Antes de tocar em qualquer coisa, leia
 
 - **Seção 2** — os 6 princípios do modelo. Toda decisão futura tem de caber neles.
-- **Seção 3** — as 47 decisões já tomadas. Não reabra sem motivo novo.
+- **Seção 3** — as 48 decisões já tomadas. Não reabra sem motivo novo.
 - **Seção 7** — as armadilhas. Cada uma já custou tempo pelo menos uma vez.
 - **Acabou o `docker compose down -v`.** Com dado real dentro, recriar o volume apaga
   8 anos de registro. Mudança de schema agora é migration incremental (seção 5).
@@ -110,7 +110,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 137 testes, bancos descartáveis
+cargo test                           # 138 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -162,7 +162,7 @@ valia enquanto o banco estava vazio — "editou migration, recria o banco" — n
 
 O `sqlx::migrate!` guarda um checksum por versão: editar um `.sql` já aplicado gera
 `VersionMismatch` no próximo startup. A partir de agora **toda mudança de schema é uma
-migration nova** (`0008`…), e todas as migrations já aplicadas são imutáveis.
+migration nova** (`0014`…), e todas as migrations já aplicadas são imutáveis.
 
 Se ainda assim for preciso recomeçar do zero — numa máquina de desenvolvimento, por
 exemplo — o caminho completo é: recriar o volume, aplicar as migrations, restaurar o
@@ -249,6 +249,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 44 | O que um processo concluído ainda pode receber? | **Nenhum novo fato operacional.** Nova substituição, prorrogação e andamento exigem `data_conclusao IS NULL`; a mensagem orienta reabrir. A checagem trava a linha do processo no backend, então vale também para IPC direto e para duas janelas concorrentes. Correções de registros históricos continuam separadas da inclusão. |
 | 45 | Toda designação cita documento? | **Não.** A relação `apuratorio_papeis.usa_documento_designacao` decide. No IPM, o Escrivão tem a flag desligada: documento e número não são gravados nem pedidos, e a tabela mostra “-”. A retroalimentação por nomes acontece uma vez na migration; o código lê apenas o booleano. E, como todo conceito de negócio, é **cadastro administrável**: a flag é uma coluna da tabela de papéis em Catálogos → Apuratórios, com alternância própria — outra espécie que dispense a citação não precisa de migration nova. |
 | 46 | Quem registra Ofendido/Vítima, e onde ele mora | **Todo procedimento — CP, FP, IPM, SR e SV —, e em tabela própria.** Três escolhas numa. (a) **Vítima deixa de ser papel de pessoa.** Era uma linha de `papeis_pessoa` escolhida num `<select>`; virou `processo_vitimas`, relação do procedimento como `processo_envolvidos` (princípio 3). O motivo é concreto: `papeis_pessoa` é catálogo **operacional** e nasce vazio, então uma seção que dependesse dele sumiria numa instalação nova — a forma exata do defeito da carta precatória (a seção 12, rodada 10). Sem catálogo no caminho, não há o que cadastrar nem o que renomear. (b) **Quem decide é `apuratorios.permite_cadastro_vitima`**, ligado pela `0012` em todo apuratório cujo tipo é `procedimento`; os cinco processos disciplinares ficam de fora, porque são instaurados **contra** um militar, e não para apurar um fato. Carga única, como `permite_indicios` (decisão 31). (c) **O atributo NÃO entra no registro de Catálogos** — desvio deliberado da seção 5, por decisão do responsável: registrar ofendido é capacidade da espécie, não escolha de administrador. Fica no mesmo caso de `codigo_extensao`. É opcional (zero, um ou vários), e o bloco genérico do formulário virou **"Pessoas inquiridas"**. |
+| 47 | Qual é a ordem das datas do fluxo? | **Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão**, comparando somente as etapas preenchidas. Datas iguais são válidas; uma etapa ausente não torna as posteriores obrigatórias. `data_remessa_encarregado` e `data_remessa_comissao` são alternativas na mesma posição e não se comparam entre si. A aplicação devolve a incompatibilidade por nome e data, e a migration `0013` repete a regra no banco. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -1500,6 +1501,7 @@ A narrativa completa de cada uma está no histórico do git.
 | 15 | Designações | cadeia de substituição com vínculo explícito (`designacao_anterior_id`); ~87 mensagens públicas revistas |
 | 16 | Datas pós-cadastro | remessa e julgamento saíram do cadastro para o detalhe; as duas remessas unificadas |
 | 17 | **Ofendido/Vítima** | tabela própria `processo_vitimas`, atributo por apuratório, e os blocos do detalhe. Detalhe abaixo |
+| 18 | Datas do fluxo | cadeia Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão, com etapas opcionais e proteção no formulário, backend e banco |
 
 ### A rodada 17, em detalhe — é a mais recente
 

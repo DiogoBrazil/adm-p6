@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Local, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::evidence::domain::AcusacoesRequest;
@@ -277,7 +277,7 @@ fn validar_substituicao(
     if motivo.trim().is_empty() {
         return Err("Informe o motivo da substituição.".to_string());
     }
-    if data_troca > Utc::now().date_naive() {
+    if data_troca > Local::now().date_naive() {
         return Err("A data da substituição não pode ser futura.".to_string());
     }
 
@@ -353,7 +353,7 @@ impl SaveProceedingRequest {
     /// do apuratório (natureza obrigatória, condutor e papéis) ficam no
     /// repositório, que lê os atributos semânticos dos catálogos.
     pub fn validate(&self) -> Result<(), String> {
-        let hoje = Utc::now().date_naive();
+        let hoje = Local::now().date_naive();
         if self.numero_documento.trim().is_empty() {
             return Err("Informe o número do documento que instaurou o processo.".to_string());
         }
@@ -363,6 +363,14 @@ impl SaveProceedingRequest {
         if self.data_recebimento.is_some_and(|d| d > hoje) {
             return Err("A data de recebimento não pode ser futura.".to_string());
         }
+        validar_ordem_datas(
+            self.data_instauracao,
+            self.data_recebimento,
+            None,
+            None,
+            None,
+            None,
+        )?;
 
         let mut ordens: Vec<i32> = self.envolvidos.iter().map(|e| e.ordem).collect();
         ordens.sort_unstable();
@@ -429,7 +437,7 @@ pub struct UpdateProceedingDatesRequest {
 
 impl UpdateProceedingDatesRequest {
     pub fn validate(&self) -> Result<(), String> {
-        let hoje = Utc::now().date_naive();
+        let hoje = Local::now().date_naive();
         if self.data_remessa_encarregado.is_some_and(|d| d > hoje) {
             return Err("A data de remessa do encarregado não pode ser futura.".to_string());
         }
@@ -444,6 +452,84 @@ impl UpdateProceedingDatesRequest {
         }
         Ok(())
     }
+}
+
+/// Valida a linha do tempo sem transformar etapas opcionais em obrigatórias.
+///
+/// As remessas são alternativas da mesma etapa e, por isso, não são comparadas
+/// entre si. Cada data preenchida é comparada apenas com as fases anteriores.
+/// O banco repete a regra, mas aqui conseguimos dizer exatamente quais fatos
+/// estão invertidos antes de qualquer escrita (decisão 38).
+pub(crate) fn validar_ordem_datas(
+    data_instauracao: NaiveDate,
+    data_recebimento: Option<NaiveDate>,
+    data_remessa_encarregado: Option<NaiveDate>,
+    data_remessa_comissao: Option<NaiveDate>,
+    data_julgamento: Option<NaiveDate>,
+    data_conclusao: Option<NaiveDate>,
+) -> Result<(), String> {
+    fn validar_etapa(
+        nome: &str,
+        data: Option<NaiveDate>,
+        anteriores: &[(&str, Option<NaiveDate>)],
+    ) -> Result<(), String> {
+        let Some(data) = data else {
+            return Ok(());
+        };
+        if let Some((nome_anterior, data_anterior)) = anteriores
+            .iter()
+            .filter_map(|(nome, data)| data.map(|data| (*nome, data)))
+            .find(|(_, data_anterior)| *data_anterior > data)
+        {
+            return Err(format!(
+                "A data de {nome} não pode ser anterior {nome_anterior} ({}).",
+                data_anterior.format("%d/%m/%Y")
+            ));
+        }
+        Ok(())
+    }
+
+    let instauracao = Some(data_instauracao);
+    validar_etapa(
+        "recebimento",
+        data_recebimento,
+        &[("à instauração", instauracao)],
+    )?;
+    let antes_da_remessa = [
+        ("à instauração", instauracao),
+        ("ao recebimento", data_recebimento),
+    ];
+    validar_etapa(
+        "remessa do encarregado",
+        data_remessa_encarregado,
+        &antes_da_remessa,
+    )?;
+    validar_etapa(
+        "remessa à comissão",
+        data_remessa_comissao,
+        &antes_da_remessa,
+    )?;
+    validar_etapa(
+        "julgamento",
+        data_julgamento,
+        &[
+            ("à instauração", instauracao),
+            ("ao recebimento", data_recebimento),
+            ("à remessa do encarregado", data_remessa_encarregado),
+            ("à remessa à comissão", data_remessa_comissao),
+        ],
+    )?;
+    validar_etapa(
+        "conclusão",
+        data_conclusao,
+        &[
+            ("à instauração", instauracao),
+            ("ao recebimento", data_recebimento),
+            ("à remessa do encarregado", data_remessa_encarregado),
+            ("à remessa à comissão", data_remessa_comissao),
+            ("ao julgamento", data_julgamento),
+        ],
+    )
 }
 
 /// Resultado individual da apuração. Soluções e penalidade pertencem ao

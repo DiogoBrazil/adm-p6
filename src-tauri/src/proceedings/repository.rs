@@ -6,12 +6,12 @@ use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
 use crate::evidence::repository as evidence_repository;
 use crate::proceedings::domain::{
-    AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, CartaPrecatoriaDetalhes,
-    ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
-    PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem, ProceedingListResult,
-    SaveProceedingRequest, SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest,
-    UpdateProceedingDatesRequest, UploadAttachmentRequest, VitimaItem, EXTENSAO_CARTA_PRECATORIA,
-    MOTIVO_DESIGNACAO_INICIAL,
+    validar_ordem_datas, AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest,
+    CartaPrecatoriaDetalhes, ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest,
+    EnvolvidoItem, PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem,
+    ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
+    VitimaItem, EXTENSAO_CARTA_PRECATORIA, MOTIVO_DESIGNACAO_INICIAL,
 };
 
 /// Limite de tamanho do anexo. Trafega em base64 pelo IPC, então o custo real em
@@ -628,10 +628,26 @@ pub async fn save(
     let data_recebimento_anterior: Option<Option<chrono::NaiveDate>> = if let Some(id) =
         request.id.as_deref()
     {
-        let (anterior, tem_prorrogacao): (Option<chrono::NaiveDate>, bool) = sqlx::query_as(
+        let (
+            anterior,
+            tem_prorrogacao,
+            remessa_encarregado,
+            remessa_comissao,
+            julgamento,
+            conclusao,
+        ): (
+            Option<chrono::NaiveDate>,
+            bool,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+        ) = sqlx::query_as(
             "SELECT p.data_recebimento,
                         EXISTS (SELECT 1 FROM processo_prazos pr
-                                 WHERE pr.processo_id = p.id AND pr.ordem > 0)
+                                 WHERE pr.processo_id = p.id AND pr.ordem > 0),
+                        p.data_remessa_encarregado, p.data_remessa_comissao,
+                        p.data_julgamento, p.data_conclusao
                    FROM processos_procedimentos p
                   WHERE p.id = $1::uuid AND p.ativo",
         )
@@ -639,6 +655,16 @@ pub async fn save(
         .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+
+        validar_ordem_datas(
+            request.data_instauracao,
+            request.data_recebimento,
+            remessa_encarregado,
+            remessa_comissao,
+            julgamento,
+            conclusao,
+        )
+        .map_err(AppError::Domain)?;
 
         // A verificacao vem antes de qualquer UPDATE: assim nenhuma
         // constraint atingida mais adiante mascara a regra com o fallback
@@ -1550,6 +1576,7 @@ pub async fn update_dates(
 ) -> Result<(), AppError> {
     let (
         data_instauracao,
+        data_recebimento,
         remessa_comissao_atual,
         julgamento_atual,
         conclusao_atual,
@@ -1560,11 +1587,13 @@ pub async fn update_dates(
         Option<chrono::NaiveDate>,
         Option<chrono::NaiveDate>,
         Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
         bool,
         bool,
     ) = sqlx::query_as(
-        "SELECT p.data_instauracao, p.data_remessa_comissao, p.data_julgamento,
-                    p.data_conclusao, a.permite_remessa_comissao, a.permite_julgamento
+        "SELECT p.data_instauracao, p.data_recebimento, p.data_remessa_comissao,
+                    p.data_julgamento, p.data_conclusao,
+                    a.permite_remessa_comissao, a.permite_julgamento
                FROM processos_procedimentos p
                JOIN apuratorios a ON a.id = p.apuratorio_id
               WHERE p.id = $1::uuid AND p.ativo
@@ -1575,38 +1604,15 @@ pub async fn update_dates(
     .await?
     .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
 
-    if request
-        .data_remessa_encarregado
-        .is_some_and(|data| data < data_instauracao)
-    {
-        return Err(AppError::Domain(
-            "A remessa do encarregado não pode ser anterior à instauração.".to_string(),
-        ));
-    }
-    if request
-        .data_remessa_comissao
-        .is_some_and(|data| data < data_instauracao)
-    {
-        return Err(AppError::Domain(
-            "A remessa à comissão não pode ser anterior à instauração.".to_string(),
-        ));
-    }
-    if request
-        .data_julgamento
-        .is_some_and(|data| data < data_instauracao)
-    {
-        return Err(AppError::Domain(
-            "O julgamento não pode ser anterior à instauração.".to_string(),
-        ));
-    }
-    if request
-        .data_conclusao
-        .is_some_and(|data| data < data_instauracao)
-    {
-        return Err(AppError::Domain(
-            "A conclusão não pode ser anterior à instauração.".to_string(),
-        ));
-    }
+    validar_ordem_datas(
+        data_instauracao,
+        data_recebimento,
+        request.data_remessa_encarregado,
+        request.data_remessa_comissao,
+        request.data_julgamento,
+        request.data_conclusao,
+    )
+    .map_err(AppError::Domain)?;
     if conclusao_atual.is_some() && request.data_conclusao.is_none() {
         return Err(AppError::Domain(
             "Para remover a conclusão, use a ação Reabrir processo.".to_string(),

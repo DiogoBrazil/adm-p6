@@ -274,6 +274,44 @@ INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('data_con
   UPDATE processos_procedimentos SET data_conclusao = DATE '2025-01-01'
    WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
 
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('remessa do encarregado anterior ao recebimento', $$
+  UPDATE processos_procedimentos
+     SET data_recebimento = DATE '2026-01-12', data_remessa_encarregado = DATE '2026-01-11'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('remessa a comissao anterior ao recebimento', $$
+  UPDATE processos_procedimentos
+     SET data_recebimento = DATE '2026-01-12', data_remessa_comissao = DATE '2026-01-11'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('julgamento anterior a remessa', $$
+  UPDATE processos_procedimentos
+     SET data_recebimento = DATE '2026-01-11', data_remessa_encarregado = DATE '2026-01-13',
+         data_julgamento = DATE '2026-01-12'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('conclusao anterior ao recebimento', $$
+  UPDATE processos_procedimentos
+     SET data_recebimento = DATE '2026-01-13', data_conclusao = DATE '2026-01-12'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('conclusao anterior a remessa', $$
+  UPDATE processos_procedimentos
+     SET data_remessa_comissao = DATE '2026-01-13', data_conclusao = DATE '2026-01-12'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('conclusao anterior ao julgamento', $$
+  UPDATE processos_procedimentos
+     SET data_julgamento = DATE '2026-01-13', data_conclusao = DATE '2026-01-12'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
+INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_aceitar('etapas opcionais e datas iguais', $$
+  UPDATE processos_procedimentos
+     SET data_recebimento = NULL, data_remessa_encarregado = DATE '2026-01-10',
+         data_remessa_comissao = NULL, data_julgamento = DATE '2026-01-10',
+         data_conclusao = DATE '2026-01-10'
+   WHERE id='aaaaaaaa-0000-0000-0000-000000000001'$$);
+
 INSERT INTO resultado_integridade (linha) SELECT pg_temp.deve_rejeitar('DELETE de catalogo em uso (status_envolvido)', $$
   DELETE FROM status_envolvido WHERE id='77777777-0000-0000-0000-000000000001'$$);
 
