@@ -9,23 +9,37 @@ use crate::evidence::domain::{
 
 /// Rótulos montados a partir do dado. No schema anterior estes textos eram
 /// `format!` no Rust, com o nome da lei escrito no código.
+///
+/// Os três seguem a ordem em que se cita uma norma — o artigo primeiro, a norma
+/// depois: "Art. 312 do Código Penal Militar - …". O conector vem de
+/// `dispositivos_legais.nome_feminino`, atributo semântico da linha, e não de
+/// leitura do nome, que o administrador pode renomear.
+///
+/// **O rótulo já termina na descrição.** Quem o exibe não deve concatenar
+/// `descricao`/`texto` de novo: era assim que o PDF do mapa mensal saía com o
+/// texto da infração repetido duas vezes.
 const ROTULO_PENAL: &str = r#"
-    dl.nome || ', art. ' || ip.artigo
-      || COALESCE(', ' || ip.paragrafo, '')
+    'Art. ' || ip.artigo
+      || COALESCE(', § ' || ip.paragrafo, '')
       || COALESCE(', inciso ' || ip.inciso, '')
-      || COALESCE(', alinea ' || ip.alinea, '')
+      || COALESCE(', alínea ' || ip.alinea, '')
+      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
       || ' - ' || ip.descricao
 "#;
 
 // `artigos_rdpm.artigo` e `infracoes_estatuto.artigo` já guardam o artigo por
 // extenso ("Art. 15", "Art. 29") — é o que o administrador digita e o que a
 // tela de catálogos exibe. Prefixar com 'Art. ' aqui produzia "Art. Art. 15".
+// `infracoes_penais.artigo`, ao contrário, guarda só o número ("121"), e é por
+// isso que só o rótulo penal acima escreve o prefixo.
 const ROTULO_TRANSGRESSAO: &str = r#"
     ar.artigo || ', inciso ' || t.inciso || ' do RDPM (' || nt.nome || ') - ' || t.texto
 "#;
 
 const ROTULO_ESTATUTO: &str = r#"
-    ie.artigo || ', inciso ' || ie.inciso || ' - ' || dl.nome || ' - ' || ie.texto
+    ie.artigo || ', inciso ' || ie.inciso
+      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+      || ' - ' || ie.texto
 "#;
 
 // ── Buscas para o formulário ─────────────────────────────────────────────────

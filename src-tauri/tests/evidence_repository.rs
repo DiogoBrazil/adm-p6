@@ -124,6 +124,125 @@ async fn busca_monta_o_rotulo_a_partir_do_dado() {
     .await;
 }
 
+/// A citação segue a ordem em que se cita uma norma, e a descrição entra UMA vez.
+///
+/// As duas metades já custaram: o PDF do mapa mensal saía com o texto da
+/// infração repetido, porque a tela concatenava `descricao` a um rótulo que já
+/// terminava nela. Se alguém tirar a descrição do fim do rótulo, ou voltar a
+/// pôr a norma na frente do artigo, é aqui que aparece.
+#[tokio::test]
+async fn rotulo_cita_o_artigo_antes_da_norma_e_nao_repete_a_descricao() {
+    util::com_banco_descartavel("ev_rotulo_citacao", |pool| async move {
+        let penais = repository::search_infracoes_penais(&pool, "art", None)
+            .await
+            .unwrap();
+        let item = penais
+            .iter()
+            .find(|i| i.rotulo.contains(" do ") || i.rotulo.contains(" da "))
+            .expect("alguma infracao penal com dispositivo");
+
+        assert!(
+            item.rotulo.starts_with("Art. "),
+            "o artigo vem primeiro: {}",
+            item.rotulo
+        );
+        // `infracoes_penais.artigo` guarda só o número, então o prefixo é do
+        // rótulo — e não pode sair dobrado como no artigo do RDPM.
+        assert!(!item.rotulo.contains("Art. Art."), "{}", item.rotulo);
+        assert!(
+            item.rotulo.ends_with(&item.descricao),
+            "o rotulo termina na descricao: {}",
+            item.rotulo
+        );
+        assert_eq!(
+            item.rotulo.matches(item.descricao.as_str()).count(),
+            1,
+            "a descricao aparece uma unica vez: {}",
+            item.rotulo
+        );
+
+        let estatuto = repository::search_infracoes_estatuto(&pool, "verdade", None)
+            .await
+            .unwrap();
+        let ie = &estatuto[0];
+        assert!(
+            ie.rotulo.ends_with(&ie.texto),
+            "o rotulo do estatuto termina no texto: {}",
+            ie.rotulo
+        );
+        assert_eq!(
+            ie.rotulo.matches(ie.texto.as_str()).count(),
+            1,
+            "o texto aparece uma unica vez: {}",
+            ie.rotulo
+        );
+    })
+    .await;
+}
+
+/// O conector sai do atributo da linha, não de leitura do nome.
+///
+/// Marcar `nome_feminino` num dispositivo tem de virar " da " no rótulo. É o que
+/// permite cadastrar "Lei …" pela tela sem migration — princípio 1.
+#[tokio::test]
+async fn conector_do_rotulo_vem_do_atributo_do_dispositivo() {
+    util::com_banco_descartavel("ev_conector", |pool| async move {
+        let alvo = sqlx::query_scalar::<_, String>(
+            "SELECT dl.id::text
+               FROM dispositivos_legais dl
+               JOIN infracoes_penais ip ON ip.dispositivo_legal_id = dl.id
+              LIMIT 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let rotulo_de = |feminino: bool| {
+            let pool = pool.clone();
+            let alvo = alvo.clone();
+            async move {
+                sqlx::query(
+                    "UPDATE dispositivos_legais SET nome_feminino = $2 WHERE id = $1::uuid",
+                )
+                .bind(&alvo)
+                .bind(feminino)
+                .execute(&pool)
+                .await
+                .unwrap();
+                let penais = repository::search_infracoes_penais(&pool, "art", Some(&alvo))
+                    .await
+                    .unwrap();
+                penais[0].rotulo.clone()
+            }
+        };
+
+        // Só a citação entra na conferência: a descrição da infração vem do
+        // catálogo e tem "do"/"da" no meio do texto ("em razão do cargo"),
+        // que não diz nada sobre o conector.
+        let masculino = citacao(&rotulo_de(false).await);
+        assert!(
+            masculino.contains(" do ") && !masculino.contains(" da "),
+            "sem a marca, o conector e 'do': {masculino}"
+        );
+
+        let feminino = citacao(&rotulo_de(true).await);
+        assert!(
+            feminino.contains(" da ") && !feminino.contains(" do "),
+            "com a marca, o conector e 'da': {feminino}"
+        );
+    })
+    .await;
+}
+
+/// A citação do rótulo: tudo antes do ` - ` que abre a descrição.
+fn citacao(rotulo: &str) -> String {
+    rotulo
+        .split_once(" - ")
+        .expect("descricao no rotulo")
+        .0
+        .to_string()
+}
+
 /// A busca é por termo e por filtro; o filtro é id de catálogo, nunca nome.
 #[tokio::test]
 async fn busca_filtra_por_termo_e_por_catalogo() {

@@ -18,7 +18,7 @@ entender X → olhe em Y".
   nova (`0015`…).
 - **Tocar em `adm-p6.sql`.** Dump de produção, 44 MB, somente leitura, fora do
   git — e com dados pessoais de 235 militares.
-- **Reabrir uma decisão da seção 3 sem motivo novo.** São 50, todas decididas pelo
+- **Reabrir uma decisão da seção 3 sem motivo novo.** São 51, todas decididas pelo
   responsável e implementadas.
 
 ## Princípios do modelo, que valem para toda mudança
@@ -56,6 +56,7 @@ entender X → olhe em Y".
 | Mexer em regra de CSS que já existe duplicada no arquivo | qual vence é a ordem, não a intenção. Medir o computado antes e depois num navegador — foi como a rodada 14 provou que a listagem de processos não mudou |
 | Teste de limite que não passa do limite | a fixture tem 3 militares: o clamp de 200 nunca é exercido e o teste passa. Teste de limite monta **mais que o limite** |
 | Orientar a folha impressa por `@page` | o WebKitGTK (motor do Tauri no Linux) **ignora** o descritor `size`, e não tem página nomeada. Quem orienta é o `GtkPageSetup` — ver `print::commands::print_landscape`. E validar impressão em Chromium headless não prova nada: lá o `@page` funciona |
+| Exibir enquadramento concatenando a descrição | o `rotulo` de `evidence/repository.rs` **já termina** na descrição. Acrescentá-la de novo imprime o parágrafo duas vezes |
 | Folha em paisagem no `GtkPageSetup` | pedir **rotação** ao GTK imprime as páginas **em branco** pelo `run_dialog`, sem erro nenhum. Declare um papel de 297×210mm — ver `folha_a4_paisagem` |
 | Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build -- --no-bundle` |
 
@@ -64,7 +65,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 144 testes
+cd src-tauri && cargo fmt --check && cargo test   # 146 testes
 cd .. && npm run typecheck
 ```
 

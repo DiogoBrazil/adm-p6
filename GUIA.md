@@ -77,7 +77,7 @@ Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão 
 ### Antes de tocar em qualquer coisa, leia
 
 - **Seção 2** — os 6 princípios do modelo. Toda decisão futura tem de caber neles.
-- **Seção 3** — as 50 decisões já tomadas. Não reabra sem motivo novo.
+- **Seção 3** — as 51 decisões já tomadas. Não reabra sem motivo novo.
 - **Seção 7** — as armadilhas. Cada uma já custou tempo pelo menos uma vez.
 - **Acabou o `docker compose down -v`.** Com dado real dentro, recriar o volume apaga
   8 anos de registro. Mudança de schema agora é migration incremental (seção 5).
@@ -110,7 +110,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 144 testes, bancos descartáveis
+cargo test                           # 146 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -252,6 +252,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 47 | Qual é a ordem das datas do fluxo? | **Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão**, comparando somente as etapas preenchidas. Datas iguais são válidas; uma etapa ausente não torna as posteriores obrigatórias. `data_remessa_encarregado` e `data_remessa_comissao` são alternativas na mesma posição e não se comparam entre si. A aplicação devolve a incompatibilidade por nome e data, e a migration `0013` repete a regra no banco. |
 | 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e CSV, sem reescrever snapshots de mapas já salvos. |
 | 49 | Como é emitido o PDF detalhado do mapa mensal? | **A partir do mapa corrente, pela impressão do sistema, sem crate de PDF.** Pode emitir todas as fichas do filtro ou somente uma; nos dois casos o backend reaplica mês e apuratórios antes de aceitar o processo. Há uma capa institucional por espécie de apuratório, com mês/ano e unidade fixa 7ºBPM. Depois dela, as fichas seguem em A4 paisagem e aproveitam a mesma folha: cabeçalho e marcador de fim delimitam cada registro, e páginas atravessadas recebem “Continuação do …”. A ficha reúne o detalhe cadastral, envolvidos, enquadramentos agrupados por natureza/esfera, resultados, vítimas, inquiridos, designações, prazos/prorrogações, andamentos e metadados dos anexos; o conteúdo binário dos anexos não entra. “Remessa da comissão” mostra “Não se aplica” conforme o atributo semântico do apuratório, nunca pela sigla. Mapas salvos continuam snapshots e ficam fora desta primeira versão. A **paisagem não vem do CSS**: o WebKitGTK ignora `@page { size }`, e quem a define é o `GtkPageSetup` de `print_landscape`, comando que abre o diálogo já orientado e só retorna quando a impressão termina. Ver a armadilha do `@page` na seção 7. |
+| 50 | Como o PDF do mapa apresenta enquadramentos e indícios? | **Um bloco por natureza, citação com o artigo na frente, e a descrição uma única vez.** Os blocos penais saem por espécie+esfera ("Indícios de Crime Militar", "Indícios de Crime Comum"), e transgressão do RDPM e infração do Estatuto ocupam **um só** bloco disciplinar — é a mesma matéria —, com a transgressão análoga recuada em itálico sob a infração do Estatuto. A citação segue a ordem em que se cita uma norma: `Art. 312 do Código Penal Militar - …`, com o conector vindo de `dispositivos_legais.nome_feminino` (atributo semântico, nunca leitura do nome). O `rotulo` montado em `evidence/repository.rs` **já termina na descrição**; quem exibe não concatena de novo. As categorias de indício só entram quando acrescentam: as de `indica_ausencia` sempre, as demais apenas quando não há enquadramento nenhum — critério estrutural, sem olhar nome. O Resultado sai em linhas rótulo/valor empilhadas. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -752,6 +753,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a seção 12, rodada 14 provou que a listagem de processos não mudou |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Larguras calculadas de coluna vão em `data-*` e são aplicadas por `aplicarLarguras()` em `shell()` |
 | **`@page` para orientar a folha impressa** | O WebKitGTK — motor do Tauri no **Linux** — ignora o descritor `size` do `@page`. Medido no webkit2gtk-4.1 2.48 com `@page nome { size: A4 landscape }`, `@page { size: A4 landscape }` e `@page { size: 297mm 210mm }`: as três saíram 595×842 pt, **retrato**. A propriedade `page` (página nomeada) também não existe no WebKit, então uma `@page` nomeada nem chega a casar. O documento sai com o layout de 297mm espremido numa folha de 210mm, sem erro nenhum | A orientação vem do `GtkPageSetup`, e só. É o que `print::commands::print_landscape` monta, antes de rodar o diálogo. O `@page` continua no frontend só para os motores que o honram, e a chamada **espera** a impressão terminar — voltar antes desmonta o documento e imprime folha em branco |
+| **Concatenar a descrição a um `rotulo` de enquadramento** | O `rotulo` de `evidence/repository.rs` **já termina** em `' - ' || descricao`. Quem acrescentar `: ${descricao}` imprime o mesmo parágrafo duas vezes na mesma linha — foi o que o PDF do mapa mensal fez desde que nasceu, e com a transgressão saía pior ainda, repetindo também a gravidade | O rótulo é a citação **completa**. Exiba-o sozinho. `rotulo_cita_o_artigo_antes_da_norma_e_nao_repete_a_descricao` trava as duas metades |
 | **Pedir ao GTK que gire a folha para paisagem** | Com `run_dialog`, o WebKitGTK sai com **as páginas em branco**: a contagem de páginas está certa, a folha sai 842×595, e não se pinta nada — nenhum texto no PDF. Não há erro, nem no console nem no `failed`. Com `print()` direto o mesmo page setup funciona, o que torna a armadilha fácil de "validar" errado | Declarar um **papel de 297×210mm** no `GtkPageSetup`, sem pedir rotação: a folha sai igual e o conteúdo aparece. É o que `folha_a4_paisagem` faz, e o comentário dela guarda a medição |
 | **Validar impressão em Chromium headless** | Não prova nada sobre o app: o Chromium honra `@page` e páginas nomeadas desde a v110, o WebKitGTK não honra nenhum dos dois. Foi assim que a rodada 20 deu o A4 paisagem por pronto enquanto o PDF saía retrato | Medir no motor que o app usa. `python3` + `gi` (`WebKit2` 4.1) imprime para arquivo, e `pdfinfo` lê `Page size` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver a seção 12, rodada 6 |
@@ -1050,7 +1052,7 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Estatísticas de Processos** — tabelas centralizadas, somente rótulo e quantidade
 - [ ] **Estatísticas de Procedimentos** — idem, sem barras percentuais
 - [ ] **Mapa do Período** — gerar o mês sem apuratório marcado e com uma espécie marcada; os registros devem obedecer à mesma regra da tabela
-- [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7ºBPM, mês/ano, A4 paisagem **sem mexer em Orientação no diálogo**, fichas compartilhando folha, marcadores de fim, “Continuação do …” e tabelas longas sem perda
+- [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7ºBPM, mês/ano, A4 paisagem **sem mexer em Orientação no diálogo**, fichas compartilhando folha, marcadores de fim, “Continuação do …” e tabelas longas sem perda. Nos enquadramentos: um bloco por natureza, artigo antes da norma, **nenhum texto repetido**, analogia recuada sob a infração do Estatuto e Resultado empilhado
 - [ ] **Mapas Salvos**
 - [ ] **Relatório Anual**
 
@@ -1511,6 +1513,7 @@ A narrativa completa de cada uma está no histórico do git.
 | 19 | Origem detalhada | catálogo de Subunidade/Seção, vínculo opcional à unidade e novo escopo de numeração |
 | 20 | PDF do mapa mensal | impressão A4 paisagem do mapa corrente, completa ou individual, com capa por apuratório e fichas detalhadas em fluxo contínuo |
 | 21 | Paisagem de verdade | a folha do PDF saía retrato: o WebKitGTK ignora `@page { size }`. A orientação passou para o `GtkPageSetup`, em `print::commands::print_landscape` |
+| 22 | Enquadramentos e indícios | citação com o artigo na frente (`Art. 312 do Código Penal Militar`), descrição sem repetição, bloco disciplinar único com a analogia recuada, e Resultado empilhado. Migration `0015` traz `dispositivos_legais.nome_feminino` |
 
 ### A rodada 17, em detalhe
 

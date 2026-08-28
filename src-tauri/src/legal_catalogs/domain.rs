@@ -341,7 +341,12 @@ pub const CATALOGOS: &[Catalogo] = &[
         chave: "dispositivos_legais",
         tabela: "dispositivos_legais",
         rotulo: "Dispositivos legais",
-        colunas: &[centralizada(texto("nome", "Nome"))],
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            centralizada(booleano("nome_feminino", "Nome feminino",
+                "Concorda o artigo com o nome ao citar o enquadramento: marcado escreve \
+                 'Art. 33 da Lei de Drogas'; desmarcado, 'Art. 312 do Código Penal'.")),
+        ],
         ordenacao: "nome",
     },
     Catalogo {

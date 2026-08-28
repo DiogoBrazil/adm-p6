@@ -83,63 +83,103 @@ function tabela(cabecalhos: string[], linhas: string[][], vazio: string, classe 
   </table>`;
 }
 
+/**
+ * Um bloco de indícios. Os itens já chegam como HTML montado — a analogia do
+ * Estatuto tem marcação própria —, então quem monta é quem escapa.
+ */
 function grupoEnquadramento(titulo: string, itens: string[]): string {
   if (!itens.length) return "";
+  // Ponto e vírgula entre os itens e ponto no último: é uma relação de
+  // enquadramentos, e no papel ela se lê como texto corrido, não como lista de
+  // tarefas.
+  const pontuados = itens.map(
+    (item, indice) => `<li>${item}${indice === itens.length - 1 ? "." : ";"}</li>`,
+  );
   return `<div class="mapa-pdf-enquadramento-grupo">
     <h3>${escapeHtml(titulo)}</h3>
-    <ul>${itens.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+    <ul>${pontuados.join("")}</ul>
   </div>`;
 }
 
-function enquadramentosDe(
-  envolvidoId: string,
-  itens: EnvolvidoComIndicios[],
-): string {
+// O `rotulo` que vem do backend já termina na descrição da infração — ver
+// `evidence/repository.rs::ROTULO_PENAL`. Concatenar `descricao`/`texto` aqui
+// imprimia o mesmo parágrafo duas vezes na mesma linha; foi o defeito que
+// motivou esta rodada.
+function enquadramentosDe(envolvidoId: string, itens: EnvolvidoComIndicios[]): string {
   const dados = itens.find((item) => item.envolvido_id === envolvidoId)?.indicios;
   if (!dados) return `<p class="mapa-pdf-vazio-celula">Não registrado</p>`;
 
   // A espécie e a esfera já são rótulos vindos dos catálogos. Agrupar pela
-  // combinação produz “Crime Militar”, “Crime Comum” etc. sem transformar
-  // esses nomes administráveis em regra de negócio do frontend.
+  // combinação produz “Indícios de Crime Militar”, “Indícios de Crime Comum”
+  // etc. sem transformar esses nomes administráveis em regra de negócio do
+  // frontend. O caixa-alta é do CSS.
   const penais = new Map<string, string[]>();
   for (const item of dados.infracoes_penais) {
-    const titulo = `${item.especie} ${item.esfera_penal}`;
+    const titulo = `Indícios de ${item.especie} ${item.esfera_penal}`;
     const grupo = penais.get(titulo) ?? [];
-    grupo.push(`${item.rotulo}: ${item.descricao}`);
+    grupo.push(escapeHtml(item.rotulo));
     penais.set(titulo, grupo);
   }
 
+  // Transgressão do RDPM e infração do Estatuto são a mesma matéria
+  // disciplinar, e saíam em dois blocos. A do Estatuto sempre vem com a
+  // transgressão análoga, que fica recuada abaixo dela em vez de disputar a
+  // mesma linha.
+  const disciplinares = [
+    ...dados.transgressoes.map((item) => escapeHtml(item.rotulo)),
+    ...dados.infracoes_estatuto.map(
+      (item) =>
+        `${escapeHtml(item.rotulo)}<span class="mapa-pdf-analogia">Analogia com ${escapeHtml(
+          item.analogia_rotulo,
+        )}</span>`,
+    ),
+  ];
+
+  const temEnquadramento = !!(penais.size || disciplinares.length);
+
+  // A categoria é a indicação grossa; o enquadramento é a fina. Quando existe
+  // enquadramento, repetir “Indícios de crime militar” ao lado do artigo não
+  // acrescenta nada. Já a categoria de ausência é a única declaração que existe
+  // quando nada foi enquadrado, e precisa constar sempre. O critério é este —
+  // estrutural —, e não o nome da linha, que o administrador pode renomear.
+  const categorias = dados.categorias
+    .filter((item) => item.indica_ausencia || !temEnquadramento)
+    .map((item) => escapeHtml(item.nome));
+
   const grupos = [
     ...[...penais.entries()].map(([titulo, valores]) => grupoEnquadramento(titulo, valores)),
-    grupoEnquadramento(
-      "Transgressão disciplinar",
-      dados.transgressoes.map((item) => `${item.rotulo} — ${item.natureza}: ${item.texto}`),
-    ),
-    grupoEnquadramento(
-      "Infração do Estatuto",
-      dados.infracoes_estatuto.map(
-        (item) => `${item.rotulo} — analogia disciplinar: ${item.analogia_rotulo}`,
-      ),
-    ),
-    grupoEnquadramento(
-      "Outros indícios / categorias",
-      dados.categorias.map((item) => item.nome),
-    ),
+    grupoEnquadramento("Indícios de transgressão disciplinar", disciplinares),
+    grupoEnquadramento("Outros indícios", categorias),
   ].filter(Boolean);
   return grupos.length
     ? `<div class="mapa-pdf-enquadramentos">${grupos.join("")}</div>`
     : `<p class="mapa-pdf-vazio-celula">Não registrado</p>`;
 }
 
+/**
+ * Devolve **marcação**, e não texto: quem chama não deve escapar de novo.
+ * Numa coluna estreita, três informações separadas por bolinha viram um
+ * emaranhado; empilhadas com o rótulo em cima, cada uma se acha.
+ */
 function resultadoDoEnvolvido(item: ProceedingDetail["envolvidos"][number]): string {
-  const partes = [
-    item.solucao_sugerida ? `Sugerida: ${item.solucao_sugerida}` : null,
-    item.solucao_decidida ? `Decidida: ${item.solucao_decidida}` : null,
-    item.penalidade_tipo
-      ? `Penalidade: ${item.penalidade_tipo}${item.penalidade_dias ? ` — ${item.penalidade_dias} dias` : ""}`
-      : null,
-  ].filter((valor): valor is string => !!valor);
-  return partes.length ? partes.join(" • ") : "Não registrado";
+  const partes: [string, string][] = [
+    ["Sugerida", item.solucao_sugerida ?? ""],
+    ["Decidida", item.solucao_decidida ?? ""],
+    [
+      "Penalidade",
+      item.penalidade_tipo
+        ? `${item.penalidade_tipo}${item.penalidade_dias ? ` — ${item.penalidade_dias} dias` : ""}`
+        : "",
+    ],
+  ];
+  const presentes = partes.filter(([, valor]) => !!valor);
+  if (!presentes.length) return `<p class="mapa-pdf-vazio-celula">Não registrado</p>`;
+  return `<dl class="mapa-pdf-resultado">${presentes
+    .map(
+      ([rotulo, valor]) =>
+        `<dt>${escapeHtml(rotulo)}</dt><dd>${escapeHtml(valor)}</dd>`,
+    )
+    .join("")}</dl>`;
 }
 
 function documentoDaDesignacao(item: ProceedingDetail["designacoes"][number]): string {
@@ -232,7 +272,7 @@ function renderEnvolvidos(item: MapPrintItem): string {
           )}</td>
           <td>${escapeHtml(envolvido.status_envolvido)}</td>
           <td>${enquadramentosDe(envolvido.id, item.enquadramentos)}</td>
-          <td>${escapeHtml(resultadoDoEnvolvido(envolvido))}</td>
+          <td>${resultadoDoEnvolvido(envolvido)}</td>
         </tr>`,
       )
       .join("")}</tbody>

@@ -1402,6 +1402,38 @@ tr.atrasado {
   margin-top: 0.5mm;
 }
 
+/* A transgressão análoga não é um enquadramento à parte: é a leitura
+   disciplinar da infração do Estatuto logo acima. Recuada e em itálico, ela se
+   lê como nota da linha, e não como mais um item da relação. */
+.mapa-pdf-analogia {
+  display: block;
+  margin-left: 2.5mm;
+  color: #475363;
+  font-size: 5.9pt;
+  font-style: italic;
+}
+
+/* Coluna estreita: rótulo em cima, valor embaixo. Em linha, as três
+   informações do desfecho se embaralhavam numa frase só. */
+.mapa-pdf-resultado {
+  display: grid;
+  margin: 0;
+  gap: 0.9mm;
+}
+
+.mapa-pdf-resultado dt {
+  color: #65707e;
+  font-size: 5.6pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mapa-pdf-resultado dd {
+  margin: 0.2mm 0 0;
+  color: #172235;
+}
+
 .mapa-pdf-vazio,
 .mapa-pdf-texto-livre {
   margin: 0;
