@@ -4,6 +4,7 @@ import {
   aplicarLarguras,
   escapeHtml,
   formularioTemPendencia,
+  instalarValidacaoAmigavel,
   podeDescartarFormulario,
 } from "./dom";
 import {
@@ -94,6 +95,7 @@ const DASHBOARD: Route = { path: ROTA_DASHBOARD, label: "Painel", group: "Geral"
 let session: SessionUser | null = null;
 let activePath = "/dashboard";
 const app = document.querySelector<HTMLDivElement>("#app")!;
+instalarValidacaoAmigavel();
 const CHAVE_SIDEBAR_RECOLHIDA = "adm-p6:sidebar-recolhida";
 const CHAVE_GRUPOS_ABERTOS = "adm-p6:grupos-abertos";
 let sidebarRecolhida = localStorage.getItem(CHAVE_SIDEBAR_RECOLHIDA) === "true";
@@ -306,6 +308,7 @@ function renderLogin(error = "") {
         ${error ? `<p class="feedback feedback--error" role="alert">${escapeHtml(error)}</p>` : ""}
         <button type="submit">Entrar no ADM-P6</button>
       </form>
+      <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     </main>
   `;
 

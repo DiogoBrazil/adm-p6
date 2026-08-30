@@ -122,15 +122,222 @@ export function podeDescartarFormulario(): boolean {
 
 export type TipoFeedback = "sucesso" | "erro" | "info";
 
+type CampoValidavel = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+type EstadoErroCampo = {
+  aviso: HTMLElement;
+  descricaoOriginal: string | null;
+};
+
+const errosDeCampo = new WeakMap<CampoValidavel, EstadoErroCampo>();
+const formulariosComAvisoAgendado = new WeakSet<HTMLFormElement>();
+let validacaoAmigavelInstalada = false;
+let sequenciaErroCampo = 0;
+
+function ehCampoValidavel(alvo: EventTarget | null): alvo is CampoValidavel {
+  return (
+    alvo instanceof HTMLInputElement ||
+    alvo instanceof HTMLSelectElement ||
+    alvo instanceof HTMLTextAreaElement
+  );
+}
+
+function dataPtBr(valor: string): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : valor;
+}
+
+/** Traduz o `ValidityState` do WebView sem substituir as regras do HTML. */
+function mensagemDeValidacao(campo: CampoValidavel): string {
+  // Uma mensagem personalizada anterior mantém `customError=true` mesmo
+  // depois que o valor muda. Limpar primeiro revela o estado nativo atual.
+  campo.setCustomValidity("");
+  const validade = campo.validity;
+  if (validade.valid) return "";
+
+  if (validade.valueMissing) {
+    return (
+      campo.dataset.mensagemObrigatorio ??
+      (campo instanceof HTMLSelectElement
+        ? "Selecione uma opção para este campo."
+        : "Preencha este campo obrigatório.")
+    );
+  }
+  if (validade.typeMismatch && campo instanceof HTMLInputElement && campo.type === "email") {
+    return "Informe um endereço de e-mail válido.";
+  }
+  if (validade.rangeUnderflow && campo instanceof HTMLInputElement) {
+    if (campo.dataset.mensagemMin) return campo.dataset.mensagemMin;
+    return campo.type === "date"
+      ? `Escolha uma data igual ou posterior a ${dataPtBr(campo.min)}.`
+      : `Informe um valor maior ou igual a ${campo.min}.`;
+  }
+  if (validade.rangeOverflow && campo instanceof HTMLInputElement) {
+    if (campo.dataset.mensagemMax) return campo.dataset.mensagemMax;
+    return campo.type === "date"
+      ? `Escolha uma data igual ou anterior a ${dataPtBr(campo.max)}.`
+      : `Informe um valor menor ou igual a ${campo.max}.`;
+  }
+  if (validade.tooShort && campo instanceof HTMLInputElement) {
+    return `Informe pelo menos ${campo.minLength} caracteres.`;
+  }
+  if (validade.tooLong && campo instanceof HTMLInputElement) {
+    return `Use no máximo ${campo.maxLength} caracteres.`;
+  }
+  if (validade.stepMismatch) return "Informe um valor permitido para este campo.";
+  if (validade.patternMismatch) return "Revise o formato informado neste campo.";
+  if (validade.badInput) return "Informe um valor válido para este campo.";
+  return "Revise o valor informado neste campo.";
+}
+
+function recipienteDoErro(campo: CampoValidavel): HTMLElement | null {
+  const grupo = campo.closest<HTMLElement>(".campo");
+  if (grupo) return grupo;
+  return campo.closest<HTMLElement>("label") ?? campo.parentElement;
+}
+
+function mostrarErroDoCampo(campo: CampoValidavel, mensagem: string): void {
+  let estado = errosDeCampo.get(campo);
+  if (!estado) {
+    const recipiente = recipienteDoErro(campo);
+    if (!recipiente) return;
+
+    const aviso = document.createElement("small");
+    aviso.className = "campo-erro campo-erro--validacao";
+    aviso.dataset.validacaoCampo = "true";
+    aviso.id = `erro-validacao-${++sequenciaErroCampo}`;
+
+    const controleData = campo.closest<HTMLElement>(".campo-data-controle");
+    if (controleData && controleData.parentElement === recipiente) {
+      controleData.insertAdjacentElement("afterend", aviso);
+    } else {
+      recipiente.append(aviso);
+    }
+
+    estado = {
+      aviso,
+      descricaoOriginal: campo.getAttribute("aria-describedby"),
+    };
+    errosDeCampo.set(campo, estado);
+  }
+
+  estado.aviso.textContent = mensagem;
+  campo.setAttribute("aria-invalid", "true");
+  const descricoes = new Set(
+    (estado.descricaoOriginal ?? "").split(/\s+/).filter(Boolean),
+  );
+  descricoes.add(estado.aviso.id);
+  campo.setAttribute("aria-describedby", [...descricoes].join(" "));
+}
+
+function limparErroDoCampo(campo: CampoValidavel): void {
+  campo.setCustomValidity("");
+  const estado = errosDeCampo.get(campo);
+  if (!estado) return;
+  estado.aviso.remove();
+  campo.removeAttribute("aria-invalid");
+  if (estado.descricaoOriginal) campo.setAttribute("aria-describedby", estado.descricaoOriginal);
+  else campo.removeAttribute("aria-describedby");
+  errosDeCampo.delete(campo);
+}
+
+/**
+ * Localiza e apresenta de forma acessível a validação nativa de todos os
+ * formulários, inclusive os que as rotas desenham depois do carregamento.
+ */
+export function instalarValidacaoAmigavel(): void {
+  if (validacaoAmigavelInstalada) return;
+  validacaoAmigavelInstalada = true;
+
+  document.addEventListener(
+    "invalid",
+    (evento) => {
+      if (!ehCampoValidavel(evento.target)) return;
+      evento.preventDefault();
+
+      const campo = evento.target;
+      const mensagem = mensagemDeValidacao(campo);
+      if (!mensagem) return;
+      campo.setCustomValidity(mensagem);
+      mostrarErroDoCampo(campo, mensagem);
+
+      const form = campo.form;
+      if (!form || formulariosComAvisoAgendado.has(form)) return;
+      formulariosComAvisoAgendado.add(form);
+      window.queueMicrotask(() => {
+        formulariosComAvisoAgendado.delete(form);
+        campo.focus({ preventScroll: true });
+        campo.scrollIntoView({ behavior: "smooth", block: "center" });
+        notificar("Revise os campos destacados antes de continuar.", "erro");
+      });
+    },
+    true,
+  );
+
+  const revisarCampo = (evento: Event) => {
+    if (!ehCampoValidavel(evento.target) || !errosDeCampo.has(evento.target)) return;
+    const campo = evento.target;
+    const mensagem = mensagemDeValidacao(campo);
+    if (mensagem) {
+      campo.setCustomValidity(mensagem);
+      mostrarErroDoCampo(campo, mensagem);
+    } else {
+      limparErroDoCampo(campo);
+    }
+  };
+  document.addEventListener("input", revisarCampo);
+  document.addEventListener("change", revisarCampo);
+}
+
 /** Mensagem não bloqueante, anunciada também por leitor de tela. */
 export function notificar(mensagem: string, tipo: TipoFeedback = "info"): void {
   const regiao = document.querySelector<HTMLElement>("#toast-region");
   if (!regiao) return;
+
+  const configuracao = {
+    sucesso: { titulo: "Tudo certo", icone: "✓", duracao: 4200 },
+    erro: { titulo: "Não foi possível concluir", icone: "!", duracao: 8000 },
+    info: { titulo: "Informação", icone: "i", duracao: 6000 },
+  }[tipo];
+
   const toast = document.createElement("div");
   toast.className = `toast toast--${tipo}`;
-  toast.textContent = mensagem;
+  toast.setAttribute("role", tipo === "erro" ? "alert" : "status");
+
+  const icone = document.createElement("span");
+  icone.className = "toast__icone";
+  icone.setAttribute("aria-hidden", "true");
+  icone.textContent = configuracao.icone;
+
+  const corpo = document.createElement("span");
+  corpo.className = "toast__corpo";
+  const titulo = document.createElement("strong");
+  titulo.className = "toast__titulo";
+  titulo.textContent = configuracao.titulo;
+  const texto = document.createElement("span");
+  texto.className = "toast__mensagem";
+  texto.textContent = mensagem;
+  corpo.append(titulo, texto);
+
+  const fechar = document.createElement("button");
+  fechar.className = "toast__fechar";
+  fechar.type = "button";
+  fechar.setAttribute("aria-label", "Fechar notificação");
+  fechar.textContent = "×";
+
+  let temporizador = window.setTimeout(() => toast.remove(), configuracao.duracao);
+  const remover = () => {
+    window.clearTimeout(temporizador);
+    toast.remove();
+  };
+  fechar.addEventListener("click", remover);
+  toast.addEventListener("mouseenter", () => window.clearTimeout(temporizador));
+  toast.addEventListener("mouseleave", () => {
+    temporizador = window.setTimeout(remover, 2500);
+  });
+
+  toast.append(icone, corpo, fechar);
   regiao.append(toast);
-  window.setTimeout(() => toast.remove(), 4200);
 }
 
 // ── Tabelas ───────────────────────────────────────────────────────────

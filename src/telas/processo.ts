@@ -680,6 +680,15 @@ export async function renderFormularioProcesso(
         </div>
       </div>
 
+      ${
+        erro
+          ? `<div class="feedback feedback--error formulario-feedback" role="alert" tabindex="-1">
+               <strong>Não foi possível salvar.</strong>
+               <span>${escapeHtml(erro)}</span>
+             </div>`
+          : ""
+      }
+
       ${documentos.length === 0 ? `<p class="aviso">Este apuratório não tem documento iniciador habilitado. Configure em <strong>Catálogos → Configuração de apuratórios</strong>.</p>` : ""}
 
       <form id="form-processo" class="crud-form">
@@ -842,7 +851,6 @@ export async function renderFormularioProcesso(
           <div class="campo campo--largo"><label>Resumo<textarea name="resumo_fatos" rows="4">${escapeHtml(r.resumo_fatos ?? "")}</textarea></label></div>
         </fieldset>
 
-        ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
         <div class="form-actions">
           <button type="button" class="secondary" id="cancelar">Cancelar</button>
           <button type="submit">Salvar</button>
@@ -853,6 +861,14 @@ export async function renderFormularioProcesso(
 
   const form = document.querySelector<HTMLFormElement>("#form-processo")!;
   protegerFormulario(form);
+  if (erro) {
+    const feedback = document.querySelector<HTMLElement>(".formulario-feedback");
+    window.requestAnimationFrame(() => {
+      feedback?.focus({ preventScroll: true });
+      feedback?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    notificar(erro, "erro");
+  }
 
   const atualizarLimitesCabecalho = () => {
     const instauracao = form.elements.namedItem("data_instauracao");
@@ -861,16 +877,33 @@ export async function renderFormularioProcesso(
       return;
     }
     const posteriores = Object.values(datasPosterioresEdicao);
+    const hoje = hojeIso();
+    const maximoInstauracao = menorDataIso([
+      hoje,
+      recebimento.value || null,
+      ...posteriores,
+    ]);
+    const maximoRecebimento = menorDataIso([hoje, ...posteriores]);
     aplicarIntervaloData(
       instauracao,
       "",
-      menorDataIso([hojeIso(), recebimento.value || null, ...posteriores]),
+      maximoInstauracao,
     );
     aplicarIntervaloData(
       recebimento,
       instauracao.value,
-      menorDataIso([hojeIso(), ...posteriores]),
+      maximoRecebimento,
     );
+    instauracao.dataset.mensagemMax =
+      maximoInstauracao === hoje
+        ? "A data de instauração não pode ser futura."
+        : `A data de instauração não pode ser posterior a ${dataParaExibicao(maximoInstauracao)}.`;
+    recebimento.dataset.mensagemMin =
+      "A data de recebimento não pode ser anterior à data de instauração.";
+    recebimento.dataset.mensagemMax =
+      maximoRecebimento === hoje
+        ? "A data de recebimento não pode ser futura."
+        : `A data de recebimento não pode ser posterior a ${dataParaExibicao(maximoRecebimento)}.`;
   };
   atualizarLimitesCabecalho();
 

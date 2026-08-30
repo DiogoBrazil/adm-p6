@@ -99,36 +99,42 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
     nome: String(l.nome ?? ""),
   }));
   const anosDisponiveis = anos.length ? anos : [anoSelecionado];
+  const idsApuratorios = apuratorios.map((apuratorio) => apuratorio.id);
+  const selecaoVisual = new Set(
+    apuratoriosSelecionados.length === 0
+      ? idsApuratorios
+      : apuratoriosSelecionados.filter((id) => idsApuratorios.includes(id)),
+  );
+  const todosSelecionados =
+    idsApuratorios.length > 0 && selecaoVisual.size === idsApuratorios.length;
 
   const concluidos = linhasGeradas?.filter((l) => l.data_conclusao !== null).length ?? 0;
   const andamento = (linhasGeradas?.length ?? 0) - concluidos;
 
-  const resultado = !linhasGeradas
+  const resultado = linhasGeradas === null
     ? ""
     : `
-      <div class="page-head">
-        <div>
+      <div class="mapa-resultado-bar">
+        <div class="mapa-resultado-resumo">
           <h2>${escapeHtml(tituloDoMapa(apuratorios))}</h2>
           <p>${linhasGeradas.length} no período · ${andamento} em andamento · ${concluidos} concluídos no mês</p>
         </div>
-        <div class="page-head-right">
-          <div class="mapa-pdf-controles">
-            <label>Conteúdo do PDF
-              <select id="pdf-processo">
-                <option value="">Mapa completo (${linhasGeradas.length})</option>
-                ${linhasGeradas
-                  .map(
-                    (linha) =>
-                      `<option value="${escapeHtml(linha.processo_id)}">${escapeHtml(
-                        `${linha.apuratorio_sigla} · ${linha.rotulo}`,
-                      )}</option>`,
-                  )
-                  .join("")}
-              </select>
-            </label>
-            <button id="btn-gerar-pdf" class="outline small" type="button">Gerar PDF</button>
-          </div>
-          ${ctx.podeEscrever() ? `<button id="btn-salvar-mapa" class="small">Salvar este mapa</button>` : ""}
+        <div class="mapa-resultado-acoes" role="group" aria-label="Ações do mapa gerado">
+          <label class="mapa-resultado-pdf">Conteúdo do PDF
+            <select id="pdf-processo">
+              <option value="">Mapa completo (${linhasGeradas.length})</option>
+              ${linhasGeradas
+                .map(
+                  (linha) =>
+                    `<option value="${escapeHtml(linha.processo_id)}">${escapeHtml(
+                      `${linha.apuratorio_sigla} · ${linha.rotulo}`,
+                    )}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+          <button id="btn-gerar-pdf" class="outline small" type="button">Gerar PDF</button>
+          ${ctx.podeEscrever() ? `<button id="btn-salvar-mapa" class="small" type="button">Salvar este mapa</button>` : ""}
         </div>
       </div>
       ${tabela(COLUNAS_MAPA, linhasGeradas.map(linhaMapa), "Nada em mãos neste período.", {
@@ -160,16 +166,25 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
           </select>
         </label>
         <fieldset class="filtro-apuratorios">
-          <legend>Apuratórios <span class="hint">(nenhum marcado = mapa completo)</span></legend>
-          ${apuratorios
-            .map(
-              (a) => `<label class="checkbox-inline" title="${escapeHtml(a.nome)}">
-                <input type="checkbox" name="apuratorio" value="${escapeHtml(a.id)}"
-                       ${apuratoriosSelecionados.includes(a.id) ? "checked" : ""} />
-                ${escapeHtml(a.sigla)}
-              </label>`,
-            )
-            .join("")}
+          <legend>Apuratórios <span class="hint">(escolha um ou mais)</span></legend>
+          <div class="filtro-apuratorios__opcoes">
+            <label class="checkbox-inline filtro-apuratorios__todos" title="Selecionar todos os apuratórios">
+              <input id="apuratorios-todos" type="checkbox"
+                     aria-describedby="erro-apuratorios"${todosSelecionados ? " checked" : ""}
+                     ${idsApuratorios.length === 0 ? "disabled" : ""} />
+              Todos
+            </label>
+            ${apuratorios
+              .map(
+                (a) => `<label class="checkbox-inline" title="${escapeHtml(a.nome)}">
+                  <input type="checkbox" name="apuratorio" value="${escapeHtml(a.id)}"
+                         ${selecaoVisual.has(a.id) ? "checked" : ""} />
+                  ${escapeHtml(a.sigla)}
+                </label>`,
+              )
+              .join("")}
+          </div>
+          <small class="campo-erro filtro-apuratorios__erro" id="erro-apuratorios" hidden></small>
         </fieldset>
         <button type="submit">Gerar mapa</button>
       </form>
@@ -178,12 +193,64 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
     </section>
   `);
 
-  document.querySelector<HTMLFormElement>("#filtro-mapa")?.addEventListener("submit", async (e) => {
+  const filtroMapa = document.querySelector<HTMLFormElement>("#filtro-mapa");
+  const marcarTodos = filtroMapa?.querySelector<HTMLInputElement>("#apuratorios-todos") ?? null;
+  const opcoesApuratorio = Array.from(
+    filtroMapa?.querySelectorAll<HTMLInputElement>('input[name="apuratorio"]') ?? [],
+  );
+  const erroApuratorios = filtroMapa?.querySelector<HTMLElement>("#erro-apuratorios") ?? null;
+  const fieldsetApuratorios = filtroMapa?.querySelector<HTMLElement>(".filtro-apuratorios") ?? null;
+
+  const limparErroApuratorios = () => {
+    if (erroApuratorios) {
+      erroApuratorios.hidden = true;
+      erroApuratorios.textContent = "";
+    }
+    fieldsetApuratorios?.classList.remove("filtro-apuratorios--erro");
+    marcarTodos?.removeAttribute("aria-invalid");
+  };
+
+  const sincronizarTodos = () => {
+    if (!marcarTodos) return;
+    const quantidade = opcoesApuratorio.filter((opcao) => opcao.checked).length;
+    marcarTodos.checked = opcoesApuratorio.length > 0 && quantidade === opcoesApuratorio.length;
+    marcarTodos.indeterminate = quantidade > 0 && quantidade < opcoesApuratorio.length;
+    if (quantidade > 0) limparErroApuratorios();
+  };
+
+  marcarTodos?.addEventListener("change", () => {
+    for (const opcao of opcoesApuratorio) opcao.checked = marcarTodos.checked;
+    marcarTodos.indeterminate = false;
+    if (marcarTodos.checked) limparErroApuratorios();
+  });
+  opcoesApuratorio.forEach((opcao) => opcao.addEventListener("change", sincronizarTodos));
+  sincronizarTodos();
+
+  filtroMapa?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
+    const selecionados = form.getAll("apuratorio").map(String);
+    if (selecionados.length === 0) {
+      const mensagem = idsApuratorios.length
+        ? "Selecione pelo menos um apuratório ou marque “Todos”."
+        : "Nenhum apuratório está disponível para gerar o mapa.";
+      if (erroApuratorios) {
+        erroApuratorios.textContent = mensagem;
+        erroApuratorios.hidden = false;
+      }
+      fieldsetApuratorios?.classList.add("filtro-apuratorios--erro");
+      marcarTodos?.setAttribute("aria-invalid", "true");
+      marcarTodos?.focus();
+      notificar(mensagem, "erro");
+      return;
+    }
+
     mesSelecionado = Number(form.get("mes"));
     anoSelecionado = Number(form.get("ano"));
-    apuratoriosSelecionados = form.getAll("apuratorio").map(String);
+    // O contrato do backend já usa lista vazia para representar mapa completo.
+    // A interface mostra todos explicitamente, mas preserva esse contrato.
+    apuratoriosSelecionados =
+      selecionados.length === idsApuratorios.length ? [] : selecionados;
 
     const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
     const resposta = await call("reports_map_rows", {
