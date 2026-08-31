@@ -218,7 +218,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Prazo inicial padrão desta espécie. Um documento iniciador pode sobrescrevê-lo."),
             inteiro_opcional("max_envolvidos", "Máximo de envolvidos",
                 "Em branco = sem limite. O banco recusa gravar acima deste número."),
-            booleano("exige_natureza_fato", "Exige natureza do fato",
+            booleano("exige_natureza_fato", "Exige natureza geral do fato",
                 "Torna a rubrica do fato apurado obrigatória no cadastro."),
             booleano("permite_julgamento", "Permite julgamento",
                 "Revela a data de julgamento no cadastro do processo."),

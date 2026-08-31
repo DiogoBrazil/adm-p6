@@ -222,7 +222,7 @@ function renderCabecalhoDados(processo: ProceedingDetail): string {
       formatarOrigem(processo.unidade_origem, processo.subunidade_secao_origem),
     )}
     ${campo("Município do fato", processo.municipio_fato)}
-    ${campo("Natureza do fato", processo.natureza_fato)}
+    ${campo("Natureza geral do fato", processo.natureza_fato)}
     ${campo("Responsável vigente", responsavel)}
     ${campo("Total de envolvidos", processo.total_envolvidos)}
     ${

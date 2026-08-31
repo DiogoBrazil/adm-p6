@@ -118,7 +118,7 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
         ${painelContagem("Soluções decididas pela autoridade", decididas, "Solução")}
         ${painelContagem("Soluções sugeridas pelo encarregado", solucoes?.sugeridas ?? [], "Solução")}
         ${painelContagem("Envolvidos por categoria de indício", categorias, "Categoria")}
-        ${painelContagem("Por natureza do fato", naturezas, "Natureza")}
+        ${painelContagem("Por natureza geral do fato", naturezas, "Natureza")}
       </div>
 
       ${painelContagem("Processos por responsável vigente", responsaveis, "Responsável")}

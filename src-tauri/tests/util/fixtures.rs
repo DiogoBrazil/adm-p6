@@ -24,7 +24,7 @@ use sqlx::{Executor, PgPool};
 /// Ids do mundo montado. Circulam como `String` porque é assim que os
 /// repositórios os recebem — o cast `::uuid` acontece no SQL.
 pub struct Mundo {
-    /// `max_envolvidos = 1`, exige natureza do fato, papéis Encarregado
+    /// `max_envolvidos = 1`, exige natureza geral do fato, papéis Encarregado
     /// (obrigatório, responsável) e Escrivão (opcional, até 2 ocupantes).
     pub apuratorio: String,
     /// `max_envolvidos = NULL` (ilimitado), não exige natureza, só Encarregado.

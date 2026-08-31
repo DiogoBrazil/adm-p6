@@ -63,7 +63,7 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
 
       <div class="stat-grid">
         ${painelContagem("Por apuratório", resumo.por_apuratorio, "Apuratório")}
-        ${painelContagem("Por natureza do fato", resumo.por_natureza, "Natureza")}
+        ${painelContagem("Por natureza geral do fato", resumo.por_natureza, "Natureza")}
         ${painelContagem("Por unidade de origem", resumo.por_unidade, "Unidade")}
         ${painelContagem("Por ano de instauração", resumo.por_ano, "Ano")}
       </div>
@@ -82,7 +82,7 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
         ["Totais", "Concluidos", resumo.concluidos],
         ["Totais", "Com prazo vencido", resumo.prazos_vencidos],
         ...bloco("Por apuratorio", resumo.por_apuratorio),
-        ...bloco("Por natureza do fato", resumo.por_natureza),
+        ...bloco("Por natureza geral do fato", resumo.por_natureza),
         ...bloco("Por unidade de origem", resumo.por_unidade),
         ...bloco("Por ano de instauracao", resumo.por_ano),
       ],
@@ -243,12 +243,12 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
         ${painelContagem("Solução sugerida pelo encarregado", solucoes?.sugeridas ?? [], "Solução")}
         ${painelContagem("Solução decidida pela autoridade", solucoes?.decididas ?? [], "Solução")}
         ${painelContagem("Envolvidos por categoria de indício", categorias, "Categoria")}
-        ${painelContagem("Processos por natureza do fato", naturezas, "Natureza")}
+        ${painelContagem("Processos por natureza geral do fato", naturezas, "Natureza")}
       </div>
 
       <section class="stat-panel">
         <h2>Condutores em sinistro</h2>
-        <p class="hint">Alcança os processos cuja natureza do fato exige condutor.</p>
+        <p class="hint">Alcança os processos cuja natureza geral do fato exige condutor.</p>
         ${tabela(
           [
             { rotulo: "Militar", largura: 80, truncar: true },

@@ -769,7 +769,7 @@ export async function renderFormularioProcesso(
           ${campoComCadastroRapido("Unidade de origem", "unidade_origem_id", selectOpcoes("unidade_origem_id", cats.unidades, r.unidade_origem_id, true), "unidades_pm", "unidade PM")}
           ${campoComCadastroRapido("Subunidade/Seção de origem", "subunidade_secao_origem_id", selectOpcoes("subunidade_secao_origem_id", subunidadesDaUnidade, r.subunidade_secao_origem_id ?? ""), "subunidades_secoes", "subunidade ou seção", false, "Opcional. As opções pertencem à unidade selecionada.")}
           ${campoComCadastroRapido("Município do fato", "municipio_fato_id", selectOpcoes("municipio_fato_id", cats.municipios, r.municipio_fato_id, true), "municipios_distritos", "município ou distrito")}
-          ${campoComCadastroRapido("Natureza do fato", "natureza_fato_id", selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza), "naturezas_fato", "natureza do fato", false, exigeNatureza ? "Obrigatória para este apuratório." : "")}
+          ${campoComCadastroRapido("Natureza geral do fato", "natureza_fato_id", selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza), "naturezas_fato", "natureza geral do fato", false, exigeNatureza ? "Obrigatória para este apuratório." : "")}
         </fieldset>
 
         ${
@@ -1823,7 +1823,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Unidade de origem", d.unidade_origem)}
         ${linha("Subunidade/Seção de origem", d.subunidade_secao_origem)}
         ${linha("Município do fato", d.municipio_fato)}
-        ${linha("Natureza do fato", d.natureza_fato)}
+        ${linha("Natureza geral do fato", d.natureza_fato)}
         ${linha("Instauração", d.data_instauracao)}
         ${linha("Recebimento", d.data_recebimento)}
         ${usaRemessaComissao ? "" : linha("Remessa do encarregado", d.data_remessa_encarregado)}

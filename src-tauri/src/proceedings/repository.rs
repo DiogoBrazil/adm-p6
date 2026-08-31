@@ -452,7 +452,7 @@ async fn validar_contra_configuracao(
 
     if config.exige_natureza_fato && request.natureza_fato_id.is_none() {
         return Err(AppError::Domain(
-            "este apuratorio exige a natureza do fato apurado".to_string(),
+            "este apuratorio exige a natureza geral do fato apurado".to_string(),
         ));
     }
 
@@ -567,7 +567,7 @@ async fn validar_contra_configuracao(
                 .bind(natureza_id)
                 .fetch_optional(&mut **tx)
                 .await?
-                .ok_or_else(|| AppError::Domain("natureza do fato nao encontrada".to_string()))?;
+                .ok_or_else(|| AppError::Domain("natureza geral do fato nao encontrada".to_string()))?;
 
         if exige_condutor && !request.envolvidos.iter().any(|e| e.e_condutor) {
             return Err(AppError::Domain(

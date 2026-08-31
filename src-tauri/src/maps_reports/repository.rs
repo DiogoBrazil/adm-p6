@@ -292,7 +292,7 @@ pub async fn by_responsible(
     .await
 }
 
-/// Ranking de condutores. Alcança os processos cuja natureza do fato exige
+/// Ranking de condutores. Alcança os processos cuja natureza geral do fato exige
 /// condutor — a flag `naturezas_fato.exige_condutor` no lugar do antigo
 /// `natureza.includes('sinistro de trânsito')`.
 pub async fn driver_ranking(
