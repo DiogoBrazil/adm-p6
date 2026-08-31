@@ -10,6 +10,13 @@
 // Os dois filtros de lista deixam de ser caixa de texto. Entidade sai de
 // `audit_statistics`, que já sabe quais existem; o autor sai da lista de
 // contas — ninguém digita um UUID à mão.
+//
+// A tela responde quatro perguntas, e só elas: QUANDO, QUEM, O QUE FOI FEITO e
+// SOBRE O QUÊ. Nome de tabela, verbo de SQL e UUID não sobem para a listagem —
+// ficam no detalhe, para quem precisa rastrear até o banco. Quem escreve as
+// duas colunas do meio é o comando que executou a ação, no momento em que ela
+// aconteceu (`auditoria.acao` e `auditoria.assunto`, migration 0018); aqui só
+// se exibe, com uma frase de reserva para o que foi gravado antes disso.
 
 import { call, type AuditDetailItem } from "../api";
 import {
@@ -18,6 +25,7 @@ import {
   baixarCsv,
   carregarTudo,
   escapeHtml,
+  formatarDataHora,
   formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarExportacao,
@@ -35,17 +43,20 @@ export const ROTA = "/auditoria";
 const OPERACOES = ["CREATE", "UPDATE", "DELETE"];
 
 /**
- * As cinco colunas dividem 100% da largura.
+ * As quatro colunas dividem 100% da largura.
  *
- * "Quando" é data e hora e não pode quebrar; "Entidade" é nome de tabela e
- * pode ser longo, então trunca com o inteiro no `title`.
+ * "Quando" é data e hora e não pode quebrar. As outras três truncam com o
+ * inteiro no `title` — nome de militar e rótulo de apuratório são longos.
+ *
+ * Saíram "Entidade" e "Diff": a primeira era nome de tabela, e a segunda
+ * imprimia "—" em todos os 74 registros do banco, porque diff só é gravado nas
+ * mudanças de configuração. As duas continuam no detalhe.
  */
 const COLUNAS: Coluna[] = [
-  { rotulo: "Quando", largura: 20, alinhamento: "centro", nowrap: true },
-  { rotulo: "Entidade", largura: 30, truncar: true },
-  { rotulo: "Operação", largura: 12, alinhamento: "centro", nowrap: true },
-  { rotulo: "Autor", largura: 30, truncar: true },
-  { rotulo: "Diff", largura: 8, alinhamento: "centro", nowrap: true },
+  { rotulo: "Quando", largura: 18, alinhamento: "centro", nowrap: true },
+  { rotulo: "Quem fez", largura: 26, truncar: true },
+  { rotulo: "O que foi feito", largura: 28, truncar: true },
+  { rotulo: "Sobre o quê", largura: 28, truncar: true },
 ];
 
 let filtros = { entidade: "", operacao: "", usuarioId: "" };
@@ -54,6 +65,31 @@ let registroAberto: AuditDetailItem | null = null;
 
 const autor = (i: AuditDetailItem) =>
   formatarQualificacaoMilitar(i.usuario_posto, i.usuario_matricula, i.usuario_nome);
+
+/**
+ * O que foi feito. Sai de `acao`, escrita pelo comando.
+ *
+ * A reserva vale só para o que foi gravado antes da `0018` e a migration não
+ * conseguiu descrever: ali existe apenas o verbo de SQL, e "Alterou" é tudo que
+ * dá para dizer com honestidade.
+ */
+const oQueFoiFeito = (i: AuditDetailItem) =>
+  i.acao ?? `${OPERACAO_EM_PORTUGUES[i.operacao] ?? "Registrou"} — ${i.entidade}`;
+
+/**
+ * Sobre o quê. Sai de `assunto`, congelado no momento da ação.
+ *
+ * Vazio quer dizer uma coisa só, e vale dizê-la: a linha já tinha sido apagada
+ * antes da `0018` poder nomeá-la. São 8 dos 74 registros antigos — prazos e
+ * designações, que são exclusão física. Daqui para frente não acontece mais.
+ */
+const sobreOQue = (i: AuditDetailItem) => i.assunto ?? "registro já removido";
+
+const OPERACAO_EM_PORTUGUES: Record<string, string> = {
+  CREATE: "Cadastrou",
+  UPDATE: "Alterou",
+  DELETE: "Excluiu",
+};
 
 /** Os três filtros da tela, no formato do comando. Um lugar só. */
 const argumentosDoFiltro = () => ({
@@ -66,13 +102,7 @@ const argumentosDoFiltro = () => ({
 const linhaDaTabela = (i: AuditDetailItem) => ({
   classe: "clicavel",
   id: i.id,
-  celulas: [
-    i.ocorrido_em.replace("T", " ").slice(0, 19),
-    i.entidade,
-    i.operacao,
-    autor(i),
-    i.alteracoes ? "sim" : "—",
-  ],
+  celulas: [formatarDataHora(i.ocorrido_em), autor(i), oQueFoiFeito(i), sobreOQue(i)],
 });
 
 export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
@@ -108,29 +138,29 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
       <div class="page-head">
         <div>
           <h1>Auditoria</h1>
-          <p>${total} registro(s) no escopo. Clique numa linha para ver o diff.</p>
+          <p>${total} registro(s) no escopo. Clique numa linha para ver os detalhes.</p>
         </div>
         <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: !!itens.length })}</div>
       </div>
 
       <form id="filtro-auditoria" class="filtro-bar">
-        <label>Entidade
+        <label>Sobre o quê
           <select name="entidade">
-            <option value="">Todas</option>
+            <option value="">Tudo</option>
             ${(estatisticas?.por_entidade ?? [])
               .map((e) =>
-                option(e.entidade, `${e.entidade} (${e.total})`, e.entidade === filtros.entidade),
+                option(e.entidade, `${e.rotulo} (${e.total})`, e.entidade === filtros.entidade),
               )
               .join("")}
           </select>
         </label>
-        <label>Operação
+        <label>Tipo de ação
           <select name="operacao">
             <option value="">Todas</option>
-            ${OPERACOES.map((o) => option(o, o, o === filtros.operacao)).join("")}
+            ${OPERACOES.map((o) => option(o, OPERACAO_EM_PORTUGUES[o] ?? o, o === filtros.operacao)).join("")}
           </select>
         </label>
-        <label>Autor
+        <label>Quem fez
           <select name="usuarioId">
             <option value="">Todos</option>
             ${comConta
@@ -207,10 +237,19 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();
       avisarSeCortado(cortado);
+      // O CSV leva as quatro colunas da tela e mais o par entidade/registro:
+      // quem exporta costuma ser quem vai rastrear até o banco.
       return baixarCsv(
         `auditoria-${new Date().toISOString().slice(0, 10)}.csv`,
-        ["Quando", "Entidade", "Registro", "Operacao", "Autor"],
-        todos.map((i) => [i.ocorrido_em, i.entidade, i.registro_id, i.operacao, autor(i)]),
+        ["Quando", "Quem fez", "O que foi feito", "Sobre o que", "Entidade", "Registro"],
+        todos.map((i) => [
+          formatarDataHora(i.ocorrido_em),
+          autor(i),
+          oQueFoiFeito(i),
+          sobreOQue(i),
+          i.entidade,
+          i.registro_id,
+        ]),
       );
     },
     async () => {
@@ -232,24 +271,27 @@ function renderDetalhe(ctx: ContextoTela, item: AuditDetailItem): void {
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Registro de auditoria</h1><p>${escapeHtml(item.entidade)} · ${escapeHtml(item.operacao)}</p></div>
+        <div><h1>Registro de auditoria</h1><p>${escapeHtml(oQueFoiFeito(item))}</p></div>
         <div class="page-head-right"><button id="btn-voltar" class="secondary small">Voltar</button></div>
       </div>
 
       <div class="table-wrap"><table class="detail-table"><tbody>
-        ${campo("Quando", item.ocorrido_em.replace("T", " ").slice(0, 19))}
-        ${campo("Entidade", item.entidade)}
-        ${campo("Registro", item.registro_id)}
-        ${campo("Operação", item.operacao)}
-        ${campo("Autor", autor(item))}
+        ${campo("Quando", formatarDataHora(item.ocorrido_em))}
+        ${campo("Quem fez", autor(item))}
+        ${campo("O que foi feito", oQueFoiFeito(item))}
+        ${campo("Sobre o quê", sobreOQue(item))}
       </tbody></table></div>
 
-      <h2>Alterações</h2>
-      ${
-        item.alteracoes
-          ? `<pre>${escapeHtml(JSON.stringify(item.alteracoes, null, 2))}</pre>`
-          : `<p class="empty">Esta operação não registrou diff. O diff é gravado nas mudanças de configuração, que alteram o comportamento futuro do sistema.</p>`
-      }
+      ${htmlAlteracoes(item)}
+
+      <h2>Rastreio</h2>
+      <p class="empty">Estes dois identificam a linha no banco, e só servem para
+      conferência técnica.</p>
+      <div class="table-wrap"><table class="detail-table"><tbody>
+        ${campo("Tabela", item.entidade)}
+        ${campo("Registro", item.registro_id)}
+        ${campo("Operação", item.operacao)}
+      </tbody></table></div>
     </section>
   `);
 
@@ -257,4 +299,36 @@ function renderDetalhe(ctx: ContextoTela, item: AuditDetailItem): void {
     registroAberto = null;
     void renderAuditoria(ctx);
   });
+}
+
+/**
+ * O diff de uma mudança de configuração, em português.
+ *
+ * O formato gravado por `legal_catalogs::commands::diferenca` é
+ * `{"campo": {"de": <antes>, "para": <depois>}}`; a configuração de apuratório
+ * grava só os valores novos. Os dois viravam um despejo de JSON na tela.
+ */
+function htmlAlteracoes(item: AuditDetailItem): string {
+  if (!item.alteracoes || typeof item.alteracoes !== "object") {
+    return `<h2>O que mudou</h2>
+      <p class="empty">Esta ação não registrou detalhamento. Ele é gravado nas
+      mudanças de configuração, que alteram o comportamento futuro do sistema.</p>`;
+  }
+
+  const valor = (v: unknown) => {
+    if (v === null || v === undefined || v === "") return "vazio";
+    if (typeof v === "boolean") return v ? "sim" : "não";
+    return String(v);
+  };
+  const linhas = Object.entries(item.alteracoes as Record<string, unknown>).map(([campo, mudanca]) => {
+    const par = mudanca as { de?: unknown; para?: unknown } | null;
+    const texto =
+      par && typeof par === "object" && "para" in par
+        ? `de ${valor(par.de)} para ${valor(par.para)}`
+        : valor(mudanca);
+    return `<tr><th>${escapeHtml(campo)}</th><td>${escapeHtml(texto)}</td></tr>`;
+  });
+
+  return `<h2>O que mudou</h2>
+    <div class="table-wrap"><table class="detail-table"><tbody>${linhas.join("")}</tbody></table></div>`;
 }

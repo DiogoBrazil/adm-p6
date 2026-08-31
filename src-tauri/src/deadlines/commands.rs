@@ -2,7 +2,8 @@ use chrono::NaiveDate;
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::deadlines::domain::{
     AddExtensionRequest, CalculateDeadlineResult, DeadlineItem, DeadlineReportFilter,
@@ -115,11 +116,17 @@ pub async fn deadlines_add_extension(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             let id = repository::add_extension(&mut tx, &request).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_prazo(&mut tx, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_prazos",
-                &id,
-                "CREATE",
+                Acao {
+                    entidade: "processo_prazos",
+                    registro_id: &id,
+                    operacao: "CREATE",
+                    acao: "Registrou uma prorrogação de prazo",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -142,11 +149,17 @@ pub async fn deadlines_update_extension(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             let alterado = repository::update_extension(&mut tx, &request).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_prazo(&mut tx, &request.prazo_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_prazos",
-                &request.prazo_id,
-                "UPDATE",
+                Acao {
+                    entidade: "processo_prazos",
+                    registro_id: &request.prazo_id,
+                    operacao: "UPDATE",
+                    acao: "Corrigiu uma prorrogação de prazo",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -170,11 +183,17 @@ pub async fn deadlines_delete_extension(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             let removido = repository::delete_extension(&mut tx, &processo_id, &prazo_id).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_apuratorio(&mut tx, &processo_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_prazos",
-                &prazo_id,
-                "DELETE",
+                Acao {
+                    entidade: "processo_prazos",
+                    registro_id: &prazo_id,
+                    operacao: "DELETE",
+                    acao: "Removeu uma prorrogação de prazo",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;

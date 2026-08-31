@@ -1,7 +1,8 @@
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::evidence::domain::{
     EnvolvidoComIndicios, EvidenceData, InfracaoEstatutoItem, InfracaoPenalItem,
@@ -22,11 +23,17 @@ pub async fn evidence_save_for_pm(
             let mut tx = pool.begin().await?;
             repository::exigir_permissao_indicios(&mut tx, &request.envolvido_id).await?;
             repository::save_for_envolvido(&mut tx, &request).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_envolvido(&mut tx, &request.envolvido_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_envolvidos",
-                &request.envolvido_id,
-                "UPDATE",
+                Acao {
+                    entidade: "processo_envolvidos",
+                    registro_id: &request.envolvido_id,
+                    operacao: "UPDATE",
+                    acao: "Registrou o enquadramento de um envolvido",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -82,11 +89,17 @@ pub async fn evidence_remove_for_pm(
             let mut tx = pool.begin().await?;
             repository::exigir_permissao_indicios(&mut tx, &envolvido_id).await?;
             repository::remove_for_envolvido(&mut tx, &envolvido_id).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_envolvido(&mut tx, &envolvido_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_envolvidos",
-                &envolvido_id,
-                "DELETE",
+                Acao {
+                    entidade: "processo_envolvidos",
+                    registro_id: &envolvido_id,
+                    operacao: "DELETE",
+                    acao: "Removeu o enquadramento de um envolvido",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;

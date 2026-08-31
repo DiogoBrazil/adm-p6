@@ -2,7 +2,8 @@ use serde_json::{Map, Value};
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::legal_catalogs::domain::{
@@ -120,17 +121,30 @@ pub async fn legal_catalogs_save(
 
             // Alteração de configuração muda o comportamento futuro do sistema, então
             // fica registrado o que mudou — e não apenas que mudou.
-            audit_repository::register_tx_com_alteracoes(
+            let assunto = assunto::de_catalogo(&mut tx, cat, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                cat.tabela,
-                &id,
-                if request.id.is_some() {
-                    "UPDATE"
-                } else {
-                    "CREATE"
+                Acao {
+                    entidade: cat.tabela,
+                    registro_id: &id,
+                    operacao: if request.id.is_some() {
+                        "UPDATE"
+                    } else {
+                        "CREATE"
+                    },
+                    acao: &format!(
+                        "{} um item de {}",
+                        if request.id.is_some() {
+                            "Alterou"
+                        } else {
+                            "Cadastrou"
+                        },
+                        cat.rotulo.to_lowercase()
+                    ),
+                    assunto,
+                    alteracoes: diferenca(antes.as_ref(), depois.as_ref()),
                 },
                 Some(&actor.id),
-                diferenca(antes.as_ref(), depois.as_ref()),
             )
             .await?;
             tx.commit().await?;
@@ -157,8 +171,22 @@ pub async fn legal_catalogs_deactivate(
             let mut tx = pool.begin().await?;
             garantir_administracao_possivel(&mut tx, cat, &id).await?;
             repository::set_ativo(&mut tx, cat, &id, false).await?;
-            audit_repository::register_tx(&mut tx, cat.tabela, &id, "UPDATE", Some(&actor.id))
-                .await?;
+            let assunto = assunto::de_catalogo(&mut tx, cat, &id).await;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: cat.tabela,
+                    registro_id: &id,
+                    // Desativar é `ativo = false`, e portanto `UPDATE`. Quem diz
+                    // que foi uma desativação é a `acao`.
+                    operacao: "UPDATE",
+                    acao: &format!("Desativou um item de {}", cat.rotulo.to_lowercase()),
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
             tx.commit().await?;
             Ok(true)
         }
@@ -180,8 +208,20 @@ pub async fn legal_catalogs_reactivate(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             repository::set_ativo(&mut tx, cat, &id, true).await?;
-            audit_repository::register_tx(&mut tx, cat.tabela, &id, "UPDATE", Some(&actor.id))
-                .await?;
+            let assunto = assunto::de_catalogo(&mut tx, cat, &id).await;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: cat.tabela,
+                    registro_id: &id,
+                    operacao: "UPDATE",
+                    acao: &format!("Reativou um item de {}", cat.rotulo.to_lowercase()),
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
             tx.commit().await?;
             Ok(true)
         }
@@ -205,9 +245,23 @@ pub async fn legal_catalogs_delete(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             garantir_administracao_possivel(&mut tx, cat, &id).await?;
+            // A exclusão aqui é FÍSICA: o assunto tem de ser lido antes, senão a
+            // trilha guarda um UUID que não aponta mais para nada.
+            let assunto = assunto::de_catalogo(&mut tx, cat, &id).await;
             repository::delete(&mut tx, cat, &id).await?;
-            audit_repository::register_tx(&mut tx, cat.tabela, &id, "DELETE", Some(&actor.id))
-                .await?;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: cat.tabela,
+                    registro_id: &id,
+                    operacao: "DELETE",
+                    acao: &format!("Excluiu um item de {}", cat.rotulo.to_lowercase()),
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
             tx.commit().await?;
             Ok(true)
         }

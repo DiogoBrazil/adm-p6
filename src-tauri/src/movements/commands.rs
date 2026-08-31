@@ -1,7 +1,8 @@
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::movements::domain::{AddMovementRequest, MovementItem, UpdateMovementRequest};
@@ -36,11 +37,17 @@ pub async fn movements_add(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             let id = repository::add(&mut tx, &request, &actor.id).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_andamento(&mut tx, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_andamentos",
-                &id,
-                "CREATE",
+                Acao {
+                    entidade: "processo_andamentos",
+                    registro_id: &id,
+                    operacao: "CREATE",
+                    acao: "Registrou um andamento",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -68,11 +75,17 @@ pub async fn movements_update(
                     "Este andamento não existe mais. Recarregue a página.".to_string(),
                 ));
             }
-            audit_repository::register_tx(
+            let assunto = assunto::de_andamento(&mut tx, &request.andamento_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_andamentos",
-                &request.andamento_id,
-                "UPDATE",
+                Acao {
+                    entidade: "processo_andamentos",
+                    registro_id: &request.andamento_id,
+                    operacao: "UPDATE",
+                    acao: "Corrigiu um andamento",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -100,11 +113,17 @@ pub async fn movements_remove(
                     "Este andamento não existe mais. Recarregue a página.".to_string(),
                 ));
             }
-            audit_repository::register_tx(
+            let assunto = assunto::de_andamento(&mut tx, &andamento_id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "processo_andamentos",
-                &andamento_id,
-                "DELETE",
+                Acao {
+                    entidade: "processo_andamentos",
+                    registro_id: &andamento_id,
+                    operacao: "DELETE",
+                    acao: "Cancelou um andamento",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;

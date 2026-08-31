@@ -4,8 +4,8 @@ use sqlx::{PgPool, Postgres, Transaction};
 use crate::db::paginacao::Recorte;
 
 use super::domain::{
-    AuditDetailItem, AuditOperationStat, AuditPageResult, AuditStatistics, AuditStatisticsFilter,
-    AuditTableStat,
+    rotulo_da_entidade, AuditDetailItem, AuditOperationStat, AuditPageResult, AuditStatistics,
+    AuditStatisticsFilter, AuditTableStat,
 };
 
 /// O autor de uma operação é uma CONTA (`usuarios`); o nome exibido pode vir do
@@ -19,6 +19,8 @@ const DETAIL_SELECT: &str = r#"
            COALESCE(u.nome_exibicao, pm.nome)    AS usuario_nome,
            pg.sigla                              AS usuario_posto,
            pm.matricula                          AS usuario_matricula,
+           a.acao                                AS acao,
+           a.assunto                             AS assunto,
            a.alteracoes                          AS alteracoes,
            a.ocorrido_em                         AS ocorrido_em
     FROM auditoria a
@@ -152,7 +154,7 @@ pub async fn statistics(
     .fetch_all(pool)
     .await?;
 
-    let por_entidade = sqlx::query_as::<_, AuditTableStat>(&format!(
+    let mut por_entidade = sqlx::query_as::<_, AuditTableStat>(&format!(
         "SELECT a.entidade, count(*) AS total FROM auditoria a
           WHERE {PERIODO} GROUP BY a.entidade ORDER BY total DESC LIMIT 15"
     ))
@@ -160,6 +162,11 @@ pub async fn statistics(
     .bind(filter.data_fim)
     .fetch_all(pool)
     .await?;
+    // O rótulo em português nasce aqui, e não na tela: um segundo mapa de
+    // tabela→nome no frontend divergiria do primeiro sem ninguém notar.
+    for linha in &mut por_entidade {
+        linha.rotulo = rotulo_da_entidade(&linha.entidade);
+    }
 
     Ok(AuditStatistics {
         total,
@@ -168,37 +175,58 @@ pub async fn statistics(
     })
 }
 
-/// Registro simples, na mesma transação da operação auditada.
-pub async fn register_tx(
-    tx: &mut Transaction<'_, Postgres>,
-    entidade: &str,
-    registro_id: &str,
-    operacao: &str,
-    usuario_id: Option<&str>,
-) -> Result<(), sqlx::Error> {
-    register_tx_com_alteracoes(tx, entidade, registro_id, operacao, usuario_id, None).await
+/// Uma ação a registrar na trilha.
+///
+/// Struct nomeada, e não sete argumentos posicionais: `entidade`, `registro_id`,
+/// `operacao`, `acao` e `assunto` são todos texto, e trocar dois de lugar
+/// compila calado. O erro só apareceria meses depois, numa trilha que ninguém
+/// consegue mais conferir contra o que de fato aconteceu.
+pub struct Acao<'a> {
+    /// Nome físico da tabela. Continua sendo o eixo do filtro e do rastreio até
+    /// o banco, mas deixou de ser o que a tela mostra.
+    pub entidade: &'a str,
+    pub registro_id: &'a str,
+    /// `CREATE`, `UPDATE` ou `DELETE` — o domínio que `ck_auditoria_operacao`
+    /// aceita, e só ele. Desativação é `UPDATE`: quem diz que foi desativação é
+    /// a `acao`, não um quarto verbo.
+    pub operacao: &'a str,
+    /// O que foi feito, em frase curta no passado: "Reabriu o apuratório".
+    ///
+    /// Vem do comando porque só ele sabe. Reabrir, concluir, corrigir datas e
+    /// editar o cadastro gravam a MESMA `operacao` na mesma `entidade`, e essa
+    /// distinção não existe em lugar nenhum do banco depois do fato.
+    pub acao: &'a str,
+    /// Sobre o quê, como o registro se chamava **no momento da ação**. Ver
+    /// `audit::assunto`, e a justificativa do snapshot na migration `0018`.
+    pub assunto: Option<String>,
+    /// Diff da operação, quando houver. Preenchido nas mudanças de
+    /// configuração, que alteram o comportamento futuro do sistema.
+    pub alteracoes: Option<Value>,
 }
 
-/// Registro com o diff da operação. Usado nas alterações de catálogo: agora que o
-/// comportamento do sistema é configurável, importa saber quem mudou o quê — por
-/// exemplo, quem reduziu o prazo base de um apuratório.
-pub async fn register_tx_com_alteracoes(
+/// Grava a ação na mesma transação da operação auditada.
+///
+/// Quando a ação **apaga a linha de verdade** — `processo_designacoes` e a
+/// exclusão de catálogo são os dois casos —, o `assunto` tem de ser lido antes
+/// de executá-la. Depois do `DELETE` não há de onde ler, e foi assim que 7 dos
+/// 8 prazos da trilha antiga ficaram sem identificação.
+pub async fn registrar(
     tx: &mut Transaction<'_, Postgres>,
-    entidade: &str,
-    registro_id: &str,
-    operacao: &str,
+    acao: Acao<'_>,
     usuario_id: Option<&str>,
-    alteracoes: Option<Value>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO auditoria (entidade, registro_id, operacao, usuario_id, alteracoes)
-         VALUES ($1, $2, $3, $4::uuid, $5)",
+        "INSERT INTO auditoria
+             (entidade, registro_id, operacao, usuario_id, acao, assunto, alteracoes)
+         VALUES ($1, $2, $3, $4::uuid, $5, $6, $7)",
     )
-    .bind(entidade)
-    .bind(registro_id)
-    .bind(operacao)
+    .bind(acao.entidade)
+    .bind(acao.registro_id)
+    .bind(acao.operacao)
     .bind(usuario_id)
-    .bind(alteracoes)
+    .bind(acao.acao)
+    .bind(acao.assunto)
+    .bind(acao.alteracoes)
     .execute(&mut **tx)
     .await?;
     Ok(())

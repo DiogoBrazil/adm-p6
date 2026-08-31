@@ -56,6 +56,8 @@ entender X → olhe em Y".
 | Trocar valor único entre duas linhas | com constraint imediata a colisão é no **meio** da transação, e a mensagem descreve a regra certa para a situação errada. Unicidade que a tela permite permutar é `DEFERRABLE`; índice parcial não se adia, vira `EXCLUDE` |
 | Sincronizar coleção pelo id da entidade referida | trocar a FK vira **apagar e recriar**, e o `ON DELETE CASCADE` leva os filhos. Sincronize pelo id da própria linha — é o que `EnvolvidoRequest.id` existe para fazer |
 | Redesenhar formulário com select pesquisável na tela | o `TomSelect` fica preso ao DOM antigo. `dom.ts::destruirSelectsPesquisaveis` antes do redraw, e absorva o formulário **antes**: `destroy()` restaura as opções originais |
+| Verbo novo em `auditoria.operacao` | `ck_auditoria_operacao` só aceita `CREATE`/`UPDATE`/`DELETE`, e o `INSERT` da trilha corre na mesma transação da operação — **as duas caem juntas**. Desativação é `UPDATE` com `Acao::acao` própria |
+| Auditar exclusão física depois do `DELETE` | O `assunto` sai de junção com a linha que sumiu. Leia-o **antes**, na mesma transação — ver `audit/assunto.rs` |
 | Envolver num `<label>` em coluna um campo com `flex` declarado | `flex-basis` é do eixo principal: o `flex: 1 1 260px` de `.filtros input[type="search"]` vira **altura** num container em coluna. Campo de filtro é filho direto de `.filtros` |
 | Limpar um `<select>` sob Tom Select | `select.value = ""` zera o `<select>` e **não** mexe no controle visível, que segue exibindo o rótulo antigo. Use `select.tomselect?.clear(true)` |
 | Esconder com `display:none` um `<select>` obrigatório | o navegador recusa o submit **em silêncio**, por não conseguir focá-lo. O Tom Select usa `clip` justamente por isso |
@@ -75,7 +77,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 162 testes
+cd src-tauri && cargo fmt --check && cargo test   # 167 testes
 cd .. && npm run typecheck
 ```
 

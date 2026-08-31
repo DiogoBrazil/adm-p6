@@ -367,6 +367,56 @@ async fn remessa_legada_vira_remessa_da_comissao_quando_o_rito_usa_comissao() {
     .await;
 }
 
+/// A `0018` acrescenta as duas colunas que tornam a trilha legível, e o domínio
+/// de `operacao` **continua** com três valores.
+///
+/// O segundo assert é o que importa: a desativação da configuração de apuratório
+/// gravava um quarto verbo (`DEACTIVATE`) que este CHECK recusa, e a transação
+/// inteira caía junto. A correção foi passar a gravar `UPDATE` com a `acao`
+/// dizendo que foi desativação — não alargar o domínio. Se alguém alargar,
+/// este teste falha e obriga a reler o porquê.
+#[tokio::test]
+async fn a_0018_torna_a_trilha_legivel_sem_alargar_o_dominio_da_operacao() {
+    util::com_banco_descartavel("aud_0018", |pool| async move {
+        let colunas: Vec<String> = sqlx::query_scalar(
+            "SELECT column_name::text FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'auditoria'
+              ORDER BY 1",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert!(colunas.contains(&"acao".to_string()), "{colunas:?}");
+        assert!(colunas.contains(&"assunto".to_string()), "{colunas:?}");
+
+        let check: String = sqlx::query_scalar(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+              WHERE conrelid = 'auditoria'::regclass AND conname = 'ck_auditoria_operacao'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        for verbo in ["CREATE", "UPDATE", "DELETE"] {
+            assert!(check.contains(verbo), "{check}");
+        }
+        assert!(
+            !check.contains("DEACTIVATE"),
+            "desativação é UPDATE com `acao` própria, não um quarto verbo: {check}"
+        );
+
+        // As duas nascem anuláveis: os registros anteriores à 0018 não têm como
+        // ganhar a frase exata, e a listagem precisa continuar servindo-os.
+        sqlx::query(
+            "INSERT INTO auditoria (entidade, registro_id, operacao)
+             VALUES ('processos_procedimentos', 'x', 'UPDATE')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    })
+    .await;
+}
+
 /// A view é contrato: quatro módulos leem dela. Uma coluna renomeada quebraria
 /// os quatro de uma vez, e só em runtime.
 #[tokio::test]

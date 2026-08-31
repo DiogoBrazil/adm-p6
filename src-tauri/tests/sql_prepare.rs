@@ -246,6 +246,11 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
                 "legal_catalogs::repository::set_ativo",
                 "legal_catalogs::repository::delete",
                 "legal_catalogs::repository::search",
+                // O SQL vem de `Catalogo::assunto_sql`, e não de um `format!` —
+                // mas continua sendo string vinda de variável, e por isso o
+                // `PREPARE` automático não o alcança. Quem cobre os 26 é
+                // `todo_catalogo_sabe_dizer_o_assunto_de_uma_linha`.
+                "audit::assunto::de_catalogo",
             ],
         ),
         (

@@ -9,6 +9,7 @@
 //! Os sete comandos genéricos substituíram 68 específicos e ~2.800 linhas de
 //! CRUD repetido, então um defeito aqui não afeta uma tela: afeta 26.
 
+use adm_p6_tauri_lib::audit::assunto;
 use adm_p6_tauri_lib::legal_catalogs::domain::{catalogo, TipoColuna, CATALOGOS};
 use adm_p6_tauri_lib::legal_catalogs::repository;
 use serde_json::{json, Map, Value};
@@ -605,6 +606,52 @@ async fn referencia_fixa_e_resolvida_pelo_atributo() {
         let linha = repository::get(&pool, cat, &id).await.unwrap().unwrap();
         assert_eq!(linha["texto"], json!("Texto corrigido"));
         assert_eq!(linha["dispositivo_legal_id"], json!(esperado));
+    })
+    .await;
+}
+
+/// Os 26 catálogos sabem dizer o assunto de uma linha para a trilha.
+///
+/// `Catalogo::assunto_sql` é a única consulta do `audit::assunto` que não é
+/// literal — vem da tabela de metadados —, e por isso `sql_prepare.rs` não a
+/// alcança sozinho. Este teste faz o papel dele: manda o PostgreSQL analisar as
+/// 26, e assim um erro de digitação em nome de coluna aparece no `cargo test`, e
+/// não meses depois, quando alguém editar aquele cadastro pela primeira vez.
+///
+/// Os quatro catálogos jurídicos são os que mais valem: o rótulo deles se compõe
+/// com junções, e é o mesmo texto que `evidence/repository.rs` já monta.
+#[tokio::test]
+async fn todo_catalogo_sabe_dizer_o_assunto_de_uma_linha() {
+    util::com_banco_descartavel("cat_assunto", |pool| async move {
+        for (i, cat) in CATALOGOS.iter().enumerate() {
+            sqlx::query(&format!("PREPARE assunto_{i} AS {}", cat.assunto_sql))
+                .execute(&pool)
+                .await
+                .unwrap_or_else(|erro| panic!("{}: {erro}", cat.chave));
+        }
+
+        // E o caminho de verdade, com uma linha semeada: o assunto sai preenchido
+        // e é o que a tela vai mostrar em "Sobre o quê".
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut tx = pool.begin().await.unwrap();
+        let apuratorio =
+            assunto::de_catalogo(&mut tx, catalogo("apuratorios").unwrap(), &m.apuratorio)
+                .await
+                .expect("apuratório tem assunto");
+        assert!(
+            apuratorio.contains(" - "),
+            "o assunto do apuratório é sigla e nome: {apuratorio}"
+        );
+
+        // Um id que não existe não é erro: a trilha fica sem o assunto daquela
+        // linha, e a operação auditada segue. Ver o cabeçalho de `audit::assunto`.
+        assert!(assunto::de_catalogo(
+            &mut tx,
+            catalogo("apuratorios").unwrap(),
+            "00000000-0000-4000-8000-000000000000",
+        )
+        .await
+        .is_none());
     })
     .await;
 }

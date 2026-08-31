@@ -1,7 +1,8 @@
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::db::paginacao::PADRAO;
 use crate::error::AppError;
@@ -81,11 +82,17 @@ pub async fn users_save(
 
             let existente = request.id.is_some();
             let (id, conta_id) = repository::save(&mut tx, &request).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_militar(&mut tx, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "policiais_militares",
-                &id,
-                if existente { "UPDATE" } else { "CREATE" },
+                Acao {
+                    entidade: "policiais_militares",
+                    registro_id: &id,
+                    operacao: if existente { "UPDATE" } else { "CREATE" },
+                    acao: if existente { "Editou o cadastro do militar" } else { "Cadastrou o militar" },
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -123,11 +130,17 @@ pub async fn users_delete(
             }
 
             repository::set_ativo(&mut tx, &id, false).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_militar(&mut tx, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "policiais_militares",
-                &id,
-                "DELETE",
+                Acao {
+                    entidade: "policiais_militares",
+                    registro_id: &id,
+                    operacao: "DELETE",
+                    acao: "Desativou o militar",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;
@@ -150,11 +163,17 @@ pub async fn users_reactivate(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             repository::set_ativo(&mut tx, &id, true).await?;
-            audit_repository::register_tx(
+            let assunto = assunto::de_militar(&mut tx, &id).await;
+            audit_repository::registrar(
                 &mut tx,
-                "policiais_militares",
-                &id,
-                "UPDATE",
+                Acao {
+                    entidade: "policiais_militares",
+                    registro_id: &id,
+                    operacao: "UPDATE",
+                    acao: "Reativou o militar",
+                    assunto,
+                    alteracoes: None,
+                },
                 Some(&actor.id),
             )
             .await?;

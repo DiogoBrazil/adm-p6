@@ -189,6 +189,19 @@ pub struct Catalogo {
     pub rotulo: &'static str,
     pub colunas: &'static [Coluna],
     pub ordenacao: &'static str,
+    /// Consulta que devolve o assunto de UMA linha para a trilha de auditoria.
+    /// `$1` é o id; o resultado é o texto da coluna "Sobre o quê".
+    ///
+    /// É consulta inteira, e não nome de coluna, porque não existe uma coluna de
+    /// exibição para todos: os quatro catálogos jurídicos compõem o rótulo com
+    /// junções. São as mesmas expressões de
+    /// `evidence/repository.rs::{ROTULO_PENAL, ROTULO_TRANSGRESSAO, ROTULO_ESTATUTO}`,
+    /// e o aviso de lá vale aqui — **o rótulo já termina na descrição**, não se
+    /// concatena `descricao`/`texto` de novo.
+    ///
+    /// Mora ao lado de `tabela` pela mesma razão que ela: o SQL sai da tabela de
+    /// metadados, nunca de um parâmetro de requisição.
+    pub assunto_sql: &'static str,
 }
 
 /// Registro de tudo que o administrador pode cadastrar.
@@ -205,6 +218,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de apuratório",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_apuratorio WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "apuratorios",
@@ -243,6 +257,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             // pela tela não a apaga.
         ],
         ordenacao: "sigla",
+        assunto_sql: "SELECT sigla || ' - ' || nome FROM apuratorios WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "tipos_documento",
@@ -250,6 +265,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de documento",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_documento WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "papeis_processo",
@@ -257,6 +273,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Funções no apuratório",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM papeis_processo WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "naturezas_transgressao",
@@ -264,6 +281,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Naturezas de transgressão",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM naturezas_transgressao WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "naturezas_fato",
@@ -275,6 +293,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Marca as rubricas de sinistro: o cadastro passa a exigir o PM condutor."),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM naturezas_fato WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "status_envolvido",
@@ -282,6 +301,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Status do envolvido",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM status_envolvido WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "tipos_solucao_sugerida",
@@ -289,6 +309,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Soluções sugeridas",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_solucao_sugerida WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "tipos_solucao_decidida",
@@ -300,6 +321,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Só com uma solução assim marcada o cadastro aceita tipo e dias de penalidade."),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_solucao_decidida WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "tipos_penalidade",
@@ -311,6 +333,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Habilita o campo de dias. Penalidades sem duração ficam desmarcadas."),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_penalidade WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "categorias_indicio",
@@ -322,6 +345,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "A categoria marcada assim não pode conviver com nenhuma outra no mesmo envolvido."),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM categorias_indicio WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "esferas_penais",
@@ -329,6 +353,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Esferas penais",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM esferas_penais WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "especies_infracao_penal",
@@ -336,6 +361,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Espécies de infração penal",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM especies_infracao_penal WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "dispositivos_legais",
@@ -348,6 +374,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                  'Art. 33 da Lei de Drogas'; desmarcado, 'Art. 312 do Código Penal'.")),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM dispositivos_legais WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "infracoes_penais",
@@ -363,6 +390,17 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto_opcional("alinea", "Alínea")),
         ],
         ordenacao: "artigo",
+        assunto_sql: r#"
+            SELECT 'Art. ' || ip.artigo
+                     || COALESCE(', § ' || ip.paragrafo, '')
+                     || COALESCE(', inciso ' || ip.inciso, '')
+                     || COALESCE(', alínea ' || ip.alinea, '')
+                     || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+                     || ' - ' || ip.descricao
+              FROM infracoes_penais ip
+              JOIN dispositivos_legais dl ON dl.id = ip.dispositivo_legal_id
+             WHERE ip.id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "artigos_rdpm",
@@ -373,6 +411,12 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao")),
         ],
         ordenacao: "artigo",
+        assunto_sql: r#"
+            SELECT ar.artigo || ' do RDPM (' || nt.nome || ')'
+              FROM artigos_rdpm ar
+              JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+             WHERE ar.id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "transgressoes",
@@ -384,6 +428,14 @@ pub const CATALOGOS: &[Catalogo] = &[
             texto("texto", "Texto"),
         ],
         ordenacao: "inciso",
+        assunto_sql: r#"
+            SELECT ar.artigo || ', inciso ' || t.inciso || ' do RDPM ('
+                     || nt.nome || ') - ' || t.texto
+              FROM transgressoes t
+              JOIN artigos_rdpm ar ON ar.id = t.artigo_rdpm_id
+              JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+             WHERE t.id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "infracoes_estatuto",
@@ -399,6 +451,14 @@ pub const CATALOGOS: &[Catalogo] = &[
             texto("texto", "Texto"),
         ],
         ordenacao: "artigo, inciso",
+        assunto_sql: r#"
+            SELECT ie.artigo || ', inciso ' || ie.inciso
+                     || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+                     || ' - ' || ie.texto
+              FROM infracoes_estatuto ie
+              JOIN dispositivos_legais dl ON dl.id = ie.dispositivo_legal_id
+             WHERE ie.id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "tipos_andamento",
@@ -406,6 +466,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de andamento",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_andamento WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "papeis_pessoa",
@@ -413,6 +474,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Papéis de pessoa",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM papeis_pessoa WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "municipios_distritos",
@@ -426,6 +488,10 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "municipios_distritos", "e_distrito")),
         ],
         ordenacao: "nome",
+        assunto_sql: r#"
+            SELECT nome || CASE WHEN e_distrito THEN ' (distrito)' ELSE '' END
+              FROM municipios_distritos WHERE id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "unidades_pm",
@@ -436,6 +502,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia_opcional("municipio_id", "Município", "municipios_distritos")),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM unidades_pm WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "subunidades_secoes",
@@ -446,6 +513,12 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("nome", "Nome")),
         ],
         ordenacao: "unidade_pm_id, nome",
+        assunto_sql: r#"
+            SELECT u.nome || ' / ' || s.nome
+              FROM subunidades_secoes s
+              JOIN unidades_pm u ON u.id = s.unidade_pm_id
+             WHERE s.id = $1::uuid
+        "#,
     },
     Catalogo {
         chave: "circulos_hierarquicos",
@@ -453,6 +526,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Círculos hierárquicos",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM circulos_hierarquicos WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "postos_graduacoes",
@@ -464,6 +538,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos")),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT sigla || ' - ' || nome FROM postos_graduacoes WHERE id = $1::uuid",
     },
     Catalogo {
         chave: "perfis_acesso",
@@ -475,6 +550,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Concede acesso às telas de cadastro e configuração. O sistema impede que sobre nenhum."),
         ],
         ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM perfis_acesso WHERE id = $1::uuid",
     },
 ];
 

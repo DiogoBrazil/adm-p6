@@ -112,17 +112,30 @@ fn com_app_e_banco<F>(sufixo: &str, corpo: F)
 where
     F: FnOnce(App<MockRuntime>, WebviewWindow<MockRuntime>, String) + Send + 'static,
 {
+    com_app_banco_e_mundo(sufixo, |app, webview, conta, _| corpo(app, webview, conta));
+}
+
+/// A mesma coisa, com os ids da fixture em mãos.
+///
+/// Comando que recebe id de catálogo precisa deles, e inventar um UUID aqui só
+/// exercitaria o caminho do "não encontrado".
+fn com_app_banco_e_mundo<F>(sufixo: &str, corpo: F)
+where
+    F: FnOnce(App<MockRuntime>, WebviewWindow<MockRuntime>, String, fixtures::Mundo)
+        + Send
+        + 'static,
+{
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
     rt.block_on(async move {
         util::com_banco_descartavel_com_url(sufixo, |pool, url| async move {
-            fixtures::mundo_configurado(&pool).await;
+            let mundo = fixtures::mundo_configurado(&pool).await;
             let conta = fixtures::conta_admin(&pool).await;
             tokio::task::spawn_blocking(move || {
                 let (app, webview) = app_de_teste(&url);
-                corpo(app, webview, conta);
+                corpo(app, webview, conta, mundo);
             })
             .await
             .expect("corpo do teste");
@@ -219,6 +232,65 @@ fn opcoes_de_filtro_vem_vazias_sem_apuratorio_nenhum() {
         ] {
             assert_eq!(dados[lista], json!([]), "{lista}: {dados}");
         }
+    });
+}
+
+/// Desativar uma função do apuratório **grava**.
+///
+/// Regressão de um defeito que ficou latente desde a 0001: o comando registrava
+/// a auditoria com `operacao = "DEACTIVATE"`, e `ck_auditoria_operacao` só
+/// aceita `CREATE`/`UPDATE`/`DELETE`. Como o `INSERT` da trilha corre na MESMA
+/// transação da desativação, a violação do CHECK derrubava as duas — a função
+/// nunca chegava a ser desativada, e o usuário via um erro de banco cru.
+///
+/// Nada acusava: o repositório tinha teste, o comando não. Desativação é
+/// `ativo = false`, ou seja `UPDATE`; quem diz que foi uma desativação é a
+/// `acao` da trilha, e não um quarto verbo que o banco recusa.
+#[test]
+fn desativar_funcao_do_apuratorio_grava_em_vez_de_derrubar_a_transacao() {
+    com_app_banco_e_mundo("ipc_desativa_papel", |app, webview, conta, m| {
+        autenticar(&app, &conta, true);
+
+        let envelope = invocar(
+            &webview,
+            "apuratorio_config_deactivate_papel",
+            json!({ "apuratorioId": m.apuratorio, "papelId": m.papel_escrivao }),
+        );
+        assert_eq!(ok(&envelope), &json!(true));
+
+        // Comitou de verdade: a configuração relida já traz a função inativa.
+        let config = invocar(
+            &webview,
+            "apuratorio_config_get",
+            json!({ "apuratorioId": m.apuratorio }),
+        );
+        let papeis = ok(&config)["papeis"].as_array().unwrap().clone();
+        let escrivao = papeis
+            .iter()
+            .find(|p| p["papel_id"] == json!(m.papel_escrivao))
+            .expect("o Escrivão continua listado");
+        assert_eq!(escrivao["ativo"], json!(false));
+
+        // E a trilha registrou, em português, sem UUID à vista.
+        let trilha = invocar(
+            &webview,
+            "audit_list",
+            json!({ "entidade": "apuratorio_papeis" }),
+        );
+        let itens = ok(&trilha)["items"].as_array().unwrap().clone();
+        assert_eq!(itens.len(), 1, "{itens:?}");
+        assert_eq!(itens[0]["operacao"], json!("UPDATE"));
+        assert_eq!(
+            itens[0]["acao"],
+            json!("Desativou uma função do apuratório")
+        );
+        // Sigla do apuratório e nome da função, e não o par de UUIDs que a PK
+        // composta obriga a guardar em `registro_id`.
+        assert_eq!(itens[0]["assunto"], json!("TST-A — Escrivao Teste"));
+        assert_eq!(
+            itens[0]["registro_id"],
+            json!(format!("{}:{}", m.apuratorio, m.papel_escrivao))
+        );
     });
 }
 

@@ -8,7 +8,7 @@
 //! quem baixou o prazo base de um apuratório.
 
 use adm_p6_tauri_lib::audit::domain::AuditStatisticsFilter;
-use adm_p6_tauri_lib::audit::repository;
+use adm_p6_tauri_lib::audit::repository::{self, Acao};
 use adm_p6_tauri_lib::db::paginacao::Recorte;
 use chrono::NaiveDate;
 use serde_json::json;
@@ -27,9 +27,20 @@ async fn registrar(
     dias_atras: i64,
 ) {
     let mut tx = pool.begin().await.unwrap();
-    repository::register_tx(&mut tx, entidade, registro_id, operacao, autor)
-        .await
-        .unwrap();
+    repository::registrar(
+        &mut tx,
+        Acao {
+            entidade,
+            registro_id,
+            operacao,
+            acao: "Registrou algo",
+            assunto: Some("Assunto de teste".to_string()),
+            alteracoes: None,
+        },
+        autor,
+    )
+    .await
+    .unwrap();
     tx.commit().await.unwrap();
 
     if dias_atras != 0 {
@@ -126,13 +137,17 @@ async fn o_diff_registra_o_que_mudou_na_configuracao() {
         let diff = json!({ "prazo_base_dias": { "de": 40, "para": 30 } });
 
         let mut tx = pool.begin().await.unwrap();
-        repository::register_tx_com_alteracoes(
+        repository::registrar(
             &mut tx,
-            "apuratorios",
-            "ap-1",
-            "UPDATE",
+            Acao {
+                entidade: "apuratorios",
+                registro_id: "ap-1",
+                operacao: "UPDATE",
+                acao: "Alterou um item de apuratórios",
+                assunto: Some("IPM - Inquérito Policial Militar".to_string()),
+                alteracoes: Some(diff.clone()),
+            },
             Some(&autor),
-            Some(diff.clone()),
         )
         .await
         .unwrap();
@@ -414,6 +429,126 @@ async fn lista_pagina_preservando_filtros() {
             .unwrap();
         assert!(longe.items.is_empty());
         assert_eq!(longe.total, QUANTOS);
+    })
+    .await;
+}
+
+/// O assunto sobrevive à exclusão física da linha que ele nomeia.
+///
+/// É a razão de ele ser gravado no momento da ação em vez de resolvido na
+/// leitura. `processo_prazos` e `processo_designacoes` são `DELETE FROM`, e na
+/// trilha antiga 7 dos 8 prazos já tinham virado UUID órfão: a exclusão, que é
+/// o que mais importa auditar, era justamente o que não se conseguia mais ler.
+#[tokio::test]
+async fn o_assunto_continua_legivel_depois_de_a_linha_ser_apagada() {
+    util::com_banco_descartavel("aud_apagado", |pool| async move {
+        let autor = conta_admin(&pool).await;
+        let m = fixtures::mundo_configurado(&pool).await;
+        let processo = fixtures::processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+
+        // Uma linha filha do apuratório, com id próprio.
+        let prazo: String = sqlx::query_scalar(
+            "INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+             VALUES ($1::uuid, 0, DATE '2026-01-10', 30) RETURNING id::text",
+        )
+        .bind(&processo)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        // O assunto é lido ANTES da exclusão, que é a ordem que
+        // `audit::assunto` documenta e os comandos seguem.
+        let mut tx = pool.begin().await.unwrap();
+        let assunto = adm_p6_tauri_lib::audit::assunto::de_prazo(&mut tx, &prazo).await;
+        assert!(assunto.is_some(), "o prazo ainda existe, então tem rótulo");
+        sqlx::query("DELETE FROM processo_prazos WHERE id = $1::uuid")
+            .bind(&prazo)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        repository::registrar(
+            &mut tx,
+            Acao {
+                entidade: "processo_prazos",
+                registro_id: &prazo,
+                operacao: "DELETE",
+                acao: "Removeu uma prorrogação de prazo",
+                assunto,
+                alteracoes: None,
+            },
+            Some(&autor),
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        // A linha não existe mais, e mesmo assim a trilha diz de qual apuratório
+        // se tratava. Resolvendo na leitura, aqui não haveria o que mostrar.
+        let vazio: Option<String> =
+            sqlx::query_scalar("SELECT id::text FROM processo_prazos WHERE id = $1::uuid")
+                .bind(&prazo)
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+        assert!(vazio.is_none());
+
+        let itens = repository::list(&pool, Recorte::novo(None, Some(50)), None, None, None)
+            .await
+            .unwrap()
+            .items;
+        let linha = itens
+            .iter()
+            .find(|i| i.registro_id == prazo)
+            .expect("a trilha registrou a exclusão");
+        assert_eq!(
+            linha.acao.as_deref(),
+            Some("Removeu uma prorrogação de prazo")
+        );
+        assert!(
+            linha
+                .assunto
+                .as_deref()
+                .unwrap()
+                .starts_with("TST-A nº 001/2026/"),
+            "o apuratório continua nomeado: {:?}",
+            linha.assunto
+        );
+    })
+    .await;
+}
+
+/// Registro anterior à `0018` continua listável, só que sem as duas frases.
+///
+/// A tela cobre o `None` com uma reserva; o que não pode é a listagem quebrar
+/// por causa de linha antiga — são 74 delas no banco de produção.
+#[tokio::test]
+async fn registro_sem_acao_nem_assunto_continua_na_listagem() {
+    util::com_banco_descartavel("aud_legado", |pool| async move {
+        let autor = conta_admin(&pool).await;
+        sqlx::query(
+            "INSERT INTO auditoria (entidade, registro_id, operacao, usuario_id)
+             VALUES ('processos_procedimentos', 'antigo-1', 'UPDATE', $1::uuid)",
+        )
+        .bind(&autor)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let itens = repository::list(&pool, Recorte::novo(None, Some(50)), None, None, None)
+            .await
+            .unwrap()
+            .items;
+        assert_eq!(itens.len(), 1);
+        assert!(itens[0].acao.is_none());
+        assert!(itens[0].assunto.is_none());
     })
     .await;
 }

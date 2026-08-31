@@ -25,9 +25,9 @@ sobre remover o schema `legado`.
 
 | Código | |
 |---|---:|
-| Migrations (`0001`–`0017`) | **17** |
+| Migrations (`0001`–`0018`) | **18** |
 | Comandos Tauri, todos no cliente tipado | **86** |
-| Testes | **162** |
+| Testes | **167** |
 | Módulos Rust · linhas de Rust | 13 · 10.193 |
 | Arquivos de frontend · linhas de TS/CSS | 19 · 13.651 |
 | Catálogos administráveis | 26 |
@@ -789,6 +789,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Sincronizar coleção pelo id da entidade referida** | `DELETE … WHERE NOT (fk = ANY(...))` seguido de upsert pela FK: trocar o valor da FK deixa de ser correção e vira **apagar e recriar**, e tudo o que pendura na linha por `ON DELETE CASCADE` some junto. Identificar um envolvido "À apurar" levava com ele enquadramentos, indícios, resultado, situação e ordem | Sincronize pelo **id da própria linha**, que a edição devolve no request (`EnvolvidoRequest.id`). E ordene as escritas: identificados antes dos nulos, senão a transição simultânea nos dois sentidos colide no índice parcial de `À apurar` |
 | **`<select>` enfeitado que deixa de alimentar o `FormData`** | Trocar o `<select>` por uma lista de `<div>` derruba de uma vez o `FormData`, o `required` nativo, a validação amigável e as regras que leem `select.value` — e nada disso acusa em build | O Tom Select **mantém** o `<select>` original no DOM e o mantém sincronizado; ele só o esconde com `.ts-hidden-accessible` (clip, não `display:none`), que é o que preserva `required` — um controle obrigatório com `display:none` faz o navegador **recusar o submit em silêncio**, porque não consegue focá-lo |
 | Redesenhar o formulário sem destruir os selects pesquisáveis | O `innerHTML` novo descarta os `<select>` originais, mas os `TomSelect` ficam com listeners e estado presos ao DOM antigo. Vaza a cada rerender, e o formulário de processo redesenha a cada troca de apuratório, natureza, unidade ou envolvido | `dom.ts::destruirSelectsPesquisaveis` antes de todo redraw — já chamada de `main.ts::shell()` e do topo de `renderFormularioProcesso`. `destroy()` **restaura as opções originais**, então absorva o formulário para o rascunho *antes* de destruir |
+| Gravar em `auditoria.operacao` um verbo fora de `CREATE`/`UPDATE`/`DELETE` | `ck_auditoria_operacao` recusa, e como o `INSERT` da trilha corre na MESMA transação da operação auditada, **as duas caem juntas**. `apuratorio_config_deactivate_*` gravava `DEACTIVATE` e por isso nunca conseguiu desativar nada — latente desde a `0001`, e o repositório tinha teste, o comando não | Desativação é `ativo = false`, ou seja `UPDATE`; quem diz que foi desativação é a `acao`. Comando que escreve no banco precisa de teste no **comando**, não só no repositório |
+| Registrar auditoria de exclusão física depois do `DELETE` | O `assunto` sai de uma junção com a linha que acabou de sumir, e a trilha guarda um UUID que não aponta para nada. Foi o que deixou 7 dos 8 prazos da trilha antiga sem identificação | Ler o assunto **antes** da exclusão, na mesma transação — é o que `audit/assunto.rs` documenta e o que `legal_catalogs_delete` e `proceedings_remove_attachment` fazem |
 | Envolver num `<label>` em coluna um campo que já tem `flex` declarado | `flex-basis` é do **eixo principal**. `.filtros input[type="search"]` declara `flex: 1 1 260px` contando com o `.filtros` em linha; pôr o input dentro de um `<label>` `flex-direction: column` faz aqueles 260px deixarem de ser largura e virarem **altura**. A barra de pesquisa dos apuratórios foi para 340px de altura contra os 89px das outras listagens, e nada acusa | Campo de filtro é filho **direto** de `.filtros`, como em Catálogos e Usuários. Precisando de rótulo visível, declare a altura do campo em vez de herdar o `flex` de outra regra — e meça o computado, que é como isto apareceu |
 | Limpar um `<select>` pesquisável por `select.value = ""` | O `<select>` original zera, mas o controle visível continua exibindo o rótulo escolhido: quem desenha é a instância do Tom Select, e ela não observa a propriedade. O usuário vê um filtro que jurou ter limpado | `select.tomselect?.clear(true)` quando houver instância, e `select.value = ""` só no `<select>` cru. Ver o botão *Limpar filtros* em `processo.ts::abrirFiltrosAvancados` |
 | Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
@@ -882,6 +884,9 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | o que vem semeado e o que não vem | `src-tauri/migrations/0003_seed_catalogos_legais.sql` e `tests/migrations.rs` |
 | quais catálogos existem e o que cada atributo faz | `src-tauri/src/legal_catalogs/domain.rs::CATALOGOS` |
 | como o responsável do processo é resolvido sem nome de papel | o `LATERAL resp` da view, em `migrations/0014_subunidade_secao_origem.sql` — casa `processo_designacoes` com `apuratorio_papeis.e_responsavel`, e é a mesma definição que `proceedings/repository.rs::FILTRO` usa |
+| de onde sai o "sobre o quê" de cada linha da auditoria | `audit/assunto.rs` (cabeçalho) — e `Catalogo::assunto_sql`, para os 26 catálogos |
+| por que a auditoria guarda o rótulo em vez de resolvê-lo na leitura | a migration `0018` (cabeçalho) e o teste `o_assunto_continua_legivel_depois_de_a_linha_ser_apagada` |
+| quem escreve a frase "Reabriu o apuratório" | o próprio comando, em `*/commands.rs`, via `audit::repository::Acao` |
 | como a listagem de apuratórios pesquisa e filtra | `proceedings/repository.rs::FILTRO` (um `WHERE` para as duas fontes) e `bind_filtro` |
 | de onde saem as opções do modal de filtros avançados | `proceedings/repository.rs::filter_options` (cabeçalho) — e por que elas **não** filtram `WHERE ativo` |
 | as validações que dependem de configuração | `proceedings/repository.rs::validar_contra_configuracao` |
@@ -1621,7 +1626,29 @@ restritiva também governa — os dois já foram exercitados, mas nunca juntos.
 
 ---
 
-## 12. Changelog — as 24 rodadas
+### m) Auditoria legível (seção 12, rodada 25)
+
+- [ ] A tabela tem quatro colunas — **Quando, Quem fez, O que foi feito, Sobre o quê** —
+      e nenhum nome de tabela, verbo em inglês ou UUID à vista
+- [ ] A data sai em `31/08/2026 16:10:39`, e não em ordem americana
+- [ ] Os registros anteriores à `0018` aparecem com a frase de reserva, e os 9 sem
+      assunto dizem "registro já removido" em vez de linha vazia
+- [ ] Os filtros dizem **Sobre o quê**, **Tipo de ação** e **Quem fez**, com os nomes em
+      português e a contagem ao lado; o total do rodapé bate com a tabela
+- [ ] Abrir uma linha: o detalhe repete as quatro, mostra "O que mudou" quando houver
+      diff (em `campo: de X para Y`, não JSON), e traz tabela/registro/operação no bloco
+      **Rastreio**, ao pé
+- [ ] **Catálogos → Configuração de apuratórios**: desativar um documento iniciador e uma
+      função **grava** — é o defeito que ficou latente desde a `0001` — e a trilha
+      registra "Desativou…" com a sigla do apuratório
+- [ ] Reabrir um apuratório e conferir que a linha diz **"Reabriu o apuratório"**, e não
+      "Alterou"; registrar conclusão diz "Registrou as datas do fluxo"
+- [ ] Excluir uma prorrogação e conferir que a trilha continua nomeando o apuratório
+- [ ] CSV e impressão saem com as quatro colunas (o CSV leva também entidade e registro)
+
+---
+
+## 12. Changelog — as 25 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1653,6 +1680,59 @@ A narrativa completa de cada uma está no histórico do git.
 | 22 | Enquadramentos e indícios | citação com o artigo na frente (`Art. 312 do Código Penal Militar`), descrição sem repetição, bloco disciplinar único com a analogia recuada, e Resultado empilhado. Migration `0015` traz `dispositivos_legais.nome_feminino` |
 | 23 | **"À apurar" e seleções pesquisáveis** | o PM fictício virou estado do vínculo (`0016`); envolvidos sincronizados pelo id da linha; todo seletor do formulário de processo pesquisável (Tom Select); cadastro rápido em modal para os sete cadastros operacionais. A `0017` tornou a unicidade do condutor adiável, e com isso trocar o condutor entre dois envolvidos parou de falhar. Detalhe abaixo |
 | 24 | **Pesquisa instantânea e filtros avançados** | a pesquisa da listagem passou a filtrar ao digitar e a alcançar o **nome do encarregado e do PM envolvido**; modal com dez parâmetros combináveis por `AND`, chips removíveis e contador. `situacao` substituiu `concluido`, e as opções do modal passaram a sair dos apuratórios em vez dos cadastros. Sem migration. Detalhe abaixo |
+| 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
+
+### A rodada 25, em detalhe
+
+Pedido: a auditoria estava técnica demais. Ela tinha de dizer **quando, quem fez, o que
+foi feito e sobre o quê** — e servir de rastro.
+
+**O que a tela mostrava.** `processos_procedimentos`, `UPDATE` e
+`bbea1b92-6cc1-4d0b-…`: nome de tabela, verbo de SQL e chave primária. Mais uma coluna
+"Diff" que imprimia "—" nos 74 registros do banco, porque diff só é gravado nas mudanças
+de configuração.
+
+**Dois problemas que não eram de redação, e que a consulta ao banco revelou.** O
+primeiro: `UPDATE` não diz *qual* atualização foi. Reabrir um apuratório, registrar a
+conclusão, corrigir as datas do fluxo e editar o cadastro gravavam todos a mesma linha, e
+essa distinção **não existia no banco** — nenhuma tela conseguiria recuperá-la depois. O
+segundo: `processo_prazos` e `processo_designacoes` são exclusão física, e ali o
+`registro_id` vira UUID órfão. Eram 7 dos 8 prazos e 2 das 6 designações já sem
+identificação possível — justamente a exclusão, que é o que mais importa auditar.
+
+**Daí a `0018` e as duas colunas.** `acao` e `assunto` nascem preenchidas pelo comando que
+executou a ação, no único instante em que as duas informações existem juntas: o comando
+sabe que aquele `UPDATE` foi um *reabrir*, e a linha referida ainda está lá para ser
+nomeada. Guardar o `assunto` duplica um rótulo que também vive na tabela de origem, e isso
+merece justificativa contra o princípio 4 — é a mesma de `mapas_salvos.dados_mapa`, que a
+`0001` já declara: **snapshot imutável de um fato já ocorrido**. Resolver por junção na
+leitura devolveria outra coisa (o número corrigido em 2027 reescreveria o que a trilha
+registrou em 2026) ou coisa nenhuma. A migration preencheu o que dava dos 74 antigos:
+`acao` em 74, `assunto` em 65 — os 9 que faltam são exatamente os órfãos, e a tela diz
+"registro já removido" neles.
+
+**A assinatura mudou de propósito.** `register_tx`/`register_tx_com_alteracoes` viraram
+`registrar(tx, Acao {...})`, com struct nomeada porque são cinco campos de texto seguidos
+e trocar dois de lugar compilaria calado. O compilador apontou os 30 pontos de chamada,
+todos em `*/commands.rs` — que é a camada certa, porque é ela que conhece a intenção.
+
+**O defeito que apareceu no caminho.** `apuratorio_config_deactivate_documento` e
+`_papel` gravavam `operacao = "DEACTIVATE"`, e `ck_auditoria_operacao` só aceita três
+verbos. Como o `INSERT` da trilha corre na **mesma transação** da desativação, a violação
+do CHECK derrubava as duas: desativar documento iniciador ou função de apuratório
+**nunca funcionou**, desde a `0001`. Ninguém tinha esbarrado porque a configuração dos 10
+apuratórios veio pela importação, não pela tela. O conserto foi gravar `UPDATE` com a
+`acao` dizendo que foi desativação — sem alargar o CHECK, que ganharia um quarto verbo
+para dizer o que a frase já diz melhor. A lição travada por teste: **comando que escreve
+no banco precisa de teste no comando**, não só no repositório.
+
+**Onde o assunto é lido.** `audit/assunto.rs`, uma função por entidade, cada uma com a
+consulta inteira escrita ali — e não passada a um helper comum, porque `sql_prepare.rs` só
+enxerga SQL que é literal no argumento de `sqlx::query*`. Os cinco filhos de apuratório
+(envolvido, prazo, designação, andamento, anexo) são nomeados pelo **pai**: o UUID do
+prazo não diz nada a ninguém. Para os 26 catálogos, `CATALOGOS` ganhou `assunto_sql` —
+não dá para adivinhar a coluna de exibição, já que os quatro catálogos jurídicos compõem
+o rótulo com junções.
 
 ### A rodada 24, em detalhe
 

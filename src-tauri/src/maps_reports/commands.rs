@@ -1,7 +1,8 @@
 use tauri::State;
 
 use crate::app_state::AppState;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::db::paginacao::Recorte;
 use crate::maps_reports::domain::{
@@ -55,8 +56,20 @@ pub async fn reports_save_map(
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
             let id = repository::save_map(&mut tx, &request, &actor.id).await?;
-            audit_repository::register_tx(&mut tx, "mapas_salvos", &id, "CREATE", Some(&actor.id))
-                .await?;
+            let assunto = assunto::de_mapa(&mut tx, &id).await;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: "mapas_salvos",
+                    registro_id: &id,
+                    operacao: "CREATE",
+                    acao: "Salvou um mapa do período",
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
             tx.commit().await?;
             Ok(id)
         }
@@ -108,9 +121,21 @@ pub async fn reports_delete_saved_map(
             let actor = require_admin(&state).await?;
             let pool = state.pool().await?;
             let mut tx = pool.begin().await?;
+            let assunto = assunto::de_mapa(&mut tx, &id).await;
             repository::delete_saved_map(&mut tx, &id).await?;
-            audit_repository::register_tx(&mut tx, "mapas_salvos", &id, "DELETE", Some(&actor.id))
-                .await?;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: "mapas_salvos",
+                    registro_id: &id,
+                    operacao: "DELETE",
+                    acao: "Excluiu um mapa salvo",
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
             tx.commit().await?;
             Ok(true)
         }

@@ -115,6 +115,12 @@ export interface AuditDetailItem {
   usuario_nome: string | null;
   usuario_posto: string | null;
   usuario_matricula: string | null;
+  /** O que foi feito, em português: "Reabriu o apuratório". `null` só nos */
+  /** registros anteriores à `0018`, que a tela cobre com frase genérica. */
+  acao: string | null;
+  /** Sobre o quê, como o registro se chamava no momento da ação. `null` */
+  /** quando a linha já tinha sido apagada antes da `0018` poder nomeá-la. */
+  assunto: string | null;
   /** Diff da operação, quando registrado. Preenchido nas alterações de */
   /** configuração, que mudam o comportamento futuro do sistema. */
   alteracoes: unknown | null;
@@ -131,6 +137,9 @@ export interface AuditOperationStat {
 export interface AuditTableStat {
   entidade: string;
   total: number;
+  /** O mesmo em português. Vem do backend para não haver um segundo mapa de */
+  /** tabela→nome aqui, que divergiria do primeiro sem ninguém notar. */
+  rotulo: string;
 }
 
 /** `audit` */

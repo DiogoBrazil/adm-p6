@@ -30,6 +30,17 @@ export function cellDisplay(value: unknown): string {
   return String(value ?? "");
 }
 
+/**
+ * `2026-08-31T16:10:39Z` → `31/08/2026 16:10:39`.
+ *
+ * A auditoria escrevia isto na mão, com `.replace("T"," ").slice(0,19)`, e o
+ * resultado era a data em ordem americana na tela de quem lê em português.
+ */
+export function formatarDataHora(iso: string): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2}:\d{2})/.exec(iso);
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}` : iso;
+}
+
 /** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
 export function formatarQualificacaoMilitar(
   posto: string | null | undefined,

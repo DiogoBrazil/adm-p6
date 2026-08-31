@@ -12,6 +12,12 @@ pub struct AuditDetailItem {
     pub usuario_nome: Option<String>,
     pub usuario_posto: Option<String>,
     pub usuario_matricula: Option<String>,
+    /// O que foi feito, em português: "Reabriu o apuratório". `None` só nos
+    /// registros anteriores à `0018`, que a tela cobre com uma frase genérica.
+    pub acao: Option<String>,
+    /// Sobre o quê, como o registro se chamava no momento da ação. `None`
+    /// quando a linha já tinha sido apagada antes da `0018` poder nomeá-la.
+    pub assunto: Option<String>,
     /// Diff da operação, quando registrado. Preenchido nas alterações de
     /// configuração, que mudam o comportamento futuro do sistema.
     pub alteracoes: Option<Value>,
@@ -28,6 +34,52 @@ pub struct AuditOperationStat {
 pub struct AuditTableStat {
     pub entidade: String,
     pub total: i64,
+    /// O mesmo em português, para o filtro da tela. Preenchido depois da
+    /// consulta por `rotulo_da_entidade`; não sai do banco.
+    #[sqlx(default)]
+    pub rotulo: String,
+}
+
+/// Nome de tabela traduzido para quem opera a Seção.
+///
+/// Os 26 catálogos administráveis já se apresentam em `CATALOGOS.rotulo` — não
+/// há por que manter uma segunda lista que envelheceria sozinha quando alguém
+/// acrescentasse um catálogo. O que sobra aqui são as tabelas que não são
+/// catálogo, e o fallback devolve o nome cru: entidade desconhecida é melhor
+/// mostrada feia do que escondida.
+pub fn rotulo_da_entidade(entidade: &str) -> String {
+    let fixo = match entidade {
+        "processos_procedimentos" => "Apuratório",
+        "processo_envolvidos" => "Envolvido",
+        "processo_designacoes" => "Designação",
+        "processo_prazos" => "Prazo",
+        "processo_andamentos" => "Andamento",
+        "processo_anexos" => "Anexo",
+        "policiais_militares" => "Militar",
+        "mapas_salvos" => "Mapa salvo",
+        "apuratorio_papeis" => "Função do apuratório",
+        "apuratorio_documentos_iniciadores" => "Documento iniciador do apuratório",
+        _ => "",
+    };
+    if !fixo.is_empty() {
+        return fixo.to_string();
+    }
+    crate::legal_catalogs::domain::CATALOGOS
+        .iter()
+        .find(|c| c.tabela == entidade)
+        .map(|c| c.rotulo.to_string())
+        .unwrap_or_else(|| entidade.to_string())
+}
+
+/// A operação em português, para quem não lê SQL. Só serve de reserva: a partir
+/// da `0018` quem descreve a ação é `auditoria.acao`, escrita pelo comando.
+pub fn rotulo_da_operacao(operacao: &str) -> &'static str {
+    match operacao {
+        "CREATE" => "Cadastrou",
+        "UPDATE" => "Alterou",
+        "DELETE" => "Excluiu",
+        _ => "Registrou",
+    }
 }
 
 #[derive(Debug, Serialize)]

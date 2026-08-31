@@ -6,13 +6,18 @@ use crate::apuratorio_config::domain::{
     ApuratorioConfig, SaveDocumentoIniciadorRequest, SavePapelRequest,
 };
 use crate::apuratorio_config::repository;
-use crate::audit::repository as audit_repository;
+use crate::audit::assunto;
+use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::response::{from_result, ApiResponse};
 
 /// Identificador da linha na trilha de auditoria. A PK é composta, então o par
 /// vai concatenado — `auditoria.registro_id` é TEXT justamente por isso.
+///
+/// Quem resolve o par de volta em texto legível é
+/// `audit::assunto::{de_papel_do_apuratorio, de_documento_do_apuratorio}`, que
+/// recebe os dois ids separados em vez de repartir esta string.
 fn registro(a: &str, b: &str) -> String {
     format!("{a}:{b}")
 }
@@ -46,17 +51,27 @@ pub async fn apuratorio_config_save_documento(
             let mut tx = pool.begin().await?;
 
             repository::save_documento(&mut tx, &request).await?;
-            audit_repository::register_tx_com_alteracoes(
+            let assunto = assunto::de_documento_do_apuratorio(
                 &mut tx,
-                "apuratorio_documentos_iniciadores",
-                &registro(&request.apuratorio_id, &request.tipo_documento_id),
-                "UPDATE",
+                &request.apuratorio_id,
+                &request.tipo_documento_id,
+            )
+            .await;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: "apuratorio_documentos_iniciadores",
+                    registro_id: &registro(&request.apuratorio_id, &request.tipo_documento_id),
+                    operacao: "UPDATE",
+                    acao: "Configurou um documento iniciador do apuratório",
+                    assunto,
+                    alteracoes: Some(json!({
+                        "prazo_base_dias": request.prazo_base_dias,
+                        "padrao": request.padrao,
+                        "ativo": request.ativo,
+                    })),
+                },
                 Some(&actor.id),
-                Some(json!({
-                    "prazo_base_dias": request.prazo_base_dias,
-                    "padrao": request.padrao,
-                    "ativo": request.ativo,
-                })),
             )
             .await?;
             tx.commit().await?;
@@ -80,19 +95,26 @@ pub async fn apuratorio_config_save_papel(
             let mut tx = pool.begin().await?;
 
             repository::save_papel(&mut tx, &request).await?;
-            audit_repository::register_tx_com_alteracoes(
+            let assunto =
+                assunto::de_papel_do_apuratorio(&mut tx, &request.apuratorio_id, &request.papel_id)
+                    .await;
+            audit_repository::registrar(
                 &mut tx,
-                "apuratorio_papeis",
-                &registro(&request.apuratorio_id, &request.papel_id),
-                "UPDATE",
+                Acao {
+                    entidade: "apuratorio_papeis",
+                    registro_id: &registro(&request.apuratorio_id, &request.papel_id),
+                    operacao: "UPDATE",
+                    acao: "Configurou uma função do apuratório",
+                    assunto,
+                    alteracoes: Some(json!({
+                        "obrigatorio": request.obrigatorio,
+                        "max_ocupantes": request.max_ocupantes,
+                        "e_responsavel": request.e_responsavel,
+                        "usa_documento_designacao": request.usa_documento_designacao,
+                        "ativo": request.ativo,
+                    })),
+                },
                 Some(&actor.id),
-                Some(json!({
-                    "obrigatorio": request.obrigatorio,
-                    "max_ocupantes": request.max_ocupantes,
-                    "e_responsavel": request.e_responsavel,
-                    "usa_documento_designacao": request.usa_documento_designacao,
-                    "ativo": request.ativo,
-                })),
             )
             .await?;
             tx.commit().await?;
@@ -118,11 +140,22 @@ pub async fn apuratorio_config_deactivate_documento(
             let ok = repository::deactivate_documento(&mut tx, &apuratorio_id, &tipo_documento_id)
                 .await?;
             if ok {
-                audit_repository::register_tx(
+                let assunto = assunto::de_documento_do_apuratorio(
                     &mut tx,
-                    "apuratorio_documentos_iniciadores",
-                    &registro(&apuratorio_id, &tipo_documento_id),
-                    "DEACTIVATE",
+                    &apuratorio_id,
+                    &tipo_documento_id,
+                )
+                .await;
+                audit_repository::registrar(
+                    &mut tx,
+                    Acao {
+                        entidade: "apuratorio_documentos_iniciadores",
+                        registro_id: &registro(&apuratorio_id, &tipo_documento_id),
+                        operacao: "UPDATE",
+                        acao: "Desativou um documento iniciador do apuratório",
+                        assunto,
+                        alteracoes: None,
+                    },
                     Some(&actor.id),
                 )
                 .await?;
@@ -149,11 +182,18 @@ pub async fn apuratorio_config_deactivate_papel(
 
             let ok = repository::deactivate_papel(&mut tx, &apuratorio_id, &papel_id).await?;
             if ok {
-                audit_repository::register_tx(
+                let assunto =
+                    assunto::de_papel_do_apuratorio(&mut tx, &apuratorio_id, &papel_id).await;
+                audit_repository::registrar(
                     &mut tx,
-                    "apuratorio_papeis",
-                    &registro(&apuratorio_id, &papel_id),
-                    "DEACTIVATE",
+                    Acao {
+                        entidade: "apuratorio_papeis",
+                        registro_id: &registro(&apuratorio_id, &papel_id),
+                        operacao: "UPDATE",
+                        acao: "Desativou uma função do apuratório",
+                        assunto,
+                        alteracoes: None,
+                    },
                     Some(&actor.id),
                 )
                 .await?;
