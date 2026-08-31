@@ -789,6 +789,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Sincronizar coleção pelo id da entidade referida** | `DELETE … WHERE NOT (fk = ANY(...))` seguido de upsert pela FK: trocar o valor da FK deixa de ser correção e vira **apagar e recriar**, e tudo o que pendura na linha por `ON DELETE CASCADE` some junto. Identificar um envolvido "À apurar" levava com ele enquadramentos, indícios, resultado, situação e ordem | Sincronize pelo **id da própria linha**, que a edição devolve no request (`EnvolvidoRequest.id`). E ordene as escritas: identificados antes dos nulos, senão a transição simultânea nos dois sentidos colide no índice parcial de `À apurar` |
 | **`<select>` enfeitado que deixa de alimentar o `FormData`** | Trocar o `<select>` por uma lista de `<div>` derruba de uma vez o `FormData`, o `required` nativo, a validação amigável e as regras que leem `select.value` — e nada disso acusa em build | O Tom Select **mantém** o `<select>` original no DOM e o mantém sincronizado; ele só o esconde com `.ts-hidden-accessible` (clip, não `display:none`), que é o que preserva `required` — um controle obrigatório com `display:none` faz o navegador **recusar o submit em silêncio**, porque não consegue focá-lo |
 | Redesenhar o formulário sem destruir os selects pesquisáveis | O `innerHTML` novo descarta os `<select>` originais, mas os `TomSelect` ficam com listeners e estado presos ao DOM antigo. Vaza a cada rerender, e o formulário de processo redesenha a cada troca de apuratório, natureza, unidade ou envolvido | `dom.ts::destruirSelectsPesquisaveis` antes de todo redraw — já chamada de `main.ts::shell()` e do topo de `renderFormularioProcesso`. `destroy()` **restaura as opções originais**, então absorva o formulário para o rascunho *antes* de destruir |
+| Envolver num `<label>` em coluna um campo que já tem `flex` declarado | `flex-basis` é do **eixo principal**. `.filtros input[type="search"]` declara `flex: 1 1 260px` contando com o `.filtros` em linha; pôr o input dentro de um `<label>` `flex-direction: column` faz aqueles 260px deixarem de ser largura e virarem **altura**. A barra de pesquisa dos apuratórios foi para 340px de altura contra os 89px das outras listagens, e nada acusa | Campo de filtro é filho **direto** de `.filtros`, como em Catálogos e Usuários. Precisando de rótulo visível, declare a altura do campo em vez de herdar o `flex` de outra regra — e meça o computado, que é como isto apareceu |
 | Limpar um `<select>` pesquisável por `select.value = ""` | O `<select>` original zera, mas o controle visível continua exibindo o rótulo escolhido: quem desenha é a instância do Tom Select, e ela não observa a propriedade. O usuário vê um filtro que jurou ter limpado | `select.tomselect?.clear(true)` quando houver instância, e `select.value = ""` só no `<select>` cru. Ver o botão *Limpar filtros* em `processo.ts::abrirFiltrosAvancados` |
 | Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
@@ -1588,6 +1589,8 @@ restritiva também governa — os dois já foram exercitados, mas nunca juntos.
 
 #### A pesquisa que filtra ao digitar
 
+- [ ] A barra de pesquisa tem **uma linha só** e a mesma altura da de Catálogos —
+      foi medida em 70px, e já esteve em 340px sem que nada acusasse
 - [ ] Digitar filtra sozinho, sem apertar nada; o **foco e a posição do cursor** ficam
       onde estavam, e a barra de pesquisa não pisca
 - [ ] A busca acha por **número, controle, SEI, RGF, resumo**, e agora também por
@@ -1688,7 +1691,18 @@ Do outro lado, o cadastro **desativado e em uso** continua na lista, marcado
 `(inativo)` — é o princípio 6 pelo outro lado, e é o que mantém o apuratório de 2019
 encontrável pela unidade desativada em 2026.
 
-**Duas coisas que a implementação ensinou.** A primeira: `montarModal` já ativa e destrói
+**A barra de pesquisa nasceu com o dobro da altura.** O campo tinha ganhado um
+`<label>` em coluna para exibir a legenda "Pesquisar" acima dele — e com isso o
+`flex: 1 1 260px` que `.filtros input[type="search"]` declara deixou de ser largura e
+virou **altura**, porque `flex-basis` é do eixo principal. Medido no Chromium contra a
+barra de Catálogos: **339,5px contra 89,5px**, com o input sozinho em 260px de altura. O
+conserto foi voltar ao arranjo das outras listagens — input filho direto de `.filtros`,
+legenda no `aria-label` — e mandar a linha de status para fora da vista, já que a
+contagem sempre esteve no cabeçalho da tela. Ficou em **70px**, numa linha só, e empilha
+abaixo de 700px sem rolagem horizontal até 320px. A linha de status continua na árvore
+de acessibilidade: `display:none` calaria o `aria-live`.
+
+**Três coisas que a implementação ensinou.** A primeira: `montarModal` já ativa e destrói
 os `TomSelect` sozinho, mas o `FormData` tem de ser lido **antes** do `fechar()` — o
 `destroy()` restaura as opções originais e o que foi escolhido some. A segunda, do botão
 *Limpar*: zerar `select.value` não limpa o controle visível, que continua exibindo o

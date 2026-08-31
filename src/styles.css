@@ -3657,28 +3657,16 @@ input[type="checkbox"][aria-invalid="true"] {
 }
 
 /* ── Pesquisa e filtros avançados da listagem de apuratórios ─────────────── */
+
+/* A barra tem a mesma altura das outras listagens porque o input é filho
+   DIRETO de `.filtros`, como em Catálogos e Usuários. Envolvê-lo num `<label>`
+   em coluna custou 340px de altura contra os 89px das demais: o
+   `.filtros input[type="search"]` lá de cima declara `flex: 1 1 260px`, e
+   flex-basis é do eixo principal — num container em coluna aqueles 260px
+   deixam de ser largura e viram **altura**. */
 .filtros-lista-apuratorios {
-  align-items: flex-end;
+  align-items: center;
   margin-bottom: 10px;
-}
-
-.filtros-lista-apuratorios > .busca-lista-apuratorios {
-  display: flex;
-  flex: 1 1 520px;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 260px;
-}
-
-.busca-lista-apuratorios > span {
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.filtros-lista-apuratorios .busca-lista-apuratorios input[type="search"] {
-  min-width: 0;
-  width: 100%;
 }
 
 .filtros-lista-apuratorios > .botao-filtros-avancados {
@@ -3710,11 +3698,21 @@ input[type="checkbox"][aria-invalid="true"] {
   display: none;
 }
 
-.filtros-lista-apuratorios > .status-pesquisa {
-  color: var(--text-muted);
-  flex: 1 0 100%;
-  font-size: 0.78rem;
-  min-height: 1em;
+/* A contagem já está no cabeçalho da tela, e a tabela abaixo mostra o recorte.
+   Este texto existe só para o leitor de tela anunciar o resultado de quem
+   digita sem olhar para a página — visível, ele tomava uma linha inteira da
+   barra, que é metade do excesso de altura. Some da vista, não da árvore de
+   acessibilidade: `display:none` cala o `aria-live`. */
+.status-pesquisa {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+  clip-path: inset(50%);
 }
 
 .filtros-ativos {
@@ -3823,10 +3821,16 @@ button.filtro-chip:focus-visible {
 }
 
 @media (max-width: 700px) {
-  .filtros-lista-apuratorios > .busca-lista-apuratorios,
+  .filtros-lista-apuratorios > input[type="search"],
   .filtros-lista-apuratorios > .botao-filtros-avancados {
     flex-basis: 100%;
     width: 100%;
+  }
+
+  /* Empilhados, os 240px de `min-width` do input estouram a largura de um
+     celular de 320px depois de somados os três recuos até aqui. */
+  .filtros-lista-apuratorios > input[type="search"] {
+    min-width: 0;
   }
 
   .filtros-avancados-grid {

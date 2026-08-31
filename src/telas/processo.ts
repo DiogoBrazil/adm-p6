@@ -1976,12 +1976,10 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
         ${ctx.podeEscrever() ? `<button id="novo">Novo</button>` : ""}
       </div>
       <div class="filtros filtros-lista-apuratorios">
-        <label class="busca-lista-apuratorios">
-          <span>Pesquisar</span>
-          <input id="busca" type="search" autocomplete="off"
-                 placeholder="Número, SEI, resumo, encarregado ou envolvido…"
-                 aria-controls="resultados-apuratorios" value="${escapeHtml(filtro.busca)}" />
-        </label>
+        <input id="busca" type="search" autocomplete="off"
+               aria-label="Pesquisar apuratórios" aria-controls="resultados-apuratorios"
+               placeholder="Número, SEI, resumo, encarregado ou envolvido…"
+               value="${escapeHtml(filtro.busca)}" />
         <button id="abrir-filtros-avancados" type="button" class="outline botao-filtros-avancados"
                 aria-haspopup="dialog">
           Filtros avançados <span class="contador-filtros" data-contador-filtros hidden></span>
