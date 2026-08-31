@@ -142,6 +142,7 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
             ("dashboard_summary", json!({})),
             ("legal_catalogs_list", json!({ "catalogo": "apuratorios" })),
             ("proceedings_list", json!({})),
+            ("proceedings_filter_options", json!({})),
             ("reports_available_years", json!({})),
             ("print_landscape", json!({})),
         ] {
@@ -151,6 +152,72 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
                 mensagem.to_lowercase().contains("sessão"),
                 "{comando}: {mensagem}"
             );
+        }
+    });
+}
+
+/// O filtro da listagem atravessa o serde inteiro pelo IPC.
+///
+/// É o único lugar onde `ProceedingSituation` e as datas do filtro são
+/// exercitadas como o frontend as manda. Duas coisas se provam aqui e em
+/// nenhum teste de repositório:
+///
+/// - `situacao` chega como a string do `rename_all = "snake_case"`
+///   (`"no_prazo"`), e não como o nome da variante;
+/// - `data_instauracao_inicio`/`_fim` aceitam a string ISO que o
+///   `<input type="date">` produz, virando `Option<NaiveDate>`.
+///
+/// Os campos vão em snake_case porque estão **dentro** de `{ filter: {...} }`:
+/// quem desserializa ali é o serde, não o Tauri. Grafia errada num deles não
+/// seria erro — viraria `None`, e o filtro sumiria em silêncio.
+#[test]
+fn o_filtro_da_listagem_desserializa_situacao_e_datas() {
+    com_app_e_banco("ipc_filtro_listagem", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+
+        let envelope = invocar(
+            &webview,
+            "proceedings_list",
+            json!({
+                "filter": {
+                    "situacao": "no_prazo",
+                    "data_instauracao_inicio": "2026-01-10",
+                    "data_instauracao_fim": "2026-12-31",
+                    "per_page": 10
+                }
+            }),
+        );
+        let dados = ok(&envelope);
+        assert_eq!(dados["total"], json!(0));
+        assert_eq!(dados["per_page"], json!(10));
+        assert_eq!(dados["items"], json!([]));
+    });
+}
+
+/// As opções do modal saem dos apuratórios, não dos cadastros.
+///
+/// O mundo da fixture tem todos os catálogos semeados e **nenhum apuratório**.
+/// As oito listas voltando vazias é exatamente a regra de
+/// `repository::filter_options`: opção que não corta nada não é oferecida. Com
+/// a regra antiga (`ativo OR em uso`) este teste falharia em seis das oito.
+#[test]
+fn opcoes_de_filtro_vem_vazias_sem_apuratorio_nenhum() {
+    com_app_e_banco("ipc_opcoes_filtro", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+
+        let envelope = invocar(&webview, "proceedings_filter_options", json!({}));
+        let dados = ok(&envelope);
+        for lista in [
+            "tipos_apuratorio",
+            "unidades",
+            "responsaveis",
+            "vitimas",
+            "anos",
+            "locais_fato",
+            "envolvidos",
+            "documentos_iniciadores",
+        ] {
+            assert_eq!(dados[lista], json!([]), "{lista}: {dados}");
         }
     });
 }

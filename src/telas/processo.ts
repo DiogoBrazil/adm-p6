@@ -29,6 +29,10 @@ import {
   type MilitarQualificado,
   type PapelItem,
   type PessoaRequest,
+  type ProceedingFilter,
+  type ProceedingFilterOptions,
+  type ProceedingListResult,
+  type ProceedingSituation,
   type VitimaRequest,
   type SaveProceedingRequest,
   type SelecaoInfracaoEstatuto,
@@ -45,6 +49,7 @@ import {
   formatarQualificacaoMilitar,
   ligarPaginacao,
   limparFormularioPendente,
+  montarModal,
   notificar,
   option,
   ITENS_POR_PAGINA,
@@ -1386,7 +1391,42 @@ export async function renderFormularioProcesso(
 
 // ── listagem ────────────────────────────────────────────────────────────────
 
-const filtro = { busca: "", concluido: null as boolean | null, ano: null as number | null };
+type FiltrosAvancados = {
+  tipo_apuratorio_id: string;
+  unidade_origem_id: string;
+  responsavel_id: string;
+  vitima_nome: string;
+  situacao: ProceedingSituation | "";
+  data_instauracao_inicio: string;
+  data_instauracao_fim: string;
+  ano: number | null;
+  municipio_fato_id: string;
+  envolvido_id: string;
+  documento_iniciador_id: string;
+};
+
+const filtrosAvancadosVazios = (): FiltrosAvancados => ({
+  tipo_apuratorio_id: "",
+  unidade_origem_id: "",
+  responsavel_id: "",
+  vitima_nome: "",
+  situacao: "",
+  data_instauracao_inicio: "",
+  data_instauracao_fim: "",
+  ano: null,
+  municipio_fato_id: "",
+  envolvido_id: "",
+  documento_iniciador_id: "",
+});
+
+const filtro: FiltrosAvancados & { busca: string } = {
+  busca: "",
+  ...filtrosAvancadosVazios(),
+};
+
+let opcoesFiltros: ProceedingFilterOptions | null = null;
+let sequenciaLista = 0;
+let temporizadorBusca: number | null = null;
 
 // O tamanho da página é o mesmo de toda listagem operacional.
 const POR_PAGINA = ITENS_POR_PAGINA;
@@ -1504,123 +1544,486 @@ function ligarTooltipsPessoas(): void {
   });
 }
 
+function argumentosDaLista(): ProceedingFilter {
+  return {
+    busca: filtro.busca.trim() || null,
+    tipo_apuratorio_id: filtro.tipo_apuratorio_id || null,
+    unidade_origem_id: filtro.unidade_origem_id || null,
+    responsavel_id: filtro.responsavel_id || null,
+    vitima_nome: filtro.vitima_nome || null,
+    situacao: filtro.situacao || null,
+    data_instauracao_inicio: filtro.data_instauracao_inicio || null,
+    data_instauracao_fim: filtro.data_instauracao_fim || null,
+    ano: filtro.ano,
+    municipio_fato_id: filtro.municipio_fato_id || null,
+    envolvido_id: filtro.envolvido_id || null,
+    documento_iniciador_id: filtro.documento_iniciador_id || null,
+    page: pagina,
+    per_page: POR_PAGINA,
+  };
+}
+
+function rotuloCatalogo(
+  itens: ProceedingFilterOptions[keyof Pick<ProceedingFilterOptions, "tipos_apuratorio" | "unidades" | "locais_fato" | "documentos_iniciadores">],
+  id: string,
+): string {
+  return itens.find((item) => item.id === id)?.rotulo ?? id;
+}
+
+function rotuloMilitarFiltro(
+  itens: ProceedingFilterOptions["responsaveis"] | ProceedingFilterOptions["envolvidos"],
+  id: string,
+): string {
+  const militar = itens.find((item) => item.id === id);
+  if (!militar) return id;
+  return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
+}
+
+function dataFiltroPtBr(valor: string): string {
+  const [ano, mes, dia] = valor.split("-");
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : valor;
+}
+
+type ChipFiltro = { chave: string; texto: string };
+
+function chipsDosFiltros(): ChipFiltro[] {
+  const opcoes = opcoesFiltros;
+  const chips: ChipFiltro[] = [];
+  if (filtro.tipo_apuratorio_id) {
+    chips.push({
+      chave: "tipo_apuratorio_id",
+      texto: `Tipo: ${opcoes ? rotuloCatalogo(opcoes.tipos_apuratorio, filtro.tipo_apuratorio_id) : filtro.tipo_apuratorio_id}`,
+    });
+  }
+  if (filtro.unidade_origem_id) {
+    chips.push({
+      chave: "unidade_origem_id",
+      texto: `Unidade: ${opcoes ? rotuloCatalogo(opcoes.unidades, filtro.unidade_origem_id) : filtro.unidade_origem_id}`,
+    });
+  }
+  if (filtro.responsavel_id) {
+    chips.push({
+      chave: "responsavel_id",
+      texto: `Encarregado: ${opcoes ? rotuloMilitarFiltro(opcoes.responsaveis, filtro.responsavel_id) : filtro.responsavel_id}`,
+    });
+  }
+  if (filtro.vitima_nome) chips.push({ chave: "vitima_nome", texto: `Vítima/Ofendido: ${filtro.vitima_nome}` });
+  if (filtro.situacao) {
+    const situacoes: Record<ProceedingSituation, string> = {
+      em_andamento: "Em andamento",
+      concluido: "Concluído",
+      no_prazo: "No prazo",
+      vencido: "Vencido",
+    };
+    chips.push({ chave: "situacao", texto: `Situação: ${situacoes[filtro.situacao]}` });
+  }
+  if (filtro.data_instauracao_inicio || filtro.data_instauracao_fim) {
+    const periodo = filtro.data_instauracao_inicio && filtro.data_instauracao_fim
+      ? `${dataFiltroPtBr(filtro.data_instauracao_inicio)} a ${dataFiltroPtBr(filtro.data_instauracao_fim)}`
+      : filtro.data_instauracao_inicio
+        ? `desde ${dataFiltroPtBr(filtro.data_instauracao_inicio)}`
+        : `até ${dataFiltroPtBr(filtro.data_instauracao_fim)}`;
+    chips.push({ chave: "periodo", texto: `Instauração: ${periodo}` });
+  }
+  if (filtro.ano !== null) chips.push({ chave: "ano", texto: `Ano: ${filtro.ano}` });
+  if (filtro.municipio_fato_id) {
+    chips.push({
+      chave: "municipio_fato_id",
+      texto: `Local: ${opcoes ? rotuloCatalogo(opcoes.locais_fato, filtro.municipio_fato_id) : filtro.municipio_fato_id}`,
+    });
+  }
+  if (filtro.envolvido_id) {
+    chips.push({
+      chave: "envolvido_id",
+      texto: `PM envolvido: ${opcoes ? rotuloMilitarFiltro(opcoes.envolvidos, filtro.envolvido_id) : filtro.envolvido_id}`,
+    });
+  }
+  if (filtro.documento_iniciador_id) {
+    chips.push({
+      chave: "documento_iniciador_id",
+      texto: `Documento: ${opcoes ? rotuloCatalogo(opcoes.documentos_iniciadores, filtro.documento_iniciador_id) : filtro.documento_iniciador_id}`,
+    });
+  }
+  return chips;
+}
+
+function htmlChipsFiltros(): string {
+  const chips = chipsDosFiltros();
+  if (!chips.length) return "";
+  return chips.map((chip) => `
+    <button type="button" class="filtro-chip" data-remover-filtro="${escapeHtml(chip.chave)}"
+            aria-label="Remover filtro ${escapeHtml(chip.texto)}">
+      <span>${escapeHtml(chip.texto)}</span><span aria-hidden="true">×</span>
+    </button>`).join("");
+}
+
+function limparCampoFiltro(chave: string): void {
+  if (chave === "periodo") {
+    filtro.data_instauracao_inicio = "";
+    filtro.data_instauracao_fim = "";
+  } else if (chave === "ano") {
+    filtro.ano = null;
+  } else if (chave === "situacao") {
+    filtro.situacao = "";
+  } else if (
+    chave === "tipo_apuratorio_id" || chave === "unidade_origem_id" ||
+    chave === "responsavel_id" || chave === "vitima_nome" ||
+    chave === "municipio_fato_id" || chave === "envolvido_id" ||
+    chave === "documento_iniciador_id"
+  ) {
+    filtro[chave] = "";
+  }
+}
+
+function htmlResultadosLista(resultado: ProceedingListResult): string {
+  const { items, total } = resultado;
+  return `
+    ${items.length
+      ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--fixa tabela-dados--larga tabela-dados--listagem tabela-processos">
+          <colgroup>
+            <col class="col-layout-tipo" />
+            <col class="col-layout-ano" />
+            <col class="col-layout-numero" />
+            <col class="col-layout-origem" />
+            <col class="col-layout-sei" />
+            <col class="col-layout-pessoa" />
+            <col class="col-layout-pessoa" />
+            <col class="col-layout-status" />
+            <col class="col-layout-acao" />
+          </colgroup>
+          <thead><tr>
+            <th class="col-tipo">Tipo</th>
+            <th class="col-ano">Ano</th>
+            <th class="col-numero-processo">Número</th>
+            <th class="col-origem">Origem</th>
+            <th class="col-sei">SEI</th>
+            <th class="col-pessoa">Encarregado</th>
+            <th class="col-pessoa">PM envolvido</th>
+            <th class="col-status-prazo">Status prazo</th>
+            <th class="col-acao">Ações</th>
+          </tr></thead>
+          <tbody>
+            ${items.map((p) => {
+              const encarregado = formatarQualificacaoMilitar(
+                p.responsavel_posto_graduacao,
+                p.responsavel_matricula,
+                p.responsavel_nome,
+              );
+              return `<tr>
+                <td class="col-tipo">${escapeHtml(p.apuratorio_sigla)}</td>
+                <td class="col-ano">${escapeHtml(p.data_instauracao.slice(0, 4))}</td>
+                <td class="col-numero-processo" title="${escapeHtml(p.numero_controle)}">${escapeHtml(p.numero_controle)}</td>
+                <td class="col-origem" title="${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}">${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}</td>
+                <td class="col-sei" title="${escapeHtml(p.processo_sei ?? "")}">${escapeHtml(p.processo_sei ?? "—")}</td>
+                <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
+                <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
+                <td class="col-status-prazo">${badgeStatusPrazo(p.concluido, p.prazo_dias_restantes)}</td>
+                <td class="col-acao"><div class="row-actions">${botaoIcone("abrir", "Abrir", { classe: "outline", dados: { processo: p.id } })}</div></td>
+              </tr>`;
+            }).join("")}
+          </tbody></table></div>`
+        : `<p class="empty">Nenhum apuratório encontrado.</p>`}
+    ${paginacao("processos", pagina, POR_PAGINA, total)}`;
+}
+
+function ligarResultadosLista(ctx: ContextoTela): void {
+  ligarPaginacao("processos", pagina, (nova) => {
+    pagina = nova;
+    void atualizarListaProcessos(ctx);
+  });
+  ligarTooltipsPessoas();
+  document.querySelectorAll<HTMLButtonElement>("[data-processo]").forEach((botao) => {
+    botao.addEventListener("click", () => void renderDetalheProcesso(ctx, botao.dataset.processo!));
+  });
+}
+
+function atualizarControlesFiltros(ctx: ContextoTela): void {
+  const chips = chipsDosFiltros();
+  const area = document.querySelector<HTMLElement>("#filtros-ativos");
+  if (area) {
+    area.innerHTML = htmlChipsFiltros();
+    area.hidden = chips.length === 0;
+  }
+  const contador = document.querySelector<HTMLElement>("[data-contador-filtros]");
+  if (contador) {
+    contador.textContent = String(chips.length);
+    contador.hidden = chips.length === 0;
+  }
+  const botao = document.querySelector<HTMLButtonElement>("#abrir-filtros-avancados");
+  if (botao) {
+    botao.setAttribute(
+      "aria-label",
+      chips.length === 0
+        ? "Filtros avançados"
+        : `Filtros avançados, ${chips.length} ${chips.length === 1 ? "aplicado" : "aplicados"}`,
+    );
+  }
+  area?.querySelectorAll<HTMLButtonElement>("[data-remover-filtro]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      limparCampoFiltro(botao.dataset.removerFiltro ?? "");
+      pagina = 1;
+      atualizarControlesFiltros(ctx);
+      void atualizarListaProcessos(ctx);
+    });
+  });
+}
+
+async function atualizarListaProcessos(ctx: ContextoTela): Promise<void> {
+  fecharTooltipPessoas();
+  const chamada = ++sequenciaLista;
+  const area = document.querySelector<HTMLElement>("#resultados-apuratorios");
+  const status = document.querySelector<HTMLElement>("#status-pesquisa-apuratorios");
+  area?.setAttribute("aria-busy", "true");
+  area?.classList.add("is-loading");
+  if (status) status.textContent = "Atualizando resultados…";
+
+  const resposta = await call("proceedings_list", { filter: argumentosDaLista() });
+  if (chamada !== sequenciaLista) return;
+  area?.removeAttribute("aria-busy");
+  area?.classList.remove("is-loading");
+  if (!resposta.ok || !resposta.data) {
+    if (status) status.textContent = "Não foi possível atualizar os resultados.";
+    notificar(resposta.error ?? "Falha ao listar.", "erro");
+    return;
+  }
+
+  pagina = resposta.data.page;
+  const total = document.querySelector<HTMLElement>("[data-total-apuratorios]");
+  if (total) total.textContent = `${resposta.data.total} registro(s)`;
+  if (area) area.innerHTML = htmlResultadosLista(resposta.data);
+  if (status) status.textContent = `${resposta.data.total} resultado(s).`;
+  ligarResultadosLista(ctx);
+}
+
+function rotuloOpcaoInativa(rotulo: string, ativo: boolean): string {
+  return ativo ? rotulo : `${rotulo} (inativo)`;
+}
+
+function opcoesCatalogoFiltro(
+  itens: ProceedingFilterOptions["tipos_apuratorio"],
+  selecionado: string,
+): string {
+  return itens.map((item) => option(item.id, rotuloOpcaoInativa(item.rotulo, item.ativo), item.id === selecionado)).join("");
+}
+
+function opcoesMilitarFiltro(
+  itens: ProceedingFilterOptions["responsaveis"],
+  selecionado: string,
+): string {
+  return itens.map((item) => option(
+    item.id,
+    rotuloOpcaoInativa(`${item.posto_graduacao} ${item.matricula} ${item.nome}`, item.ativo),
+    item.id === selecionado,
+  )).join("");
+}
+
+function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): void {
+  const opcoes = opcoesFiltros;
+  if (!opcoes) {
+    notificar("Não foi possível carregar as opções de filtros avançados.", "erro");
+    return;
+  }
+
+  let modal: ReturnType<typeof montarModal> = null;
+  const cancelar = () => modal?.fechar();
+  modal = montarModal(
+    `<div class="page-head">
+       <div><h1>Filtros avançados</h1><p>Combine quantos parâmetros forem necessários.</p></div>
+     </div>
+     <form id="form-filtros-avancados" class="form-filtros-avancados">
+       <div class="filtros-avancados-grid">
+         <label>Tipo de apuratório
+           <select name="tipo_apuratorio_id"><option value="">Todos</option>${opcoesCatalogoFiltro(opcoes.tipos_apuratorio, filtro.tipo_apuratorio_id)}</select>
+         </label>
+         <label>Situação
+           <select name="situacao">
+             <option value="">Todas</option>
+             ${option("em_andamento", "Em andamento", filtro.situacao === "em_andamento")}
+             ${option("concluido", "Concluído", filtro.situacao === "concluido")}
+             ${option("no_prazo", "No prazo", filtro.situacao === "no_prazo")}
+             ${option("vencido", "Vencido", filtro.situacao === "vencido")}
+           </select>
+         </label>
+         <label>Unidade
+           <select name="unidade_origem_id" data-select-pesquisavel><option value="">Todas</option>${opcoesCatalogoFiltro(opcoes.unidades, filtro.unidade_origem_id)}</select>
+         </label>
+         <label>Local dos fatos
+           <select name="municipio_fato_id" data-select-pesquisavel><option value="">Todos</option>${opcoesCatalogoFiltro(opcoes.locais_fato, filtro.municipio_fato_id)}</select>
+         </label>
+         <label>Encarregado
+           <select name="responsavel_id" data-select-pesquisavel><option value="">Todos</option>${opcoesMilitarFiltro(opcoes.responsaveis, filtro.responsavel_id)}</select>
+         </label>
+         <label>PM envolvido
+           <select name="envolvido_id" data-select-pesquisavel><option value="">Todos</option>${opcoesMilitarFiltro(opcoes.envolvidos, filtro.envolvido_id)}</select>
+         </label>
+         <label>Vítima/Ofendido
+           <select name="vitima_nome" data-select-pesquisavel><option value="">Todos</option>${opcoes.vitimas.map((nome) => option(nome, nome, nome === filtro.vitima_nome)).join("")}</select>
+         </label>
+         <label>Documento iniciador
+           <select name="documento_iniciador_id" data-select-pesquisavel><option value="">Todos</option>${opcoesCatalogoFiltro(opcoes.documentos_iniciadores, filtro.documento_iniciador_id)}</select>
+         </label>
+         <label>Ano
+           <select name="ano"><option value="">Todos</option>${opcoes.anos.map((ano) => option(String(ano), String(ano), ano === filtro.ano)).join("")}</select>
+         </label>
+         <label>Data de instauração (início)
+           <input name="data_instauracao_inicio" type="date" value="${escapeHtml(filtro.data_instauracao_inicio)}" />
+         </label>
+         <label>Data de instauração (fim)
+           <input name="data_instauracao_fim" type="date" value="${escapeHtml(filtro.data_instauracao_fim)}" />
+         </label>
+       </div>
+       <p class="error filtro-modal__erro" data-erro-filtros hidden></p>
+       <div class="form-actions form-actions--filtros">
+         <button type="button" class="secondary" data-limpar-filtros>Limpar filtros</button>
+         <button type="button" class="outline" data-fechar-modal>Cancelar</button>
+         <button type="submit">Aplicar filtros</button>
+       </div>
+     </form>`,
+    "Filtros avançados de apuratórios",
+    cancelar,
+    gatilho,
+  );
+  if (!modal) return;
+  modal.overlay.querySelector<HTMLElement>(".modal")?.classList.add("modal--filtros");
+
+  const form = modal.overlay.querySelector<HTMLFormElement>("#form-filtros-avancados")!;
+  const inicio = form.elements.namedItem("data_instauracao_inicio") as HTMLInputElement;
+  const fim = form.elements.namedItem("data_instauracao_fim") as HTMLInputElement;
+  const sincronizarDatas = () => {
+    fim.min = inicio.value;
+    inicio.max = fim.value;
+  };
+  inicio.addEventListener("input", sincronizarDatas);
+  fim.addEventListener("input", sincronizarDatas);
+  sincronizarDatas();
+  const erroDosFiltros = () => form.querySelector<HTMLElement>("[data-erro-filtros]")!;
+
+  form.addEventListener("submit", (evento) => {
+    evento.preventDefault();
+    const dados = new FormData(form);
+    const dataInicio = String(dados.get("data_instauracao_inicio") ?? "");
+    const dataFim = String(dados.get("data_instauracao_fim") ?? "");
+    const erro = erroDosFiltros();
+    if (dataInicio && dataFim && dataInicio > dataFim) {
+      erro.textContent = "A data inicial não pode ser posterior à data final.";
+      erro.hidden = false;
+      inicio.focus();
+      return;
+    }
+
+    Object.assign(filtro, {
+      tipo_apuratorio_id: String(dados.get("tipo_apuratorio_id") ?? ""),
+      unidade_origem_id: String(dados.get("unidade_origem_id") ?? ""),
+      responsavel_id: String(dados.get("responsavel_id") ?? ""),
+      vitima_nome: String(dados.get("vitima_nome") ?? ""),
+      situacao: String(dados.get("situacao") ?? "") as ProceedingSituation | "",
+      data_instauracao_inicio: dataInicio,
+      data_instauracao_fim: dataFim,
+      ano: Number(dados.get("ano")) || null,
+      municipio_fato_id: String(dados.get("municipio_fato_id") ?? ""),
+      envolvido_id: String(dados.get("envolvido_id") ?? ""),
+      documento_iniciador_id: String(dados.get("documento_iniciador_id") ?? ""),
+    });
+    pagina = 1;
+    modal?.fechar();
+    atualizarControlesFiltros(ctx);
+    void atualizarListaProcessos(ctx);
+  });
+
+  // Limpar esvazia o formulário e **mantém o modal aberto**: quem limpou quase
+  // sempre quer remontar outro conjunto de filtros. Só Aplicar fecha e
+  // recarrega — e, por isso, Cancelar depois de limpar descarta a limpeza junto
+  // com o resto, que é o que cancelar quer dizer.
+  form.querySelector<HTMLButtonElement>("[data-limpar-filtros]")?.addEventListener("click", () => {
+    form.querySelectorAll<HTMLSelectElement>("select").forEach((select) => {
+      // Zerar só o `value` deixa o controle visível do Tom Select exibindo a
+      // opção antiga: quem manda no que aparece é a instância, não o `<select>`.
+      if (select.tomselect) select.tomselect.clear(true);
+      else select.value = "";
+    });
+    inicio.value = "";
+    fim.value = "";
+    sincronizarDatas();
+    erroDosFiltros().hidden = true;
+    // Focar o `<select>` cru de um campo pesquisável mandaria o foco para o
+    // elemento que o Tom Select mantém recortado — o mesmo lugar errado onde a
+    // validação amigável ainda cai. Quem recebe o foco é o controle visível.
+    const primeiro = form.querySelector<HTMLSelectElement>("select");
+    if (primeiro?.tomselect) primeiro.tomselect.focus();
+    else primeiro?.focus();
+  });
+}
+
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
   fecharTooltipPessoas();
   limparFormularioPendente();
-  const resposta = await call("proceedings_list", {
-    filter: {
-      busca: filtro.busca || null,
-      concluido: filtro.concluido,
-      ano: filtro.ano,
-      page: pagina,
-      per_page: POR_PAGINA,
-    },
-  });
+  if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
+  const [resposta, respostaOpcoes] = await Promise.all([
+    call("proceedings_list", { filter: argumentosDaLista() }),
+    call("proceedings_filter_options", {}),
+  ]);
   if (!resposta.ok || !resposta.data) {
     ctx.shell(`<section class="panel"><p class="error">${escapeHtml(resposta.error ?? "Falha ao listar.")}</p></section>`);
     return;
   }
-
-  const { items, total } = resposta.data;
-  const podeEscrever = ctx.podeEscrever();
+  opcoesFiltros = respostaOpcoes.ok ? respostaOpcoes.data : null;
+  pagina = resposta.data.page;
 
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Apuratórios</h1><p>${total} registro(s)</p></div>
-        ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
+        <div><h1>Apuratórios</h1><p data-total-apuratorios>${resposta.data.total} registro(s)</p></div>
+        ${ctx.podeEscrever() ? `<button id="novo">Novo</button>` : ""}
       </div>
-      <div class="filtros">
-        <input id="busca" type="search" placeholder="Número, SEI, resumo…" value="${escapeHtml(filtro.busca)}" />
-        <label>Situação <select id="concluido">
-          <option value="">todas</option>
-          <option value="false"${filtro.concluido === false ? " selected" : ""}>em andamento</option>
-          <option value="true"${filtro.concluido === true ? " selected" : ""}>concluídos</option>
-        </select></label>
+      <div class="filtros filtros-lista-apuratorios">
+        <label class="busca-lista-apuratorios">
+          <span>Pesquisar</span>
+          <input id="busca" type="search" autocomplete="off"
+                 placeholder="Número, SEI, resumo, encarregado ou envolvido…"
+                 aria-controls="resultados-apuratorios" value="${escapeHtml(filtro.busca)}" />
+        </label>
+        <button id="abrir-filtros-avancados" type="button" class="outline botao-filtros-avancados"
+                aria-haspopup="dialog">
+          Filtros avançados <span class="contador-filtros" data-contador-filtros hidden></span>
+        </button>
+        <span id="status-pesquisa-apuratorios" class="status-pesquisa" aria-live="polite"></span>
       </div>
-      ${
-        items.length
-          ? `<div class="table-wrap table-wrap--viewport"><table class="tabela-dados tabela-dados--fixa tabela-dados--larga tabela-dados--listagem tabela-processos">
-              <colgroup>
-                <col class="col-layout-tipo" />
-                <col class="col-layout-ano" />
-                <col class="col-layout-numero" />
-                <col class="col-layout-origem" />
-                <col class="col-layout-sei" />
-                <col class="col-layout-pessoa" />
-                <col class="col-layout-pessoa" />
-                <col class="col-layout-status" />
-                <col class="col-layout-acao" />
-              </colgroup>
-              <thead><tr>
-                <th class="col-tipo">Tipo</th>
-                <th class="col-ano">Ano</th>
-                <th class="col-numero-processo">Número</th>
-                <th class="col-origem">Origem</th>
-                <th class="col-sei">SEI</th>
-                <th class="col-pessoa">Encarregado</th>
-                <th class="col-pessoa">PM envolvido</th>
-                <th class="col-status-prazo">Status prazo</th>
-                <th class="col-acao">Ações</th>
-              </tr></thead>
-              <tbody>
-                ${items
-                  .map((p) => {
-                    const encarregado = formatarQualificacaoMilitar(
-                      p.responsavel_posto_graduacao,
-                      p.responsavel_matricula,
-                      p.responsavel_nome,
-                    );
-                    return `
-                  <tr>
-                    <td class="col-tipo">${escapeHtml(p.apuratorio_sigla)}</td>
-                    <td class="col-ano">${escapeHtml(p.data_instauracao.slice(0, 4))}</td>
-                    <td class="col-numero-processo" title="${escapeHtml(p.numero_controle)}">${escapeHtml(p.numero_controle)}</td>
-                    <td class="col-origem" title="${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}">${escapeHtml(formatarOrigem(p.unidade_origem, p.subunidade_secao_origem))}</td>
-                    <td class="col-sei" title="${escapeHtml(p.processo_sei ?? "")}">${escapeHtml(p.processo_sei ?? "—")}</td>
-                    <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
-                    <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
-                    <td class="col-status-prazo">${badgeStatusPrazo(p.concluido, p.prazo_dias_restantes)}</td>
-                    <td class="col-acao"><div class="row-actions">${botaoIcone("abrir", "Abrir", { classe: "outline", dados: { processo: p.id } })}</div></td>
-                  </tr>`;
-                  })
-                  .join("")}
-              </tbody></table></div>`
-          : `<p class="empty">Nenhum apuratório encontrado.</p>`
-      }
-      ${paginacao("processos", pagina, POR_PAGINA, total)}
+      <div id="filtros-ativos" class="filtros-ativos" role="group" aria-label="Filtros aplicados" hidden></div>
+      <div id="resultados-apuratorios">${htmlResultadosLista(resposta.data)}</div>
     </section>
   `);
 
-  ligarPaginacao("processos", pagina, (nova) => {
-    pagina = nova;
-    void renderListaProcessos(ctx);
-  });
-  ligarTooltipsPessoas();
+  atualizarControlesFiltros(ctx);
+  ligarResultadosLista(ctx);
 
-  // Mudar filtro volta para a primeira página: seguir na 3ª de um resultado
-  // que agora tem 1 mostraria tela vazia sem dizer por quê.
-  const recarregar = () => {
-    pagina = 1;
-    void renderListaProcessos(ctx);
-  };
   const busca = document.querySelector<HTMLInputElement>("#busca");
-  busca?.addEventListener("change", () => {
-    filtro.busca = busca.value.trim();
-    recarregar();
+  const pesquisarAgora = () => {
+    if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
+    filtro.busca = busca?.value ?? "";
+    pagina = 1;
+    void atualizarListaProcessos(ctx);
+  };
+  busca?.addEventListener("input", () => {
+    filtro.busca = busca.value;
+    pagina = 1;
+    if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
+    temporizadorBusca = window.setTimeout(() => {
+      temporizadorBusca = null;
+      void atualizarListaProcessos(ctx);
+    }, 250);
   });
-  document.querySelector<HTMLSelectElement>("#concluido")?.addEventListener("change", (e) => {
-    const v = (e.currentTarget as HTMLSelectElement).value;
-    filtro.concluido = v === "" ? null : v === "true";
-    recarregar();
+  busca?.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter") {
+      evento.preventDefault();
+      pesquisarAgora();
+    }
   });
 
+  document.querySelector<HTMLButtonElement>("#abrir-filtros-avancados")?.addEventListener("click", (evento) => {
+    abrirFiltrosAvancados(ctx, evento.currentTarget as HTMLButtonElement);
+  });
   document.querySelector<HTMLButtonElement>("#novo")?.addEventListener("click", () => {
     void renderFormularioProcesso(ctx, null);
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-processo]").forEach((botao) => {
-    botao.addEventListener("click", () => void renderDetalheProcesso(ctx, botao.dataset.processo!));
   });
 }
 

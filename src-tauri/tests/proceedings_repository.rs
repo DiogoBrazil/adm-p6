@@ -15,12 +15,12 @@ use adm_p6_tauri_lib::deadlines::{
 use adm_p6_tauri_lib::evidence::domain::{AcusacoesRequest, SelecaoInfracaoPenal};
 use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
-    PessoaRequest, ProceedingFilter, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
-    VitimaRequest,
+    PessoaRequest, ProceedingFilter, ProceedingSituation, SaveProceedingRequest,
+    SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest,
+    UploadAttachmentRequest, VitimaRequest,
 };
 use adm_p6_tauri_lib::proceedings::repository;
-use chrono::NaiveDate;
+use chrono::{Datelike, Local, NaiveDate};
 use sqlx::PgPool;
 
 mod util;
@@ -2040,9 +2040,16 @@ async fn limite_de_ocupantes_fala_antes_da_constraint() {
 
 /// Monta três processos com atributos distintos para exercitar cada filtro.
 async fn cenario_de_listagem(pool: &PgPool, m: &Mundo) -> (String, String, String) {
+    habilitar_vitima(pool, &m.apuratorio, true).await;
     let mut a = base(m, "001");
     a.resumo_fatos = Some("furto de equipamento".to_string());
     a.data_recebimento = Some(data(2026, 1, 12));
+    a.vitimas = vec![vitima("Ofendido da Lista", 1)];
+    // Envolvido sem militar identificado: a busca textual passa por
+    // `JOIN policiais_militares` e não pode fazer o apuratório sumir.
+    a.envolvidos = vec![envolvido_a_apurar(m, 1)];
+    a.designacoes
+        .push(designacao(m, &m.pm_tres, &m.papel_escrivao));
     let a = salvar(pool, &a).await.unwrap();
 
     let mut b = base(m, "002");
@@ -2067,9 +2074,11 @@ async fn cenario_de_listagem(pool: &PgPool, m: &Mundo) -> (String, String, Strin
 
     let mut c = base(m, "003");
     c.natureza_fato_id = Some(m.natureza_transito.clone());
+    c.data_instauracao = Local::now().date_naive();
+    c.data_recebimento = Some(Local::now().date_naive());
     c.envolvidos = vec![EnvolvidoRequest {
         e_condutor: true,
-        ..envolvido(m, &m.pm_dois, 1)
+        ..envolvido(m, &m.pm_tres, 1)
     }];
     c.designacoes = vec![designacao(m, &m.pm_dois, &m.papel_encarregado)];
     let c = salvar(pool, &c).await.unwrap();
@@ -2092,7 +2101,9 @@ async fn listagem_aplica_cada_filtro_e_pagina() {
         assert_eq!(todos.total, 3);
         assert_eq!(todos.page, 1);
 
-        // Busca textual no resumo dos fatos.
+        // Busca textual no resumo dos fatos. `a` é o do envolvido "À apurar", e
+        // achá-lo aqui prova que o `JOIN policiais_militares` da busca por
+        // envolvido não elimina quem ainda não tem militar identificado.
         let r = so(ProceedingFilter {
             busca: Some("EQUIPAMENTO".to_string()),
             ..Default::default()
@@ -2100,6 +2111,32 @@ async fn listagem_aplica_cada_filtro_e_pagina() {
         .await;
         assert_eq!(r.total, 1);
         assert_eq!(r.items[0].id, a);
+
+        // A busca textual alcança o responsável vigente e os envolvidos, mas
+        // não confunde o Escrivão vigente com o responsável do apuratório.
+        let r = so(ProceedingFilter {
+            busca: Some("PM DOIS".to_string()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
+        let r = so(ProceedingFilter {
+            busca: Some("PM TRES".to_string()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
+        // O nome é gravado em caixa alta por `users::repository::save`; quem
+        // digita não sabe disso. É o `lower(...) LIKE` dos dois lados.
+        let r = so(ProceedingFilter {
+            busca: Some("pm dois".to_string()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
 
         // Escopo por espécie: substitui o `IN ('IPM','SR','SV')` de sigla.
         let r = so(ProceedingFilter {
@@ -2118,6 +2155,15 @@ async fn listagem_aplica_cada_filtro_e_pagina() {
         assert_eq!(r.total, 1);
         assert_eq!(r.items[0].id, c);
 
+        // Uma designação vigente de outro papel não satisfaz o filtro de
+        // Encarregado/responsável.
+        let r = so(ProceedingFilter {
+            responsavel_id: Some(m.pm_tres.clone()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 0);
+
         // Responsável resolvido pelo papel `e_responsavel`.
         let r = so(ProceedingFilter {
             responsavel_id: Some(m.pm_dois.clone()),
@@ -2135,27 +2181,95 @@ async fn listagem_aplica_cada_filtro_e_pagina() {
         assert_eq!(r.total, 1);
         assert_eq!(r.items[0].id, b);
 
-        // Concluído é derivado de `data_conclusao IS NOT NULL`.
-        let r = so(ProceedingFilter {
-            concluido: Some(true),
-            ..Default::default()
-        })
-        .await;
-        assert_eq!(r.total, 1);
-        assert!(r.items[0].concluido);
-        let r = so(ProceedingFilter {
-            concluido: Some(false),
-            ..Default::default()
-        })
-        .await;
-        assert_eq!(r.total, 2);
-
         let r = so(ProceedingFilter {
             unidade_origem_id: Some(m.unidade.clone()),
             ..Default::default()
         })
         .await;
         assert_eq!(r.total, 3);
+
+        let r = so(ProceedingFilter {
+            vitima_nome: Some("ofendido da lista".to_string()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, a);
+
+        let r = so(ProceedingFilter {
+            envolvido_id: Some(m.pm_tres.clone()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
+
+        let r = so(ProceedingFilter {
+            municipio_fato_id: Some(m.municipio.clone()),
+            documento_iniciador_id: Some(m.documento.clone()),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 3);
+
+        let hoje = Local::now().date_naive();
+        let r = so(ProceedingFilter {
+            data_instauracao_inicio: Some(hoje),
+            data_instauracao_fim: Some(hoje),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
+
+        // Concluído é derivado de `data_conclusao IS NOT NULL`; em andamento é o
+        // complemento, e inclui quem não tem prazo nenhum.
+        let r = so(ProceedingFilter {
+            situacao: Some(ProceedingSituation::Concluido),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, b);
+        assert!(r.items[0].concluido);
+        let r = so(ProceedingFilter {
+            situacao: Some(ProceedingSituation::EmAndamento),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 2);
+        let r = so(ProceedingFilter {
+            situacao: Some(ProceedingSituation::Vencido),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, a);
+        let r = so(ProceedingFilter {
+            situacao: Some(ProceedingSituation::NoPrazo),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
+
+        let tipo_apuratorio_id: String = sqlx::query_scalar(
+            "SELECT tipo_apuratorio_id::text FROM apuratorios WHERE id = $1::uuid",
+        )
+        .bind(&m.apuratorio)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let r = so(ProceedingFilter {
+            tipo_apuratorio_id: Some(tipo_apuratorio_id),
+            responsavel_id: Some(m.pm_dois.clone()),
+            envolvido_id: Some(m.pm_tres.clone()),
+            situacao: Some(ProceedingSituation::NoPrazo),
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(r.total, 1);
+        assert_eq!(r.items[0].id, c);
 
         // Paginação: total continua sendo o do conjunto inteiro.
         let r = so(ProceedingFilter {
@@ -2166,6 +2280,266 @@ async fn listagem_aplica_cada_filtro_e_pagina() {
         .await;
         assert_eq!(r.total, 3);
         assert_eq!(r.items.len(), 1);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn situacao_no_prazo_exclui_apuratorio_sem_prazo_vigente() {
+    util::com_banco_descartavel("proc_lista_sem_prazo", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.data_instauracao = Local::now().date_naive();
+        // Com recebimento nasce o prazo inicial — é o que dá o que remover
+        // depois. Sem isso o `DELETE` abaixo não apagaria nada e o teste
+        // passaria sem exercitar o caso.
+        req.data_recebimento = Some(Local::now().date_naive());
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let situacao = |s: ProceedingSituation| {
+            let pool = pool.clone();
+            async move {
+                repository::list(
+                    &pool,
+                    &ProceedingFilter {
+                        situacao: Some(s),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+                .total
+            }
+        };
+
+        assert_eq!(situacao(ProceedingSituation::NoPrazo).await, 1);
+
+        let apagados = sqlx::query("DELETE FROM processo_prazos WHERE processo_id = $1::uuid")
+            .bind(&id)
+            .execute(&pool)
+            .await
+            .unwrap()
+            .rows_affected();
+        assert_eq!(apagados, 1);
+
+        // Sem prazo nenhum não há como estar "no prazo" nem "vencido" — mas o
+        // apuratório segue em andamento, e não pode sumir da listagem por isso.
+        assert_eq!(situacao(ProceedingSituation::NoPrazo).await, 0);
+        assert_eq!(situacao(ProceedingSituation::Vencido).await, 0);
+        assert_eq!(situacao(ProceedingSituation::EmAndamento).await, 1);
+    })
+    .await;
+}
+
+/// A fronteira entre "no prazo" e "vencido" é o dia do vencimento.
+///
+/// Vencer **hoje** ainda é estar no prazo (`data_vencimento >= CURRENT_DATE`), e
+/// é o mesmo corte que a tela usa no badge: `statusPrazo` escreve "Vence hoje"
+/// com `diasRestantes === 0`, e só passa a "Vencido há N dias" abaixo de zero.
+/// Um dia de diferença aqui classificaria errado todo apuratório que vence no
+/// dia em que alguém abre a listagem.
+#[tokio::test]
+async fn vencer_hoje_ainda_e_no_prazo_e_vencido_comeca_ontem() {
+    util::com_banco_descartavel("proc_lista_vence_hoje", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.data_instauracao = Local::now().date_naive();
+        req.data_recebimento = Some(Local::now().date_naive());
+        let id = salvar(&pool, &req).await.unwrap();
+
+        // `data_vencimento` é coluna gerada (`data_inicio + dias`): quem se move
+        // para pousar o vencimento no dia desejado é o início.
+        let vencer_em = |offset: i64| {
+            let pool = pool.clone();
+            let id = id.clone();
+            async move {
+                sqlx::query(
+                    "UPDATE processo_prazos
+                        SET data_inicio = CURRENT_DATE + $2 - dias
+                      WHERE processo_id = $1::uuid",
+                )
+                .bind(&id)
+                .bind(offset as i32)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+        };
+        let situacao = |s: ProceedingSituation| {
+            let pool = pool.clone();
+            async move {
+                repository::list(
+                    &pool,
+                    &ProceedingFilter {
+                        situacao: Some(s),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+                .total
+            }
+        };
+
+        vencer_em(0).await;
+        assert_eq!(situacao(ProceedingSituation::NoPrazo).await, 1);
+        assert_eq!(situacao(ProceedingSituation::Vencido).await, 0);
+
+        vencer_em(-1).await;
+        assert_eq!(situacao(ProceedingSituation::NoPrazo).await, 0);
+        assert_eq!(situacao(ProceedingSituation::Vencido).await, 1);
+
+        // Em qualquer dos dois o apuratório continua em andamento: "no prazo" e
+        // "vencido" recortam essa situação, não são alternativas a ela.
+        assert_eq!(situacao(ProceedingSituation::EmAndamento).await, 1);
+    })
+    .await;
+}
+
+/// As opções do modal saem dos apuratórios, e `ativo` só decide o rótulo.
+///
+/// Os dois eixos são independentes e o teste cruza os quatro cantos: um cadastro
+/// **inativo e em uso** continua na lista (senão o apuratório de 2019 ficaria
+/// infiltrável pela unidade desativada em 2026), e um cadastro **ativo e nunca
+/// usado** fica de fora — inclusive as dezenas de municípios que a `0003`
+/// semeia, que só ofereceriam recorte vazio.
+#[tokio::test]
+async fn opcoes_de_filtro_saem_dos_apuratorios_e_o_ativo_so_rotula() {
+    util::com_banco_descartavel("proc_lista_opcoes", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        cenario_de_listagem(&pool, &m).await;
+
+        // Encarregado marcado no cadastro, mas sem designação nenhuma: é o que
+        // separa "pode vir a responder" de "responde por algum apuratório".
+        let encarregado_ocioso: String = sqlx::query_scalar(
+            "INSERT INTO policiais_militares (matricula, nome, posto_graduacao_id, is_encarregado)
+             SELECT '100000009', 'PM SEM DESIGNACAO', pm.posto_graduacao_id, true
+               FROM policiais_militares pm WHERE pm.id = $1::uuid
+             RETURNING id::text",
+        )
+        .bind(&m.pm_um)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        // Desativa somente o que está em uso. `unidade_deprecada`,
+        // `documento_curto` e o encarregado ocioso ficam ATIVOS de propósito: a
+        // ausência deles é que prova o recorte pelos fatos.
+        sqlx::query("UPDATE unidades_pm SET ativo = false WHERE id = $1::uuid")
+            .bind(&m.unidade)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE policiais_militares SET ativo = false
+              WHERE id IN ($1::uuid, $2::uuid)",
+        )
+        .bind(&m.pm_dois)
+        .bind(&m.pm_tres)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE tipos_documento SET ativo = false WHERE id = $1::uuid")
+            .bind(&m.documento)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE municipios_distritos SET ativo = false WHERE id = $1::uuid")
+            .bind(&m.municipio)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "UPDATE tipos_apuratorio SET ativo = false
+              WHERE id = (SELECT tipo_apuratorio_id FROM apuratorios WHERE id = $1::uuid)",
+        )
+        .bind(&m.apuratorio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let opcoes = repository::filter_options(&pool).await.unwrap();
+
+        // Unidade: a usada permanece mesmo inativa; a ativa e nunca usada não entra.
+        let unidade_usada = opcoes
+            .unidades
+            .iter()
+            .find(|opcao| opcao.id == m.unidade)
+            .expect("unidade inativa em uso permanece disponível");
+        assert!(!unidade_usada.ativo);
+        assert!(
+            opcoes
+                .unidades
+                .iter()
+                .all(|opcao| opcao.id != m.unidade_deprecada),
+            "unidade ativa que nenhum apuratório usa não aparece"
+        );
+
+        // Responsável é quem tem designação vigente no papel `e_responsavel`.
+        let responsavel = opcoes
+            .responsaveis
+            .iter()
+            .find(|opcao| opcao.id == m.pm_dois)
+            .expect("responsável inativo em uso permanece disponível");
+        assert!(!responsavel.ativo);
+        assert_eq!(responsavel.matricula, "100000002");
+        assert_eq!(responsavel.posto_graduacao, "TST PM");
+        // O ativo vem antes do inativo, e o Escrivão vigente não é responsável.
+        assert_eq!(opcoes.responsaveis[0].id, m.pm_um);
+        assert!(opcoes.responsaveis[0].ativo);
+        assert!(
+            opcoes
+                .responsaveis
+                .iter()
+                .all(|opcao| opcao.id != m.pm_tres),
+            "designação vigente de outro papel não faz um responsável"
+        );
+        assert!(
+            opcoes
+                .responsaveis
+                .iter()
+                .all(|opcao| opcao.id != encarregado_ocioso),
+            "`is_encarregado` sem designação não vira opção de Encarregado"
+        );
+
+        // Envolvido é quem consta em `processo_envolvidos`.
+        let envolvido = opcoes
+            .envolvidos
+            .iter()
+            .find(|opcao| opcao.id == m.pm_tres)
+            .expect("envolvido inativo em uso permanece disponível");
+        assert!(!envolvido.ativo);
+        assert!(
+            opcoes
+                .envolvidos
+                .iter()
+                .all(|opcao| opcao.id != m.pm_um && opcao.id != m.pm_dois),
+            "militar ativo que nunca foi envolvido não aparece"
+        );
+
+        assert_eq!(opcoes.vitimas, vec!["OFENDIDO DA LISTA".to_string()]);
+        assert!(opcoes.anos.contains(&2025));
+        assert!(opcoes.anos.contains(&Local::now().date_naive().year()));
+
+        // Só o município dos fatos, entre todos os que a `0003` semeia ativos.
+        assert_eq!(opcoes.locais_fato.len(), 1);
+        assert_eq!(opcoes.locais_fato[0].id, m.municipio);
+        assert!(!opcoes.locais_fato[0].ativo);
+        assert!(opcoes.locais_fato[0].rotulo.contains("Município"));
+
+        assert!(opcoes
+            .documentos_iniciadores
+            .iter()
+            .any(|opcao| opcao.id == m.documento && !opcao.ativo));
+        assert!(
+            opcoes
+                .documentos_iniciadores
+                .iter()
+                .all(|opcao| opcao.id != m.documento_curto),
+            "documento ativo que nenhum apuratório iniciou não aparece"
+        );
+        assert_eq!(opcoes.tipos_apuratorio.len(), 1);
+        assert!(!opcoes.tipos_apuratorio[0].ativo);
     })
     .await;
 }

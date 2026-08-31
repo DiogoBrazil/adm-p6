@@ -606,6 +606,26 @@ impl UpdateInvolvedOutcomeRequest {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProceedingSituation {
+    EmAndamento,
+    Concluido,
+    NoPrazo,
+    Vencido,
+}
+
+impl ProceedingSituation {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::EmAndamento => "em_andamento",
+            Self::Concluido => "concluido",
+            Self::NoPrazo => "no_prazo",
+            Self::Vencido => "vencido",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct ProceedingFilter {
     pub busca: Option<String>,
@@ -616,9 +636,43 @@ pub struct ProceedingFilter {
     pub natureza_fato_id: Option<String>,
     pub responsavel_id: Option<String>,
     pub ano: Option<i32>,
-    pub concluido: Option<bool>,
+    pub vitima_nome: Option<String>,
+    pub situacao: Option<ProceedingSituation>,
+    pub data_instauracao_inicio: Option<NaiveDate>,
+    pub data_instauracao_fim: Option<NaiveDate>,
+    pub municipio_fato_id: Option<String>,
+    pub envolvido_id: Option<String>,
+    pub documento_iniciador_id: Option<String>,
     pub page: Option<i64>,
     pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ProceedingFilterOption {
+    pub id: String,
+    pub rotulo: String,
+    pub ativo: bool,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ProceedingMilitaryFilterOption {
+    pub id: String,
+    pub nome: String,
+    pub matricula: String,
+    pub posto_graduacao: String,
+    pub ativo: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProceedingFilterOptions {
+    pub tipos_apuratorio: Vec<ProceedingFilterOption>,
+    pub unidades: Vec<ProceedingFilterOption>,
+    pub responsaveis: Vec<ProceedingMilitaryFilterOption>,
+    pub vitimas: Vec<String>,
+    pub anos: Vec<i32>,
+    pub locais_fato: Vec<ProceedingFilterOption>,
+    pub envolvidos: Vec<ProceedingMilitaryFilterOption>,
+    pub documentos_iniciadores: Vec<ProceedingFilterOption>,
 }
 
 #[derive(Debug, Serialize)]

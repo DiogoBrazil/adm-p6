@@ -915,6 +915,9 @@ export interface SaveProceedingRequest {
 }
 
 /** `proceedings` */
+export type ProceedingSituation = "em_andamento" | "concluido" | "no_prazo" | "vencido";
+
+/** `proceedings` */
 export interface ProceedingFilter {
   busca?: string | null;
   /** Espécies a incluir. Vazio = todas. Substitui os `IN (...)` de sigla. */
@@ -924,9 +927,43 @@ export interface ProceedingFilter {
   natureza_fato_id?: string | null;
   responsavel_id?: string | null;
   ano?: number | null;
-  concluido?: boolean | null;
+  vitima_nome?: string | null;
+  situacao?: ProceedingSituation | null;
+  data_instauracao_inicio?: string | null;
+  data_instauracao_fim?: string | null;
+  municipio_fato_id?: string | null;
+  envolvido_id?: string | null;
+  documento_iniciador_id?: string | null;
   page?: number | null;
   per_page?: number | null;
+}
+
+/** `proceedings` */
+export interface ProceedingFilterOption {
+  id: string;
+  rotulo: string;
+  ativo: boolean;
+}
+
+/** `proceedings` */
+export interface ProceedingMilitaryFilterOption {
+  id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  ativo: boolean;
+}
+
+/** `proceedings` */
+export interface ProceedingFilterOptions {
+  tipos_apuratorio: ProceedingFilterOption[];
+  unidades: ProceedingFilterOption[];
+  responsaveis: ProceedingMilitaryFilterOption[];
+  vitimas: string[];
+  anos: number[];
+  locais_fato: ProceedingFilterOption[];
+  envolvidos: ProceedingMilitaryFilterOption[];
+  documentos_iniciadores: ProceedingFilterOption[];
 }
 
 /** `proceedings` */

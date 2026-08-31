@@ -8,8 +8,9 @@ use crate::evidence::repository as evidence_repository;
 use crate::proceedings::domain::{
     validar_ordem_datas, AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest,
     CartaPrecatoriaDetalhes, ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest,
-    EnvolvidoItem, PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingListItem,
-    ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    EnvolvidoItem, PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingFilterOption,
+    ProceedingFilterOptions, ProceedingListItem, ProceedingListResult,
+    ProceedingMilitaryFilterOption, SaveProceedingRequest, SubstituirDesignacaoRequest,
     UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
     VitimaItem, EXTENSAO_CARTA_PRECATORIA, MOTIVO_DESIGNACAO_INICIAL,
 };
@@ -101,7 +102,9 @@ const BASE_CONTAGEM: &str = r#"
                pp.ativo,
                pp.apuratorio_id,
                aa.tipo_apuratorio_id,
+               pp.documento_iniciador_id,
                pp.unidade_origem_id,
+               pp.municipio_fato_id,
                pp.natureza_fato_id,
                pp.numero_documento,
                COALESCE(pp.numero_controle, pp.numero_documento) AS numero_controle,
@@ -124,17 +127,52 @@ const FILTRO: &str = r#"
            OR lower(v.numero_controle) LIKE $1
            OR lower(COALESCE(v.resumo_fatos, '')) LIKE $1
            OR lower(COALESCE(v.processo_sei, '')) LIKE $1
-           OR lower(COALESCE(v.numero_rgf, '')) LIKE $1)
+           OR lower(COALESCE(v.numero_rgf, '')) LIKE $1
+           OR EXISTS (
+              SELECT 1
+                FROM processo_designacoes d
+                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                          AND ap.papel_id = d.papel_id
+                JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+               WHERE d.processo_id = v.id AND d.data_fim IS NULL
+                 AND ap.e_responsavel AND lower(pm.nome) LIKE $1)
+           OR EXISTS (
+              SELECT 1
+                FROM processo_envolvidos e
+                JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+               WHERE e.processo_id = v.id AND lower(pm.nome) LIKE $1))
       AND ($2::uuid[] IS NULL OR v.apuratorio_id = ANY($2::uuid[]))
       AND ($3::uuid IS NULL OR v.tipo_apuratorio_id = $3::uuid)
       AND ($4::uuid IS NULL OR v.unidade_origem_id = $4::uuid)
       AND ($5::uuid IS NULL OR v.natureza_fato_id = $5::uuid)
       AND ($6::uuid IS NULL OR EXISTS (
-              SELECT 1 FROM processo_designacoes d
+              SELECT 1
+                FROM processo_designacoes d
+                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                          AND ap.papel_id = d.papel_id
                WHERE d.processo_id = v.id AND d.data_fim IS NULL
-                 AND d.policial_militar_id = $6::uuid))
+                 AND ap.e_responsavel AND d.policial_militar_id = $6::uuid))
       AND ($7::int IS NULL OR EXTRACT(YEAR FROM v.data_instauracao)::int = $7)
-      AND ($8::bool IS NULL OR v.concluido = $8)
+      AND ($8::text IS NULL OR EXISTS (
+              SELECT 1 FROM processo_vitimas vit
+               WHERE vit.processo_id = v.id
+                 AND lower(btrim(vit.nome)) = lower(btrim($8))))
+      AND ($9::text IS NULL
+           OR ($9 = 'em_andamento' AND NOT v.concluido)
+           OR ($9 = 'concluido' AND v.concluido)
+           OR ($9 = 'no_prazo' AND NOT v.concluido AND
+               (SELECT pr.data_vencimento FROM processo_prazos pr
+                 WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) >= CURRENT_DATE)
+           OR ($9 = 'vencido' AND NOT v.concluido AND
+               (SELECT pr.data_vencimento FROM processo_prazos pr
+                 WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) < CURRENT_DATE))
+      AND ($10::date IS NULL OR v.data_instauracao >= $10)
+      AND ($11::date IS NULL OR v.data_instauracao <= $11)
+      AND ($12::uuid IS NULL OR v.municipio_fato_id = $12::uuid)
+      AND ($13::uuid IS NULL OR EXISTS (
+              SELECT 1 FROM processo_envolvidos e
+               WHERE e.processo_id = v.id AND e.policial_militar_id = $13::uuid))
+      AND ($14::uuid IS NULL OR v.documento_iniciador_id = $14::uuid)
 "#;
 
 fn bind_filtro<'q, O>(
@@ -150,7 +188,13 @@ fn bind_filtro<'q, O>(
         .bind(filtro.natureza_fato_id.as_deref())
         .bind(filtro.responsavel_id.as_deref())
         .bind(filtro.ano)
-        .bind(filtro.concluido)
+        .bind(filtro.vitima_nome.as_deref())
+        .bind(filtro.situacao.as_ref().map(|situacao| situacao.as_str()))
+        .bind(filtro.data_instauracao_inicio)
+        .bind(filtro.data_instauracao_fim)
+        .bind(filtro.municipio_fato_id.as_deref())
+        .bind(filtro.envolvido_id.as_deref())
+        .bind(filtro.documento_iniciador_id.as_deref())
 }
 
 pub async fn list(
@@ -176,7 +220,7 @@ pub async fn list(
         sqlx::query_as::<_, ProceedingListItem>(&format!(
             "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA} {FILTRO}
              ORDER BY v.data_instauracao DESC, v.numero_documento
-             LIMIT $9 OFFSET $10"
+             LIMIT $15 OFFSET $16"
         )),
         filtro,
         busca,
@@ -191,6 +235,134 @@ pub async fn list(
         total: total.0,
         page,
         per_page,
+    })
+}
+
+/// Opções do modal de filtros avançados da listagem.
+///
+/// **Desvio deliberado da regra da seção 2 do guia** ("lista de opções filtra
+/// `WHERE ativo`"), e o motivo é que aqui a lista não é a mesma coisa. Um
+/// seletor de formulário oferece o que *pode* ser escolhido daqui para frente, e
+/// aí `ativo` é porta. Estas listas oferecem por onde *cortar o que já foi
+/// registrado* — e um valor que nenhum apuratório usa não corta nada: seria uma
+/// opção que devolve zero, em meio a dezenas de municípios semeados pela `0003`.
+///
+/// Então cada lista sai dos fatos: somente valores que algum apuratório **ativo**
+/// de fato registrou, como `anos` e `vitimas` já faziam por natureza. `ativo`
+/// continua no payload, mas como **rótulo** — é o princípio 6 pelo outro lado, o
+/// que garante que o apuratório de 2019 continue encontrável pela unidade
+/// desativada em 2026, marcada "(inativo)" na tela.
+///
+/// O envolvido "À apurar" é `policial_militar_id IS NULL` e por isso não gera
+/// opção nenhuma em `envolvidos`, que é o certo: não há por quem filtrar.
+pub async fn filter_options(pool: &PgPool) -> Result<ProceedingFilterOptions, sqlx::Error> {
+    let tipos_apuratorio = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT t.id::text AS id, t.nome AS rotulo, t.ativo
+           FROM tipos_apuratorio t
+          WHERE EXISTS (
+                SELECT 1
+                  FROM apuratorios a
+                  JOIN processos_procedimentos p ON p.apuratorio_id = a.id AND p.ativo
+                 WHERE a.tipo_apuratorio_id = t.id)
+          ORDER BY t.ativo DESC, t.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    let unidades = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT u.id::text AS id, u.nome AS rotulo, u.ativo
+           FROM unidades_pm u
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.unidade_origem_id = u.id AND p.ativo)
+          ORDER BY u.ativo DESC, u.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    // Responsável é o papel marcado `e_responsavel` na configuração do
+    // apuratório, com designação vigente — a mesma definição que o filtro usa e
+    // que a view resolve para a coluna Encarregado. `is_encarregado` do militar
+    // não entra: aqui a pergunta é quem responde por algum apuratório, não quem
+    // pode vir a responder.
+    let responsaveis = sqlx::query_as::<_, ProceedingMilitaryFilterOption>(
+        "SELECT pm.id::text AS id, pm.nome, pm.matricula,
+                pg.sigla AS posto_graduacao, pm.ativo
+           FROM policiais_militares pm
+           JOIN postos_graduacoes pg ON pg.id = pm.posto_graduacao_id
+          WHERE EXISTS (
+                SELECT 1
+                  FROM processo_designacoes d
+                  JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                            AND ap.papel_id = d.papel_id
+                  JOIN processos_procedimentos p ON p.id = d.processo_id AND p.ativo
+                 WHERE d.policial_militar_id = pm.id AND d.data_fim IS NULL
+                   AND ap.e_responsavel)
+          ORDER BY pm.ativo DESC, pm.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    // Nome de vítima é texto livre: o `upper(btrim(...))` colapsa as variações de
+    // caixa numa opção só, e o filtro compara em `lower(btrim(...))` — de modo
+    // que escolher a opção alcança todas as grafias gravadas.
+    let vitimas = sqlx::query_scalar(
+        "SELECT DISTINCT upper(btrim(v.nome))
+           FROM processo_vitimas v
+           JOIN processos_procedimentos p ON p.id = v.processo_id AND p.ativo
+          ORDER BY 1",
+    )
+    .fetch_all(pool)
+    .await?;
+    let anos = sqlx::query_scalar(
+        "SELECT DISTINCT EXTRACT(YEAR FROM data_instauracao)::int
+           FROM processos_procedimentos WHERE ativo ORDER BY 1 DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    let locais_fato = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT m.id::text AS id,
+                m.nome || CASE WHEN m.e_distrito THEN ' — Distrito' ELSE ' — Município' END AS rotulo,
+                m.ativo
+           FROM municipios_distritos m
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.municipio_fato_id = m.id AND p.ativo)
+          ORDER BY m.ativo DESC, m.nome, m.e_distrito",
+    )
+    .fetch_all(pool)
+    .await?;
+    let envolvidos = sqlx::query_as::<_, ProceedingMilitaryFilterOption>(
+        "SELECT pm.id::text AS id, pm.nome, pm.matricula,
+                pg.sigla AS posto_graduacao, pm.ativo
+           FROM policiais_militares pm
+           JOIN postos_graduacoes pg ON pg.id = pm.posto_graduacao_id
+          WHERE EXISTS (
+                SELECT 1
+                  FROM processo_envolvidos e
+                  JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+                 WHERE e.policial_militar_id = pm.id)
+          ORDER BY pm.ativo DESC, pm.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    let documentos_iniciadores = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT d.id::text AS id, d.nome AS rotulo, d.ativo
+           FROM tipos_documento d
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.documento_iniciador_id = d.id AND p.ativo)
+          ORDER BY d.ativo DESC, d.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(ProceedingFilterOptions {
+        tipos_apuratorio,
+        unidades,
+        responsaveis,
+        vitimas,
+        anos,
+        locais_fato,
+        envolvidos,
+        documentos_iniciadores,
     })
 }
 

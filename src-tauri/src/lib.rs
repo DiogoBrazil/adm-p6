@@ -62,6 +62,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             apuratorio_config::commands::apuratorio_config_deactivate_documento,
             apuratorio_config::commands::apuratorio_config_deactivate_papel,
             proceedings::commands::proceedings_list,
+            proceedings::commands::proceedings_filter_options,
             proceedings::commands::proceedings_get,
             proceedings::commands::proceedings_save,
             proceedings::commands::proceedings_delete,

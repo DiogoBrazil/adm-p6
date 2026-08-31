@@ -82,6 +82,7 @@ import type {
   PessoaRequest,
   ProceedingDetail,
   ProceedingFilter,
+  ProceedingFilterOptions,
   ProceedingListItem,
   ProceedingListResult,
   ReportFilter,
@@ -172,6 +173,7 @@ export interface Commands {
 
   // ── Processos e procedimentos ─────────────────────────────────────
   proceedings_list: { args: { filter?: ProceedingFilter | null }; result: ProceedingListResult };
+  proceedings_filter_options: { args: Record<string, never>; result: ProceedingFilterOptions };
   proceedings_get: { args: { id: string }; result: ProceedingDetail | null };
   proceedings_save: { args: { request: SaveProceedingRequest }; result: string };
   proceedings_delete: { args: { id: string }; result: boolean };

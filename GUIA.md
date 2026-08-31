@@ -26,8 +26,8 @@ sobre remover o schema `legado`.
 | Código | |
 |---|---:|
 | Migrations (`0001`–`0017`) | **17** |
-| Comandos Tauri, todos no cliente tipado | **85** |
-| Testes | **154** |
+| Comandos Tauri, todos no cliente tipado | **86** |
+| Testes | **162** |
 | Módulos Rust · linhas de Rust | 13 · 10.193 |
 | Arquivos de frontend · linhas de TS/CSS | 19 · 13.651 |
 | Catálogos administráveis | 26 |
@@ -58,6 +58,7 @@ sai só quando ela fechar.
 | 2 | **Criar uma carta precatória de ponta a ponta** | seção 11, item (f) | **Sim** |
 | 3 | **Conferir Ofendido/Vítima e o Resumo dos fatos na tela** — segue entre as áreas menos vistas por olho humano | seção 11, item (i) | **Sim** |
 | 3b | **Conferir "À apurar", os seletores pesquisáveis e o cadastro rápido** — nenhum deles existia antes, e o modal e a CSP só se provam no binário | seção 11, item **(k)** | **Sim** |
+| 3c | **Conferir a pesquisa instantânea e o modal de filtros avançados** — é o primeiro modal do app com seletor pesquisável **e** CSP restritiva ao mesmo tempo | seção 11, item **(l)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -788,6 +789,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Sincronizar coleção pelo id da entidade referida** | `DELETE … WHERE NOT (fk = ANY(...))` seguido de upsert pela FK: trocar o valor da FK deixa de ser correção e vira **apagar e recriar**, e tudo o que pendura na linha por `ON DELETE CASCADE` some junto. Identificar um envolvido "À apurar" levava com ele enquadramentos, indícios, resultado, situação e ordem | Sincronize pelo **id da própria linha**, que a edição devolve no request (`EnvolvidoRequest.id`). E ordene as escritas: identificados antes dos nulos, senão a transição simultânea nos dois sentidos colide no índice parcial de `À apurar` |
 | **`<select>` enfeitado que deixa de alimentar o `FormData`** | Trocar o `<select>` por uma lista de `<div>` derruba de uma vez o `FormData`, o `required` nativo, a validação amigável e as regras que leem `select.value` — e nada disso acusa em build | O Tom Select **mantém** o `<select>` original no DOM e o mantém sincronizado; ele só o esconde com `.ts-hidden-accessible` (clip, não `display:none`), que é o que preserva `required` — um controle obrigatório com `display:none` faz o navegador **recusar o submit em silêncio**, porque não consegue focá-lo |
 | Redesenhar o formulário sem destruir os selects pesquisáveis | O `innerHTML` novo descarta os `<select>` originais, mas os `TomSelect` ficam com listeners e estado presos ao DOM antigo. Vaza a cada rerender, e o formulário de processo redesenha a cada troca de apuratório, natureza, unidade ou envolvido | `dom.ts::destruirSelectsPesquisaveis` antes de todo redraw — já chamada de `main.ts::shell()` e do topo de `renderFormularioProcesso`. `destroy()` **restaura as opções originais**, então absorva o formulário para o rascunho *antes* de destruir |
+| Limpar um `<select>` pesquisável por `select.value = ""` | O `<select>` original zera, mas o controle visível continua exibindo o rótulo escolhido: quem desenha é a instância do Tom Select, e ela não observa a propriedade. O usuário vê um filtro que jurou ter limpado | `select.tomselect?.clear(true)` quando houver instância, e `select.value = ""` só no `<select>` cru. Ver o botão *Limpar filtros* em `processo.ts::abrirFiltrosAvancados` |
 | Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 
@@ -878,7 +880,9 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | o schema e o porquê de cada decisão | `src-tauri/migrations/0001_schema.sql` (comentado por seção) |
 | o que vem semeado e o que não vem | `src-tauri/migrations/0003_seed_catalogos_legais.sql` e `tests/migrations.rs` |
 | quais catálogos existem e o que cada atributo faz | `src-tauri/src/legal_catalogs/domain.rs::CATALOGOS` |
-| como o responsável do processo é resolvido sem nome de papel | `proceedings/repository.rs::JOIN_RESPONSAVEL` |
+| como o responsável do processo é resolvido sem nome de papel | o `LATERAL resp` da view, em `migrations/0014_subunidade_secao_origem.sql` — casa `processo_designacoes` com `apuratorio_papeis.e_responsavel`, e é a mesma definição que `proceedings/repository.rs::FILTRO` usa |
+| como a listagem de apuratórios pesquisa e filtra | `proceedings/repository.rs::FILTRO` (um `WHERE` para as duas fontes) e `bind_filtro` |
+| de onde saem as opções do modal de filtros avançados | `proceedings/repository.rs::filter_options` (cabeçalho) — e por que elas **não** filtram `WHERE ativo` |
 | as validações que dependem de configuração | `proceedings/repository.rs::validar_contra_configuracao` |
 | como a cadeia de substituição é ligada e protegida | `migrations/0008_cadeia_de_substituicao.sql` |
 | quem pode ser corrigido ou desfeito numa cadeia | `proceedings/repository.rs::travar_ultima_substituicao` |
@@ -892,7 +896,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql`, sua ampliação na `0014_subunidade_secao_origem.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 85 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 86 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
 | por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
@@ -1576,7 +1580,45 @@ papel de pessoa:
 
 ---
 
-## 12. Changelog — as 23 rodadas
+### l) Pesquisa instantânea e filtros avançados dos apuratórios (seção 12, rodada 24)
+
+Mesma advertência da (k): o binário de produção, e o console aberto. O modal de filtros
+é o **primeiro** lugar do app em que um `TomSelect` vive dentro de um modal que a CSP
+restritiva também governa — os dois já foram exercitados, mas nunca juntos.
+
+#### A pesquisa que filtra ao digitar
+
+- [ ] Digitar filtra sozinho, sem apertar nada; o **foco e a posição do cursor** ficam
+      onde estavam, e a barra de pesquisa não pisca
+- [ ] A busca acha por **número, controle, SEI, RGF, resumo**, e agora também por
+      **nome do encarregado** e **nome de PM envolvido**
+- [ ] Digitar rápido e apagar em seguida não deixa um resultado antigo na tela —
+      é o descarte de resposta atrasada
+- [ ] Apagar tudo devolve a listagem inteira, na página 1
+
+#### O modal de filtros avançados
+
+- [ ] O botão abre o modal; **Esc**, **Cancelar** e clique no fundo fecham, e o foco
+      volta para o botão
+- [ ] Os seis seletores pesquisáveis abrem e buscam **dentro do modal**, sem nenhum
+      `Refused to` no console
+- [ ] As opções trazem só o que algum apuratório usa; o cadastro **desativado em uso**
+      aparece marcado `(inativo)`
+- [ ] Combinar três filtros recorta por todos ao mesmo tempo, e o **total** e o
+      controle de página batem com o que a tabela mostra
+- [ ] Data inicial maior que a final mostra a mensagem **dentro** do modal e não aplica
+- [ ] **Limpar filtros** esvazia os campos e **o modal continua aberto** — inclusive os
+      seletores pesquisáveis, que precisam voltar ao placeholder, não ao rótulo antigo
+- [ ] Limpar e em seguida **Cancelar** descarta a limpeza: a listagem não muda
+- [ ] Os *chips* abaixo da barra mostram cada filtro aplicado, e clicar em um remove só
+      aquele; o contador no botão acompanha
+- [ ] Sair da tela e voltar preserva os filtros, e os chips continuam dizendo quais são
+- [ ] Em **largura de celular** o formulário vira uma coluna e os botões empilham, com
+      *Aplicar* em cima
+
+---
+
+## 12. Changelog — as 24 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1607,6 +1649,52 @@ A narrativa completa de cada uma está no histórico do git.
 | 21 | Paisagem de verdade | a folha do PDF saía retrato: o WebKitGTK ignora `@page { size }`. A orientação passou para o `GtkPageSetup`, em `print::commands::print_landscape` |
 | 22 | Enquadramentos e indícios | citação com o artigo na frente (`Art. 312 do Código Penal Militar`), descrição sem repetição, bloco disciplinar único com a analogia recuada, e Resultado empilhado. Migration `0015` traz `dispositivos_legais.nome_feminino` |
 | 23 | **"À apurar" e seleções pesquisáveis** | o PM fictício virou estado do vínculo (`0016`); envolvidos sincronizados pelo id da linha; todo seletor do formulário de processo pesquisável (Tom Select); cadastro rápido em modal para os sete cadastros operacionais. A `0017` tornou a unicidade do condutor adiável, e com isso trocar o condutor entre dois envolvidos parou de falhar. Detalhe abaixo |
+| 24 | **Pesquisa instantânea e filtros avançados** | a pesquisa da listagem passou a filtrar ao digitar e a alcançar o **nome do encarregado e do PM envolvido**; modal com dez parâmetros combináveis por `AND`, chips removíveis e contador. `situacao` substituiu `concluido`, e as opções do modal passaram a sair dos apuratórios em vez dos cadastros. Sem migration. Detalhe abaixo |
+
+### A rodada 24, em detalhe
+
+Pedido: pesquisar a listagem de apuratórios também pelo nome do encarregado e do PM
+envolvido, filtrando **enquanto se digita**, e um modal de filtros avançados que
+combine vários parâmetros.
+
+**A busca ficou instantânea sem redesenhar a tela.** O `change` do input virou `input`
+com 250 ms de espera, e o que se redesenha é só `#resultados-apuratorios` — não a tela
+inteira. Redesenhar tudo tiraria o foco do campo a cada tecla, que é o defeito clássico
+desse recurso. Cada chamada leva um número de sequência e a resposta que chega fora de
+ordem é **descartada**: sem isso, digitar rápido deixa na tela o resultado de um termo
+que já não está no campo.
+
+**Encarregado na busca é o papel, não o nome do papel.** A busca textual e o filtro de
+Encarregado passam por `apuratorio_papeis.e_responsavel`, a mesma definição que o
+`LATERAL resp` da view usa para preencher a coluna. O filtro antigo se contentava com
+*qualquer* designação vigente — de modo que procurar pelo Encarregado achava também o
+processo em que a pessoa era Escrivão. Era defeito, e está travado por teste.
+
+**Situação absorveu `concluido`.** As quatro opções — em andamento, concluído, no prazo,
+vencido — cabem num seletor só, e as duas últimas recortam a primeira. O corte é
+`data_vencimento >= CURRENT_DATE`: **vencer hoje ainda é estar no prazo**, que é o mesmo
+corte do badge da tela (`statusPrazo` escreve "Vence hoje" com zero dias restantes). Quem
+não tem prazo nenhum fica em "em andamento" e fora das outras duas — não há por onde
+dizer que está no prazo. O campo `concluido` do filtro **saiu**: dizia a mesma coisa que
+`situacao`, e duas formas de perguntar o mesmo é o que o princípio 4 proíbe.
+
+**As opções do modal saem dos apuratórios, não dos cadastros.** É desvio deliberado da
+regra "lista de opções filtra `WHERE ativo`", e o motivo está no cabeçalho de
+`filter_options`: um seletor de formulário oferece o que *pode* ser escolhido daqui para
+frente, e aí `ativo` é porta; estas listas oferecem por onde *cortar o que já foi
+registrado*, e valor que nenhum apuratório usa não corta nada. Sem isso, "Local dos
+fatos" traria as dezenas de municípios que a `0003` semeia, todos devolvendo lista vazia.
+Do outro lado, o cadastro **desativado e em uso** continua na lista, marcado
+`(inativo)` — é o princípio 6 pelo outro lado, e é o que mantém o apuratório de 2019
+encontrável pela unidade desativada em 2026.
+
+**Duas coisas que a implementação ensinou.** A primeira: `montarModal` já ativa e destrói
+os `TomSelect` sozinho, mas o `FormData` tem de ser lido **antes** do `fechar()` — o
+`destroy()` restaura as opções originais e o que foi escolhido some. A segunda, do botão
+*Limpar*: zerar `select.value` não limpa o controle visível, que continua exibindo o
+rótulo antigo; quem manda no que aparece é a instância (`tomselect.clear()`), não o
+`<select>`. O *Limpar* esvazia os campos e **mantém o modal aberto**; só *Aplicar* fecha
+e recarrega, de modo que cancelar depois de limpar descarta a limpeza junto com o resto.
 
 ### A rodada 23, em detalhe
 

@@ -6,8 +6,9 @@ use crate::auth::guards::{require_admin, require_session};
 use crate::error::AppError;
 use crate::proceedings::domain::{
     AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest, DashboardSummary, ProceedingDetail,
-    ProceedingFilter, ProceedingListResult, SaveProceedingRequest, SubstituirDesignacaoRequest,
-    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
+    ProceedingFilter, ProceedingFilterOptions, ProceedingListResult, SaveProceedingRequest,
+    SubstituirDesignacaoRequest, UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest,
+    UploadAttachmentRequest,
 };
 use crate::proceedings::repository;
 use crate::response::{from_result, ApiResponse};
@@ -22,6 +23,21 @@ pub async fn proceedings_list(
             require_session(&state).await?;
             let pool = state.pool().await?;
             Ok(repository::list(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn proceedings_filter_options(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<ProceedingFilterOptions>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::filter_options(&pool).await?)
         }
         .await,
     )

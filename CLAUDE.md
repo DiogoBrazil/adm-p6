@@ -56,6 +56,7 @@ entender X → olhe em Y".
 | Trocar valor único entre duas linhas | com constraint imediata a colisão é no **meio** da transação, e a mensagem descreve a regra certa para a situação errada. Unicidade que a tela permite permutar é `DEFERRABLE`; índice parcial não se adia, vira `EXCLUDE` |
 | Sincronizar coleção pelo id da entidade referida | trocar a FK vira **apagar e recriar**, e o `ON DELETE CASCADE` leva os filhos. Sincronize pelo id da própria linha — é o que `EnvolvidoRequest.id` existe para fazer |
 | Redesenhar formulário com select pesquisável na tela | o `TomSelect` fica preso ao DOM antigo. `dom.ts::destruirSelectsPesquisaveis` antes do redraw, e absorva o formulário **antes**: `destroy()` restaura as opções originais |
+| Limpar um `<select>` sob Tom Select | `select.value = ""` zera o `<select>` e **não** mexe no controle visível, que segue exibindo o rótulo antigo. Use `select.tomselect?.clear(true)` |
 | Esconder com `display:none` um `<select>` obrigatório | o navegador recusa o submit **em silêncio**, por não conseguir focá-lo. O Tom Select usa `clip` justamente por isso |
 | Envolvido "À apurar" | é `policial_militar_id IS NULL`, sem coluna booleana ao lado. Conta no limite, recebe enquadramento e resultado; não pode ser condutor, e é no máximo um por processo |
 | Comando paginado servindo de lista de **opções** | O teto de 200 **corta em silêncio**. Lista de opções não pagina (`users_list_ativos`); paginação é da listagem de tela, e precisa de controle de página |
@@ -73,7 +74,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 154 testes
+cd src-tauri && cargo fmt --check && cargo test   # 162 testes
 cd .. && npm run typecheck
 ```
 
