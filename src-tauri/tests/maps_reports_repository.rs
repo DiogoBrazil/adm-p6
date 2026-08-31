@@ -889,3 +889,60 @@ async fn mapas_salvos_paginam_do_mais_recente() {
     })
     .await;
 }
+
+/// No mapa e no ranking de condutores, o envolvido ainda não identificado
+/// aparece por extenso como "À apurar" — e não como um posto vazio seguido de
+/// nome nenhum, que era o efeito de listar o PM fictício.
+#[tokio::test]
+async fn mapa_escreve_a_apurar_por_extenso_e_o_ranking_ignora_o_nao_identificado() {
+    util::com_banco_descartavel("mapa_a_apurar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "A-APURAR",
+            data(2026, 4, 2),
+            None,
+        )
+        .await;
+        envolvido(&pool, &m, &id, &m.pm_um, 1).await;
+        fixtures::envolvido_a_apurar(&pool, &m, &id, 2).await;
+
+        let linhas = repository::map_rows(
+            &pool,
+            &MapPeriodRequest {
+                periodo_inicio: data(2026, 4, 1),
+                periodo_fim: data(2026, 4, 30),
+                apuratorio_ids: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let linha = linhas
+            .iter()
+            .find(|l| l.processo_id == id)
+            .expect("o processo está no período");
+        let lista = linha.envolvidos.as_deref().unwrap_or_default();
+        assert!(lista.contains("À apurar"), "lista de envolvidos: {lista}");
+        // O LEFT JOIN não pode engolir o identificado nem devolver a linha nula.
+        assert!(lista.contains("PM UM"), "lista de envolvidos: {lista}");
+
+        // Estatística de pessoa não conta quem ainda não é pessoa identificada.
+        // A trava é do schema (`ck_envolvido_condutor_identificado`), mas o
+        // ranking também precisa continuar montado por INNER JOIN.
+        let ranking = repository::driver_ranking(
+            &pool,
+            &ReportFilter {
+                apuratorio_ids: None,
+                ano: None,
+                limit: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(ranking.iter().all(|r| !r.nome.is_empty()));
+    })
+    .await;
+}

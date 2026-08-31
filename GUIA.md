@@ -25,18 +25,19 @@ sobre remover o schema `legado`.
 
 | Código | |
 |---|---:|
-| Migrations (`0001`–`0014`) | **14** |
-| Comandos Tauri, todos no cliente tipado | **84** |
-| Testes | **143** |
-| Módulos Rust · linhas de Rust | 12 · 9.817 |
-| Arquivos de frontend · linhas de TS/CSS | 18 · 11.991 |
+| Migrations (`0001`–`0017`) | **17** |
+| Comandos Tauri, todos no cliente tipado | **85** |
+| Testes | **154** |
+| Módulos Rust · linhas de Rust | 13 · 10.193 |
+| Arquivos de frontend · linhas de TS/CSS | 19 · 13.651 |
 | Catálogos administráveis | 26 |
 | Comandos que o frontend invoca e não existem | **0** |
 | Chamadas fora do cliente tipado | **0** |
+| Dependências de frontend | **2** — `@tauri-apps/api` e `tom-select`, empacotadas pelo Vite |
 
 | Schema | |
 |---|---:|
-| Tabelas · FKs · CHECKs · EXCLUDEs · triggers · views | **46 · 59 · 29 · 2 · 3 · 1** |
+| Tabelas · FKs · CHECKs · EXCLUDEs · triggers · views | **46 · 59 · 30 · 3 · 3 · 1** |
 
 | No banco agora | |
 |---|---:|
@@ -56,6 +57,7 @@ sai só quando ela fechar.
 | 1 | **Percorrer as telas com o binário de produção**, console aberto (F12). É o único que exerce a CSP restritiva | seção **11** | **Sim**, antes do uso real |
 | 2 | **Criar uma carta precatória de ponta a ponta** | seção 11, item (f) | **Sim** |
 | 3 | **Conferir Ofendido/Vítima e o Resumo dos fatos na tela** — segue entre as áreas menos vistas por olho humano | seção 11, item (i) | **Sim** |
+| 3b | **Conferir "À apurar", os seletores pesquisáveis e o cadastro rápido** — nenhum deles existia antes, e o modal e a CSP só se provam no binário | seção 11, item **(k)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -253,6 +255,9 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e CSV, sem reescrever snapshots de mapas já salvos. |
 | 49 | Como é emitido o PDF detalhado do mapa mensal? | **A partir do mapa corrente, pela impressão do sistema, sem crate de PDF.** Pode emitir todas as fichas do filtro ou somente uma; nos dois casos o backend reaplica mês e apuratórios antes de aceitar o processo. Há uma capa institucional por espécie de apuratório, com mês/ano e unidade fixa 7ºBPM. Depois dela, as fichas seguem em A4 paisagem e aproveitam a mesma folha: cabeçalho e marcador de fim delimitam cada registro, e páginas atravessadas recebem “Continuação do …”. A ficha reúne o detalhe cadastral, envolvidos, enquadramentos agrupados por natureza/esfera, resultados, vítimas, inquiridos, designações, prazos/prorrogações, andamentos e metadados dos anexos; o conteúdo binário dos anexos não entra. “Remessa da comissão” mostra “Não se aplica” conforme o atributo semântico do apuratório, nunca pela sigla. Mapas salvos continuam snapshots e ficam fora desta primeira versão. A **paisagem não vem do CSS**: o WebKitGTK ignora `@page { size }`, e quem a define é o `GtkPageSetup` de `print_landscape`, comando que abre o diálogo já orientado e só retorna quando a impressão termina. Ver a armadilha do `@page` na seção 7. |
 | 50 | Como o PDF do mapa apresenta enquadramentos e indícios? | **Um bloco por natureza, citação com o artigo na frente, e a descrição uma única vez.** Os blocos penais saem por espécie+esfera ("Indícios de Crime Militar", "Indícios de Crime Comum"), e transgressão do RDPM e infração do Estatuto ocupam **um só** bloco disciplinar — é a mesma matéria —, com a transgressão análoga recuada em itálico sob a infração do Estatuto. A citação segue a ordem em que se cita uma norma: `Art. 312 do Código Penal Militar - …`, com o conector vindo de `dispositivos_legais.nome_feminino` (atributo semântico, nunca leitura do nome). O `rotulo` montado em `evidence/repository.rs` **já termina na descrição**; quem exibe não concatena de novo. As categorias de indício só entram quando acrescentam: as de `indica_ausencia` sempre, as demais apenas quando não há enquadramento nenhum — critério estrutural, sem olhar nome. O Resultado sai em linhas rótulo/valor empilhadas. |
+| 51 | Como se registra um envolvido cujo PM ainda não foi identificado? | **`processo_envolvidos.policial_militar_id IS NULL`, e nada mais.** Era um policial fictício de cadastro — "À APURAR", matrícula `100000000` — e isso o punha em lista de opção, em estatística pessoal e em ranking de condutor, como se fosse gente. Três escolhas numa. (a) **O estado mora no vínculo, não numa pessoa inventada nem num booleano ao lado.** `NULL` é a única fonte de verdade (princípio 4); um `a_apurar` gravado ao lado do `policial_militar_id` seriam duas, e elas divergiriam. Os resumos expõem `a_apurar` **derivado**, para a tela não ter de deduzir de campo vazio. (b) **É envolvido de verdade.** Conta no `max_envolvidos`, recebe situação, enquadramento, indício e resultado. O que não pode é ser **condutor** — `ck_envolvido_condutor_identificado` —, porque conduzir é ato de pessoa identificada; e é **no máximo um por processo** (`uq_envolvido_a_apurar`), porque "os PMs a apurar" é um marcador coletivo, não uma fila. (c) **A `0016` converte e desativa, não apaga.** Os vínculos do cadastro artificial viram `NULL` preservando o **id do envolvido**, e o registro fica inativo — catálogo em uso se desativa (princípio 6). |
+| 52 | Como um militar é identificado depois, sem perder o que já foi apurado? | **A sincronização de envolvidos passou a ser pelo id do VÍNCULO, não pelo id do PM.** Enquanto a chave era o militar, identificar quem estava "À apurar" apagava a linha e criava outra — e enquadramentos, indícios, resultado, situação e ordem, que penduram em `processo_envolvidos.id`, iam junto pelo `ON DELETE CASCADE`. `EnvolvidoRequest.id` viaja na edição justamente para que a linha sobreviva à troca do PM, nos dois sentidos: identificar quem faltava, e devolver a "À apurar" um militar registrado por engano. Sem `id` — cliente antigo — o repositório ainda casa pelo PM, e o `IS NOT DISTINCT FROM` alcança o `NULL`. |
+| 53 | O formulário de processo pede cadastro que não existe. Cadastra ali? | **Sim, para os cadastros operacionais, em modal, sem perder o formulário em andamento.** PM, unidade, subunidade/seção, município, natureza do fato, situação do envolvido e papel de pessoa ganharam "+" ao lado do seletor. Ficam **de fora** apuratório, documento iniciador, papel de designação e as classificações jurídicas: dependem de configuração e de relações que uma caixinha não deveria decidir — esses seguem só na tela administrativa própria, e o seletor continua pesquisável. O modal **reusa** o formulário dirigido por metadados de Catálogos e o de militares, então não há segunda cópia das regras de validação; e **não cria conta de acesso**, que continua sendo escolha da tela de usuários. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -338,7 +343,9 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
   apuratório. Juntas, "escrivão só em IPM" e "PAD/CD/CJ não têm encarregado" passam a ser
   garantidas pelo banco, sem nome nenhum no código.
 - **`EXCLUDE USING gist`** em `processo_prazos` (períodos nunca se sobrepõem, intervalo
-  fechado `[]`) e em `processo_designacoes` (mesma pessoa, mesmo papel, intervalo `[)`).
+  fechado `[]`), em `processo_designacoes` (mesma pessoa, mesmo papel, intervalo `[)`) e
+  em `processo_envolvidos` (um condutor por processo — era índice parcial até a `0017`,
+  e virou `EXCLUDE` porque índice não se adia).
 - **`data_vencimento GENERATED ALWAYS AS (data_inicio + dias) STORED`** — a aritmética do
   prazo existe em um único lugar.
 - Dois índices únicos **parciais** de numeração, um usando
@@ -351,6 +358,15 @@ mudança de código. Fica **separado** de `sigla` e `nome`. Constante em
 **valor configurável**. Consequência prática para quem escreve teste: **o erro aparece no
 `commit`, não no `insert`.** São as únicas triggers do schema; acrescentar outra exige
 justificar por que não cabe em constraint.
+
+**As três unicidades de `processo_envolvidos`** — `uq_envolvido_pm`, `uq_envolvido_ordem`
+(`0016`) e `uq_envolvido_condutor` (`0017`) — também são adiadas, por outro motivo: a tela
+permite **permutar** esses valores entre linhas, e com constraint imediata a permuta
+colide no meio da transação com o estado final válido. Duas consequências, e as duas já
+morderam: o erro sai no `commit`, e **`ON CONFLICT` não aceita constraint adiada como
+árbitro** — upsert nessa tabela declara `ON CONFLICT (id)`. `tests/migrations.rs` falha se
+alguma delas voltar a ser imediata. Só `ck_envolvido_condutor_identificado` e
+`uq_envolvido_a_apurar` continuam imediatas: não há permuta que passe por elas.
 
 
 ---
@@ -767,6 +783,12 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Esconder campo lendo o formulário pelo DOM | `FormData.get` devolve `null` tanto para "o usuário apagou" quanto para "o campo nem foi renderizado". Tratar os dois igual **apaga fato já registrado** quando a configuração muda (princípio 5) | `dados.has(campo)` separa os dois. Ver `processo.ts::textoSePresente`; e o campo com valor gravado continua à vista, com nota, em vez de sumir |
 | `auto-fit` para alinhar linhas com número diferente de campos | Ele **colapsa** as trilhas vazias, então cada linha ganha a sua própria grade e nada alinha entre linhas | `auto-fill` mantém as trilhas. É a diferença entre os envolvidos alinharem "Situação" na mesma coluna ou não |
 | Busca incremental sem carimbo de sequência | Cada tecla dispara uma consulta, e a resposta atrasada de um termo antigo sobrescreve a lista do termo atual | Um contador local: descarte a resposta cuja sequência não é a última. O seletor de analogia já fazia; as três buscas de indícios, não |
+| **Constraint adiada como árbitro de `ON CONFLICT`** | O PostgreSQL recusa: `ON CONFLICT does not support deferrable unique constraints/exclusion constraints as arbiters`. E a forma **sem alvo** (`ON CONFLICT DO NOTHING`) considera *todos* os índices da tabela, então basta **uma** constraint adiada para o upsert inteiro parar de funcionar. Adiar `uq_envolvido_pm` na `0016` quebrou a etapa 05 da importação, que nem sabia da mudança — o `cargo check` passa, só `cargo test` acusa | As três unicidades de `processo_envolvidos` são adiadas de propósito (decisões 51 e 52). Upsert nessa tabela declara árbitro **não adiável**: `ON CONFLICT (id)`. Um teste em `tests/migrations.rs` falha se alguma delas voltar a ser imediata |
+| **Trocar um valor único entre duas linhas com constraint imediata** | A colisão acontece **no meio** da transação, com o estado final perfeitamente válido — e a mensagem descreve a regra certa para a situação errada. Mudar o condutor de envolvido lia "Só pode haver um condutor por processo." com exatamente um condutor na tela, porque o de cima era marcado antes de o de baixo ser desmarcado | Unicidade que a tela permite *permutar* é `DEFERRABLE INITIALLY DEFERRED`, conferida no `commit`. Índice parcial não se adia: vire uma constraint `EXCLUDE`, como a `0017` fez com `uq_envolvido_condutor` |
+| **Sincronizar coleção pelo id da entidade referida** | `DELETE … WHERE NOT (fk = ANY(...))` seguido de upsert pela FK: trocar o valor da FK deixa de ser correção e vira **apagar e recriar**, e tudo o que pendura na linha por `ON DELETE CASCADE` some junto. Identificar um envolvido "À apurar" levava com ele enquadramentos, indícios, resultado, situação e ordem | Sincronize pelo **id da própria linha**, que a edição devolve no request (`EnvolvidoRequest.id`). E ordene as escritas: identificados antes dos nulos, senão a transição simultânea nos dois sentidos colide no índice parcial de `À apurar` |
+| **`<select>` enfeitado que deixa de alimentar o `FormData`** | Trocar o `<select>` por uma lista de `<div>` derruba de uma vez o `FormData`, o `required` nativo, a validação amigável e as regras que leem `select.value` — e nada disso acusa em build | O Tom Select **mantém** o `<select>` original no DOM e o mantém sincronizado; ele só o esconde com `.ts-hidden-accessible` (clip, não `display:none`), que é o que preserva `required` — um controle obrigatório com `display:none` faz o navegador **recusar o submit em silêncio**, porque não consegue focá-lo |
+| Redesenhar o formulário sem destruir os selects pesquisáveis | O `innerHTML` novo descarta os `<select>` originais, mas os `TomSelect` ficam com listeners e estado presos ao DOM antigo. Vaza a cada rerender, e o formulário de processo redesenha a cada troca de apuratório, natureza, unidade ou envolvido | `dom.ts::destruirSelectsPesquisaveis` antes de todo redraw — já chamada de `main.ts::shell()` e do topo de `renderFormularioProcesso`. `destroy()` **restaura as opções originais**, então absorva o formulário para o rascunho *antes* de destruir |
+| Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 
 ---
@@ -870,7 +892,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql`, sua ampliação na `0014_subunidade_secao_origem.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 78 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 85 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
 | por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
@@ -921,6 +943,12 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que a CSP é o que é, e o que ela recusaria | **seção 12**, rodada 6, e as quatro armadilhas de CSP na seção 7 |
 | como um seletor de busca é montado nesta base | `src/telas/indicios.ts::pedirAnalogia` e o helper `buscar()` do mesmo arquivo |
 | por que a prorrogação começa no dia do vencimento | `src-tauri/migrations/0005_prazo_intervalo_ocupacao.sql` |
+| como se registra um envolvido sem PM identificado | decisões **51** e **52**, `migrations/0016_envolvido_a_apurar.sql` e o teste `a_0016_converte_o_pm_ficticio_sem_perder_o_que_pendurava_nele` |
+| por que a sincronização de envolvidos é pelo id do vínculo | `proceedings/repository.rs::gravar_envolvidos` (cabeçalho do bloco) e decisão **52** |
+| por que as unicidades do envolvido são adiadas | `migrations/0016` e `0017`, e as duas armadilhas de `ON CONFLICT` e permuta na seção 7 |
+| como um `<select>` vira pesquisável sem deixar de ser `<select>` | `dom.ts::ativarSelectsPesquisaveis` / `destruirSelectsPesquisaveis`, e o atributo `data-select-pesquisavel` |
+| como o cadastro rápido em modal reusa o formulário da tela cheia | `catalogos.ts::abrirCadastroRapidoCatalogo`, `usuarios.ts::abrirCadastroRapidoMilitar` e `dom.ts::montarModal` |
+| quais cadastros têm "+" no formulário de processo, e por que os outros não | decisão **53** e o mapa `seletores` em `processo.ts` |
 | o diagnóstico do estado anterior | `a seção 13` |
 
 ---
@@ -1484,7 +1512,71 @@ etapa correspondente em `src-tauri/importacao/` e rode o roteiro do zero.
 
 ---
 
-## 12. Changelog — as 20 rodadas
+### k) "À apurar", seletores pesquisáveis e cadastro rápido (seção 12, rodada 23)
+
+A parte que o `cargo test` alcança está travada por teste. O que sobra aqui é o que só
+o olho vê — e a CSP restritiva, que **só vale no binário de produção**
+(`npm run tauri build -- --no-bundle`); em `tauri dev` a `devCsp` afrouxa `style-src` e
+esconderia um `style` recusado.
+
+#### O envolvido ainda não identificado
+
+- [ ] No formulário de processo, o seletor de **Militar** de um envolvido traz
+      **"À apurar — PM ainda não identificado"** logo abaixo da opção vazia
+- [ ] Escolhendo-a, o checkbox **Condutor** fica desabilitado, com a nota
+      "Identifique o PM antes de marcá-lo como condutor"
+- [ ] Com um envolvido já "À apurar", a mesma opção aparece **desabilitada** na
+      linha do outro envolvido
+- [ ] Salvo o processo, a **listagem**, o **detalhe**, o **mapa do período** e o
+      **PDF** escrevem só `À apurar` — sem posto vazio à frente nem matrícula em branco
+- [ ] O painel de **indícios** lista o "À apurar" na ordem e aceita enquadramento
+- [ ] **Identificar depois**: editar o processo, trocar "À apurar" por um militar,
+      salvar, e conferir que enquadramento, indícios, **resultado** e situação
+      continuam lá
+- [ ] **Corrigir para trás**: trocar um militar registrado por "À apurar" e conferir
+      o mesmo
+- [ ] Em **Usuários**, o cadastro "À APURAR" (matrícula `100000000`) aparece só com
+      "incluir inativos" marcado, e **não** aparece em nenhum seletor
+
+#### Os seletores pesquisáveis
+
+- [ ] Digitar em cada seletor filtra: militar por **nome e por matrícula**, catálogo
+      por qualquer pedaço do rótulo
+- [ ] Busca **sem acento** acha o com acento (`municipio` acha `Município`)
+- [ ] ↑ ↓ percorrem, **Enter** escolhe, **Esc** fecha; **Tab** sai do campo
+- [ ] Campo obrigatório vazio ainda bloqueia o salvamento e mostra a mensagem —
+      é o `<select>` escondido que valida, e é a metade mais fácil de quebrar
+- [ ] "Nenhum resultado para …" aparece em português
+- [ ] Um processo antigo com catálogo **desativado** continua exibindo a opção
+      histórica ao abrir para edição
+- [ ] Trocar apuratório, natureza ou unidade **redesenha** o formulário e os
+      seletores continuam funcionando (é aí que um `TomSelect` não destruído vaza)
+
+#### O cadastro rápido em modal
+
+Para cada um dos sete — PM (envolvido **e** designado), unidade de origem, unidade
+deprecada, subunidade/seção, município, natureza do fato, situação do envolvido,
+papel de pessoa:
+
+- [ ] O "+" abre o modal, o foco entra nele, **Esc** e **Cancelar** fecham, e o foco
+      volta para o "+"
+- [ ] Salvando, o registro novo **já vem selecionado** naquele campo
+- [ ] Todo o resto do formulário continua preenchido, e o aviso de alterações
+      pendentes continua de pé
+- [ ] A **subunidade** criada pelo atalho já vem com a unidade atual, e passa a
+      aparecer no seletor filtrado por ela
+- [ ] O PM criado por uma **designação** vem com "Pode ser designado" sugerido; o
+      criado por um **envolvido**, não
+- [ ] Erro do backend (nome repetido, por exemplo) aparece **dentro** do modal, sem
+      fechá-lo e sem perder o que foi digitado
+- [ ] Apuratório, documento iniciador, papel de designação e as classificações
+      jurídicas **não** têm "+" — e continuam pesquisáveis
+- [ ] Em **largura de tablet e de celular**, o modal cabe na tela, o conteúdo rola
+      dentro dele e os botões ficam alcançáveis
+
+---
+
+## 12. Changelog — as 23 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1514,6 +1606,67 @@ A narrativa completa de cada uma está no histórico do git.
 | 20 | PDF do mapa mensal | impressão A4 paisagem do mapa corrente, completa ou individual, com capa por apuratório e fichas detalhadas em fluxo contínuo |
 | 21 | Paisagem de verdade | a folha do PDF saía retrato: o WebKitGTK ignora `@page { size }`. A orientação passou para o `GtkPageSetup`, em `print::commands::print_landscape` |
 | 22 | Enquadramentos e indícios | citação com o artigo na frente (`Art. 312 do Código Penal Militar`), descrição sem repetição, bloco disciplinar único com a analogia recuada, e Resultado empilhado. Migration `0015` traz `dispositivos_legais.nome_feminino` |
+| 23 | **"À apurar" e seleções pesquisáveis** | o PM fictício virou estado do vínculo (`0016`); envolvidos sincronizados pelo id da linha; todo seletor do formulário de processo pesquisável (Tom Select); cadastro rápido em modal para os sete cadastros operacionais. A `0017` tornou a unicidade do condutor adiável, e com isso trocar o condutor entre dois envolvidos parou de falhar. Detalhe abaixo |
+
+### A rodada 23, em detalhe
+
+Pedido: parar de registrar "PM ainda não identificado" como se fosse uma pessoa, e
+tornar os seletores do formulário de processo utilizáveis com 235 militares na lista.
+
+**O policial fictício.** Havia um cadastro "À APURAR", matrícula `100000000`, usado
+como envolvido enquanto o militar não era identificado. Ele aparecia nas listas de
+opção ao lado de gente de verdade, entrava em estatística pessoal e podia ser marcado
+condutor. Virou `policial_militar_id IS NULL` — estado do **vínculo**, não pessoa
+inventada e não booleano ao lado (princípio 4). A `0016` converte os vínculos
+existentes **preservando o id do envolvido** e desativa o cadastro artificial sem
+apagá-lo. Duas travas novas: no máximo um "À apurar" por processo, e ele não conduz.
+
+**O que a conversão obrigou a mudar no repositório.** Enquanto a sincronização de
+envolvidos era pelo id do **militar**, identificar quem estava "À apurar" apagava a
+linha e criava outra — e enquadramentos, indícios, resultado, situação e ordem, todos
+pendurados em `processo_envolvidos.id`, iam junto pelo `ON DELETE CASCADE`. A chave
+passou a ser o id do **vínculo**, que a edição devolve no request. Nos dois sentidos:
+identificar quem faltava, e devolver a "À apurar" um militar registrado por engano.
+
+**As duas coisas que só apareceram rodando os testes.** Adiar `uq_envolvido_pm` para
+permitir a permuta quebrou a **etapa 05 da importação**, que usava `ON CONFLICT DO
+NOTHING` sem alvo — constraint adiada não serve de árbitro, e a forma sem alvo
+considera todos os índices. E o teste da própria conversão não existia: um banco de
+teste nasce sem o cadastro artificial, então aplicar as migrations de uma vez nunca
+exercita o `UPDATE` que converte. `a_0016_converte_o_pm_ficticio_sem_perder_o_que_pendurava_nele`
+para na `0015`, monta o cenário legado e só então roda a `0016` — é o único teste do
+repositório que aplica migrations em faixa.
+
+**O condutor que não trocava de dono.** Achado durante a conferência, e **anterior a
+esta rodada**: marcar o condutor no envolvido de cima antes de desmarcar o de baixo
+colidia no índice parcial da `0001`, e o usuário lia "Só pode haver um condutor por
+processo." com exatamente um condutor na tela. A `0017` trocou o índice por uma
+constraint `EXCLUDE` adiada, conferida no `commit`, quando o processo já está no
+estado pedido. A trava continua de pé — `schema_integrity.sql` dá
+`SET CONSTRAINTS ALL IMMEDIATE` antes de cada caso, então o "dois condutores" segue
+recusado ali.
+
+**Os seletores.** Tom Select 2.4.3, empacotado pelo Vite (CDN não passa na CSP). Ele
+**mantém o `<select>` original** no DOM e sincronizado, e é isso que preserva
+`FormData`, `required`, a validação amigável e as regras que leem `select.value`; o
+esconde por `clip`, não por `display:none`, senão o navegador recusaria o submit em
+silêncio por não conseguir focar o campo obrigatório. Busca sem acento e sem caixa,
+teclado, e as opções históricas desativadas continuam preservadas como antes.
+
+**O cadastro rápido.** "+" ao lado de PM, unidade, subunidade/seção, município,
+natureza do fato, situação do envolvido e papel de pessoa — os cadastros
+**operacionais**, que nascem vazios. O modal reusa o formulário dirigido por metadados
+de Catálogos e o de militares, então não há segunda cópia das regras de validação.
+Ficam de fora apuratório, documento iniciador, papel de designação e as classificações
+jurídicas: dependem de configuração e de relações que uma caixinha não deveria
+decidir. E o PM criado pelo atalho **não ganha conta de acesso**.
+
+Duas coisas ficaram sabidas e não feitas, por não valerem o risco agora: a **sigla** da
+unidade não é pesquisável (o rótulo de `unidades_pm` só traz `nome`, e a busca é sobre
+o rótulo), e a validação amigável, num seletor obrigatório vazio, foca o `<select>`
+escondido em vez do controle visível — a mensagem aparece no lugar certo, o foco não.
+
+---
 
 ### A rodada 17, em detalhe
 

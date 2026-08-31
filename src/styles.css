@@ -3115,6 +3115,101 @@ tr.atrasado {
   align-items: center;
 }
 
+/* O combobox mantém o `<select>` original como fonte do FormData. O botão de
+   cadastro é irmão do controle para não criar elementos interativos dentro do
+   `<label>` de forma inválida. */
+.campo-com-cadastro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 4px 8px;
+  align-items: end;
+  width: 100%;
+}
+
+.campo-com-cadastro > label {
+  display: grid;
+  grid-column: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campo-com-cadastro > .cadastro-rapido-botao {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.campo-com-cadastro > .campo-efeito {
+  grid-column: 1 / -1;
+}
+
+.campo-com-cadastro .ts-wrapper {
+  min-width: 0;
+  width: 100%;
+}
+
+.cadastro-rapido-botao.botao-icone {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
+}
+
+.ts-wrapper.single .ts-control {
+  min-height: 40px;
+  align-items: center;
+  padding: 8px 36px 8px 11px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 1px rgb(15 35 55 / 3%);
+  font-size: inherit;
+  line-height: 1.35;
+}
+
+.ts-wrapper.single.focus .ts-control,
+.ts-wrapper.single.input-active .ts-control {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 16%);
+}
+
+.ts-wrapper.invalid .ts-control {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgb(180 55 45 / 10%);
+}
+
+.ts-dropdown {
+  z-index: 30;
+  margin-top: 4px;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 38px rgb(15 35 55 / 18%);
+  overflow: hidden;
+}
+
+.ts-dropdown .option,
+.ts-dropdown .no-results {
+  padding: 9px 11px;
+  line-height: 1.35;
+}
+
+.ts-dropdown .option.active {
+  color: var(--brand-800);
+  background: var(--brand-50);
+}
+
+.ts-dropdown .option.disabled {
+  color: var(--text-soft);
+  background: var(--surface-muted);
+}
+
+.ts-dropdown .no-results {
+  color: var(--text-muted);
+  font-style: normal;
+}
+
 .campo-data-limpar {
   align-self: stretch;
   min-width: 62px;
@@ -3352,6 +3447,40 @@ tr.atrasado {
 .modal {
   border-radius: var(--radius-lg);
   box-shadow: 0 24px 80px rgb(0 15 30 / 34%);
+}
+
+.modal--cadastro {
+  overflow: hidden;
+}
+
+.modal--cadastro .crud-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 4px 4px;
+}
+
+.modal--cadastro .form-actions {
+  margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+  .modal-overlay {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .modal--cadastro {
+    max-height: 100%;
+  }
+
+  .modal--cadastro .form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .modal--cadastro .form-actions button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 1180px) {

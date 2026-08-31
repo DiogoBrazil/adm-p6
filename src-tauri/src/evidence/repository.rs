@@ -203,7 +203,7 @@ pub async fn list_for_proceeding(
     #[derive(sqlx::FromRow)]
     struct Linha {
         envolvido_id: String,
-        policial_militar_id: String,
+        policial_militar_id: Option<String>,
         nome: String,
         matricula: String,
         posto_graduacao: String,
@@ -213,15 +213,15 @@ pub async fn list_for_proceeding(
 
     let envolvidos = sqlx::query_as::<_, Linha>(
         "SELECT e.id::text                  AS envolvido_id,
-                pm.id::text                 AS policial_militar_id,
-                pm.nome                     AS nome,
-                pm.matricula                AS matricula,
-                pg.sigla                    AS posto_graduacao,
+                e.policial_militar_id::text AS policial_militar_id,
+                COALESCE(pm.nome, 'À apurar') AS nome,
+                COALESCE(pm.matricula, '')  AS matricula,
+                COALESCE(pg.sigla, '')      AS posto_graduacao,
                 se.nome                     AS status_envolvido,
                 e.ordem                     AS ordem
            FROM processo_envolvidos e
-           JOIN policiais_militares pm ON pm.id = e.policial_militar_id
-           JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+           LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
            JOIN status_envolvido se    ON se.id = e.status_envolvido_id
           WHERE e.processo_id = $1::uuid
           ORDER BY e.ordem",

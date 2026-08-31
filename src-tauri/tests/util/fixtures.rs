@@ -276,6 +276,24 @@ pub async fn envolvido(
     .expect("criar envolvido")
 }
 
+/// Cria o marcador "À apurar": envolvido real, PM ainda não identificado.
+/// `policial_militar_id` nulo é a única fonte de verdade desse estado.
+#[allow(dead_code)]
+pub async fn envolvido_a_apurar(pool: &PgPool, m: &Mundo, processo_id: &str, ordem: i32) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO processo_envolvidos
+             (processo_id, policial_militar_id, status_envolvido_id, ordem)
+         VALUES ($1::uuid, NULL, $2::uuid, $3)
+      RETURNING id::text",
+    )
+    .bind(processo_id)
+    .bind(&m.status_envolvido)
+    .bind(ordem)
+    .fetch_one(pool)
+    .await
+    .expect("criar envolvido À apurar")
+}
+
 /// A conta administrativa da migration 0002. É o autor de qualquer escrita
 /// auditada: o autor é uma CONTA, não um policial militar.
 pub async fn conta_admin(pool: &PgPool) -> String {

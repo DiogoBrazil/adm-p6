@@ -1,7 +1,9 @@
+import "tom-select/dist/css/tom-select.css";
 import "./styles.css";
 import { call, type SessionUser } from "./api";
 import {
   aplicarLarguras,
+  destruirSelectsPesquisaveis,
   escapeHtml,
   formularioTemPendencia,
   instalarValidacaoAmigavel,
@@ -195,6 +197,7 @@ function groupedRoutes() {
 }
 
 function shell(content: string) {
+  destruirSelectsPesquisaveis(app);
   const grupoAtivo = routes.find((route) => route.path === activePath)?.group ?? "Geral";
   gruposAbertos.add(grupoAtivo);
   salvarGruposAbertos();

@@ -72,14 +72,15 @@ const JOINS_LISTA: &str = r#"
     LEFT JOIN LATERAL (
         SELECT jsonb_agg(
                    jsonb_build_object(
-                       'posto_graduacao', pg.sigla,
-                       'matricula', pm.matricula,
-                       'nome', pm.nome
+                       'posto_graduacao', COALESCE(pg.sigla, ''),
+                       'matricula', COALESCE(pm.matricula, ''),
+                       'nome', COALESCE(pm.nome, 'À apurar'),
+                       'a_apurar', e.policial_militar_id IS NULL
                    ) ORDER BY e.ordem
                ) AS lista
           FROM processo_envolvidos e
-          JOIN policiais_militares pm ON pm.id = e.policial_militar_id
-          JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+          LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+          LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
          WHERE e.processo_id = v.id
     ) envolvidos ON true
 "#;
@@ -241,10 +242,10 @@ pub async fn list_envolvidos<'e, E: PgExecutor<'e>>(
 ) -> Result<Vec<EnvolvidoItem>, sqlx::Error> {
     sqlx::query_as::<_, EnvolvidoItem>(
         "SELECT e.id::text                    AS id,
-                pm.id::text                   AS policial_militar_id,
-                pm.nome                       AS nome,
-                pm.matricula                  AS matricula,
-                pg.sigla                      AS posto_graduacao,
+                e.policial_militar_id::text   AS policial_militar_id,
+                COALESCE(pm.nome, 'À apurar') AS nome,
+                COALESCE(pm.matricula, '')    AS matricula,
+                COALESCE(pg.sigla, '')        AS posto_graduacao,
                 se.id::text                   AS status_envolvido_id,
                 se.nome                       AS status_envolvido,
                 e.ordem                       AS ordem,
@@ -257,8 +258,8 @@ pub async fn list_envolvidos<'e, E: PgExecutor<'e>>(
                 tp.nome                       AS penalidade_tipo,
                 e.penalidade_dias             AS penalidade_dias
            FROM processo_envolvidos e
-           JOIN policiais_militares pm ON pm.id = e.policial_militar_id
-           JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+           LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
            JOIN status_envolvido se    ON se.id = e.status_envolvido_id
            LEFT JOIN tipos_solucao_sugerida ss ON ss.id = e.solucao_sugerida_id
            LEFT JOIN tipos_solucao_decidida sd ON sd.id = e.solucao_decidida_id
@@ -497,10 +498,15 @@ async fn validar_contra_configuracao(
                           + (SELECT count(*) FROM envolvido_infracoes_estatuto s WHERE s.envolvido_id = e.id)
                            FROM processo_envolvidos e
                           WHERE e.processo_id = $1::uuid
-                            AND e.policial_militar_id = $2::uuid",
+                            AND (($2::uuid IS NOT NULL AND e.id = $2::uuid)
+                              OR ($2::uuid IS NULL AND $3::uuid IS NOT NULL
+                                  AND e.policial_militar_id = $3::uuid)
+                              OR ($2::uuid IS NULL AND $3::uuid IS NULL
+                                  AND e.policial_militar_id IS NULL))",
                     )
                     .bind(processo_id)
-                    .bind(&envolvido.policial_militar_id)
+                    .bind(envolvido.id.as_deref())
+                    .bind(envolvido.policial_militar_id.as_deref())
                     .fetch_optional(&mut **tx)
                     .await?
                     .unwrap_or(0),
@@ -862,40 +868,124 @@ async fn gravar_envolvidos(
     processo_id: &str,
     request: &SaveProceedingRequest,
 ) -> Result<(), AppError> {
-    let manter: Vec<String> = request
+    let manter_ids: Vec<String> = request
         .envolvidos
         .iter()
-        .map(|e| e.policial_militar_id.clone())
+        .filter_map(|e| e.id.clone())
         .collect();
+    // Compatibilidade com clientes anteriores ao id no request: uma linha sem
+    // id ainda encontra o vínculo pelo PM. O frontend atual sempre manda o id
+    // ao editar, inclusive para o marcador "À apurar".
+    let manter_pms_sem_id: Vec<String> = request
+        .envolvidos
+        .iter()
+        .filter(|e| e.id.is_none())
+        .filter_map(|e| e.policial_militar_id.clone())
+        .collect();
+    let manter_a_apurar_sem_id = request
+        .envolvidos
+        .iter()
+        .any(|e| e.id.is_none() && e.policial_militar_id.is_none());
 
     sqlx::query(
         "DELETE FROM processo_envolvidos
-          WHERE processo_id = $1::uuid AND NOT (policial_militar_id::text = ANY($2::text[]))",
+          WHERE processo_id = $1::uuid
+            AND NOT (id::text = ANY($2::text[])
+                  OR policial_militar_id::text = ANY($3::text[])
+                  OR ($4 AND policial_militar_id IS NULL))",
     )
     .bind(processo_id)
-    .bind(&manter)
+    .bind(&manter_ids)
+    .bind(&manter_pms_sem_id)
+    .bind(manter_a_apurar_sem_id)
     .execute(&mut **tx)
     .await?;
 
-    for envolvido in &request.envolvidos {
-        let envolvido_id: String = sqlx::query_scalar(
-            "INSERT INTO processo_envolvidos
-                 (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
-             VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
-             ON CONFLICT (processo_id, policial_militar_id) DO UPDATE
-                SET status_envolvido_id = EXCLUDED.status_envolvido_id,
-                    ordem               = EXCLUDED.ordem,
-                    e_condutor          = EXCLUDED.e_condutor,
-                    updated_at          = now()
-             RETURNING id::text",
-        )
-        .bind(processo_id)
-        .bind(&envolvido.policial_militar_id)
-        .bind(&envolvido.status_envolvido_id)
-        .bind(envolvido.ordem)
-        .bind(envolvido.e_condutor)
-        .fetch_one(&mut **tx)
-        .await?;
+    // Identificados vêm primeiro. Assim a transição simultânea
+    // "À apurar" -> PM e PM -> "À apurar" libera o único NULL antes de criá-lo.
+    let ordenados = request
+        .envolvidos
+        .iter()
+        .filter(|e| e.policial_militar_id.is_some())
+        .chain(
+            request
+                .envolvidos
+                .iter()
+                .filter(|e| e.policial_militar_id.is_none()),
+        );
+
+    for envolvido in ordenados {
+        let envolvido_id = if let Some(id) = envolvido.id.as_deref() {
+            sqlx::query_scalar::<_, String>(
+                "UPDATE processo_envolvidos
+                    SET policial_militar_id = $3::uuid,
+                        status_envolvido_id = $4::uuid,
+                        ordem = $5,
+                        e_condutor = $6,
+                        updated_at = now()
+                  WHERE id = $1::uuid AND processo_id = $2::uuid
+              RETURNING id::text",
+            )
+            .bind(id)
+            .bind(processo_id)
+            .bind(envolvido.policial_militar_id.as_deref())
+            .bind(&envolvido.status_envolvido_id)
+            .bind(envolvido.ordem)
+            .bind(envolvido.e_condutor)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| {
+                AppError::Domain(
+                    "Um dos envolvidos não pertence mais a este processo. Recarregue a página."
+                        .to_string(),
+                )
+            })?
+        } else {
+            let existente: Option<String> = sqlx::query_scalar(
+                "SELECT id::text FROM processo_envolvidos
+                  WHERE processo_id = $1::uuid
+                    AND policial_militar_id IS NOT DISTINCT FROM $2::uuid",
+            )
+            .bind(processo_id)
+            .bind(envolvido.policial_militar_id.as_deref())
+            .fetch_optional(&mut **tx)
+            .await?;
+
+            match existente {
+                Some(id) => {
+                    sqlx::query(
+                        "UPDATE processo_envolvidos
+                            SET status_envolvido_id = $2::uuid,
+                                ordem = $3,
+                                e_condutor = $4,
+                                updated_at = now()
+                          WHERE id = $1::uuid",
+                    )
+                    .bind(&id)
+                    .bind(&envolvido.status_envolvido_id)
+                    .bind(envolvido.ordem)
+                    .bind(envolvido.e_condutor)
+                    .execute(&mut **tx)
+                    .await?;
+                    id
+                }
+                None => {
+                    sqlx::query_scalar(
+                        "INSERT INTO processo_envolvidos
+                             (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
+                         VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
+                      RETURNING id::text",
+                    )
+                    .bind(processo_id)
+                    .bind(envolvido.policial_militar_id.as_deref())
+                    .bind(&envolvido.status_envolvido_id)
+                    .bind(envolvido.ordem)
+                    .bind(envolvido.e_condutor)
+                    .fetch_one(&mut **tx)
+                    .await?
+                }
+            }
+        };
 
         if let Some(acusacoes) = &envolvido.acusacoes {
             evidence_repository::save_acusacoes(tx, &envolvido_id, acusacoes).await?;

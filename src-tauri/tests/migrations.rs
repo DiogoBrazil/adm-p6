@@ -98,6 +98,42 @@ async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     assert!(vitimas, "processo_vitimas deveria existir desde a 0012");
 
+    // A 0016 torna "À apurar" um estado do vínculo, não um policial fictício.
+    let pm_envolvido_nulo: String = sqlx::query_scalar(
+        "SELECT is_nullable::text FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'processo_envolvidos'
+            AND column_name = 'policial_militar_id'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(pm_envolvido_nulo, "YES");
+    let indice_a_apurar: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.uq_envolvido_a_apurar') IS NOT NULL")
+            .fetch_one(&mut conn)
+            .await?;
+    assert!(indice_a_apurar, "índice único do estado À apurar ausente");
+
+    // As três unicidades do envolvido são adiadas até o `commit`. Se alguma
+    // voltar a ser imediata, reordenar linhas, trocar dois militares entre si
+    // ou mudar o condutor de envolvido volta a colidir no meio da transação —
+    // com o estado FINAL válido. Ver a armadilha do `ON CONFLICT` na seção 7
+    // antes de escrever upsert nesta tabela.
+    let imediatas: Vec<String> = sqlx::query_scalar(
+        "SELECT conname FROM pg_constraint
+          WHERE conrelid = 'public.processo_envolvidos'::regclass
+            AND conname IN ('uq_envolvido_pm', 'uq_envolvido_ordem',
+                            'uq_envolvido_condutor')
+            AND NOT condeferrable
+          ORDER BY conname",
+    )
+    .fetch_all(&mut conn)
+    .await?;
+    assert!(
+        imediatas.is_empty(),
+        "unicidade do envolvido deixou de ser adiável: {imediatas:?}"
+    );
+
     // Toda FK precisa de ON DELETE explícito. No schema anterior as 111 FKs
     // ficavam todas em NO ACTION por omissão.
     let sem_acao: i64 = sqlx::query_scalar(
@@ -544,4 +580,219 @@ async fn a_retroalimentacao_liga_o_inequivoco_e_deixa_o_ambiguo_em_branco() {
         assert_eq!(segunda, 0);
     })
     .await;
+}
+
+// ─────────────────────────── 0016: o PM fictício vira estado do vínculo ──
+
+/// A 0016 é a única migration deste repositório que CONVERTE dado de produção:
+/// os vínculos do policial artificial "À APURAR" passam a `NULL` no próprio
+/// `processo_envolvidos`. Um teste que aplique tudo de uma vez não veria a
+/// conversão — o banco de teste nasce sem o cadastro artificial. Então aqui as
+/// migrations param na 0015, o cenário legado é montado, e só então a 0016 roda.
+async fn aplicar_faixa(
+    conn: &mut PgConnection,
+    primeira: i64,
+    ultima: i64,
+) -> Result<(), sqlx::Error> {
+    for migration in sqlx::migrate!("./migrations")
+        .iter()
+        .filter(|m| m.version >= primeira && m.version <= ultima)
+    {
+        conn.execute(&*migration.sql).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_0016_converte_o_pm_ficticio_sem_perder_o_que_pendurava_nele() {
+    let Some((manutencao, teste, nome)) = urls() else {
+        eprintln!("DATABASE_URL ausente: teste ignorado");
+        return;
+    };
+    let nome = format!("{nome}_a_apurar");
+    let teste = teste.rsplit_once('/').unwrap().0.to_string() + "/" + &nome;
+
+    let mut admin = PgConnection::connect(&manutencao).await.unwrap();
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute(&*format!(r#"CREATE DATABASE "{nome}""#))
+        .await
+        .unwrap();
+
+    let resultado = converter_a_apurar(&teste).await;
+
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    resultado.unwrap();
+}
+
+async fn converter_a_apurar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut conn = PgConnection::connect(url).await?;
+    aplicar_faixa(&mut conn, 1, 15).await?;
+
+    // Cenário legado mínimo: o cadastro artificial e um militar de verdade
+    // envolvidos no mesmo processo. O artificial carrega tudo o que a conversão
+    // precisa preservar — status, condutor, enquadramento, indício e resultado.
+    conn.execute(
+        r#"
+        INSERT INTO tipos_apuratorio (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000001', 'Procedimento');
+        INSERT INTO tipos_documento (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000002', 'Portaria');
+        INSERT INTO apuratorios (id, sigla, nome, tipo_apuratorio_id, max_envolvidos)
+             VALUES ('30000000-0000-0000-0000-000000000003', 'SIND',
+                     'Sindicancia', '30000000-0000-0000-0000-000000000001', NULL);
+        INSERT INTO apuratorio_documentos_iniciadores (apuratorio_id, tipo_documento_id)
+             VALUES ('30000000-0000-0000-0000-000000000003',
+                     '30000000-0000-0000-0000-000000000002');
+        INSERT INTO unidades_pm (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000004', '7 BPM');
+        INSERT INTO status_envolvido (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000005', 'Sindicado');
+        INSERT INTO tipos_solucao_decidida (id, nome, permite_penalidade) VALUES
+            ('30000000-0000-0000-0000-000000000006', 'Punido', true);
+        INSERT INTO tipos_penalidade (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000007', 'Prisao');
+        INSERT INTO categorias_indicio (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000008', 'Indicio de transgressao');
+
+        -- O par nome/matrícula é exatamente o que a 0016 procura.
+        INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id, ativo)
+        SELECT '30000000-0000-0000-0000-00000000000a', '100000000', 'À APURAR', pg.id, true
+          FROM postos_graduacoes pg ORDER BY pg.sigla LIMIT 1;
+        INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id, ativo)
+        SELECT '30000000-0000-0000-0000-00000000000b', '900000001', 'FULANO DE TAL', pg.id, true
+          FROM postos_graduacoes pg ORDER BY pg.sigla LIMIT 1;
+
+        INSERT INTO processos_procedimentos
+            (id, apuratorio_id, documento_iniciador_id, numero_documento,
+             unidade_origem_id, municipio_fato_id, data_instauracao)
+        SELECT '30000000-0000-0000-0000-0000000000c0',
+               '30000000-0000-0000-0000-000000000003',
+               '30000000-0000-0000-0000-000000000002',
+               '001/2019',
+               '30000000-0000-0000-0000-000000000004',
+               md.id, DATE '2019-03-01'
+          FROM municipios_distritos md ORDER BY md.nome LIMIT 1;
+
+        INSERT INTO processo_envolvidos
+            (id, processo_id, policial_militar_id, status_envolvido_id, ordem,
+             e_condutor, solucao_decidida_id, penalidade_tipo_id, penalidade_dias)
+        VALUES
+            ('30000000-0000-0000-0000-0000000000e1',
+             '30000000-0000-0000-0000-0000000000c0',
+             '30000000-0000-0000-0000-00000000000a',
+             '30000000-0000-0000-0000-000000000005', 1, true,
+             '30000000-0000-0000-0000-000000000006',
+             '30000000-0000-0000-0000-000000000007', 5),
+            ('30000000-0000-0000-0000-0000000000e2',
+             '30000000-0000-0000-0000-0000000000c0',
+             '30000000-0000-0000-0000-00000000000b',
+             '30000000-0000-0000-0000-000000000005', 2, false, NULL, NULL, NULL);
+
+        INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ('30000000-0000-0000-0000-0000000000e1',
+                     '30000000-0000-0000-0000-000000000008');
+        INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+        SELECT '30000000-0000-0000-0000-0000000000e1', t.id
+          FROM transgressoes t ORDER BY t.inciso LIMIT 1;
+        "#,
+    )
+    .await?;
+
+    aplicar_faixa(&mut conn, 16, 16).await?;
+
+    let linha = sqlx::query(
+        "SELECT policial_militar_id IS NULL AS a_apurar,
+                e_condutor,
+                solucao_decidida_id IS NOT NULL AS tem_solucao,
+                penalidade_dias
+           FROM processo_envolvidos
+          WHERE id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert!(
+        linha.get::<bool, _>("a_apurar"),
+        "o vínculo do PM fictício deveria ter virado À apurar"
+    );
+    assert!(
+        !linha.get::<bool, _>("e_condutor"),
+        "quem não está identificado não pode continuar condutor"
+    );
+    assert!(
+        linha.get::<bool, _>("tem_solucao"),
+        "o resultado do envolvido é fato registrado e não se perde"
+    );
+    assert_eq!(linha.get::<Option<i32>, _>("penalidade_dias"), Some(5));
+
+    // O id do vínculo não muda, então nada pendurado nele se perde.
+    let indicios: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM envolvido_categorias_indicio
+          WHERE envolvido_id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(indicios, 1);
+    let transgressoes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM envolvido_transgressoes
+          WHERE envolvido_id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(transgressoes, 1);
+
+    // O envolvido de verdade fica intacto.
+    let identificado: Option<String> = sqlx::query_scalar(
+        "SELECT policial_militar_id::text FROM processo_envolvidos
+          WHERE id = '30000000-0000-0000-0000-0000000000e2'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(
+        identificado.as_deref(),
+        Some("30000000-0000-0000-0000-00000000000b")
+    );
+
+    // Catálogo em uso se desativa, não se apaga: a linha continua lá, inativa,
+    // fora das listas de opção.
+    let ficticio = sqlx::query(
+        "SELECT ativo FROM policiais_militares
+          WHERE id = '30000000-0000-0000-0000-00000000000a'",
+    )
+    .fetch_optional(&mut conn)
+    .await?
+    .expect("o cadastro artificial não deve ser excluído");
+    assert!(!ficticio.get::<bool, _>("ativo"));
+
+    // Depois da conversão o marcador é único por processo e não pode conduzir.
+    let segundo_nulo = sqlx::query(
+        "UPDATE processo_envolvidos SET policial_militar_id = NULL
+          WHERE id = '30000000-0000-0000-0000-0000000000e2'",
+    )
+    .execute(&mut conn)
+    .await;
+    assert!(segundo_nulo.is_err(), "dois À apurar no mesmo processo");
+
+    let condutor_nao_identificado = sqlx::query(
+        "UPDATE processo_envolvidos SET e_condutor = true
+          WHERE id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .execute(&mut conn)
+    .await;
+    assert!(
+        condutor_nao_identificado.is_err(),
+        "À apurar não pode ser condutor"
+    );
+
+    Ok(())
 }

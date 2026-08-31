@@ -8,6 +8,8 @@ pub struct MilitarQualificado {
     pub posto_graduacao: String,
     pub matricula: String,
     pub nome: String,
+    /// Derivado de `processo_envolvidos.policial_militar_id IS NULL`.
+    pub a_apurar: bool,
 }
 
 /// Único código técnico do sistema. Identifica que um apuratório usa a tabela de
@@ -65,7 +67,7 @@ pub struct ProceedingListItem {
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct EnvolvidoItem {
     pub id: String,
-    pub policial_militar_id: String,
+    pub policial_militar_id: Option<String>,
     pub nome: String,
     pub matricula: String,
     pub posto_graduacao: String,
@@ -177,7 +179,12 @@ pub struct ProceedingDetail {
 
 #[derive(Debug, Deserialize)]
 pub struct EnvolvidoRequest {
-    pub policial_militar_id: String,
+    /// Presente na edição para manter o vínculo e todos os seus dados filhos
+    /// quando o PM é identificado ou corrigido.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Nulo = PM ainda não identificado ("À apurar").
+    pub policial_militar_id: Option<String>,
     pub status_envolvido_id: String,
     pub ordem: i32,
     #[serde(default)]
@@ -383,6 +390,47 @@ impl SaveProceedingRequest {
         }
         if self.envolvidos.iter().filter(|e| e.e_condutor).count() > 1 {
             return Err("Só pode haver um condutor por processo.".to_string());
+        }
+        if self
+            .envolvidos
+            .iter()
+            .any(|e| e.e_condutor && e.policial_militar_id.is_none())
+        {
+            return Err("O condutor precisa ser um policial militar identificado.".to_string());
+        }
+        if self
+            .envolvidos
+            .iter()
+            .filter(|e| e.policial_militar_id.is_none())
+            .count()
+            > 1
+        {
+            return Err("Só pode haver um envolvido “À apurar” por processo.".to_string());
+        }
+        for (i, envolvido) in self.envolvidos.iter().enumerate() {
+            if envolvido
+                .policial_militar_id
+                .as_deref()
+                .is_some_and(|id| id.trim().is_empty())
+            {
+                return Err("Escolha um policial militar ou a opção “À apurar”.".to_string());
+            }
+            if self.envolvidos[..i].iter().any(|anterior| {
+                envolvido.policial_militar_id.is_some()
+                    && anterior.policial_militar_id == envolvido.policial_militar_id
+            }) {
+                return Err(
+                    "O mesmo policial militar aparece duas vezes como envolvido. Remova a linha repetida."
+                        .to_string(),
+                );
+            }
+            if envolvido.id.is_some()
+                && self.envolvidos[..i]
+                    .iter()
+                    .any(|anterior| anterior.id == envolvido.id)
+            {
+                return Err("O mesmo vínculo de envolvido foi enviado duas vezes.".to_string());
+            }
         }
         for pessoa in &self.pessoas {
             if pessoa.nome.trim().is_empty() {

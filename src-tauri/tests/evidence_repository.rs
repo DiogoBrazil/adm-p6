@@ -681,3 +681,53 @@ async fn remover_limpa_as_quatro_tabelas_de_vinculo() {
     })
     .await;
 }
+
+/// "À apurar" é envolvido de verdade: aparece no painel, na ordem, e pode
+/// receber enquadramento antes de o militar ser identificado. O que ele não
+/// tem é posto e matrícula — e o painel não inventa nenhum dos dois.
+#[tokio::test]
+async fn painel_mostra_a_apurar_sem_posto_nem_matricula() {
+    util::com_banco_descartavel("ev_a_apurar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "001",
+            data(2026, 2, 1),
+            None,
+        )
+        .await;
+        let identificado = envolvido(&pool, &m, &p, &m.pm_um, 1).await;
+        let a_apurar = fixtures::envolvido_a_apurar(&pool, &m, &p, 2).await;
+        let transgressao = ids(&pool, "transgressoes", 1).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::save_for_envolvido(
+            &mut tx,
+            &SaveEvidenceRequest {
+                envolvido_id: a_apurar.clone(),
+                categorias_ids: vec![],
+                infracoes_penais: vec![],
+                transgressoes_ids: vec![transgressao[0].clone()],
+                infracoes_estatuto: vec![],
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let painel = repository::list_for_proceeding(&pool, &p).await.unwrap();
+        assert_eq!(painel.len(), 2);
+        assert_eq!(painel[0].envolvido_id, identificado);
+        assert!(painel[0].policial_militar_id.is_some());
+
+        assert_eq!(painel[1].envolvido_id, a_apurar);
+        assert_eq!(painel[1].policial_militar_id, None);
+        assert_eq!(painel[1].nome, "À apurar");
+        assert_eq!(painel[1].posto_graduacao, "");
+        assert_eq!(painel[1].matricula, "");
+        assert_eq!(painel[1].indicios.transgressoes.len(), 1);
+    })
+    .await;
+}

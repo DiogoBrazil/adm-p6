@@ -7,6 +7,7 @@
 // largura calculada sai em `data-*` e é aplicada pela CSSOM.
 
 import { call } from "./api";
+import TomSelect from "tom-select";
 
 /** Escapa para interpolação em corpo de elemento e em valor de atributo. */
 export function escapeHtml(value: unknown): string {
@@ -54,7 +55,8 @@ export type IconeAcao =
   | "padrao"
   | "excluir"
   | "baixar"
-  | "substituir";
+  | "substituir"
+  | "adicionar";
 
 /** Ícones lineares das ações tabulares, desenhados com a cor do botão. */
 function iconeAcao(nome: IconeAcao): string {
@@ -68,6 +70,7 @@ function iconeAcao(nome: IconeAcao): string {
     baixar: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
     // Duas setas em sentidos opostos: quem sai e quem entra na mesma função.
     substituir: '<path d="M4 8h13"/><path d="m13 4 4 4-4 4"/><path d="M20 16H7"/><path d="m11 12-4 4 4 4"/>',
+    adicionar: '<path d="M12 5v14M5 12h14"/>',
   };
   return `<svg class="icone-acao" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${conteudo[nome]}</svg>`;
 }
@@ -88,6 +91,102 @@ export function botaoIcone(
 /** `<option>` já escapado, marcando o selecionado. */
 export function option(valor: string, rotulo: string, selecionado: boolean): string {
   return `<option value="${escapeHtml(valor)}"${selecionado ? " selected" : ""}>${escapeHtml(rotulo)}</option>`;
+}
+
+// ── Select pesquisável e modal compartilhado ──────────────────────────────
+
+/** Ativa busca por teclado sem trocar o `<select>` que alimenta o FormData. */
+export function ativarSelectsPesquisaveis(root: ParentNode = document): void {
+  root.querySelectorAll<HTMLSelectElement>("select[data-select-pesquisavel]").forEach((select) => {
+    if (select.tomselect) return;
+    const placeholder = select.dataset.placeholder ?? "Digite para buscar…";
+    new TomSelect(select, {
+      maxItems: 1,
+      create: false,
+      diacritics: true,
+      placeholder,
+      closeAfterSelect: true,
+      selectOnTab: true,
+      render: {
+        no_results(data: { input: string }, escape: (valor: string) => string) {
+          return `<div class="no-results">Nenhum resultado para “${escape(data.input)}”.</div>`;
+        },
+      },
+    });
+  });
+}
+
+/** Libera listeners e devolve os selects ao estado nativo antes de um redraw. */
+export function destruirSelectsPesquisaveis(root: ParentNode = document): void {
+  root.querySelectorAll<HTMLSelectElement>("select.tomselected").forEach((select) => {
+    select.tomselect?.destroy();
+  });
+}
+
+export type ModalMontado = {
+  overlay: HTMLDivElement;
+  fechar: () => void;
+};
+
+/** Modal acessível usado pelos cadastros rápidos, sempre fora do `#app`. */
+export function montarModal(
+  conteudo: string,
+  rotulo: string,
+  aoCancelar: () => void,
+  gatilho?: HTMLElement | null,
+): ModalMontado | null {
+  if (document.querySelector(".modal-overlay")) return null;
+
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `<div class="modal panel modal--cadastro" role="dialog" aria-modal="true" aria-label="${escapeHtml(rotulo)}">${conteudo}</div>`;
+  document.body.appendChild(overlay);
+
+  const dialog = overlay.querySelector<HTMLElement>("[role=dialog]")!;
+  let encerrado = false;
+  const focaveis = () =>
+    [...dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((item) => !item.hidden && item.offsetParent !== null);
+
+  const aoTeclar = (evento: KeyboardEvent) => {
+    if (evento.key === "Escape") {
+      evento.preventDefault();
+      aoCancelar();
+      return;
+    }
+    if (evento.key !== "Tab") return;
+    const itens = focaveis();
+    if (!itens.length) return;
+    const primeiro = itens[0]!;
+    const ultimo = itens[itens.length - 1]!;
+    if (evento.shiftKey && document.activeElement === primeiro) {
+      evento.preventDefault();
+      ultimo.focus();
+    } else if (!evento.shiftKey && document.activeElement === ultimo) {
+      evento.preventDefault();
+      primeiro.focus();
+    }
+  };
+
+  const fechar = () => {
+    if (encerrado) return;
+    encerrado = true;
+    document.removeEventListener("keydown", aoTeclar);
+    destruirSelectsPesquisaveis(overlay);
+    overlay.remove();
+    gatilho?.focus();
+  };
+  document.addEventListener("keydown", aoTeclar);
+  overlay.addEventListener("click", (evento) => {
+    if (evento.target === overlay) aoCancelar();
+  });
+  overlay.querySelectorAll<HTMLElement>("[data-fechar-modal]").forEach((botao) => {
+    botao.addEventListener("click", aoCancelar);
+  });
+  ativarSelectsPesquisaveis(overlay);
+  window.setTimeout(() => focaveis()[0]?.focus(), 0);
+  return { overlay, fechar };
 }
 
 // ── Estado de formulários e feedback ─────────────────────────────────

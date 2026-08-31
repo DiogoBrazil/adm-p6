@@ -15,10 +15,12 @@ entender X → olhe em Y".
   volume apaga oito anos de registro.
 - **Editar migration já aplicada.** `sqlx` guarda checksum por versão e o
   startup seguinte quebra com `VersionMismatch`. Mudança de schema é migration
-  nova (`0015`…).
-- **Tocar em `adm-p6.sql`.** Dump de produção, 44 MB, somente leitura, fora do
-  git — e com dados pessoais de 235 militares.
-- **Reabrir uma decisão da seção 3 sem motivo novo.** São 51, todas decididas pelo
+  nova (`0018`…).
+- **Tocar em `adm-p6.sql`, ou versionar um `*.dump`.** Dump de produção, 44 MB,
+  somente leitura, fora do git — e com dados pessoais de 235 militares. Os backups
+  da seção 6.1 nascem na raiz e carregam os mesmos dados: o `.gitignore` cobre
+  `*.dump`, e essa linha não sai.
+- **Reabrir uma decisão da seção 3 sem motivo novo.** São 54, todas decididas pelo
   responsável e implementadas.
 
 ## Princípios do modelo, que valem para toda mudança
@@ -50,6 +52,12 @@ entender X → olhe em Y".
 | `count(*)`/`GROUP BY` em `v_processos_detalhados` | 7× mais lento; agregação parte das tabelas base |
 | Entregar arquivo ao usuário | `dom.ts::baixarArquivoBase64` → `files_save_download` (diálogo nativo no Rust). Nunca `<a download>` com `blob:`: no WebView não define destino |
 | Interpolar `style=""` ou handler inline no HTML | a CSP está ligada e recusa. Estilo calculado vai pela CSSOM, evento por `addEventListener` |
+| `ON CONFLICT` em `processo_envolvidos` | as três unicidades são **adiadas** (`0016`/`0017`), e constraint adiada não serve de árbitro — a forma sem alvo considera todos os índices e quebra tudo. Declare `ON CONFLICT (id)` |
+| Trocar valor único entre duas linhas | com constraint imediata a colisão é no **meio** da transação, e a mensagem descreve a regra certa para a situação errada. Unicidade que a tela permite permutar é `DEFERRABLE`; índice parcial não se adia, vira `EXCLUDE` |
+| Sincronizar coleção pelo id da entidade referida | trocar a FK vira **apagar e recriar**, e o `ON DELETE CASCADE` leva os filhos. Sincronize pelo id da própria linha — é o que `EnvolvidoRequest.id` existe para fazer |
+| Redesenhar formulário com select pesquisável na tela | o `TomSelect` fica preso ao DOM antigo. `dom.ts::destruirSelectsPesquisaveis` antes do redraw, e absorva o formulário **antes**: `destroy()` restaura as opções originais |
+| Esconder com `display:none` um `<select>` obrigatório | o navegador recusa o submit **em silêncio**, por não conseguir focá-lo. O Tom Select usa `clip` justamente por isso |
+| Envolvido "À apurar" | é `policial_militar_id IS NULL`, sem coluna booleana ao lado. Conta no limite, recebe enquadramento e resultado; não pode ser condutor, e é no máximo um por processo |
 | Comando paginado servindo de lista de **opções** | O teto de 200 **corta em silêncio**. Lista de opções não pagina (`users_list_ativos`); paginação é da listagem de tela, e precisa de controle de página |
 | Listagem de tela nova | o recorte é `db::paginacao::Recorte` (padrão 10, teto 200), e o envelope devolve `page`/`per_page` — sem isso a tela desenha um controle de página com o que **pediu**, não com o que foi servido |
 | Largura de coluna | vem de `dom.ts::Coluna.largura`, sai em `data-largura` e é aplicada por `aplicarLarguras` (chamada de `shell()`). Num `<col style="">` a CSP recusa igual, e a tabela volta a se dimensionar pelo conteúdo sem avisar |
@@ -65,7 +73,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 146 testes
+cd src-tauri && cargo fmt --check && cargo test   # 154 testes
 cd .. && npm run typecheck
 ```
 

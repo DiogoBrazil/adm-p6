@@ -229,6 +229,12 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
             "Só é possível registrar penalidade depois de informar a solução decidida."
         }
         "ck_envolvido_ordem" => "A ordem do envolvido precisa ser maior que zero.",
+        "ck_envolvido_condutor_identificado" => {
+            "O condutor precisa ser um policial militar identificado."
+        }
+        "uq_envolvido_a_apurar" => {
+            "Só pode haver um envolvido “À apurar” por processo."
+        }
 
         _ => return None,
     })

@@ -112,7 +112,19 @@ async fn sincronizar_designacoes(pool: &PgPool, req: &mut SaveProceedingRequest,
 
 fn envolvido(m: &Mundo, pm: &str, ordem: i32) -> EnvolvidoRequest {
     EnvolvidoRequest {
-        policial_militar_id: pm.to_string(),
+        id: None,
+        policial_militar_id: Some(pm.to_string()),
+        status_envolvido_id: m.status_envolvido.clone(),
+        ordem,
+        e_condutor: false,
+        acusacoes: None,
+    }
+}
+
+fn envolvido_a_apurar(m: &Mundo, ordem: i32) -> EnvolvidoRequest {
+    EnvolvidoRequest {
+        id: None,
+        policial_militar_id: None,
         status_envolvido_id: m.status_envolvido.clone(),
         ordem,
         e_condutor: false,
@@ -305,6 +317,53 @@ async fn cria_processo_completo_em_uma_transacao() {
 }
 
 #[tokio::test]
+async fn a_apurar_e_identificado_sem_perder_o_vinculo_e_os_indicios() {
+    util::com_banco_descartavel("proc_a_apurar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "A-APURAR-1");
+        req.envolvidos = vec![envolvido_a_apurar(&m, 1)];
+
+        let processo_id = salvar(&pool, &req).await.unwrap();
+        let detalhe = repository::get(&pool, &processo_id).await.unwrap().unwrap();
+        let envolvido_id = detalhe.envolvidos[0].id.clone();
+        assert_eq!(detalhe.envolvidos[0].policial_militar_id, None);
+        assert_eq!(detalhe.envolvidos[0].nome, "À apurar");
+
+        sqlx::query(
+            "INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&envolvido_id)
+        .bind(&m.categoria_indicio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        req.id = Some(processo_id.clone());
+        req.envolvidos[0].id = Some(envolvido_id.clone());
+        req.envolvidos[0].policial_militar_id = Some(m.pm_dois.clone());
+        sincronizar_designacoes(&pool, &mut req, &processo_id).await;
+        salvar(&pool, &req).await.unwrap();
+
+        let detalhe = repository::get(&pool, &processo_id).await.unwrap().unwrap();
+        assert_eq!(detalhe.envolvidos[0].id, envolvido_id);
+        assert_eq!(
+            detalhe.envolvidos[0].policial_militar_id.as_deref(),
+            Some(m.pm_dois.as_str())
+        );
+        let indicios: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM envolvido_categorias_indicio WHERE envolvido_id = $1::uuid",
+        )
+        .bind(&detalhe.envolvidos[0].id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(indicios, 1);
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn prazo_inicial_nasce_com_os_dias_da_configuracao() {
     util::com_banco_descartavel("proc_prazo", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
@@ -387,7 +446,10 @@ async fn edicao_substitui_colecoes_e_nao_duplica_o_prazo_inicial() {
 
         let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
         assert_eq!(detalhe.envolvidos.len(), 1);
-        assert_eq!(detalhe.envolvidos[0].policial_militar_id, m.pm_tres);
+        assert_eq!(
+            detalhe.envolvidos[0].policial_militar_id.as_deref(),
+            Some(m.pm_tres.as_str())
+        );
         assert_eq!(detalhe.pessoas.len(), 1);
         assert_eq!(detalhe.pessoas[0].nome, "VITIMA DOIS");
         assert_eq!(
@@ -1110,6 +1172,20 @@ async fn validacoes_puras_do_request() {
             },
         ];
         assert!(salvar(&pool, &req).await.unwrap_err().contains("condutor"));
+
+        let mut req = base(&m, "001");
+        req.envolvidos = vec![envolvido_a_apurar(&m, 1), envolvido_a_apurar(&m, 2)];
+        assert!(salvar(&pool, &req).await.unwrap_err().contains("À apurar"));
+
+        let mut req = base(&m, "001");
+        req.envolvidos = vec![EnvolvidoRequest {
+            e_condutor: true,
+            ..envolvido_a_apurar(&m, 1)
+        }];
+        assert!(salvar(&pool, &req)
+            .await
+            .unwrap_err()
+            .contains("identificado"));
 
         let mut req = base(&m, "001");
         req.data_instauracao = chrono::Local::now().date_naive() + chrono::Duration::days(1);
@@ -2615,6 +2691,162 @@ async fn pessoas_inquiridas_e_vitimas_sao_independentes() {
         assert_eq!(detalhe.pessoas.len(), 2);
         assert_eq!(detalhe.vitimas.len(), 1);
         assert_eq!(detalhe.vitimas[0].nome, "OFENDIDO UM");
+    })
+    .await;
+}
+
+/// O caminho inverso: o militar registrado estava errado e o processo volta ao
+/// estado "À apurar". A sincronização é pelo id do VÍNCULO, então a linha e o
+/// que pendura nela sobrevivem — trocar o PM não é criar outro envolvido.
+#[tokio::test]
+async fn identificado_volta_a_ser_a_apurar_como_correcao() {
+    util::com_banco_descartavel("proc_volta_a_apurar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "CORRECAO-1");
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+
+        let processo_id = salvar(&pool, &req).await.unwrap();
+        let detalhe = repository::get(&pool, &processo_id).await.unwrap().unwrap();
+        let envolvido_id = detalhe.envolvidos[0].id.clone();
+
+        sqlx::query(
+            "INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&envolvido_id)
+        .bind(&m.categoria_indicio)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        req.id = Some(processo_id.clone());
+        req.envolvidos[0].id = Some(envolvido_id.clone());
+        req.envolvidos[0].policial_militar_id = None;
+        sincronizar_designacoes(&pool, &mut req, &processo_id).await;
+        salvar(&pool, &req).await.unwrap();
+
+        let detalhe = repository::get(&pool, &processo_id).await.unwrap().unwrap();
+        assert_eq!(detalhe.envolvidos.len(), 1, "não nasceu um segundo vínculo");
+        assert_eq!(detalhe.envolvidos[0].id, envolvido_id);
+        assert_eq!(detalhe.envolvidos[0].policial_militar_id, None);
+        assert_eq!(detalhe.envolvidos[0].nome, "À apurar");
+        assert_eq!(detalhe.envolvidos[0].posto_graduacao, "");
+        assert_eq!(detalhe.envolvidos[0].matricula, "");
+
+        let indicios: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM envolvido_categorias_indicio WHERE envolvido_id = $1::uuid",
+        )
+        .bind(&envolvido_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(indicios, 1, "o enquadramento não some ao voltar a À apurar");
+
+        // E o militar que estava errado continua no cadastro, intocado: a
+        // correção do processo não mexe no catálogo de pessoas.
+        let ativo: bool =
+            sqlx::query_scalar("SELECT ativo FROM policiais_militares WHERE id = $1::uuid")
+                .bind(&m.pm_dois)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(ativo);
+    })
+    .await;
+}
+
+/// "À apurar" é um envolvido como qualquer outro para efeito de teto: ocupa
+/// uma vaga do `max_envolvidos` configurado no apuratório.
+#[tokio::test]
+async fn a_apurar_ocupa_vaga_no_limite_de_envolvidos() {
+    util::com_banco_descartavel("proc_a_apurar_limite", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // O apuratório principal aceita 1 envolvido.
+        let mut req = base(&m, "LIMITE-1");
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1), envolvido_a_apurar(&m, 2)];
+        let erro = salvar(&pool, &req)
+            .await
+            .expect_err("o marcador coletivo também conta");
+        assert!(erro.contains("envolvid"), "mensagem: {erro}");
+
+        // Sozinho ele cabe.
+        req.envolvidos = vec![envolvido_a_apurar(&m, 1)];
+        salvar(&pool, &req).await.expect("um só cabe no limite");
+    })
+    .await;
+}
+
+/// O mesmo militar em duas linhas é erro de digitação, não fato novo. A
+/// mensagem é de domínio, e não o texto cru da constraint do PostgreSQL.
+#[tokio::test]
+async fn o_mesmo_militar_duas_vezes_como_envolvido_e_recusado_com_frase_propria() {
+    util::com_banco_descartavel("proc_env_duplicado", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "DUPLICADO-1");
+        req.apuratorio_id = m.apuratorio_livre.clone();
+        req.natureza_fato_id = None;
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1), envolvido(&m, &m.pm_dois, 2)];
+
+        let erro = salvar(&pool, &req).await.expect_err("PM repetido");
+        assert!(erro.contains("duas vezes"), "mensagem: {erro}");
+        assert!(
+            !erro.contains("uq_envolvido") && !erro.contains("duplicate"),
+            "texto cru do PostgreSQL vazando: {erro}"
+        );
+    })
+    .await;
+}
+
+/// Trocar o condutor entre dois envolvidos numa gravação só.
+///
+/// Falhava, e falhava mentindo: o índice parcial da 0001 colidia no meio da
+/// transação — o de cima já marcado, o de baixo ainda não desmarcado — e o
+/// usuário lia "Só pode haver um condutor por processo." com exatamente um
+/// condutor na tela. A 0017 trocou o índice por uma constraint EXCLUDE adiada,
+/// conferida no `commit`, quando o processo já está no estado pedido.
+#[tokio::test]
+async fn condutor_troca_de_envolvido_numa_gravacao_so() {
+    util::com_banco_descartavel("proc_troca_condutor", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "CONDUTOR-1");
+        req.apuratorio_id = m.apuratorio_livre.clone();
+        req.natureza_fato_id = Some(m.natureza_transito.clone());
+        req.envolvidos = vec![
+            EnvolvidoRequest {
+                e_condutor: false,
+                ..envolvido(&m, &m.pm_dois, 1)
+            },
+            EnvolvidoRequest {
+                e_condutor: true,
+                ..envolvido(&m, &m.pm_tres, 2)
+            },
+        ];
+        let id = salvar(&pool, &req).await.unwrap();
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        req.id = Some(id.clone());
+        req.envolvidos[0].id = Some(detalhe.envolvidos[0].id.clone());
+        req.envolvidos[1].id = Some(detalhe.envolvidos[1].id.clone());
+        // O condutor sobe uma linha: o primeiro é marcado antes de o segundo
+        // ser desmarcado, que é exatamente a ordem que colidia.
+        req.envolvidos[0].e_condutor = true;
+        req.envolvidos[1].e_condutor = false;
+        sincronizar_designacoes(&pool, &mut req, &id).await;
+        salvar(&pool, &req)
+            .await
+            .expect("a troca é um estado válido");
+
+        let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
+        assert!(detalhe.envolvidos[0].e_condutor);
+        assert!(!detalhe.envolvidos[1].e_condutor);
+
+        // A trava continua de pé: dois condutores de verdade seguem recusados,
+        // e com a frase de domínio, não com o texto cru da constraint.
+        req.envolvidos[1].e_condutor = true;
+        sincronizar_designacoes(&pool, &mut req, &id).await;
+        let erro = salvar(&pool, &req).await.expect_err("dois condutores");
+        assert!(erro.contains("um condutor"), "mensagem: {erro}");
     })
     .await;
 }

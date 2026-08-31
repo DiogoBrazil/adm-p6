@@ -132,7 +132,7 @@ impl EvidenceData {
 #[derive(Debug, Serialize)]
 pub struct EnvolvidoComIndicios {
     pub envolvido_id: String,
-    pub policial_militar_id: String,
+    pub policial_militar_id: Option<String>,
     pub nome: String,
     pub matricula: String,
     pub posto_graduacao: String,

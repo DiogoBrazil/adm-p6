@@ -6,6 +6,12 @@ node_modules
 # Fonte somente-leitura para gerar seeds e para a importacao; nunca versionar.
 adm-p6.sql
 
+# Backups gerados pela secao 6.1 do GUIA (`adm_p6_db_AAAA-MM-DD.dump`). Carregam
+# os mesmos dados pessoais que o `adm-p6.sql`, e nascem na raiz do repositorio:
+# sem esta linha, um `git add -A` distraido versiona os 235 militares.
+*.dump
+*.sql.gz
+
 # Build do Vite: artefato, regenerado por `npm run build`.
 dist
 

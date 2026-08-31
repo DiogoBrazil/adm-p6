@@ -20,6 +20,7 @@
 
 import { call, type UserListItem, type UserProcessItem } from "../api";
 import {
+  ativarSelectsPesquisaveis,
   avisarSeCortado,
   barraDeExportacao,
   baixarCsv,
@@ -29,6 +30,7 @@ import {
   ligarExportacao,
   ligarPaginacao,
   limparFormularioPendente,
+  montarModal,
   notificar,
   option,
   paginacao,
@@ -259,6 +261,101 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
 // ── Formulário ────────────────────────────────────────────────────────
 
+/** Cadastro enxuto de PM: conta de acesso continua sendo uma decisão da tela própria. */
+export async function abrirCadastroRapidoMilitar(
+  sugerirDesignavel: boolean,
+  gatilho?: HTMLElement | null,
+): Promise<UserListItem | null> {
+  const postos = await opcoes("postos_graduacoes", "nome");
+  return new Promise((resolver) => {
+    let finalizado = false;
+    let modal: ReturnType<typeof montarModal> = null;
+    const concluir = (resultado: UserListItem | null) => {
+      if (finalizado) return;
+      finalizado = true;
+      modal?.fechar();
+      resolver(resultado);
+    };
+    modal = montarModal(
+      `<div class="page-head">
+         <div><h1>Novo policial militar</h1><p>O cadastro será selecionado no processo.</p></div>
+       </div>
+       <div class="feedback feedback--error formulario-feedback" data-erro-militar hidden role="alert"></div>
+       <form class="crud-form" data-form-militar-rapido>
+         <fieldset><legend>Dados do militar</legend>
+           <label>Posto / Graduação
+             <select name="posto_graduacao_id" required data-select-pesquisavel>
+               <option value=""></option>
+               ${postos.map((posto) => option(posto.id, posto.rotulo, false)).join("")}
+             </select>
+           </label>
+           <label>Nome<input name="nome" required autocomplete="off" /></label>
+           <label>Matrícula<input name="matricula" required inputmode="numeric" autocomplete="off" /></label>
+           <label class="checkbox-inline">
+             <input name="is_encarregado" type="checkbox"${sugerirDesignavel ? " checked" : ""} />
+             Pode ser designado
+           </label>
+           <p class="campo-efeito">Este atalho não cria conta de acesso ao sistema.</p>
+         </fieldset>
+         <div class="form-actions">
+           <button type="button" class="secondary" data-fechar-modal>Cancelar</button>
+           <button type="submit">Salvar e selecionar</button>
+         </div>
+       </form>`,
+      "Cadastrar policial militar",
+      () => concluir(null),
+      gatilho,
+    );
+    if (!modal) {
+      resolver(null);
+      return;
+    }
+    const form = modal.overlay.querySelector<HTMLFormElement>("[data-form-militar-rapido]")!;
+    ativarSelectsPesquisaveis(form);
+    form.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const salvar = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      const erro = modal?.overlay.querySelector<HTMLElement>("[data-erro-militar]");
+      salvar.disabled = true;
+      salvar.textContent = "Salvando…";
+      const dados = new FormData(form);
+      const resposta = await call("users_save", {
+        request: {
+          id: null,
+          nome: String(dados.get("nome") ?? "").trim(),
+          matricula: String(dados.get("matricula") ?? "").trim(),
+          posto_graduacao_id: String(dados.get("posto_graduacao_id") ?? ""),
+          is_encarregado: dados.get("is_encarregado") === "on",
+          conta: null,
+        },
+      });
+      if (!resposta.ok || !resposta.data) {
+        if (erro) {
+          erro.hidden = false;
+          erro.textContent = resposta.error ?? "Não foi possível cadastrar o militar.";
+          erro.focus();
+        }
+        salvar.disabled = false;
+        salvar.textContent = "Salvar e selecionar";
+        return;
+      }
+      const ativos = await call("users_list_ativos", {});
+      const militar = (ativos.data ?? []).find((item) => item.id === resposta.data?.id) ?? null;
+      if (!militar) {
+        if (erro) {
+          erro.hidden = false;
+          erro.textContent = "O militar foi salvo, mas não pôde ser recarregado.";
+        }
+        salvar.disabled = false;
+        salvar.textContent = "Salvar e selecionar";
+        return;
+      }
+      notificar("Militar cadastrado e selecionado.", "sucesso");
+      concluir(militar);
+    });
+  });
+}
+
 export async function renderFormularioUsuario(
   ctx: ContextoTela,
   usuario: UserListItem | null,
@@ -287,7 +384,7 @@ export async function renderFormularioUsuario(
         <fieldset>
           <legend>Dados do militar</legend>
           <label>Posto / Graduação
-            <select name="posto_graduacao_id" required>
+            <select name="posto_graduacao_id" required data-select-pesquisavel>
               <option value="">Selecione…</option>
               ${postos.map((p) => option(p.id, p.rotulo, p.id === usuario?.posto_graduacao_id)).join("")}
             </select>
@@ -316,7 +413,7 @@ export async function renderFormularioUsuario(
               <input name="email" type="email" value="${escapeHtml(usuario?.conta_email ?? "")}" />
             </label>
             <label>Perfil
-              <select name="perfil_id">
+              <select name="perfil_id" data-select-pesquisavel>
                 <option value="">Selecione…</option>
                 ${perfis.map((p) => option(p.id, p.rotulo, p.id === usuario?.conta_perfil_id)).join("")}
               </select>
@@ -352,6 +449,7 @@ export async function renderFormularioUsuario(
   });
 
   const formulario = document.querySelector<HTMLFormElement>("#form-usuario")!;
+  ativarSelectsPesquisaveis(formulario);
   protegerFormulario(formulario);
   formulario.addEventListener("submit", async (e) => {
     e.preventDefault();

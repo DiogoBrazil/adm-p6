@@ -11,12 +11,14 @@
 
 import { call, type Catalogo, type Coluna } from "../api";
 import {
+  ativarSelectsPesquisaveis,
   cellDisplay,
   botaoIcone,
   escapeHtml,
   ITENS_POR_PAGINA,
   ligarPaginacao,
   limparFormularioPendente,
+  montarModal,
   notificar,
   option,
   paginacao,
@@ -180,7 +182,7 @@ function campo(
     return `
       <div class="campo"${marca}${oculto}>
         <label>${escapeHtml(coluna.rotulo)}
-          <select name="${coluna.nome}"${obrigatorio}>
+          <select name="${coluna.nome}"${obrigatorio} data-select-pesquisavel>
             <option value=""></option>
             ${opcoes.map((o) => option(o.value, o.label, o.value === atual)).join("")}
           </select>
@@ -223,6 +225,133 @@ function montarValores(cat: Catalogo, form: FormData): Record<string, unknown> {
     valores[coluna.nome] = bruto || null;
   }
   return valores;
+}
+
+export type CadastroRapidoResultado = {
+  id: string;
+  rotulo: string;
+  valores: Record<string, unknown>;
+};
+
+/**
+ * Reutiliza o mesmo formulário dirigido por metadados dentro do processo.
+ * Não toca na proteção global de formulário: o processo aberto continua sujo
+ * antes e depois do modal, e o novo valor passa a fazer parte dele.
+ */
+export async function abrirCadastroRapidoCatalogo(
+  chave: string,
+  valoresIniciais: Record<string, unknown> = {},
+  gatilho?: HTMLElement | null,
+): Promise<CadastroRapidoResultado | null> {
+  const definicoes = await carregarDefinicoes();
+  const cat = definicoes.find((item) => item.chave === chave);
+  if (!cat) {
+    notificar("Este cadastro não está disponível. Recarregue a página.", "erro");
+    return null;
+  }
+  const referencias = await carregarReferencias(cat, definicoes);
+  const linhaInicial = { id: "", ativo: true, ...valoresIniciais } as Linha;
+
+  return new Promise((resolver) => {
+    let finalizado = false;
+    let modal: ReturnType<typeof montarModal> = null;
+    const concluir = (resultado: CadastroRapidoResultado | null) => {
+      if (finalizado) return;
+      finalizado = true;
+      modal?.fechar();
+      resolver(resultado);
+    };
+
+    modal = montarModal(
+      `<div class="page-head">
+         <div><h1>Novo — ${escapeHtml(cat.rotulo)}</h1><p>Cadastre sem sair do processo.</p></div>
+       </div>
+       <div class="feedback feedback--error formulario-feedback" data-erro-cadastro hidden role="alert"></div>
+       <form class="crud-form" data-form-cadastro-rapido>
+         <fieldset><legend>Dados do registro</legend>
+           ${colunasVisiveis(cat).map((coluna) => campo(coluna, linhaInicial, referencias)).join("")}
+         </fieldset>
+         <div class="form-actions">
+           <button type="button" class="secondary" data-fechar-modal>Cancelar</button>
+           <button type="submit">Salvar e selecionar</button>
+         </div>
+       </form>`,
+      `Cadastrar ${cat.rotulo}`,
+      () => concluir(null),
+      gatilho,
+    );
+    if (!modal) {
+      resolver(null);
+      return;
+    }
+
+    const form = modal.overlay.querySelector<HTMLFormElement>("[data-form-cadastro-rapido]")!;
+    for (const alvo of form.querySelectorAll<HTMLElement>("[data-visivel-se]")) {
+      const porta = form.querySelector<HTMLInputElement>(
+        `input[name="${alvo.dataset.visivelSe}"]`,
+      );
+      if (!porta) continue;
+      const sincronizar = () => {
+        alvo.hidden = !porta.checked;
+        const entrada = alvo.querySelector<HTMLInputElement | HTMLSelectElement>("input, select");
+        if (entrada) {
+          entrada.required = porta.checked;
+          if (!porta.checked) {
+            entrada.value = "";
+            if (entrada instanceof HTMLSelectElement) entrada.tomselect?.clear(true);
+          }
+        }
+      };
+      porta.addEventListener("change", sincronizar);
+      sincronizar();
+    }
+    ativarSelectsPesquisaveis(form);
+
+    form.addEventListener("submit", async (evento) => {
+      evento.preventDefault();
+      const salvar = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+      const erro = modal?.overlay.querySelector<HTMLElement>("[data-erro-cadastro]");
+      salvar.disabled = true;
+      salvar.textContent = "Salvando…";
+      const resposta = await call("legal_catalogs_save", {
+        request: {
+          catalogo: cat.chave,
+          id: null,
+          valores: montarValores(cat, new FormData(form)),
+        },
+      });
+      if (!resposta.ok || !resposta.data) {
+        if (erro) {
+          erro.hidden = false;
+          erro.textContent = resposta.error ?? "Não foi possível salvar o registro.";
+          erro.focus();
+        }
+        salvar.disabled = false;
+        salvar.textContent = "Salvar e selecionar";
+        return;
+      }
+      const gravado = await call("legal_catalogs_get", {
+        catalogo: cat.chave,
+        id: resposta.data.id,
+      });
+      const linha = gravado.data as Linha | null;
+      if (!linha) {
+        if (erro) {
+          erro.hidden = false;
+          erro.textContent = "O registro foi salvo, mas não pôde ser recarregado.";
+        }
+        salvar.disabled = false;
+        salvar.textContent = "Salvar e selecionar";
+        return;
+      }
+      notificar("Registro cadastrado e selecionado.", "sucesso");
+      concluir({
+        id: String(linha.id),
+        rotulo: rotuloDaLinha(cat, linha),
+        valores: linha,
+      });
+    });
+  });
 }
 
 // ── telas ───────────────────────────────────────────────────────────────────
@@ -490,6 +619,7 @@ async function renderFormulario(
   });
 
   const formulario = document.querySelector<HTMLFormElement>("#form-catalogo")!;
+  ativarSelectsPesquisaveis(formulario);
   protegerFormulario(formulario);
 
   // Cada campo condicional acompanha o seu booleano-porta. Guiado pelo
@@ -504,7 +634,10 @@ async function renderFormulario(
       const entrada = alvo.querySelector<HTMLInputElement | HTMLSelectElement>("input, select");
       if (entrada) {
         entrada.required = porta.checked;
-        if (!porta.checked) entrada.value = "";
+        if (!porta.checked) {
+          entrada.value = "";
+          if (entrada instanceof HTMLSelectElement) entrada.tomselect?.clear(true);
+        }
       }
     };
     porta.addEventListener("change", sincronizar);

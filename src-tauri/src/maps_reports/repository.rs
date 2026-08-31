@@ -75,10 +75,15 @@ pub async fn map_rows(
           -- Os envolvidos por extenso e o último andamento são do mapa, não da
           -- composição comum: ficam aqui.
           LEFT JOIN LATERAL (
-              SELECT string_agg(pg.sigla || ' ' || pme.nome, ', ' ORDER BY e.ordem) AS lista
+              SELECT string_agg(
+                         CASE WHEN e.policial_militar_id IS NULL
+                              THEN 'À apurar'
+                              ELSE pg.sigla || ' ' || pme.nome END,
+                         ', ' ORDER BY e.ordem
+                     ) AS lista
                 FROM processo_envolvidos e
-                JOIN policiais_militares pme ON pme.id = e.policial_militar_id
-                JOIN postos_graduacoes pg    ON pg.id = pme.posto_graduacao_id
+                LEFT JOIN policiais_militares pme ON pme.id = e.policial_militar_id
+                LEFT JOIN postos_graduacoes pg    ON pg.id = pme.posto_graduacao_id
                WHERE e.processo_id = v.id
           ) env ON true
           LEFT JOIN LATERAL (

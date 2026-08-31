@@ -36,8 +36,10 @@ import {
   type UserListItem,
 } from "../api";
 import {
+  ativarSelectsPesquisaveis,
   baixarArquivoBase64,
   botaoIcone,
+  destruirSelectsPesquisaveis,
   escapeHtml,
   formatarOrigem,
   formatarQualificacaoMilitar,
@@ -50,12 +52,15 @@ import {
   podeDescartarFormulario,
   protegerFormulario,
 } from "../dom";
-import type { ContextoTela } from "./catalogos";
+import { abrirCadastroRapidoCatalogo, type ContextoTela } from "./catalogos";
 import { pedirAnalogia, renderIndicios } from "./indicios";
+import { abrirCadastroRapidoMilitar } from "./usuarios";
 
 export const ROTA_LISTA = "/procedimentos/lista";
 
 const EXTENSAO_CARTA_PRECATORIA = "carta_precatoria";
+/** Valor exclusivo do DOM. No IPC, esta opção vira `policial_militar_id: null`. */
+const A_APURAR = "__a_apurar__";
 
 type Opcao = { id: string; rotulo: string; extra?: Record<string, unknown> };
 
@@ -241,7 +246,11 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
       : null;
 
   rascunho.envolvidos = rascunho.envolvidos.map((envolvido, i) => ({
-    policial_militar_id: String(dados.get(`env_${i}_pm`) ?? ""),
+    id: envolvido.id ?? null,
+    policial_militar_id:
+      String(dados.get(`env_${i}_pm`) ?? "") === A_APURAR
+        ? null
+        : String(dados.get(`env_${i}_pm`) ?? ""),
     status_envolvido_id: String(dados.get(`env_${i}_status`) ?? ""),
     ordem: i + 1,
     e_condutor: dados.get(`env_${i}_condutor`) === "on",
@@ -299,18 +308,57 @@ function selectMilitares(nome: string, militares: UserListItem[], atual: string)
   // Então o valor atual é preservado como opção própria quando falta na lista.
   // O id é tudo o que o rascunho carrega; o rótulo diz por que está ali.
   const ausente = atual !== "" && !militares.some((m) => m.id === atual);
-  return `<select name="${nome}" required>
+  return `<select name="${nome}" required data-select-pesquisavel data-tipo-cadastro="militar">
     <option value=""></option>
     ${ausente ? option(atual, "— militar desativado (vínculo preservado) —", true) : ""}
     ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === atual)).join("")}
   </select>`;
 }
 
+function selectMilitarEnvolvido(
+  nome: string,
+  militares: UserListItem[],
+  atual: string | null,
+  permitirApenasApurar = true,
+): string {
+  const valorAtual = atual === null ? A_APURAR : atual;
+  const ausente = valorAtual !== "" && valorAtual !== A_APURAR && !militares.some((m) => m.id === valorAtual);
+  return `<select name="${nome}" required data-select-pesquisavel data-tipo-cadastro="militar">
+    <option value=""></option>
+    <option value="${A_APURAR}"${valorAtual === A_APURAR ? " selected" : ""}${permitirApenasApurar ? "" : " disabled"}>À apurar — PM ainda não identificado</option>
+    ${ausente ? option(valorAtual, "— militar desativado (vínculo preservado) —", true) : ""}
+    ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === valorAtual)).join("")}
+  </select>`;
+}
+
 function selectOpcoes(nome: string, opcoes: Opcao[], atual: string, obrigatorio = false): string {
-  return `<select name="${nome}"${obrigatorio ? " required" : ""}>
+  return `<select name="${nome}"${obrigatorio ? " required" : ""} data-select-pesquisavel>
     <option value=""></option>
     ${opcoes.map((o) => option(o.id, o.rotulo, o.id === atual)).join("")}
   </select>`;
+}
+
+function campoComCadastroRapido(
+  rotuloCampo: string,
+  nome: string,
+  controle: string,
+  tipo: string,
+  rotulo: string,
+  designavel = false,
+  ajuda = "",
+): string {
+  return `<div class="campo campo-com-cadastro">
+    <label>${escapeHtml(rotuloCampo)}${controle}</label>
+    ${botaoIcone("adicionar", `Cadastrar ${rotulo}`, {
+      classe: "secondary cadastro-rapido-botao",
+      dados: {
+        "cadastro-rapido": tipo,
+        "select-alvo": nome,
+        ...(designavel ? { "militar-designavel": "true" } : {}),
+      },
+    })}
+    ${ajuda ? `<small class="campo-efeito">${escapeHtml(ajuda)}</small>` : ""}
+  </div>`;
 }
 
 function campoData(
@@ -387,11 +435,18 @@ function linhaDesignacao(
     <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
       <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
     </div>
-    <label>Papel<select name="des_${i}_papel" required>
+    <label>Papel<select name="des_${i}_papel" required data-select-pesquisavel>
       <option value=""></option>
       ${opcoesPapel.join("")}
     </select></label>
-    <label>Militar${selectMilitares(`des_${i}_pm`, militares, d.policial_militar_id)}</label>
+    ${campoComCadastroRapido(
+      "Militar",
+      `des_${i}_pm`,
+      selectMilitares(`des_${i}_pm`, militares, d.policial_militar_id),
+      "militar",
+      "policial militar",
+      true,
+    )}
   </div>`;
 }
 
@@ -407,7 +462,7 @@ function listaAcusacoes(
         .map(
           (item, indice) => `<div class="vinculo">
             <span>${escapeHtml(rotulo(item.infracao_penal_id))}</span>
-            <label>Esfera<select data-acusacao-esfera="${indiceEnvolvido}:${indice}">
+            <label>Esfera<select data-acusacao-esfera="${indiceEnvolvido}:${indice}" data-select-pesquisavel>
               ${esferas.map((e) => option(e.id, e.rotulo, e.id === item.esfera_penal_id)).join("")}
             </select></label>
             <button type="button" class="danger small" data-remover-acusacao-penal="${indiceEnvolvido}:${indice}" aria-label="Remover infração penal">×</button>
@@ -458,7 +513,7 @@ function blocoAcusacoes(
               <strong>Crime ou contravenção</strong>
               <div class="linha-form">
                 <label>Buscar artigo<input id="acusacao-penal-${indice}" placeholder="artigo ou descrição" autocomplete="off" /></label>
-                <label>Dispositivo<select id="acusacao-dispositivo-${indice}"><option value="">Todos</option>${dispositivos.map((d) => option(d.id, d.rotulo, false)).join("")}</select></label>
+                <label>Dispositivo<select id="acusacao-dispositivo-${indice}" data-select-pesquisavel><option value="">Todos</option>${dispositivos.map((d) => option(d.id, d.rotulo, false)).join("")}</select></label>
               </div>
               <div id="acusacao-penal-resultados-${indice}" class="resultados"></div>
             </div>`
@@ -468,7 +523,7 @@ function blocoAcusacoes(
         <strong>Transgressão do RDPM</strong>
         <div class="linha-form">
           <label>Buscar transgressão<input id="acusacao-transgressao-${indice}" placeholder="inciso ou texto" autocomplete="off" /></label>
-          <label>Natureza<select id="acusacao-natureza-${indice}"><option value="">Todas</option>${naturezasTransgressao.map((n) => option(n.id, n.rotulo, false)).join("")}</select></label>
+          <label>Natureza<select id="acusacao-natureza-${indice}" data-select-pesquisavel><option value="">Todas</option>${naturezasTransgressao.map((n) => option(n.id, n.rotulo, false)).join("")}</select></label>
         </div>
         <div id="acusacao-transgressao-resultados-${indice}" class="resultados"></div>
       </div>
@@ -487,6 +542,7 @@ export async function renderFormularioProcesso(
   erro = "",
   rascunhoAtual?: Rascunho,
 ): Promise<void> {
+  destruirSelectsPesquisaveis(document);
   if (!rascunhoAtual) {
     limparFormularioPendente();
     datasPosterioresEdicao = datasPosterioresVazias();
@@ -514,8 +570,8 @@ export async function renderFormularioProcesso(
         data_julgamento: d.data_julgamento,
         data_conclusao: d.data_conclusao,
       };
-      const evidenciasPorMilitar = new Map(
-        (evidenciasResp.data ?? []).map((item) => [item.policial_militar_id, item.indicios]),
+      const evidenciasPorEnvolvido = new Map(
+        (evidenciasResp.data ?? []).map((item) => [item.envolvido_id, item.indicios]),
       );
       rascunho = {
         id: d.id,
@@ -533,7 +589,7 @@ export async function renderFormularioProcesso(
         data_recebimento: d.data_recebimento,
         resumo_fatos: d.resumo_fatos,
         envolvidos: d.envolvidos.map((e, i) => {
-          const dados = evidenciasPorMilitar.get(e.policial_militar_id);
+          const dados = evidenciasPorEnvolvido.get(e.id);
           const rotulos: Record<string, string> = {};
           for (const item of dados?.infracoes_penais ?? []) rotulos[item.infracao_penal_id] = item.rotulo;
           for (const item of dados?.transgressoes ?? []) rotulos[item.id] = item.rotulo;
@@ -542,6 +598,7 @@ export async function renderFormularioProcesso(
             rotulos[item.analogia_transgressao_id] = item.analogia_rotulo;
           }
           return {
+            id: e.id,
             policial_militar_id: e.policial_militar_id,
             status_envolvido_id: e.status_envolvido_id,
             ordem: i + 1,
@@ -696,7 +753,7 @@ export async function renderFormularioProcesso(
           <legend>Identificação</legend>
           <div class="campo"><label>Apuratório ${selectOpcoes("apuratorio_id", cats.apuratorios, r.apuratorio_id, true)}</label></div>
           <div class="campo"><label>Documento iniciador
-            <select name="documento_iniciador_id" required>
+            <select name="documento_iniciador_id" required data-select-pesquisavel>
               <option value=""></option>
               ${documentos.map((d) => option(d.tipo_documento_id, `${d.tipo_documento} (${d.prazo_efetivo_dias} dias)`, d.tipo_documento_id === r.documento_iniciador_id)).join("")}
             </select></label></div>
@@ -709,12 +766,10 @@ export async function renderFormularioProcesso(
 
         <fieldset>
           <legend>Localização</legend>
-          <div class="campo"><label>Unidade de origem ${selectOpcoes("unidade_origem_id", cats.unidades, r.unidade_origem_id, true)}</label></div>
-          <div class="campo"><label>Subunidade/Seção de origem ${selectOpcoes("subunidade_secao_origem_id", subunidadesDaUnidade, r.subunidade_secao_origem_id ?? "")}
-            <small class="campo-efeito">Opcional. As opções pertencem à unidade selecionada.</small></label></div>
-          <div class="campo"><label>Município do fato ${selectOpcoes("municipio_fato_id", cats.municipios, r.municipio_fato_id, true)}</label></div>
-          <div class="campo"><label>Natureza do fato ${selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza)}
-            ${exigeNatureza ? `<small class="campo-efeito">Obrigatória para este apuratório.</small>` : ""}</label></div>
+          ${campoComCadastroRapido("Unidade de origem", "unidade_origem_id", selectOpcoes("unidade_origem_id", cats.unidades, r.unidade_origem_id, true), "unidades_pm", "unidade PM")}
+          ${campoComCadastroRapido("Subunidade/Seção de origem", "subunidade_secao_origem_id", selectOpcoes("subunidade_secao_origem_id", subunidadesDaUnidade, r.subunidade_secao_origem_id ?? ""), "subunidades_secoes", "subunidade ou seção", false, "Opcional. As opções pertencem à unidade selecionada.")}
+          ${campoComCadastroRapido("Município do fato", "municipio_fato_id", selectOpcoes("municipio_fato_id", cats.municipios, r.municipio_fato_id, true), "municipios_distritos", "município ou distrito")}
+          ${campoComCadastroRapido("Natureza do fato", "natureza_fato_id", selectOpcoes("natureza_fato_id", cats.naturezas, r.natureza_fato_id ?? "", exigeNatureza), "naturezas_fato", "natureza do fato", false, exigeNatureza ? "Obrigatória para este apuratório." : "")}
         </fieldset>
 
         ${
@@ -722,7 +777,7 @@ export async function renderFormularioProcesso(
             ? `<fieldset>
                  <legend>Carta precatória</legend>
                  <div class="campo"><label>Deprecante<input name="cp_deprecante" value="${escapeHtml(r.carta_precatoria?.deprecante ?? "")}" required /></label></div>
-                 <div class="campo"><label>Unidade deprecada ${selectOpcoes("cp_unidade_deprecada_id", cats.unidades, r.carta_precatoria?.unidade_deprecada_id ?? "", true)}</label></div>
+                 ${campoComCadastroRapido("Unidade deprecada", "cp_unidade_deprecada_id", selectOpcoes("cp_unidade_deprecada_id", cats.unidades, r.carta_precatoria?.unidade_deprecada_id ?? "", true), "unidades_pm", "unidade PM")}
                </fieldset>`
             : ""
         }
@@ -766,9 +821,27 @@ export async function renderFormularioProcesso(
               <div class="linha-colecao-head"><strong>Envolvido ${i + 1}</strong>
                 <button type="button" class="danger small" data-remover-env="${i}">Remover</button>
               </div>
-              <label>Militar${selectMilitares(`env_${i}_pm`, cats.militares, e.policial_militar_id)}</label>
-              <label>Situação${selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true)}</label>
-              ${exigeCondutor ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor ? " checked" : ""} /> Condutor</label>` : ""}
+              ${campoComCadastroRapido(
+                "Militar",
+                `env_${i}_pm`,
+                selectMilitarEnvolvido(
+                  `env_${i}_pm`,
+                  cats.militares,
+                  e.policial_militar_id,
+                  !r.envolvidos.some(
+                    (outro, indiceOutro) => indiceOutro !== i && outro.policial_militar_id === null,
+                  ),
+                ),
+                "militar",
+                "policial militar",
+              )}
+              ${campoComCadastroRapido("Situação", `env_${i}_status`, selectOpcoes(`env_${i}_status`, cats.status, e.status_envolvido_id, true), "status_envolvido", "status do envolvido")}
+              ${
+                exigeCondutor
+                  ? `<label class="checkbox"><input name="env_${i}_condutor" type="checkbox"${e.e_condutor && e.policial_militar_id !== null ? " checked" : ""}${e.policial_militar_id === null ? " disabled" : ""} /> Condutor</label>
+                     ${e.policial_militar_id === null ? `<small class="campo-efeito">Identifique o PM antes de marcá-lo como condutor.</small>` : ""}`
+                  : ""
+              }
               ${
                 permiteAcusacao
                   ? blocoAcusacoes(
@@ -838,7 +911,7 @@ export async function renderFormularioProcesso(
               <div class="linha-colecao-head"><strong>Pessoa ${i + 1}</strong>
                 <button type="button" class="danger small" data-remover-pes="${i}">Remover</button>
               </div>
-              <label>Papel${selectOpcoes(`pes_${i}_papel`, cats.papeisPessoa, p.papel_pessoa_id, true)}</label>
+              ${campoComCadastroRapido("Papel", `pes_${i}_papel`, selectOpcoes(`pes_${i}_papel`, cats.papeisPessoa, p.papel_pessoa_id, true), "papeis_pessoa", "papel de pessoa")}
               <label>Nome<input name="pes_${i}_nome" value="${escapeHtml(p.nome)}" required /></label>
             </div>`,
             )
@@ -861,6 +934,7 @@ export async function renderFormularioProcesso(
 
   const form = document.querySelector<HTMLFormElement>("#form-processo")!;
   protegerFormulario(form);
+  ativarSelectsPesquisaveis(form);
   if (erro) {
     const feedback = document.querySelector<HTMLElement>(".formulario-feedback");
     window.requestAnimationFrame(() => {
@@ -1113,10 +1187,109 @@ export async function renderFormularioProcesso(
     void renderListaProcessos(ctx);
   });
 
+  const adicionarAosSelects = (
+    tipo: string,
+    idNovo: string,
+    rotulo: string,
+    nomeAlvo: string,
+  ) => {
+    const seletores: Record<string, string> = {
+      militar: 'select[name^="env_"][name$="_pm"], select[name^="des_"][name$="_pm"]',
+      unidades_pm: 'select[name="unidade_origem_id"], select[name="cp_unidade_deprecada_id"]',
+      subunidades_secoes: 'select[name="subunidade_secao_origem_id"]',
+      municipios_distritos: 'select[name="municipio_fato_id"]',
+      naturezas_fato: 'select[name="natureza_fato_id"]',
+      status_envolvido: 'select[name^="env_"][name$="_status"]',
+      papeis_pessoa: 'select[name^="pes_"][name$="_papel"]',
+    };
+    const seletor = seletores[tipo];
+    if (!seletor) return;
+    form.querySelectorAll<HTMLSelectElement>(seletor).forEach((select) => {
+      if (!select.querySelector(`option[value="${CSS.escape(idNovo)}"]`)) {
+        select.add(new Option(rotulo, idNovo));
+      }
+      if (select.tomselect && !select.tomselect.options[idNovo]) {
+        select.tomselect.addOption({ value: idNovo, text: rotulo });
+      }
+      if (select.name === nomeAlvo) {
+        if (select.tomselect) select.tomselect.setValue(idNovo);
+        else {
+          select.value = idNovo;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      }
+    });
+  };
+
+  form.querySelectorAll<HTMLButtonElement>("[data-cadastro-rapido]").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      const tipo = botao.dataset.cadastroRapido;
+      const nomeAlvo = botao.dataset.selectAlvo;
+      if (!tipo || !nomeAlvo) return;
+      botao.disabled = true;
+      try {
+        if (tipo === "militar") {
+          const militar = await abrirCadastroRapidoMilitar(
+            botao.dataset.militarDesignavel === "true",
+            botao,
+          );
+          if (!militar) return;
+          cats.militares.push(militar);
+          cats.militares.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+          adicionarAosSelects(tipo, militar.id, nomeMilitar(militar), nomeAlvo);
+          return;
+        }
+
+        const iniciais =
+          tipo === "subunidades_secoes"
+            ? { unidade_pm_id: String(new FormData(form).get("unidade_origem_id") ?? "") }
+            : {};
+        const resultado = await abrirCadastroRapidoCatalogo(tipo, iniciais, botao);
+        if (!resultado) return;
+        const nova: Opcao = {
+          id: resultado.id,
+          rotulo: resultado.rotulo,
+          extra: resultado.valores,
+        };
+        const lista =
+          tipo === "unidades_pm"
+            ? cats.unidades
+            : tipo === "subunidades_secoes"
+              ? cats.subunidades
+              : tipo === "municipios_distritos"
+                ? cats.municipios
+                : tipo === "naturezas_fato"
+                  ? cats.naturezas
+                  : tipo === "status_envolvido"
+                    ? cats.status
+                    : tipo === "papeis_pessoa"
+                      ? cats.papeisPessoa
+                      : null;
+        lista?.push(nova);
+        lista?.sort((a, b) => a.rotulo.localeCompare(b.rotulo, "pt-BR"));
+        adicionarAosSelects(tipo, resultado.id, resultado.rotulo, nomeAlvo);
+      } finally {
+        botao.disabled = false;
+      }
+    });
+  });
+
   // Trocar apuratório, natureza ou unidade muda campos/opções do cadastro.
   for (const seletor of ['[name="apuratorio_id"]', '[name="natureza_fato_id"]']) {
     form.querySelector<HTMLSelectElement>(seletor)?.addEventListener("change", () => rerender(() => {}));
   }
+  form
+    .querySelectorAll<HTMLSelectElement>('select[name^="env_"][name$="_pm"]')
+    .forEach((select) => {
+      select.addEventListener("change", () =>
+        rerender(() => {
+          const indice = Number(select.name.match(/^env_(\d+)_pm$/)?.[1]);
+          if (Number.isInteger(indice) && r.envolvidos[indice]?.policial_militar_id === null) {
+            r.envolvidos[indice]!.e_condutor = false;
+          }
+        }),
+      );
+    });
   form.querySelector<HTMLSelectElement>('[name="unidade_origem_id"]')?.addEventListener(
     "change",
     () =>
@@ -1140,6 +1313,7 @@ export async function renderFormularioProcesso(
   document.querySelector("#add-env")?.addEventListener("click", () =>
     rerender(() =>
       r.envolvidos.push({
+        id: null,
         policial_militar_id: "",
         status_envolvido_id: "",
         ordem: r.envolvidos.length + 1,
@@ -1183,6 +1357,7 @@ export async function renderFormularioProcesso(
       // quando o atributo está desligado.
       vitimas: permiteVitima ? r.vitimas : [],
       envolvidos: r.envolvidos.map((envolvido) => ({
+        id: envolvido.id ?? null,
         policial_militar_id: envolvido.policial_militar_id,
         status_envolvido_id: envolvido.status_envolvido_id,
         ordem: envolvido.ordem,
@@ -1222,6 +1397,7 @@ type StatusPrazo = {
 };
 
 function qualificacaoMilitar(militar: MilitarQualificado): string {
+  if (militar.a_apurar) return "À apurar";
   return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
 }
 
@@ -1724,7 +1900,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
                 .map(
                   (e) => `<tr>
                     <td>${e.ordem}</td>
-                    <td>${escapeHtml(`${e.posto_graduacao} ${e.nome}`)}</td>
+                    <td>${escapeHtml(formatarQualificacaoMilitar(e.posto_graduacao, e.matricula, e.nome))}</td>
                     <td>${escapeHtml(e.status_envolvido)}</td>
                     <td>${e.e_condutor ? "sim" : ""}</td>
                     ${permiteAcusacao ? `<td class="celula-acusacoes">${resumoAcusacoes(e.id)}</td>` : ""}
@@ -2273,7 +2449,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       inputDias()!.value = envolvido.penalidade_dias?.toString() ?? "";
       if (resumoResultado) {
         resumoResultado.textContent =
-          `Editando o resultado de ${envolvido.posto_graduacao} ${envolvido.matricula} ${envolvido.nome}.`;
+          `Editando o resultado de ${formatarQualificacaoMilitar(envolvido.posto_graduacao, envolvido.matricula, envolvido.nome)}.`;
       }
       formResultado.hidden = false;
       atualizarCamposPenalidade();

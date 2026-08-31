@@ -66,7 +66,12 @@ SELECT fonte.id::uuid,
       AND lower(sd.nome) = lower(l.solucao_tipo)
   LEFT JOIN tipos_penalidade tp
        ON lower(tp.nome) = lower(replace(l.penalidade_tipo, '_', ' '))
-ON CONFLICT DO NOTHING;
+-- Arbitro explícito pela chave primária. Desde a 0016 `uq_envolvido_pm` e
+-- `uq_envolvido_ordem` são DEFERRABLE, e o PostgreSQL recusa constraint adiada
+-- como árbitro de `ON CONFLICT` — a forma sem alvo, que considera todos os
+-- índices, passaria a falhar. O `id` vem do legado, então reexecutar a etapa
+-- continua sendo inofensivo.
+ON CONFLICT (id) DO NOTHING;
 
 -- ------------------------------------------------------ processo_vitimas ----
 -- Vítimas. `nome_vitima` é array JSON em 71 dos 87 preenchidos e texto simples

@@ -375,7 +375,7 @@ export interface EvidenceData {
 /** `evidence` */
 export interface EnvolvidoComIndicios {
   envolvido_id: string;
-  policial_militar_id: string;
+  policial_militar_id: string | null;
   nome: string;
   matricula: string;
   posto_graduacao: string;
@@ -649,6 +649,7 @@ export interface MilitarQualificado {
   posto_graduacao: string;
   matricula: string;
   nome: string;
+  a_apurar: boolean;
 }
 
 /** `proceedings` */
@@ -700,7 +701,7 @@ export interface ProceedingListItem {
 /** `proceedings` */
 export interface EnvolvidoItem {
   id: string;
-  policial_militar_id: string;
+  policial_militar_id: string | null;
   nome: string;
   matricula: string;
   posto_graduacao: string;
@@ -798,7 +799,10 @@ export interface ProceedingDetail extends ProceedingListItem {
 
 /** `proceedings` */
 export interface EnvolvidoRequest {
-  policial_militar_id: string;
+  /** Presente na edição para preservar enquadramentos, indícios e resultados. */
+  id?: string | null;
+  /** Nulo representa o estado válido “À apurar”. */
+  policial_militar_id: string | null;
   status_envolvido_id: string;
   ordem: number;
   e_condutor?: boolean;
