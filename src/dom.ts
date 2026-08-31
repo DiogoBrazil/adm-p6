@@ -720,6 +720,83 @@ export function paginaValida(pagina: number, porPagina: number, total: number): 
   return Math.min(Math.max(1, pagina), Math.max(1, Math.ceil(total / porPagina)));
 }
 
+// ── Busca que filtra enquanto se digita ───────────────────────────────────
+
+/**
+ * A espera do teclado antes de refazer a busca.
+ *
+ * Um número só, aqui, porque a listagem de apuratórios o tinha escrito à mão e
+ * as outras duas telas com campo de busca repetiriam a escolha sem saber dela.
+ */
+export const ESPERA_BUSCA_MS = 250;
+
+/**
+ * Liga um campo que filtra a listagem **enquanto se digita**.
+ *
+ * Duas coisas que a listagem de apuratórios ensinou, e que este helper carrega
+ * para quem chegar depois:
+ *
+ *   - `aoDigitar` corre a **cada tecla**, e é onde o estado do módulo se
+ *     atualiza. Quem exportar o CSV ou abrir o modal de filtros dentro dos
+ *     250 ms tem de levar o termo que está no campo, não o anterior — só o
+ *     redesenho é que espera.
+ *   - Enter dispara na hora, cancelando o timer pendente. Quem digita e aperta
+ *     Enter não deve esperar mais um quarto de segundo.
+ *
+ * Quem redesenha é o chamador, e **só a área de resultados**: refazer a tela
+ * inteira recria o `<input>` e tira o foco a cada tecla, que é o defeito
+ * clássico do recurso.
+ *
+ * Devolve `cancelar()`. O render que troca de tela precisa chamá-lo, senão um
+ * timer pendente redesenha uma área que já não está no documento.
+ */
+export function ligarBuscaInstantanea(
+  input: HTMLInputElement | null,
+  aoBuscar: (termo: string) => void,
+  opcoes: { aoDigitar?: (termo: string) => void; espera?: number } = {},
+): () => void {
+  const espera = opcoes.espera ?? ESPERA_BUSCA_MS;
+  let temporizador: number | null = null;
+
+  const cancelar = () => {
+    if (temporizador !== null) window.clearTimeout(temporizador);
+    temporizador = null;
+  };
+
+  input?.addEventListener("input", () => {
+    opcoes.aoDigitar?.(input.value);
+    cancelar();
+    temporizador = window.setTimeout(() => {
+      temporizador = null;
+      aoBuscar(input.value);
+    }, espera);
+  });
+
+  input?.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Enter") return;
+    evento.preventDefault();
+    cancelar();
+    opcoes.aoDigitar?.(input.value);
+    aoBuscar(input.value);
+  });
+
+  return cancelar;
+}
+
+/**
+ * O par que marca a área de resultados como "atualizando".
+ *
+ * `aria-busy` é para quem ouve a tela; `.is-loading` é o esmaecido de
+ * `.area-resultados` no CSS. Andam sempre juntos, e por isso moram aqui: cada
+ * tela que os escrevesse por conta própria acabaria esquecendo um dos dois.
+ */
+export function marcarCarregando(area: HTMLElement | null, ligado: boolean): void {
+  if (!area) return;
+  if (ligado) area.setAttribute("aria-busy", "true");
+  else area.removeAttribute("aria-busy");
+  area.classList.toggle("is-loading", ligado);
+}
+
 /** Lote de cada chamada ao percorrer um filtro inteiro. É o teto do backend. */
 const LOTE = 200;
 

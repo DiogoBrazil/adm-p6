@@ -3763,11 +3763,14 @@ button.filtro-chip:focus-visible {
   transform: none;
 }
 
-#resultados-apuratorios {
+/* A área que a busca instantânea redesenha sozinha, sem passar pelo `shell()`.
+   Nasceu presa ao id `#resultados-apuratorios`; virou classe quando Catálogos e
+   Usuários ganharam a mesma pesquisa, para que as três esmaeçam igual. */
+.area-resultados {
   transition: opacity 120ms ease;
 }
 
-#resultados-apuratorios.is-loading {
+.area-resultados.is-loading {
   opacity: 0.58;
   pointer-events: none;
 }

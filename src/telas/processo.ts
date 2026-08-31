@@ -47,8 +47,10 @@ import {
   escapeHtml,
   formatarOrigem,
   formatarQualificacaoMilitar,
+  ligarBuscaInstantanea,
   ligarPaginacao,
   limparFormularioPendente,
+  marcarCarregando,
   montarModal,
   notificar,
   option,
@@ -1426,7 +1428,9 @@ const filtro: FiltrosAvancados & { busca: string } = {
 
 let opcoesFiltros: ProceedingFilterOptions | null = null;
 let sequenciaLista = 0;
-let temporizadorBusca: number | null = null;
+
+/** Cancela o timer da pesquisa pendente ao sair da listagem. Ver `dom.ts`. */
+let cancelarBusca: (() => void) | null = null;
 
 // O tamanho da página é o mesmo de toda listagem operacional.
 const POR_PAGINA = ITENS_POR_PAGINA;
@@ -1773,14 +1777,12 @@ async function atualizarListaProcessos(ctx: ContextoTela): Promise<void> {
   const chamada = ++sequenciaLista;
   const area = document.querySelector<HTMLElement>("#resultados-apuratorios");
   const status = document.querySelector<HTMLElement>("#status-pesquisa-apuratorios");
-  area?.setAttribute("aria-busy", "true");
-  area?.classList.add("is-loading");
+  marcarCarregando(area, true);
   if (status) status.textContent = "Atualizando resultados…";
 
   const resposta = await call("proceedings_list", { filter: argumentosDaLista() });
   if (chamada !== sequenciaLista) return;
-  area?.removeAttribute("aria-busy");
-  area?.classList.remove("is-loading");
+  marcarCarregando(area, false);
   if (!resposta.ok || !resposta.data) {
     if (status) status.textContent = "Não foi possível atualizar os resultados.";
     notificar(resposta.error ?? "Falha ao listar.", "erro");
@@ -1957,7 +1959,7 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
   fecharTooltipPessoas();
   limparFormularioPendente();
-  if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
+  cancelarBusca?.();
   const [resposta, respostaOpcoes] = await Promise.all([
     call("proceedings_list", { filter: argumentosDaLista() }),
     call("proceedings_filter_options", {}),
@@ -1987,35 +1989,26 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
         <span id="status-pesquisa-apuratorios" class="status-pesquisa" aria-live="polite"></span>
       </div>
       <div id="filtros-ativos" class="filtros-ativos" role="group" aria-label="Filtros aplicados" hidden></div>
-      <div id="resultados-apuratorios">${htmlResultadosLista(resposta.data)}</div>
+      <div id="resultados-apuratorios" class="area-resultados">${htmlResultadosLista(resposta.data)}</div>
     </section>
   `);
 
   atualizarControlesFiltros(ctx);
   ligarResultadosLista(ctx);
 
-  const busca = document.querySelector<HTMLInputElement>("#busca");
-  const pesquisarAgora = () => {
-    if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
-    filtro.busca = busca?.value ?? "";
-    pagina = 1;
-    void atualizarListaProcessos(ctx);
-  };
-  busca?.addEventListener("input", () => {
-    filtro.busca = busca.value;
-    pagina = 1;
-    if (temporizadorBusca !== null) window.clearTimeout(temporizadorBusca);
-    temporizadorBusca = window.setTimeout(() => {
-      temporizadorBusca = null;
-      void atualizarListaProcessos(ctx);
-    }, 250);
-  });
-  busca?.addEventListener("keydown", (evento) => {
-    if (evento.key === "Enter") {
-      evento.preventDefault();
-      pesquisarAgora();
-    }
-  });
+  // O termo entra no filtro a cada tecla, e só o redesenho espera: o modal de
+  // filtros avançados lê `filtro` ao aplicar, e abri-lo dentro dos 250 ms tem
+  // de encontrar o que está no campo.
+  cancelarBusca = ligarBuscaInstantanea(
+    document.querySelector<HTMLInputElement>("#busca"),
+    () => void atualizarListaProcessos(ctx),
+    {
+      aoDigitar: (termo) => {
+        filtro.busca = termo;
+        pagina = 1;
+      },
+    },
+  );
 
   document.querySelector<HTMLButtonElement>("#abrir-filtros-avancados")?.addEventListener("click", (evento) => {
     abrirFiltrosAvancados(ctx, evento.currentTarget as HTMLButtonElement);

@@ -20,6 +20,7 @@
 
 import { call, type UserListItem, type UserProcessItem } from "../api";
 import {
+  aplicarLarguras,
   ativarSelectsPesquisaveis,
   avisarSeCortado,
   barraDeExportacao,
@@ -27,9 +28,11 @@ import {
   carregarTudo,
   escapeHtml,
   ITENS_POR_PAGINA,
+  ligarBuscaInstantanea,
   ligarExportacao,
   ligarPaginacao,
   limparFormularioPendente,
+  marcarCarregando,
   montarModal,
   notificar,
   option,
@@ -117,6 +120,12 @@ let busca = "";
 let pagina = 1;
 let detalheAberto: string | null = null;
 
+/** Descarta a resposta que chega depois de o termo já ter mudado. */
+let sequenciaLista = 0;
+
+/** Cancela a pesquisa pendente ao sair da listagem. Ver `dom.ts`. */
+let cancelarBusca: (() => void) | null = null;
+
 async function opcoes(catalogo: string, campo: string): Promise<Opcao[]> {
   const linhas = (await call("legal_catalogs_list", { catalogo })).data ?? [];
   return linhas.map((l) => ({ id: String(l.id), rotulo: String(l[campo] ?? l.id) }));
@@ -143,8 +152,104 @@ const nomeCompleto = (u: UserListItem) =>
 
 // ── Lista ─────────────────────────────────────────────────────────────
 
+/**
+ * A tabela e o controle de página — o que a pesquisa redesenha sozinha.
+ *
+ * Está separado do resto da tela porque refazer o `shell()` inteiro recriaria o
+ * campo de busca e tiraria o foco a cada tecla. Ver `dom.ts::ligarBuscaInstantanea`.
+ */
+function htmlResultadosUsuarios(itens: UserListItem[], total: number): string {
+  return `
+    ${tabela(
+      COLUNAS,
+      itens.map(linhaDaTabela),
+      busca ? "Nenhum militar encontrado." : "Nenhum militar cadastrado.",
+      { viewport: true, listagem: true },
+    )}
+    ${paginacao("usuarios", pagina, POR_PAGINA, total)}`;
+}
+
+/** Religa o que vive dentro da área redesenhada. */
+function ligarResultadosUsuarios(ctx: ContextoTela): void {
+  ligarPaginacao("usuarios", pagina, (nova) => {
+    pagina = nova;
+    void atualizarListaUsuarios(ctx);
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-tabela-acao]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      detalheAberto = botao.dataset.tabelaAcao ?? null;
+      void renderListaUsuarios(ctx);
+    });
+  });
+}
+
+/**
+ * Refaz só a área de resultados, com o termo e a página correntes.
+ *
+ * Duas cautelas que a listagem de apuratórios já pagou:
+ *
+ *   - o **carimbo de sequência**, porque a consulta vai ao backend e digitar
+ *     rápido deixaria na tela a resposta de um termo que já não está no campo;
+ *   - o `aplicarLarguras`, porque as larguras declaradas em `Coluna.largura`
+ *     saem em `data-largura` e quem as aplica é o `shell()` — trocar o
+ *     `innerHTML` sem rechamá-lo devolve a tabela ao dimensionamento por
+ *     conteúdo, **sem erro nenhum**.
+ */
+async function atualizarListaUsuarios(ctx: ContextoTela): Promise<void> {
+  const chamada = ++sequenciaLista;
+  const area = document.querySelector<HTMLElement>("#resultados-usuarios");
+  const status = document.querySelector<HTMLElement>("#status-pesquisa-usuarios");
+  marcarCarregando(area, true);
+  if (status) status.textContent = "Atualizando resultados…";
+
+  const resposta = await call("users_list", {
+    search: busca || null,
+    page: pagina,
+    perPage: POR_PAGINA,
+  });
+  if (chamada !== sequenciaLista) return;
+  marcarCarregando(area, false);
+
+  if (!resposta.ok || !resposta.data) {
+    if (status) status.textContent = "Não foi possível atualizar os resultados.";
+    notificar(resposta.error ?? "Falha ao carregar.", "erro");
+    return;
+  }
+
+  const { items: itens, total } = resposta.data;
+
+  // Estreitar a busca pode deixar a página corrente fora do total. O rodapé
+  // some junto com a tabela, e a tela ficaria vazia sem dizer por quê.
+  const corrigida = paginaValida(pagina, POR_PAGINA, total);
+  if (corrigida !== pagina) {
+    pagina = corrigida;
+    return atualizarListaUsuarios(ctx);
+  }
+
+  if (area) {
+    area.innerHTML = htmlResultadosUsuarios(itens, total);
+    aplicarLarguras(area);
+  }
+
+  const contagem = document.querySelector<HTMLElement>("[data-total-usuarios]");
+  if (contagem) contagem.textContent = String(total);
+
+  // O botão nasce sempre, e some quando o filtro não acha nada: com redesenho
+  // parcial ele não pode entrar e sair do HTML, que fica fora desta área.
+  const csv = document.querySelector<HTMLButtonElement>("#btn-csv");
+  if (csv) csv.hidden = itens.length === 0;
+
+  const limpar = document.querySelector<HTMLButtonElement>("#limpar-busca");
+  if (limpar) limpar.hidden = busca === "";
+
+  if (status) status.textContent = `${total} resultado(s).`;
+  ligarResultadosUsuarios(ctx);
+}
+
 export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
   limparFormularioPendente();
+  cancelarBusca?.();
   if (detalheAberto) return renderDetalheUsuario(ctx, detalheAberto);
 
   const resposta = await call("users_list", {
@@ -163,65 +268,64 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     return renderListaUsuarios(ctx);
   }
 
-  const linhas = itens.map(linhaDaTabela);
-
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Usuários <span class="badge">${total}</span></h1>
+        <div><h1>Usuários <span class="badge" data-total-usuarios>${total}</span></h1>
           <p>Policiais militares. A conta de acesso é opcional.</p></div>
         <div class="page-head-right">
           ${ctx.podeEscrever() ? `<button id="btn-novo">Novo</button>` : ""}
-          ${barraDeExportacao({ imprimir: true, csv: !!itens.length })}
+          ${barraDeExportacao({ imprimir: true, csv: true })}
         </div>
       </div>
 
-      <form id="busca-usuarios" class="search-bar">
-        <input name="q" type="search" placeholder="Buscar por nome ou matrícula..."
+      <div class="search-bar">
+        <input id="busca" type="search" autocomplete="off"
+               aria-label="Pesquisar militares" aria-controls="resultados-usuarios"
+               placeholder="Buscar por nome ou matrícula..."
                value="${escapeHtml(busca)}" />
-        <button type="submit">Buscar</button>
-        ${busca ? `<button type="button" class="secondary small" id="limpar-busca">Limpar</button>` : ""}
-      </form>
+        <button type="button" class="secondary small" id="limpar-busca"${busca ? "" : " hidden"}>Limpar</button>
+        <span id="status-pesquisa-usuarios" class="status-pesquisa" aria-live="polite"></span>
+      </div>
 
       ${
         resposta.ok
-          ? tabela(COLUNAS, linhas, "Nenhum militar cadastrado.", {
-              viewport: true,
-              listagem: true,
-            })
+          ? `<div id="resultados-usuarios" class="area-resultados">${htmlResultadosUsuarios(itens, total)}</div>`
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
-      ${paginacao("usuarios", pagina, POR_PAGINA, total)}
     </section>
   `);
 
-  ligarPaginacao("usuarios", pagina, (nova) => {
-    pagina = nova;
-    void renderListaUsuarios(ctx);
-  });
+  const csv = document.querySelector<HTMLButtonElement>("#btn-csv");
+  if (csv) csv.hidden = itens.length === 0;
 
-  document.querySelector<HTMLFormElement>("#busca-usuarios")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    busca = String(new FormData(e.currentTarget as HTMLFormElement).get("q") ?? "").trim();
-    pagina = 1;
-    void renderListaUsuarios(ctx);
-  });
+  ligarResultadosUsuarios(ctx);
+
+  // O termo entra em `busca` a cada tecla, e só o redesenho espera: o CSV e a
+  // impressão leem `busca` no clique, e clicar dentro dos 250 ms tem de levar
+  // o que está no campo.
+  cancelarBusca = ligarBuscaInstantanea(
+    document.querySelector<HTMLInputElement>("#busca"),
+    () => void atualizarListaUsuarios(ctx),
+    {
+      aoDigitar: (termo) => {
+        busca = termo.trim();
+        pagina = 1;
+      },
+    },
+  );
 
   document.querySelector<HTMLButtonElement>("#limpar-busca")?.addEventListener("click", () => {
+    const campo = document.querySelector<HTMLInputElement>("#busca");
+    if (campo) campo.value = "";
     busca = "";
     pagina = 1;
-    void renderListaUsuarios(ctx);
+    campo?.focus();
+    void atualizarListaUsuarios(ctx);
   });
 
   document.querySelector<HTMLButtonElement>("#btn-novo")?.addEventListener("click", () => {
     void renderFormularioUsuario(ctx, null);
-  });
-
-  document.querySelectorAll<HTMLButtonElement>("[data-tabela-acao]").forEach((botao) => {
-    botao.addEventListener("click", () => {
-      detalheAberto = botao.dataset.tabelaAcao ?? null;
-      void renderListaUsuarios(ctx);
-    });
   });
 
   // CSV e impressão levam o que a **busca** alcança, não os dez da tela: com

@@ -286,7 +286,7 @@ pub const CATALOGOS: &[Catalogo] = &[
     Catalogo {
         chave: "naturezas_fato",
         tabela: "naturezas_fato",
-        rotulo: "Naturezas do fato apurado",
+        rotulo: "Naturezas gerais do fato apurado",
         colunas: &[
             texto("nome", "Nome"),
             booleano("exige_condutor", "Exige condutor",

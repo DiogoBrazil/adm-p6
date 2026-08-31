@@ -59,6 +59,7 @@ sai só quando ela fechar.
 | 3 | **Conferir Ofendido/Vítima e o Resumo dos fatos na tela** — segue entre as áreas menos vistas por olho humano | seção 11, item (i) | **Sim** |
 | 3b | **Conferir "À apurar", os seletores pesquisáveis e o cadastro rápido** — nenhum deles existia antes, e o modal e a CSP só se provam no binário | seção 11, item **(k)** | **Sim** |
 | 3c | **Conferir a pesquisa instantânea e o modal de filtros avançados** — é o primeiro modal do app com seletor pesquisável **e** CSP restritiva ao mesmo tempo | seção 11, item **(l)** | **Sim** |
+| 3d | **Conferir a pesquisa instantânea de Catálogos e Usuários** — o redesenho parcial pode perder a largura das colunas **sem acusar** | seção 11, item **(n)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -795,6 +796,8 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Limpar um `<select>` pesquisável por `select.value = ""` | O `<select>` original zera, mas o controle visível continua exibindo o rótulo escolhido: quem desenha é a instância do Tom Select, e ela não observa a propriedade. O usuário vê um filtro que jurou ter limpado | `select.tomselect?.clear(true)` quando houver instância, e `select.value = ""` só no `<select>` cru. Ver o botão *Limpar filtros* em `processo.ts::abrirFiltrosAvancados` |
 | Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
+| Redesenhar **parte** de uma listagem sem rechamar `aplicarLarguras` | As larguras declaradas em `Coluna.largura` saem em `data-largura` e são aplicadas pela CSSOM em `aplicarLarguras`, que só `main.ts::shell()` chama. A pesquisa instantânea troca o `innerHTML` da área de resultados sem passar pelo `shell()` — e a tabela volta a se dimensionar pelo conteúdo **sem erro nenhum**, num redesenho que acontece a cada tecla | `aplicarLarguras(area)` logo depois de escrever o `innerHTML`, como em `usuarios.ts::atualizarListaUsuarios` e `catalogos.ts::atualizarListaCatalogo`. A listagem de apuratórios não sofre disso porque o `<colgroup>` dela é de classes de CSS, não de `data-largura` |
+| Debounce sem atualizar o estado a cada tecla | Se o termo só entrar na variável do módulo **depois** dos 250 ms, quem exporta o CSV ou aplica o modal de filtros dentro dessa janela leva o termo **anterior** — os dois leem a variável no clique, não o campo | `dom.ts::ligarBuscaInstantanea` separa as duas coisas: `aoDigitar` corre a cada tecla e é onde o estado se atualiza; só o redesenho espera |
 
 ---
 
@@ -952,6 +955,8 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | a conferência campo a campo dos 6 processos da amostra | `src-tauri/importacao/98_amostra_lado_a_lado.sql` (cabeçalho) e **seção 6** |
 | por que a CSP é o que é, e o que ela recusaria | **seção 12**, rodada 6, e as quatro armadilhas de CSP na seção 7 |
 | como um seletor de busca é montado nesta base | `src/telas/indicios.ts::pedirAnalogia` e o helper `buscar()` do mesmo arquivo |
+| como uma listagem filtra enquanto se digita | `dom.ts::ligarBuscaInstantanea` (cabeçalho) e as três `atualizar*` que ela move: `processo.ts::atualizarListaProcessos`, `usuarios.ts::atualizarListaUsuarios`, `catalogos.ts::atualizarListaCatalogo` |
+| por que Catálogos guarda as linhas num `let` do módulo | o cabeçalho de `linhasCarregadas`, em `src/telas/catalogos.ts` — e a **seção 12**, rodada 26 |
 | por que a prorrogação começa no dia do vencimento | `src-tauri/migrations/0005_prazo_intervalo_ocupacao.sql` |
 | como se registra um envolvido sem PM identificado | decisões **51** e **52**, `migrations/0016_envolvido_a_apurar.sql` e o teste `a_0016_converte_o_pm_ficticio_sem_perder_o_que_pendurava_nele` |
 | por que a sincronização de envolvidos é pelo id do vínculo | `proceedings/repository.rs::gravar_envolvidos` (cabeçalho do bloco) e decisão **52** |
@@ -1648,7 +1653,53 @@ restritiva também governa — os dois já foram exercitados, mas nunca juntos.
 
 ---
 
-## 12. Changelog — as 25 rodadas
+### n) Pesquisa instantânea em Catálogos e Usuários (seção 12, rodada 26)
+
+Mesma advertência das anteriores: o binário de produção, e o console aberto. O que se
+confere aqui é sobretudo o que **não** acusa sozinho — a largura das colunas depois do
+redesenho parcial.
+
+#### Nas duas telas
+
+- [ ] Digitar filtra sozinho, sem apertar nada; o **foco e a posição do cursor** ficam
+      onde estavam, e a barra não pisca
+- [ ] A barra continua numa linha só, na mesma altura de antes — medir, não olhar
+- [ ] **As colunas mantêm a mesma largura depois de filtrar**: é o que cai se
+      `aplicarLarguras` faltar, e cai calado
+- [ ] Apagar tudo devolve a listagem inteira, na página 1
+- [ ] A contagem do cabeçalho acompanha o filtro, e o controle de página bate com o que
+      a tabela mostra
+- [ ] Estreitar o filtro estando na 4ª página recua a página em vez de mostrar tabela
+      vazia
+- [ ] Enter busca na hora, sem esperar o quarto de segundo
+
+#### Catálogos
+
+- [ ] Digitar **não** dispara consulta nenhuma — a rede fica quieta enquanto se digita
+- [ ] Editar, desativar e reativar continuam funcionando **depois** de um filtro, e
+      mantêm a página
+- [ ] Desativar com "Mostrar inativos" desmarcado tira a linha da lista, e marcar a
+      caixa a traz de volta — a caixa recarrega a tela inteira, de propósito
+- [ ] Trocar de catálogo pelo menu volta à página 1; o termo digitado continua no campo
+      e continua valendo, como antes
+- [ ] O vazio diz "Nenhum registro encontrado." quando há termo, e "Nenhum registro."
+      quando não há
+
+#### Usuários
+
+- [ ] Não há mais botão "Buscar"; **Limpar** aparece só quando há termo, devolve o foco
+      ao campo e recarrega a lista
+- [ ] Digitar rápido e apagar em seguida não deixa resultado antigo na tela — é o
+      descarte de resposta atrasada
+- [ ] **Exportar CSV** e **Imprimir** logo depois de digitar levam o termo **atual**, e
+      o conjunto inteiro do filtro, não os dez da tela
+- [ ] O botão de CSV some quando o filtro não acha nada, e volta quando acha
+- [ ] Abrir o detalhe de um militar e voltar preserva o termo e a página
+- [ ] A barra de pesquisa **não** sai no papel
+
+---
+
+## 12. Changelog — as 26 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1681,6 +1732,55 @@ A narrativa completa de cada uma está no histórico do git.
 | 23 | **"À apurar" e seleções pesquisáveis** | o PM fictício virou estado do vínculo (`0016`); envolvidos sincronizados pelo id da linha; todo seletor do formulário de processo pesquisável (Tom Select); cadastro rápido em modal para os sete cadastros operacionais. A `0017` tornou a unicidade do condutor adiável, e com isso trocar o condutor entre dois envolvidos parou de falhar. Detalhe abaixo |
 | 24 | **Pesquisa instantânea e filtros avançados** | a pesquisa da listagem passou a filtrar ao digitar e a alcançar o **nome do encarregado e do PM envolvido**; modal com dez parâmetros combináveis por `AND`, chips removíveis e contador. `situacao` substituiu `concluido`, e as opções do modal passaram a sair dos apuratórios em vez dos cadastros. Sem migration. Detalhe abaixo |
 | 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
+| 26 | **Pesquisa instantânea nas outras listagens** | Catálogos e Usuários passaram a filtrar ao digitar, como os apuratórios desde a 24. O "250 ms + Enter" saiu de dentro de `processo.ts` e virou `dom.ts::ligarBuscaInstantanea`, usado pelas três. Sem migration e sem comando novo — os dois backends já pesquisavam. Detalhe abaixo |
+
+### A rodada 26, em detalhe
+
+Pedido: aplicar às outras telas com campo de busca o que a listagem de apuratórios já
+fazia — filtrar enquanto se digita.
+
+**Eram duas telas, não sete.** O levantamento achou campo de busca textual só em
+Catálogos e Usuários. Auditoria, Encarregados, Estatísticas, Anual, Mapas, Prazos e
+Apuratório filtram por `<select>` e checkbox: não há texto para filtrar ao digitar.
+As buscas de Indícios e das acusações do formulário **já** disparavam no `input` com
+carimbo de sequência — são autocomplete, não listagem, e ficaram como estavam.
+
+**O helper existe porque o padrão tem duas partes, e uma delas não é óbvia.**
+`dom.ts::ligarBuscaInstantanea` espera 250 ms para redesenhar, mas corre `aoDigitar` a
+**cada tecla**. É `aoDigitar` que atualiza o estado do módulo, e sem ele quem exportasse
+o CSV de Usuários ou aplicasse o modal de filtros dos apuratórios dentro dos 250 ms
+levaria o termo anterior — os dois leem a variável do módulo no clique, não o campo.
+Enter dispara na hora; o `cancelar()` devolvido é o que impede um timer pendente de
+redesenhar uma área que já saiu do documento.
+
+**O que quase passou em silêncio: a largura das colunas.** As larguras declaradas em
+`Coluna.largura` saem em `data-largura` e quem as aplica pela CSSOM é `aplicarLarguras`,
+chamada de `main.ts::shell()`. Redesenho parcial não passa pelo `shell()` — trocar o
+`innerHTML` sem rechamá-la devolve a tabela ao dimensionamento por conteúdo, **sem erro
+nenhum**. A listagem de apuratórios não sofria disso porque monta o `<colgroup>` com
+classes de CSS; as de Catálogos e Usuários, sim. É a armadilha nova da seção 7.
+
+**Catálogos filtra sem ir ao backend, e é por isso que não tem carimbo de sequência.**
+O `renderCatalogo` inteiro custa o catálogo **mais uma consulta por coluna de
+referência** (`carregarReferencias`, que não tem cache): dispará-lo por tecla era o que
+não podia acontecer. As linhas e as referências que o render já carregou ficam num `let`
+do módulo, e a busca refiltra o que está ali. Como não há ida ao backend, não existe
+resposta atrasada para chegar fora de ordem — e o comentário no código diz isso, para
+que ninguém acrescente um carimbo achando que faltou. O cache não envelhece porque
+gravar, desativar e reativar continuam passando pelo `renderCatalogo` inteiro; e
+"Mostrar inativos" também, porque muda o que o backend traz, não o recorte do que veio.
+
+**Usuários perdeu o botão "Buscar" e o `<form>`.** Com a busca disparando sozinha o
+botão não tinha mais o que fazer, e Enter continua funcionando pelo helper. Duas coisas
+tiveram de deixar de ser condicionais no HTML: o "Limpar" e o "Exportar CSV" nasciam
+conforme o termo e a quantidade de itens, e ficam **fora** da área redesenhada — passaram
+a existir sempre, alternando `hidden`. A classe `search-bar` ficou: é ela que a regra de
+impressão esconde, e trocá-la por `.filtros` traria a barra para o papel.
+
+**A busca de Usuários vai ao backend, então o carimbo veio junto.** `users_list` já
+aceitava `search` e já paginava — nada mudou no Rust. O que mudou é que digitar rápido e
+apagar em seguida não deixa mais na tela o resultado de um termo que já não está no
+campo, e que estreitar o filtro recua a página em vez de mostrar tabela vazia.
 
 ### A rodada 25, em detalhe
 
