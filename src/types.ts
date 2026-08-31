@@ -114,6 +114,7 @@ export interface AuditDetailItem {
   usuario_id: string | null;
   usuario_nome: string | null;
   usuario_posto: string | null;
+  usuario_matricula: string | null;
   /** Diff da operação, quando registrado. Preenchido nas alterações de */
   /** configuração, que mudam o comportamento futuro do sistema. */
   alteracoes: unknown | null;
@@ -170,6 +171,8 @@ export interface UserAuthRow {
   /** administrador pode renomear "Administrador" sem perder o acesso. */
   pode_administrar: boolean;
   policial_militar_id: string | null;
+  matricula: string | null;
+  posto_graduacao: string | null;
 }
 
 /** `auth` */
@@ -180,6 +183,8 @@ export interface SessionUser {
   perfil: string;
   is_admin: boolean;
   policial_militar_id: string | null;
+  matricula: string | null;
+  posto_graduacao: string | null;
 }
 
 /** `deadlines` */
@@ -496,6 +501,8 @@ export interface MapRow {
   data_instauracao: string;
   data_conclusao: string | null;
   responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
   envolvidos: string | null;
   prazo_vencimento: string | null;
   ultimo_andamento: string | null;

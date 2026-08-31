@@ -18,6 +18,7 @@ import {
   baixarCsv,
   carregarTudo,
   escapeHtml,
+  formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarExportacao,
   ligarPaginacao,
@@ -52,7 +53,7 @@ let pagina = 1;
 let registroAberto: AuditDetailItem | null = null;
 
 const autor = (i: AuditDetailItem) =>
-  i.usuario_nome ? `${i.usuario_posto ?? ""} ${i.usuario_nome}`.trim() : "—";
+  formatarQualificacaoMilitar(i.usuario_posto, i.usuario_matricula, i.usuario_nome);
 
 /** Os três filtros da tela, no formato do comando. Um lugar só. */
 const argumentosDoFiltro = () => ({
@@ -136,7 +137,7 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
               .map((u) =>
                 option(
                   u.conta_id ?? "",
-                  `${u.posto_graduacao} ${u.nome}`,
+                  formatarQualificacaoMilitar(u.posto_graduacao_sigla, u.matricula, u.nome),
                   u.conta_id === filtros.usuarioId,
                 ),
               )

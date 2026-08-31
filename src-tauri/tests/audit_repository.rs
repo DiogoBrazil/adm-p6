@@ -65,6 +65,10 @@ async fn o_autor_e_a_conta_e_a_conta_tecnica_nao_inventa_militar() {
         );
         assert!(itens[0].usuario_posto.is_none(), "sem militar, sem posto");
         assert!(
+            itens[0].usuario_matricula.is_none(),
+            "sem militar, sem matricula"
+        );
+        assert!(
             itens[0].alteracoes.is_none(),
             "registro simples nao tem diff"
         );
@@ -108,6 +112,7 @@ async fn autor_com_militar_vinculado_traz_nome_e_posto() {
             .items;
         assert_eq!(itens[0].usuario_nome.as_deref(), Some("PM UM"));
         assert_eq!(itens[0].usuario_posto.as_deref(), Some("TST PM"));
+        assert_eq!(itens[0].usuario_matricula.as_deref(), Some("100000001"));
     })
     .await;
 }

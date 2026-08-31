@@ -98,6 +98,8 @@ pub struct MapRow {
     pub data_instauracao: NaiveDate,
     pub data_conclusao: Option<NaiveDate>,
     pub responsavel_nome: Option<String>,
+    pub responsavel_matricula: Option<String>,
+    pub responsavel_posto_graduacao: Option<String>,
     pub envolvidos: Option<String>,
     pub prazo_vencimento: Option<NaiveDate>,
     pub ultimo_andamento: Option<String>,

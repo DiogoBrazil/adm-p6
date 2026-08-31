@@ -19,6 +19,7 @@ import {
   barraDeExportacao,
   baixarCsv,
   escapeHtml,
+  formatarQualificacaoMilitar,
   ligarExportacao,
   option,
   tabela,
@@ -110,7 +111,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
           </select>
         </label>
         <fieldset class="filtro-apuratorios">
-          <legend>Papéis <span class="hint">(nenhum marcado = todos)</span></legend>
+          <legend>Funções <span class="hint">(nenhuma marcada = todas)</span></legend>
           ${papeis
             .map(
               (p) => `<label class="checkbox-inline">
@@ -126,7 +127,15 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
 
       <div class="stat-row">
         <div class="stat-card"><span class="stat-value">${linhas.length}</span><span>militares designados</span></div>
-        <div class="stat-card"><span class="stat-value">${escapeHtml(linhas[0]?.nome ?? "—")}</span><span>mais designado</span></div>
+        <div class="stat-card"><span class="stat-value">${escapeHtml(
+          linhas[0]
+            ? formatarQualificacaoMilitar(
+                linhas[0].posto_graduacao,
+                linhas[0].matricula,
+                linhas[0].nome,
+              )
+            : "—",
+        )}</span><span>mais designado</span></div>
       </div>
 
       ${

@@ -14,11 +14,13 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<MovementItem>,
                 a.tipo_andamento_id::text          AS tipo_andamento_id,
                 ta.nome                            AS tipo_andamento,
                 a.registrado_por_id::text          AS registrado_por_id,
-                COALESCE(u.nome_exibicao, pm.nome) AS registrado_por
+                CASE WHEN pm.id IS NULL THEN u.nome_exibicao
+                     ELSE pg.sigla || ' ' || pm.matricula || ' ' || pm.nome END AS registrado_por
            FROM processo_andamentos a
            LEFT JOIN tipos_andamento ta      ON ta.id = a.tipo_andamento_id
            LEFT JOIN usuarios u              ON u.id = a.registrado_por_id
            LEFT JOIN policiais_militares pm  ON pm.id = u.policial_militar_id
+           LEFT JOIN postos_graduacoes pg    ON pg.id = pm.posto_graduacao_id
           WHERE a.processo_id = $1::uuid
             AND a.cancelado_em IS NULL
           ORDER BY a.ocorrido_em DESC",

@@ -18,6 +18,7 @@ const DETAIL_SELECT: &str = r#"
            a.usuario_id::text                    AS usuario_id,
            COALESCE(u.nome_exibicao, pm.nome)    AS usuario_nome,
            pg.sigla                              AS usuario_posto,
+           pm.matricula                          AS usuario_matricula,
            a.alteracoes                          AS alteracoes,
            a.ocorrido_em                         AS ocorrido_em
     FROM auditoria a

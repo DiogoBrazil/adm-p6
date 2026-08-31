@@ -98,6 +98,8 @@ fn autenticar(app: &App<MockRuntime>, conta: &str, admin: bool) {
         perfil: "Administrador".into(),
         is_admin: admin,
         policial_militar_id: None,
+        matricula: None,
+        posto_graduacao: None,
     })));
 }
 

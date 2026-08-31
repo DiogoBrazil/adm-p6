@@ -142,6 +142,34 @@ async fn prorrogacao_comeca_no_dia_do_vencimento_anterior() {
 }
 
 #[tokio::test]
+async fn autoridade_da_prorrogacao_sai_com_qualificacao_completa() {
+    util::com_banco_descartavel("prazo_autoridade", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let id = processo_com_prazo_inicial(&pool, &m, data(2026, 1, 10)).await;
+        let pedido = AddExtensionRequest {
+            processo_id: id.clone(),
+            nova_data_vencimento: data(2026, 3, 1),
+            motivo: "prazo autorizado".to_string(),
+            documento_autorizador_id: None,
+            numero_documento: None,
+            data_documento: None,
+            autoridade_id: Some(m.pm_um.clone()),
+        };
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::add_extension(&mut tx, &pedido).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let prazos = repository::list(&pool, &id).await.unwrap();
+        assert_eq!(
+            prazos.last().unwrap().autoridade.as_deref(),
+            Some("TST PM 100000001 PM UM")
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
 async fn prorrogacao_exige_prazo_inicial_e_motivo() {
     util::com_banco_descartavel("prazo_regras", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;

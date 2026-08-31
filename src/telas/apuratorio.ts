@@ -42,7 +42,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         <h1>Configuração de apuratórios</h1>
         <p class="empty">
           Nenhum apuratório cadastrado. Cadastre em <strong>Catálogos → Apuratórios</strong>
-          antes de configurar documentos e papéis.
+          antes de configurar documentos e funções.
         </p>
       </section>`);
     return;
@@ -92,7 +92,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         semDocumentoAtivo || semResponsavel
           ? `<p class="aviso">
                ${semDocumentoAtivo ? "Sem documento iniciador ativo, nenhum processo pode ser criado neste apuratório. " : ""}
-               ${semResponsavel ? "Sem papel responsável ativo, os processos aparecem sem responsável na listagem e nos relatórios." : ""}
+               ${semResponsavel ? "Sem função responsável ativa, os processos aparecem sem responsável na listagem e nos relatórios." : ""}
              </p>`
           : ""
       }
@@ -168,13 +168,13 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
           : ""
       }
 
-      <h2>Papéis</h2>
+      <h2>Funções</h2>
       <p class="secao-ajuda">
         <strong>Obrigatório</strong> impede salvar o processo sem a designação.
-        <strong>Responsável</strong> é o papel que responde pelo apuratório — é
+        <strong>Responsável</strong> é a função que responde pelo apuratório — é
         dele que saem o responsável da listagem, do dashboard e dos relatórios,
         e só pode haver um. <strong>Cita documento</strong> diz se a designação
-        deste papel informa tipo e número do documento que a autorizou; desligado,
+        desta função informa tipo e número do documento que a autorizou; desligado,
         o detalhe do processo mostra apenas “-” e o formulário de substituição
         deixa de pedir os dois campos.
       </p>
@@ -182,7 +182,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
         config.papeis.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-configuracao-apuratorio">
                <thead><tr>
-                 <th>Papel</th><th>Obrigatório</th><th>Máx. ocupantes</th>
+                 <th>Função</th><th>Obrigatória</th><th>Máx. ocupantes</th>
                  <th>Responsável</th><th>Cita documento</th><th>Situação</th><th>Em uso</th>
                  ${podeEscrever ? "<th>Ações</th>" : ""}
                </tr></thead>
@@ -237,19 +237,19 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
                    )
                    .join("")}
                </tbody></table></div>`
-          : `<p class="empty">Nenhum papel habilitado.</p>`
+          : `<p class="empty">Nenhuma função habilitada.</p>`
       }
       ${
         podeEscrever
           ? `<form id="form-papel" class="linha-form">
-               <label>Habilitar papel
+               <label>Habilitar função
                  <select name="papel_id" required>
                    <option value=""></option>
                    ${naoConfigurados(papeis, papeisUsados).map((o) => option(o.id, o.rotulo, false)).join("")}
                  </select>
                </label>
                <label>Máx. ocupantes<input name="max_ocupantes" type="number" min="1" value="1" required /></label>
-               <label class="checkbox"><input name="obrigatorio" type="checkbox" /> Obrigatório</label>
+               <label class="checkbox"><input name="obrigatorio" type="checkbox" /> Obrigatória</label>
                <label class="checkbox"><input name="e_responsavel" type="checkbox" /> Responsável</label>
                <label class="checkbox"><input name="usa_documento_designacao" type="checkbox" checked /> Cita documento</label>
                <button type="submit">Habilitar</button>

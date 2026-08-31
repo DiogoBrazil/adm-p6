@@ -147,7 +147,7 @@ penal). Os **operacionais** nascem vazios de propósito. Para chegar a um proces
 2. **Catálogos → Apuratórios** — sigla, nome, tipo, prazo base, `max_envolvidos`,
    `exige_natureza_fato`
 3. **Catálogos → Tipos de documento** — ex.: Portaria, Memorando Disciplinar
-4. **Catálogos → Papéis de processo** — ex.: Encarregado, Escrivão, Presidente
+4. **Catálogos → Funções no processo** — ex.: Encarregado, Escrivão, Presidente
 5. **Catálogos → Unidades PM**, **Naturezas do fato**, **Status do envolvido**,
    **Soluções**, **Penalidades**, **Papéis de pessoa**, **Tipos de andamento**
 6. **Catálogos → Configuração de apuratórios** — para cada apuratório, habilitar ao menos
@@ -213,7 +213,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 6 | O que significa `data_fim` de uma designação? | **O dia da troca, exclusivo.** O sucessor começa exatamente nesse dia. Intervalo semiaberto `[)`. |
 | 7 | Qual o escopo de unicidade do número de controle? | **Sequencial por unidade, subunidade/seção opcional, ano e apuratório.** Dois registros sem subunidade continuam no mesmo escopo; sem subunidade e com subunidade são escopos distintos. |
 | 8 | Condutor (motorista) em sinistro | **No máximo um por processo, sempre entre os envolvidos.** É papel do envolvido, não outra pessoa. |
-| 9 | Papéis obrigatórios bloqueiam o salvamento? | **Sim.** Um `obrigatorio` que não bloqueia não significa nada. Para permitir a ausência, desmarque `obrigatorio` naquele apuratório — quem decide é a configuração. |
+| 9 | Funções obrigatórias bloqueiam o salvamento? | **Sim.** Um `obrigatorio` que não bloqueia não significa nada. Para permitir a ausência, desmarque `obrigatorio` naquele apuratório — quem decide é a configuração. |
 | 10 | Que catálogos vêm semeados? | **Só o que é lei** e não varia por instalação (migration `0003`). O operacional por unidade fica com o administrador. |
 | 11 | Como o administrador configura um apuratório? | Módulo dedicado `apuratorio_config`, não o CRUD genérico: as duas tabelas de associação têm PK composta, sem `id` e sem `nome`. |
 | 12 | Rumo do frontend | Vanilla TS **dividido em módulos**, sem dependência nova, migrando tela por tela. |
@@ -1066,7 +1066,7 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] Em um **IPM**, a linha de Escrivão mostra apenas **“-”** na coluna Documento e o formulário de substituição não pede tipo/número
 - [ ] Depois de concluir, desaparecem os controles de nova substituição, prorrogação e andamento; o aviso orienta usar **Reabrir**
 - [ ] Com o processo concluído, chamadas diretas desses três comandos devolvem mensagem amigável e não gravam nada
-- [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nos papéis, a alternância grava, e tornar o mesmo papel responsável logo depois **não** religa a flag
+- [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nas funções, a alternância grava, e tornar a mesma função responsável logo depois **não** religa a flag
 - [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessas, julgamento, conclusão, soluções e penalidade não aparecem antes do cadastro
 - [ ] **Indícios** — a partir do detalhe de um procedimento, num envolvido; em processo a ação não aparece
 - [ ] **Prazos** — o painel carrega

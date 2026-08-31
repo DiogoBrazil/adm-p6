@@ -281,7 +281,7 @@ function renderEnvolvidos(item: MapPrintItem): string {
 
 function renderDesignacoes(processo: ProceedingDetail): string {
   return tabela(
-    ["Papel", "Militar", "Início", "Fim", "Documento", "Motivo"],
+    ["Função", "Militar", "Início", "Fim", "Documento", "Motivo"],
     processo.designacoes.map((item) => [
       `${item.papel}${item.e_responsavel ? " — responsável" : ""}`,
       qualificacao(item.posto_graduacao, item.matricula, item.nome),

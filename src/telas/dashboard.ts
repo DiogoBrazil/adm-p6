@@ -6,7 +6,7 @@
 // painel de entrada mostrava zero desde que o comando foi remodelado.
 
 import { call, type DeadlineReportItem } from "../api";
-import { escapeHtml, tabela } from "../dom";
+import { escapeHtml, formatarQualificacaoMilitar, tabela } from "../dom";
 import { painelContagem } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
@@ -42,7 +42,11 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
 
   const linhaVencido = (i: DeadlineReportItem) => [
     `${i.apuratorio_sigla} nº ${i.numero_controle}`,
-    i.responsavel_nome ?? "—",
+    formatarQualificacaoMilitar(
+      i.responsavel_posto_graduacao,
+      i.responsavel_matricula,
+      i.responsavel_nome,
+    ),
     i.data_vencimento,
     { texto: `${-i.dias_restantes} dias`, numerica: true },
   ];

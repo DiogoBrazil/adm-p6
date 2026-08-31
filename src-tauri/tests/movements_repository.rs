@@ -68,6 +68,28 @@ async fn andamento_guarda_o_autor_e_o_tipo_do_catalogo() {
     .await;
 }
 
+#[tokio::test]
+async fn autor_militar_do_andamento_sai_com_qualificacao_completa() {
+    util::com_banco_descartavel("mov_autor_militar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let p = processo_de_teste(&pool, &m).await;
+        let autor = fixtures::conta_militar(&pool, &m.pm_um, "movimento@teste.com").await;
+
+        let mut tx = pool.begin().await.unwrap();
+        repository::add(&mut tx, &pedido(&p, "Autos conclusos.", None), &autor)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let itens = repository::list(&pool, &p).await.unwrap();
+        assert_eq!(
+            itens[0].registrado_por.as_deref(),
+            Some("TST PM 100000001 PM UM")
+        );
+    })
+    .await;
+}
+
 /// O tipo é opcional: um andamento pode ser só texto. Era uma lista de 11
 /// literais no Rust, sem coluna correspondente.
 #[tokio::test]

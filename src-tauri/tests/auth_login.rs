@@ -51,3 +51,25 @@ async fn administrador_do_seed_autentica_em_banco_sem_catalogos() {
     })
     .await;
 }
+
+#[tokio::test]
+async fn sessao_de_militar_traz_posto_e_matricula_para_a_identificacao() {
+    util::com_banco_descartavel("auth_militar", |pool| async move {
+        let m = util::fixtures::mundo_configurado(&pool).await;
+        util::fixtures::conta_militar(&pool, &m.pm_um, "militar@sistema.com").await;
+
+        let row =
+            adm_p6_tauri_lib::auth::repository::find_account_by_email(&pool, "militar@sistema.com")
+                .await
+                .unwrap()
+                .unwrap();
+        assert_eq!(row.nome, "PM UM");
+        assert_eq!(row.matricula.as_deref(), Some("100000001"));
+        assert_eq!(row.posto_graduacao.as_deref(), Some("TST PM"));
+
+        let sessao: adm_p6_tauri_lib::auth::domain::SessionUser = row.into();
+        assert_eq!(sessao.matricula.as_deref(), Some("100000001"));
+        assert_eq!(sessao.posto_graduacao.as_deref(), Some("TST PM"));
+    })
+    .await;
+}

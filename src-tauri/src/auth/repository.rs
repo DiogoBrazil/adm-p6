@@ -16,10 +16,13 @@ pub async fn find_account_by_email<'e, E: PgExecutor<'e>>(
                u.senha_hash                              AS senha_hash,
                pa.nome                                   AS perfil,
                pa.pode_administrar                       AS pode_administrar,
-               u.policial_militar_id::text               AS policial_militar_id
+               u.policial_militar_id::text               AS policial_militar_id,
+               pm.matricula                              AS matricula,
+               pg.sigla                                  AS posto_graduacao
         FROM usuarios u
         JOIN perfis_acesso pa ON pa.id = u.perfil_id
         LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
+        LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
         WHERE lower(u.email) = lower($1)
           AND u.ativo
           AND pa.ativo

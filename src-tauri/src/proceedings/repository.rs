@@ -359,11 +359,13 @@ pub async fn list_anexos<'e, E: PgExecutor<'e>>(
                 an.nome_arquivo                    AS nome_arquivo,
                 an.mime_type                       AS mime_type,
                 octet_length(an.conteudo)::bigint  AS tamanho_bytes,
-                COALESCE(u.nome_exibicao, pm.nome) AS enviado_por,
+                CASE WHEN pm.id IS NULL THEN u.nome_exibicao
+                     ELSE pg.sigla || ' ' || pm.matricula || ' ' || pm.nome END AS enviado_por,
                 an.created_at                      AS created_at
            FROM processo_anexos an
            LEFT JOIN usuarios u             ON u.id = an.enviado_por_id
            LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
           WHERE an.processo_id = $1::uuid AND an.cancelado_em IS NULL
           ORDER BY an.created_at DESC",
     )
@@ -567,7 +569,9 @@ async fn validar_contra_configuracao(
                 .bind(natureza_id)
                 .fetch_optional(&mut **tx)
                 .await?
-                .ok_or_else(|| AppError::Domain("natureza geral do fato nao encontrada".to_string()))?;
+                .ok_or_else(|| {
+                    AppError::Domain("natureza geral do fato nao encontrada".to_string())
+                })?;
 
         if exige_condutor && !request.envolvidos.iter().any(|e| e.e_condutor) {
             return Err(AppError::Domain(
@@ -1419,7 +1423,7 @@ async fn travar_designacao(
                 pap.nome                      AS papel,
                 ap.usa_documento_designacao   AS usa_documento_designacao,
                 d.policial_militar_id::text   AS policial_militar_id,
-                pg.sigla || ' ' || pm.nome    AS ocupante,
+                pg.sigla || ' ' || pm.matricula || ' ' || pm.nome AS ocupante,
                 d.data_inicio                 AS data_inicio,
                 d.data_fim                    AS data_fim,
                 d.designacao_anterior_id::text AS designacao_anterior_id

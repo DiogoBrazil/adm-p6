@@ -562,7 +562,7 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
       </div>
 
       <div class="stat-grid">
-        ${painelContagem("Designações por papel", estatisticas?.designacoes_por_papel ?? [], "Papel", OPCOES_CONTAGEM_USUARIO)}
+        ${painelContagem("Designações por função", estatisticas?.designacoes_por_papel ?? [], "Função", OPCOES_CONTAGEM_USUARIO)}
         ${painelContagem("Designações por apuratório", estatisticas?.designacoes_por_apuratorio ?? [], "Apuratório", OPCOES_CONTAGEM_USUARIO)}
         ${painelContagem("Envolvimentos por status", estatisticas?.envolvimentos_por_status ?? [], "Status", OPCOES_CONTAGEM_USUARIO)}
       </div>
@@ -570,11 +570,11 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
       <div class="detail-section">
         <h2>Designado (${designados.length})</h2>
         <p class="hint">
-          Uma seção só, e não "como encarregado" e "como escrivão": o papel é
+          Uma seção só, e não "como encarregado" e "como escrivão": a função é
           configuração por apuratório, e separar por nome aqui traria de volta o
-          hardcode. A coluna Papel mostra qual foi.
+          hardcode. A coluna Função mostra qual foi.
         </p>
-        ${tabelaProcessos(designados, "Papel", "papel")}
+        ${tabelaProcessos(designados, "Função", "papel")}
       </div>
 
       <div class="detail-section">

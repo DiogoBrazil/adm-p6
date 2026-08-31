@@ -2225,11 +2225,7 @@ async fn anexos_sao_multiplos_e_a_remocao_e_logica() {
         let m = fixtures::mundo_configurado(&pool).await;
         let id = salvar(&pool, &base(&m, "001")).await.unwrap();
 
-        let autor: String =
-            sqlx::query_scalar("SELECT id::text FROM usuarios WHERE email = 'admin@sistema.com'")
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let autor = fixtures::conta_militar(&pool, &m.pm_um, "anexo@teste.com").await;
 
         let mut ids = vec![];
         for nome in ["a.pdf", "b.pdf"] {
@@ -2255,6 +2251,10 @@ async fn anexos_sao_multiplos_e_a_remocao_e_logica() {
         // N anexos por processo — antes era um PDF inline por tabela de tipo.
         let detalhe = repository::get(&pool, &id).await.unwrap().unwrap();
         assert_eq!(detalhe.anexos.len(), 2);
+        assert_eq!(
+            detalhe.anexos[0].enviado_por.as_deref(),
+            Some("TST PM 100000001 PM UM")
+        );
         assert_eq!(
             detalhe.anexos[0].tamanho_bytes, 3,
             "octet_length do conteudo"

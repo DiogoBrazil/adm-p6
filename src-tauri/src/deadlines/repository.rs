@@ -149,11 +149,13 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
                 p.numero_documento              AS numero_documento,
                 p.data_documento                AS data_documento,
                 p.autoridade_id::text           AS autoridade_id,
-                pm.nome                         AS autoridade,
+                CASE WHEN pm.id IS NULL THEN NULL
+                     ELSE pg.sigla || ' ' || pm.matricula || ' ' || pm.nome END AS autoridade,
                 {VIGENTE}                       AS vigente
            FROM processo_prazos p
            LEFT JOIN tipos_documento td     ON td.id = p.documento_autorizador_id
            LEFT JOIN policiais_militares pm ON pm.id = p.autoridade_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
           WHERE p.processo_id = $1::uuid
           ORDER BY p.ordem"
     ))

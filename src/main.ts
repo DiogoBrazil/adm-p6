@@ -5,6 +5,7 @@ import {
   aplicarLarguras,
   destruirSelectsPesquisaveis,
   escapeHtml,
+  formatarQualificacaoMilitar,
   formularioTemPendencia,
   instalarValidacaoAmigavel,
   podeDescartarFormulario,
@@ -247,7 +248,15 @@ function shell(content: string) {
         <div class="session-info">
           <span class="session-avatar" aria-hidden="true">${escapeHtml((session?.nome ?? "A").slice(0, 1).toUpperCase())}</span>
           <div>
-          <strong>${escapeHtml(session?.nome ?? "Sessão não autenticada")}</strong>
+          <strong>${escapeHtml(
+            session
+              ? formatarQualificacaoMilitar(
+                  session.posto_graduacao,
+                  session.matricula,
+                  session.nome,
+                )
+              : "Sessão não autenticada",
+          )}</strong>
           <span>${escapeHtml(session?.perfil ?? "offline")}</span>
           </div>
         </div>

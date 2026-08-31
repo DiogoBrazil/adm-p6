@@ -3147,6 +3147,27 @@ tr.atrasado {
   width: 100%;
 }
 
+/* Posto, matrícula e nome formam uma única identificação administrativa. Nos
+   blocos de Designações e Envolvidos, o seletor ocupa duas trilhas para que
+   essa informação não seja espremida como os campos curtos ao redor. */
+.linha-colecao > .campo--militar {
+  grid-column: span 2;
+}
+
+.campo--militar .ts-control > .item {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .linha-colecao > .campo--militar {
+    grid-column: 1 / -1;
+  }
+}
+
 .cadastro-rapido-botao.botao-icone {
   width: 40px;
   min-width: 40px;

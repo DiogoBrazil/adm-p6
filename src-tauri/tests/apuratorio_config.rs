@@ -149,7 +149,7 @@ async fn recusa_configuracao_que_deixaria_o_apuratorio_sem_responsavel() {
         )
         .await
         .expect_err("responsavel desativado deve ser recusado");
-        assert!(erro.contains("desativado"), "mensagem inesperada: {erro}");
+        assert!(erro.contains("desativad"), "mensagem inesperada: {erro}");
 
         let erro = salvar_papel(
             &pool,

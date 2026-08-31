@@ -11,6 +11,7 @@ pub struct AuditDetailItem {
     pub usuario_id: Option<String>,
     pub usuario_nome: Option<String>,
     pub usuario_posto: Option<String>,
+    pub usuario_matricula: Option<String>,
     /// Diff da operação, quando registrado. Preenchido nas alterações de
     /// configuração, que mudam o comportamento futuro do sistema.
     pub alteracoes: Option<Value>,

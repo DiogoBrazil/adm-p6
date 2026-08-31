@@ -254,7 +254,7 @@ pub const CATALOGOS: &[Catalogo] = &[
     Catalogo {
         chave: "papeis_processo",
         tabela: "papeis_processo",
-        rotulo: "Papéis no processo",
+        rotulo: "Funções no processo",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
     },

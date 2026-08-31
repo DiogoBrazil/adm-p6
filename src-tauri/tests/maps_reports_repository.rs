@@ -326,6 +326,18 @@ async fn impressao_do_mapa_reune_os_dados_detalhados() {
             "Diligência registrada para o PDF"
         );
         assert_eq!(item.enquadramentos.len(), 1);
+
+        let responsaveis = repository::by_responsible(
+            &pool,
+            &ReportFilter {
+                apuratorio_ids: None,
+                ano: Some(2026),
+                limit: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(responsaveis[0].rotulo, "TST PM 100000001 PM UM");
     })
     .await;
 }
@@ -676,7 +688,7 @@ use util::fixtures::conta_admin;
 async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
     util::com_banco_descartavel("mapa_salvo", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
-        let autor = conta_admin(&pool).await;
+        let autor = fixtures::conta_militar(&pool, &m.pm_um, "mapa@teste.com").await;
         let snapshot = json!([{ "rotulo": "TST-A nº 001", "responsavel_nome": "PM UM" }]);
 
         let mut tx = pool.begin().await.unwrap();
@@ -709,8 +721,8 @@ async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
         assert_eq!(lista[0].total_processos, 1);
         assert_eq!(
             lista[0].gerado_por.as_deref(),
-            Some("ADMINISTRADOR DO SISTEMA"),
-            "o autor e a conta que gerou"
+            Some("TST PM 100000001 PM UM"),
+            "o militar vinculado a conta sai qualificado"
         );
 
         let completo = repository::get_saved_map(&pool, &id)
@@ -927,7 +939,10 @@ async fn mapa_escreve_a_apurar_por_extenso_e_o_ranking_ignora_o_nao_identificado
         let lista = linha.envolvidos.as_deref().unwrap_or_default();
         assert!(lista.contains("À apurar"), "lista de envolvidos: {lista}");
         // O LEFT JOIN não pode engolir o identificado nem devolver a linha nula.
-        assert!(lista.contains("PM UM"), "lista de envolvidos: {lista}");
+        assert!(
+            lista.contains("TST PM 100000001 PM UM"),
+            "lista de envolvidos: {lista}"
+        );
 
         // Estatística de pessoa não conta quem ainda não é pessoa identificada.
         // A trava é do schema (`ck_envolvido_condutor_identificado`), mas o

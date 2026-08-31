@@ -162,7 +162,7 @@ impl SavePapelRequest {
         }
         if self.e_responsavel && !self.ativo {
             return Err(
-                "o papel que responde pelo apuratorio nao pode ficar desativado".to_string(),
+                "A função que responde pelo apuratório não pode ficar desativada.".to_string(),
             );
         }
         // Sem responsável ativo, o processo aparece sem responsável na listagem,

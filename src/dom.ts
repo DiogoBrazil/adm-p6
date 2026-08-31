@@ -32,9 +32,9 @@ export function cellDisplay(value: unknown): string {
 
 /** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
 export function formatarQualificacaoMilitar(
-  posto: string | null,
-  matricula: string | null,
-  nome: string | null,
+  posto: string | null | undefined,
+  matricula: string | null | undefined,
+  nome: string | null | undefined,
 ): string {
   return [posto, matricula, nome].filter((parte): parte is string => Boolean(parte)).join(" ") || "—";
 }

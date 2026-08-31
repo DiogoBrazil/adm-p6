@@ -13,6 +13,10 @@ pub struct UserAuthRow {
     /// administrador pode renomear "Administrador" sem perder o acesso.
     pub pode_administrar: bool,
     pub policial_militar_id: Option<String>,
+    /// Preenchidos somente quando a conta representa um policial militar.
+    /// Contas técnicas conservam apenas `nome`, sem qualificação inventada.
+    pub matricula: Option<String>,
+    pub posto_graduacao: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +27,8 @@ pub struct SessionUser {
     pub perfil: String,
     pub is_admin: bool,
     pub policial_militar_id: Option<String>,
+    pub matricula: Option<String>,
+    pub posto_graduacao: Option<String>,
 }
 
 impl From<UserAuthRow> for SessionUser {
@@ -34,6 +40,8 @@ impl From<UserAuthRow> for SessionUser {
             perfil: row.perfil,
             is_admin: row.pode_administrar,
             policial_militar_id: row.policial_militar_id,
+            matricula: row.matricula,
+            posto_graduacao: row.posto_graduacao,
         }
     }
 }

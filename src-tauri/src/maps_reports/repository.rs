@@ -31,7 +31,8 @@ const SAVED_MAP_COLS: &str = r#"
     m.total_processos                  AS total_processos,
     m.total_concluidos                 AS total_concluidos,
     m.total_andamento                  AS total_andamento,
-    COALESCE(u.nome_exibicao, pm.nome) AS gerado_por,
+    CASE WHEN pm.id IS NULL THEN u.nome_exibicao
+         ELSE pg.sigla || ' ' || pm.matricula || ' ' || pm.nome END AS gerado_por,
     m.created_at                       AS created_at
 "#;
 
@@ -40,6 +41,7 @@ const SAVED_MAP_JOINS: &str = r#"
     LEFT JOIN apuratorios a          ON a.id = m.apuratorio_id
     LEFT JOIN usuarios u             ON u.id = m.gerado_por_id
     LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
+    LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
 "#;
 
 /// Mapa do período: uma linha por processo, com responsável vigente, envolvidos,
@@ -67,6 +69,8 @@ pub async fn map_rows(
                v.data_instauracao  AS data_instauracao,
                v.data_conclusao    AS data_conclusao,
                v.responsavel_nome  AS responsavel_nome,
+               responsavel_pm.matricula AS responsavel_matricula,
+               responsavel_posto.sigla  AS responsavel_posto_graduacao,
                env.lista           AS envolvidos,
                v.prazo_vencimento  AS prazo_vencimento,
                andam.descricao     AS ultimo_andamento,
@@ -78,14 +82,18 @@ pub async fn map_rows(
               SELECT string_agg(
                          CASE WHEN e.policial_militar_id IS NULL
                               THEN 'À apurar'
-                              ELSE pg.sigla || ' ' || pme.nome END,
+                              ELSE pg.sigla || ' ' || pme.matricula || ' ' || pme.nome END,
                          ', ' ORDER BY e.ordem
                      ) AS lista
                 FROM processo_envolvidos e
                 LEFT JOIN policiais_militares pme ON pme.id = e.policial_militar_id
                 LEFT JOIN postos_graduacoes pg    ON pg.id = pme.posto_graduacao_id
-               WHERE e.processo_id = v.id
+              WHERE e.processo_id = v.id
           ) env ON true
+          LEFT JOIN policiais_militares responsavel_pm
+                 ON responsavel_pm.id = v.responsavel_id::uuid
+          LEFT JOIN postos_graduacoes responsavel_posto
+                 ON responsavel_posto.id = responsavel_pm.posto_graduacao_id
           LEFT JOIN LATERAL (
               SELECT an.descricao, an.ocorrido_em FROM processo_andamentos an
                WHERE an.processo_id = v.id AND an.cancelado_em IS NULL
@@ -270,7 +278,7 @@ pub async fn by_responsible(
 ) -> Result<Vec<ContagemRotulada>, sqlx::Error> {
     sqlx::query_as::<_, ContagemRotulada>(
         "SELECT pm.id::text AS id,
-                pg.sigla || ' ' || pm.nome AS rotulo,
+                pg.sigla || ' ' || pm.matricula || ' ' || pm.nome AS rotulo,
                 count(DISTINCT p.id) AS total
            FROM processos_procedimentos p
            JOIN processo_designacoes d  ON d.processo_id = p.id AND d.data_fim IS NULL
@@ -281,7 +289,7 @@ pub async fn by_responsible(
           WHERE p.ativo
             AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
             AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $2)
-          GROUP BY pm.id, pg.sigla, pm.nome
+          GROUP BY pm.id, pg.sigla, pm.matricula, pm.nome
           ORDER BY total DESC, pm.nome
           LIMIT $3",
     )

@@ -290,7 +290,7 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
 // ── render ──────────────────────────────────────────────────────────────────
 
 function nomeMilitar(m: UserListItem): string {
-  return `${m.posto_graduacao} ${m.nome} (${m.matricula})`;
+  return formatarQualificacaoMilitar(m.posto_graduacao_sigla, m.matricula, m.nome);
 }
 
 /** Qualificação completa de um designado: posto, matrícula e nome. */
@@ -347,7 +347,8 @@ function campoComCadastroRapido(
   designavel = false,
   ajuda = "",
 ): string {
-  return `<div class="campo campo-com-cadastro">
+  const classeMilitar = tipo === "militar" ? " campo--militar" : "";
+  return `<div class="campo campo-com-cadastro${classeMilitar}">
     <label>${escapeHtml(rotuloCampo)}${controle}</label>
     ${botaoIcone("adicionar", `Cadastrar ${rotulo}`, {
       classe: "secondary cadastro-rapido-botao",
@@ -435,7 +436,7 @@ function linhaDesignacao(
     <div class="linha-colecao-head"><strong>Designação ${i + 1}</strong>
       <button type="button" class="danger small" data-remover-des="${i}">Remover</button>
     </div>
-    <label>Papel<select name="des_${i}_papel" required data-select-pesquisavel>
+    <label>Função<select name="des_${i}_papel" required data-select-pesquisavel>
       <option value=""></option>
       ${opcoesPapel.join("")}
     </select></label>
@@ -801,8 +802,8 @@ export async function renderFormularioProcesso(
 
         <fieldset>
           <legend>Designações</legend>
-          ${papeis.length === 0 ? `<p class="empty">Nenhum papel habilitado para este apuratório.</p>` : ""}
-          ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Papéis obrigatórios: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O processo não salva sem eles.</p>` : ""}
+          ${papeis.length === 0 ? `<p class="empty">Nenhuma função habilitada para este apuratório.</p>` : ""}
+          ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Funções obrigatórias: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O processo não salva sem elas.</p>` : ""}
           <p class="secao-ajuda">A designação inicial começa na data de instauração e é autorizada pelo documento que instaurou o processo — por isso não se digitam data nem documento aqui. Trocas posteriores são feitas em <strong>Substituir</strong>, na página de detalhes.</p>
           ${r.designacoes
             .map((d, i) => linhaDesignacao(d, i, papeis, cats.militares, r.designacoes))
@@ -1830,7 +1831,16 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         ${linha("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
         ${linha("Julgamento", d.data_julgamento)}
         ${linha("Conclusão", d.data_conclusao)}
-        ${linha("Responsável", d.responsavel_nome ? `${d.responsavel_nome} (${d.responsavel_papel})` : null)}
+        ${linha(
+          "Responsável",
+          d.responsavel_nome
+            ? `${formatarQualificacaoMilitar(
+                d.responsavel_posto_graduacao,
+                d.responsavel_matricula,
+                d.responsavel_nome,
+              )} (${d.responsavel_papel})`
+            : null,
+        )}
         ${d.carta_precatoria ? linha("Deprecante", d.carta_precatoria.deprecante) : ""}
         ${d.carta_precatoria ? linha("Unidade deprecada", d.carta_precatoria.unidade_deprecada) : ""}
       </table>
@@ -2013,7 +2023,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ${
         d.designacoes.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--designacoes">
-              <thead><tr><th>Papel</th><th>Militar</th><th>Início</th><th>Fim</th><th>Documento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
+              <thead><tr><th>Função</th><th>Militar</th><th>Início</th><th>Fim</th><th>Documento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${d.designacoes
                 .map(
                   (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>

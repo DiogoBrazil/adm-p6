@@ -302,3 +302,18 @@ pub async fn conta_admin(pool: &PgPool) -> String {
         .await
         .expect("conta do seed")
 }
+
+/// Conta vinculada a um militar da fixture. Exercita a diferença entre o nome
+/// livre de uma conta técnica e a qualificação administrativa completa do PM.
+pub async fn conta_militar(pool: &PgPool, policial_militar_id: &str, email: &str) -> String {
+    sqlx::query_scalar(
+        "INSERT INTO usuarios (policial_militar_id, email, senha_hash, perfil_id)
+         SELECT $1::uuid, $2, 'x', id FROM perfis_acesso ORDER BY created_at LIMIT 1
+         RETURNING id::text",
+    )
+    .bind(policial_militar_id)
+    .bind(email)
+    .fetch_one(pool)
+    .await
+    .expect("conta vinculada ao militar")
+}
