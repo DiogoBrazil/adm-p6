@@ -71,7 +71,7 @@ const COLUNAS: Coluna[] = [
     quebrarRotulo: true,
   },
   { rotulo: "Matrícula", largura: 10, alinhamento: "centro", nowrap: true },
-  { rotulo: "Nome", largura: 30, truncar: true },
+  { rotulo: "Nome", largura: 24, truncar: true },
   { rotulo: "Encarregado", largura: 9, alinhamento: "centro", nowrap: true },
   {
     rotulo: "Usuário do sistema",
@@ -82,7 +82,10 @@ const COLUNAS: Coluna[] = [
   },
   { rotulo: "Perfil", largura: 10, alinhamento: "centro", truncar: true },
   { rotulo: "Situação", largura: 8, alinhamento: "centro", nowrap: true },
-  { rotulo: "Ações", largura: 6, alinhamento: "centro", nowrap: true },
+  // 12%, e não os 6% de quando havia um botão só: são três agora, e
+  // 3×32px + 2×8px de gap = 112px. Abaixo disso o terceiro botão passa da
+  // borda da tabela — medido em 1024px de janela, onde 12% dão 117px.
+  { rotulo: "Ações", largura: 12, alinhamento: "centro", nowrap: true },
 ];
 
 /**
@@ -133,7 +136,7 @@ async function opcoes(catalogo: string, campo: string): Promise<Opcao[]> {
 
 /** Uma linha da tabela. Serve a tela e o bloco completo da impressão. */
 // `tr.inativo` já esmaece a linha inteira — o CSS espera a classe no `<tr>`.
-const linhaDaTabela = (u: UserListItem) => ({
+const linhaDaTabela = (u: UserListItem, podeEscrever = false) => ({
   classe: u.ativo ? "" : "inativo",
   celulas: [
     u.posto_graduacao,
@@ -143,7 +146,31 @@ const linhaDaTabela = (u: UserListItem) => ({
     u.conta_ativa === true ? "sim" : "não",
     u.conta_perfil ?? "—",
     u.ativo ? "ativo" : "inativo",
-    { texto: "", acao: { rotulo: "Abrir", id: u.id } },
+    {
+      texto: "",
+      // Três ações, e cada uma com o seu `data-`: um `data-tabela-acao` só para
+      // as três faria os três cliques caírem no mesmo listener.
+      //
+      // Só a exclusão é `danger`, e de propósito: desativar se desfaz com um
+      // clique em Reativar, apagar não se desfaz de jeito nenhum. As outras
+      // duas ficam `outline` para que o vermelho seja a única coisa que salta
+      // na linha — com `secondary`, o botão escuro do meio puxava o olho para
+      // a ação errada.
+      acoes: [
+        { rotulo: "Abrir", id: u.id, icone: "abrir" as const, classe: "outline" },
+        // Desativar e excluir exigem administrador no backend
+        // (`require_admin`), e `podeEscrever()` é exatamente `is_admin`. Um
+        // botão que só sabe dizer "não" ao ser clicado é pior que botão nenhum.
+        ...(podeEscrever
+          ? [
+              u.ativo
+                ? { rotulo: "Desativar", id: u.id, icone: "desativar" as const, classe: "outline", dado: "desativar" }
+                : { rotulo: "Reativar", id: u.id, icone: "reativar" as const, classe: "outline", dado: "reativar" },
+              { rotulo: "Excluir", id: u.id, icone: "excluir" as const, classe: "danger", dado: "excluir" },
+            ]
+          : []),
+      ],
+    },
   ],
 });
 
@@ -158,11 +185,15 @@ const nomeCompleto = (u: UserListItem) =>
  * Está separado do resto da tela porque refazer o `shell()` inteiro recriaria o
  * campo de busca e tiraria o foco a cada tecla. Ver `dom.ts::ligarBuscaInstantanea`.
  */
-function htmlResultadosUsuarios(itens: UserListItem[], total: number): string {
+function htmlResultadosUsuarios(
+  itens: UserListItem[],
+  total: number,
+  podeEscrever: boolean,
+): string {
   return `
     ${tabela(
       COLUNAS,
-      itens.map(linhaDaTabela),
+      itens.map((u) => linhaDaTabela(u, podeEscrever)),
       busca ? "Nenhum militar encontrado." : "Nenhum militar cadastrado.",
       { viewport: true, listagem: true },
     )}
@@ -170,7 +201,7 @@ function htmlResultadosUsuarios(itens: UserListItem[], total: number): string {
 }
 
 /** Religa o que vive dentro da área redesenhada. */
-function ligarResultadosUsuarios(ctx: ContextoTela): void {
+function ligarResultadosUsuarios(ctx: ContextoTela, itens: UserListItem[]): void {
   ligarPaginacao("usuarios", pagina, (nova) => {
     pagina = nova;
     void atualizarListaUsuarios(ctx);
@@ -182,6 +213,60 @@ function ligarResultadosUsuarios(ctx: ContextoTela): void {
       void renderListaUsuarios(ctx);
     });
   });
+
+  /** As três ações de linha seguem o mesmo roteiro: confirmar, chamar, refazer. */
+  const ligarAcao = (
+    dado: string,
+    confirmacao: (u: UserListItem) => string,
+    comando: "users_deactivate" | "users_reactivate" | "users_delete",
+    falha: string,
+    sucesso: (u: UserListItem) => string,
+  ) => {
+    document.querySelectorAll<HTMLButtonElement>(`[data-${dado}]`).forEach((botao) => {
+      botao.addEventListener("click", async () => {
+        const id = botao.dataset[dado]!;
+        const militar = itens.find((u) => u.id === id);
+        if (!militar || !confirm(confirmacao(militar))) return;
+        const resposta = await call(comando, { id });
+        if (!resposta.ok) {
+          // A recusa da exclusão diz **qual** vínculo segurou, e é o texto que
+          // orienta a desativar. Vale a pena ser lido inteiro.
+          notificar(resposta.error ?? falha, "erro");
+          return;
+        }
+        notificar(sucesso(militar), "sucesso");
+        void atualizarListaUsuarios(ctx);
+      });
+    });
+  };
+
+  ligarAcao(
+    "desativar",
+    (u) =>
+      `Desativar ${nomeCompleto(u)}?\n\nEle sai das listas de escolha e a conta de acesso, se houver, é desativada junto. O histórico continua inteiro.`,
+    "users_deactivate",
+    "Falha ao desativar.",
+    (u) => `${nomeCompleto(u)} foi desativado.`,
+  );
+
+  ligarAcao(
+    "reativar",
+    (u) => `Reativar ${nomeCompleto(u)}?`,
+    "users_reactivate",
+    "Falha ao reativar.",
+    (u) => `${nomeCompleto(u)} foi reativado.`,
+  );
+
+  // A exclusão é física e não se desfaz — a confirmação diz isso com todas as
+  // letras, e o backend ainda recusa quem tiver qualquer vínculo.
+  ligarAcao(
+    "excluir",
+    (u) =>
+      `Excluir ${nomeCompleto(u)} definitivamente?\n\nO cadastro sai do banco e NÃO há como desfazer. Para tirar de circulação sem perder o registro, use Desativar.`,
+    "users_delete",
+    "Falha ao excluir.",
+    (u) => `${nomeCompleto(u)} foi excluído.`,
+  );
 }
 
 /**
@@ -228,7 +313,7 @@ async function atualizarListaUsuarios(ctx: ContextoTela): Promise<void> {
   }
 
   if (area) {
-    area.innerHTML = htmlResultadosUsuarios(itens, total);
+    area.innerHTML = htmlResultadosUsuarios(itens, total, ctx.podeEscrever());
     aplicarLarguras(area);
   }
 
@@ -244,7 +329,7 @@ async function atualizarListaUsuarios(ctx: ContextoTela): Promise<void> {
   if (limpar) limpar.hidden = busca === "";
 
   if (status) status.textContent = `${total} resultado(s).`;
-  ligarResultadosUsuarios(ctx);
+  ligarResultadosUsuarios(ctx, itens);
 }
 
 export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
@@ -290,7 +375,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
       ${
         resposta.ok
-          ? `<div id="resultados-usuarios" class="area-resultados">${htmlResultadosUsuarios(itens, total)}</div>`
+          ? `<div id="resultados-usuarios" class="area-resultados">${htmlResultadosUsuarios(itens, total, ctx.podeEscrever())}</div>`
           : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar.")}</p>`
       }
     </section>
@@ -299,7 +384,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
   const csv = document.querySelector<HTMLButtonElement>("#btn-csv");
   if (csv) csv.hidden = itens.length === 0;
 
-  ligarResultadosUsuarios(ctx);
+  ligarResultadosUsuarios(ctx, itens);
 
   // O termo entra em `busca` a cada tecla, e só o redesenho espera: o CSV e a
   // impressão leem `busca` no clique, e clicar dentro dos 250 ms tem de levar
@@ -658,7 +743,11 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
           ${
             ctx.podeEscrever()
               ? `<button id="btn-editar" class="small">Editar</button>
-                 ${inativo ? `<button id="btn-reativar" class="small">Reativar</button>` : ""}`
+                 ${
+                   inativo
+                     ? `<button id="btn-reativar" class="small">Reativar</button>`
+                     : `<button id="btn-desativar" class="secondary small">Desativar</button>`
+                 }`
               : ""
           }
           ${barraDeExportacao({ imprimir: true })}
@@ -704,6 +793,26 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
       notificar(resposta.error ?? "Falha ao reativar.", "erro");
       return;
     }
+    void renderDetalheUsuario(ctx, id);
+  });
+
+  // O par do Reativar, que faltava: o detalhe sabia devolver alguém ao ativo,
+  // mas não tirar. Excluir não vem para cá de propósito — é irreversível e o
+  // lugar dela é a listagem, onde a linha inteira está à vista.
+  document.querySelector<HTMLButtonElement>("#btn-desativar")?.addEventListener("click", async () => {
+    if (
+      !confirm(
+        `Desativar ${nomeCompleto(usuario)}?\n\nEle sai das listas de escolha e a conta de acesso, se houver, é desativada junto. O histórico continua inteiro.`,
+      )
+    ) {
+      return;
+    }
+    const resposta = await call("users_deactivate", { id });
+    if (!resposta.ok) {
+      notificar(resposta.error ?? "Falha ao desativar.", "erro");
+      return;
+    }
+    notificar(`${nomeCompleto(usuario)} foi desativado.`, "sucesso");
     void renderDetalheUsuario(ctx, id);
   });
 

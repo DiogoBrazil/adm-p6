@@ -26,8 +26,8 @@ sobre remover o schema `legado`.
 | Código | |
 |---|---:|
 | Migrations (`0001`–`0018`) | **18** |
-| Comandos Tauri, todos no cliente tipado | **86** |
-| Testes | **167** |
+| Comandos Tauri, todos no cliente tipado | **87** |
+| Testes | **169** |
 | Módulos Rust · linhas de Rust | 13 · 10.193 |
 | Arquivos de frontend · linhas de TS/CSS | 19 · 13.651 |
 | Catálogos administráveis | 26 |
@@ -60,6 +60,7 @@ sai só quando ela fechar.
 | 3b | **Conferir "À apurar", os seletores pesquisáveis e o cadastro rápido** — nenhum deles existia antes, e o modal e a CSP só se provam no binário | seção 11, item **(k)** | **Sim** |
 | 3c | **Conferir a pesquisa instantânea e o modal de filtros avançados** — é o primeiro modal do app com seletor pesquisável **e** CSP restritiva ao mesmo tempo | seção 11, item **(l)** | **Sim** |
 | 3d | **Conferir a pesquisa instantânea de Catálogos e Usuários** — o redesenho parcial pode perder a largura das colunas **sem acusar** | seção 11, item **(n)** | **Sim** |
+| 3e | **Conferir desativar e excluir militar** — a exclusão é física e não se desfaz; fazer em banco descartável ou com o responsável | seção 11, item **(o)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -260,6 +261,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 51 | Como se registra um envolvido cujo PM ainda não foi identificado? | **`processo_envolvidos.policial_militar_id IS NULL`, e nada mais.** Era um policial fictício de cadastro — "À APURAR", matrícula `100000000` — e isso o punha em lista de opção, em estatística pessoal e em ranking de condutor, como se fosse gente. Três escolhas numa. (a) **O estado mora no vínculo, não numa pessoa inventada nem num booleano ao lado.** `NULL` é a única fonte de verdade (princípio 4); um `a_apurar` gravado ao lado do `policial_militar_id` seriam duas, e elas divergiriam. Os resumos expõem `a_apurar` **derivado**, para a tela não ter de deduzir de campo vazio. (b) **É envolvido de verdade.** Conta no `max_envolvidos`, recebe situação, enquadramento, indício e resultado. O que não pode é ser **condutor** — `ck_envolvido_condutor_identificado` —, porque conduzir é ato de pessoa identificada; e é **no máximo um por processo** (`uq_envolvido_a_apurar`), porque "os PMs a apurar" é um marcador coletivo, não uma fila. (c) **A `0016` converte e desativa, não apaga.** Os vínculos do cadastro artificial viram `NULL` preservando o **id do envolvido**, e o registro fica inativo — catálogo em uso se desativa (princípio 6). |
 | 52 | Como um militar é identificado depois, sem perder o que já foi apurado? | **A sincronização de envolvidos passou a ser pelo id do VÍNCULO, não pelo id do PM.** Enquanto a chave era o militar, identificar quem estava "À apurar" apagava a linha e criava outra — e enquadramentos, indícios, resultado, situação e ordem, que penduram em `processo_envolvidos.id`, iam junto pelo `ON DELETE CASCADE`. `EnvolvidoRequest.id` viaja na edição justamente para que a linha sobreviva à troca do PM, nos dois sentidos: identificar quem faltava, e devolver a "À apurar" um militar registrado por engano. Sem `id` — cliente antigo — o repositório ainda casa pelo PM, e o `IS NOT DISTINCT FROM` alcança o `NULL`. |
 | 53 | O formulário de processo pede cadastro que não existe. Cadastra ali? | **Sim, para os cadastros operacionais, em modal, sem perder o formulário em andamento.** PM, unidade, subunidade/seção, município, natureza geral do fato, situação do envolvido e papel de pessoa ganharam "+" ao lado do seletor. Ficam **de fora** apuratório, documento iniciador, papel de designação e as classificações jurídicas: dependem de configuração e de relações que uma caixinha não deveria decidir — esses seguem só na tela administrativa própria, e o seletor continua pesquisável. O modal **reusa** o formulário dirigido por metadados de Catálogos e o de militares, então não há segunda cópia das regras de validação; e **não cria conta de acesso**, que continua sendo escolha da tela de usuários. |
+| 54 | A listagem de militares não tem como desativar nem excluir ninguém. O que ela ganha? | **Os dois, e são coisas diferentes.** *Desativar* tira o militar das listas de escolha e desliga a conta de acesso junto, sem perder nada — é o caminho normal, e o único que serve para quem tem histórico (princípio 6). *Excluir* apaga a linha do banco e **só conclui para quem não tem vínculo nenhum**: sem conta, sem designação, sem envolvimento e sem prorrogação em que seja autoridade. É o cadastro digitado errado, e nada além disso. As quatro FKs são `ON DELETE RESTRICT` e recusariam sozinhas; o comando confere antes para poder dizer **qual** vínculo segurou, que é o que a mensagem do banco não diz. Militar que já teve conta nunca poderá ser apagado — a conta se desativa e nunca se apaga —, e isso é consequência aceita, não descuido. Na tela, os dois ícones só aparecem para administrador, porque é o que o backend exige. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -905,7 +907,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql`, sua ampliação na `0014_subunidade_secao_origem.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 86 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 87 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
 | por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
@@ -955,6 +957,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | a conferência campo a campo dos 6 processos da amostra | `src-tauri/importacao/98_amostra_lado_a_lado.sql` (cabeçalho) e **seção 6** |
 | por que a CSP é o que é, e o que ela recusaria | **seção 12**, rodada 6, e as quatro armadilhas de CSP na seção 7 |
 | como um seletor de busca é montado nesta base | `src/telas/indicios.ts::pedirAnalogia` e o helper `buscar()` do mesmo arquivo |
+| por que desativar e excluir militar são comandos diferentes | decisão **54**, `users/commands.rs::users_deactivate` e `users_delete` (cabeçalhos), e `users/repository.rs::Vinculos` |
 | como uma listagem filtra enquanto se digita | `dom.ts::ligarBuscaInstantanea` (cabeçalho) e as três `atualizar*` que ela move: `processo.ts::atualizarListaProcessos`, `usuarios.ts::atualizarListaUsuarios`, `catalogos.ts::atualizarListaCatalogo` |
 | por que Catálogos guarda as linhas num `let` do módulo | o cabeçalho de `linhasCarregadas`, em `src/telas/catalogos.ts` — e a **seção 12**, rodada 26 |
 | por que a prorrogação começa no dia do vencimento | `src-tauri/migrations/0005_prazo_intervalo_ocupacao.sql` |
@@ -1699,7 +1702,39 @@ redesenho parcial.
 
 ---
 
-## 12. Changelog — as 26 rodadas
+### o) Desativar e excluir militar (seção 12, rodada 27)
+
+O binário de produção, e o console aberto. **Faça num banco descartável ou combinado com
+o responsável**: a exclusão é física e não se desfaz.
+
+- [ ] Cada linha da listagem tem **três** ícones: abrir, desativar (ou reativar, se já
+      inativo) e excluir — e só o de excluir é vermelho
+- [ ] Os três cabem na coluna sem passar da borda da tabela nem criar rolagem
+      horizontal, inclusive em janela de 1024px
+- [ ] **Com perfil somente leitura, só o de abrir aparece**
+- [ ] Desativar pede confirmação nomeando o militar, e a linha passa a "inativo" sem
+      sair da listagem; o ícone do meio vira Reativar
+- [ ] Se o militar tinha conta de acesso, ela fica **inativa** junto — conferir na
+      coluna "Usuário do sistema"
+- [ ] Reativar devolve os dois ao ativo
+- [ ] Desativar **a própria conta** é recusado com a mensagem de pedir a outro
+      administrador; desativar o **último** administrador também é recusado
+- [ ] Excluir um militar **com histórico** é recusado, e a mensagem diz **qual** vínculo
+      segurou (conta de acesso, designações, envolvimentos ou prorrogações) e manda
+      desativar — o cadastro continua lá depois da recusa
+- [ ] Excluir um militar recém-cadastrado, sem nada pendurado, tira a linha da listagem
+      e ela não volta em busca nenhuma
+- [ ] A confirmação de excluir avisa que **não há como desfazer** e sugere Desativar
+- [ ] Excluir o único item da última página recua a página em vez de mostrar tabela vazia
+- [ ] No **detalhe** do militar existe agora **Desativar** (e Reativar quando inativo) —
+      excluir não fica aqui, de propósito
+- [ ] Na **Auditoria**: a desativação aparece como "Desativou o militar" com tipo de ação
+      **Alterou**, e a exclusão como "Excluiu o militar" nomeando quem foi — mesmo depois
+      de a linha ter sumido do banco
+
+---
+
+## 12. Changelog — as 27 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1733,6 +1768,55 @@ A narrativa completa de cada uma está no histórico do git.
 | 24 | **Pesquisa instantânea e filtros avançados** | a pesquisa da listagem passou a filtrar ao digitar e a alcançar o **nome do encarregado e do PM envolvido**; modal com dez parâmetros combináveis por `AND`, chips removíveis e contador. `situacao` substituiu `concluido`, e as opções do modal passaram a sair dos apuratórios em vez dos cadastros. Sem migration. Detalhe abaixo |
 | 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
 | 26 | **Pesquisa instantânea nas outras listagens** | Catálogos e Usuários passaram a filtrar ao digitar, como os apuratórios desde a 24. O "250 ms + Enter" saiu de dentro de `processo.ts` e virou `dom.ts::ligarBuscaInstantanea`, usado pelas três. Sem migration e sem comando novo — os dois backends já pesquisavam. Detalhe abaixo |
+| 27 | **Desativar e excluir militar** | A listagem de militares não tinha nem uma coisa nem outra: `users_delete` **desativava** apesar do nome, e tela nenhuma o chamava. O comando virou `users_deactivate`, e `users_delete` passou a apagar de verdade — só para quem não tem vínculo nenhum, com mensagem que nomeia o vínculo que segurou. Três ícones por linha, e o par do Reativar que faltava no detalhe. Decisão **54**. Sem migration. Detalhe abaixo |
+
+### A rodada 27, em detalhe
+
+Pedido: a listagem de militares mostra se o cadastro está ativo, mas não tem como
+desativar nem excluir ninguém. Um ícone para cada, ao lado do de abrir.
+
+**Desativar já existia — e nenhuma tela chamava.** O comando se chamava `users_delete`
+e, apesar do nome, fazia `set_ativo(false)`, com as travas de não desativar a própria
+conta nem o último administrador. O detalhe do militar só oferecia **Reativar**: dava
+para devolver alguém ao ativo, nunca para tirar. Ou seja, o caminho de volta existia sem
+o de ida, e o de ida estava escrito e inalcançável.
+
+**Os dois verbos passaram a ter nomes que dizem o que fazem.** `users_deactivate`
+desativa; `users_delete` apaga. Enquanto os dois couberam no mesmo nome, quem lesse a
+lista de comandos entenderia o contrário do que acontece — e foi por isso que a
+renomeação veio junto, e não depois.
+
+**Na trilha, desativar virou `UPDATE`.** Gravava `DELETE`, herança do nome antigo, e
+dizia que uma linha que continua no banco tinha sido apagada. É a regra que a rodada 25
+fixou: o verbo descreve o que aconteceu com a linha, e quem diz que foi desativação é a
+`acao`. Registros anteriores não mudam — configuração não reescreve fato registrado.
+
+**Excluir só conclui para quem não tem vínculo nenhum.** As quatro FKs que apontam para
+o militar são `ON DELETE RESTRICT` e recusariam sozinhas, mas a mensagem do PostgreSQL é
+a mesma para os quatro casos. O comando conta os vínculos antes e monta a frase que diz
+**qual** deles segurou — conta de acesso, designações, envolvimentos ou prorrogações em
+que ele é autoridade —, e manda desativar. A conferência não substitui a rede: o teste
+tenta o `DELETE` direto e exige o `23503` do banco, para que a proteção continue de pé
+se um dia a conferência esquecer um caso.
+
+**Militar que já teve conta nunca poderá ser apagado.** A conta é desativada e nunca
+apagada (`users/repository.rs`), então a linha em `usuarios` fica lá segurando a FK para
+sempre. É consequência aceita, não descuido: quem tem conta operou o sistema, e o que
+operou o sistema tem rastro em auditoria, andamento, anexo e mapa — todos `RESTRICT`
+também. Apagar essa gente seria apagar a trilha junto.
+
+**Três ícones, e um só em vermelho.** Abrir, desativar/reativar e excluir. Cada botão
+leva o seu próprio `data-`, senão os três cliques cairiam no mesmo listener — o
+`dom.ts::tabela` ganhou `Celula.acoes` para isso. Os dois primeiros ficaram `outline` e
+só a exclusão é `danger`: com `secondary`, o botão escuro do meio puxava o olho para a
+ação errada. E os dois novos **só aparecem para administrador**, porque é o que
+`require_admin` exige — botão que só sabe dizer "não" ao ser clicado é pior que botão
+nenhum.
+
+**A coluna "Ações" foi de 6% para 12%.** Três botões de 32px com 8px de gap são 112px, e
+a 6% eles passavam da borda da tabela. Medido em janela de 1024px, onde 12% dão 118px,
+com os três dentro e sem barra de rolagem; os 2 pontos que faltavam saíram da coluna
+Nome, que trunca com reticências e tem `title`.
 
 ### A rodada 26, em detalhe
 

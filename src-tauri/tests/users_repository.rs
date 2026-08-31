@@ -521,3 +521,69 @@ async fn processos_do_militar_separam_designacao_de_envolvimento() {
     })
     .await;
 }
+
+/// O militar sem vínculo sai do banco; o vinculado é barrado **antes** da
+/// tentativa, para que a mensagem diga qual vínculo segurou.
+///
+/// A conferência não substitui as FKs — as quatro são `ON DELETE RESTRICT` e
+/// recusariam de qualquer jeito. É por isso que o teste também tenta o `DELETE`
+/// direto e exige o erro do banco: se um dia a conferência esquecer um caso, é
+/// a rede embaixo que tem de estar de pé.
+#[tokio::test]
+async fn so_o_militar_sem_vinculo_pode_ser_apagado() {
+    util::com_banco_descartavel("users_exclusao", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // `pm_tres` não aparece em processo nenhum na fixture — é o cadastro
+        // que ainda dá para apagar.
+        let mut tx = pool.begin().await.unwrap();
+        let livre = repository::vinculos(&mut tx, &m.pm_tres).await.unwrap();
+        assert!(!livre.existe(), "pm_tres nasce sem vínculo");
+        repository::delete(&mut tx, &m.pm_tres).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let sobrou: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM policiais_militares WHERE id = $1::uuid")
+                .bind(&m.pm_tres)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(sobrou, 0, "o militar sem vínculo sai do banco");
+
+        // `pm_um` vira envolvido: um vínculo basta para barrar.
+        let processo = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+        envolvido(&pool, &m, &processo, &m.pm_um, 1).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        let preso = repository::vinculos(&mut tx, &m.pm_um).await.unwrap();
+        assert!(preso.existe());
+        assert_eq!(preso.envolvimentos, 1);
+        assert_eq!(preso.designacoes, 0);
+        assert!(!preso.conta, "a fixture não dá conta de acesso ao pm_um");
+
+        // E a rede embaixo: o banco recusa mesmo sem a conferência.
+        let erro = repository::delete(&mut tx, &m.pm_um).await.unwrap_err();
+        assert!(
+            matches!(&erro, sqlx::Error::Database(e) if e.code().as_deref() == Some("23503")),
+            "esperava foreign_key_violation, veio {erro:?}"
+        );
+        tx.rollback().await.unwrap();
+
+        // A conta de acesso também segura, e sozinha.
+        let mut tx = pool.begin().await.unwrap();
+        fixtures::conta_militar(&pool, &m.pm_dois, "pm.dois@teste.com").await;
+        let com_conta = repository::vinculos(&mut tx, &m.pm_dois).await.unwrap();
+        assert!(com_conta.conta);
+        assert!(com_conta.existe());
+        tx.rollback().await.unwrap();
+    })
+    .await;
+}

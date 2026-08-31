@@ -381,3 +381,53 @@ pub async fn proceedings_as_involved(
     .fetch_all(pool)
     .await
 }
+
+/// O que impede um militar de ser apagado, contado antes da tentativa.
+///
+/// As quatro FKs são `ON DELETE RESTRICT`, então o PostgreSQL já recusaria — mas
+/// a mensagem dele é uma só para os quatro casos, e quem opera precisa saber
+/// *qual* vínculo segurou. Ver `users::commands::users_delete`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Vinculos {
+    pub conta: bool,
+    pub designacoes: i64,
+    pub envolvimentos: i64,
+    pub prazos: i64,
+}
+
+impl Vinculos {
+    pub fn existe(&self) -> bool {
+        self.conta || self.designacoes > 0 || self.envolvimentos > 0 || self.prazos > 0
+    }
+}
+
+pub async fn vinculos(
+    tx: &mut Transaction<'_, Postgres>,
+    id: &str,
+) -> Result<Vinculos, sqlx::Error> {
+    let linha: (bool, i64, i64, i64) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM usuarios WHERE policial_militar_id = $1::uuid),
+                (SELECT count(*) FROM processo_designacoes WHERE policial_militar_id = $1::uuid),
+                (SELECT count(*) FROM processo_envolvidos  WHERE policial_militar_id = $1::uuid),
+                (SELECT count(*) FROM processo_prazos       WHERE autoridade_id       = $1::uuid)",
+    )
+    .bind(id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(Vinculos {
+        conta: linha.0,
+        designacoes: linha.1,
+        envolvimentos: linha.2,
+        prazos: linha.3,
+    })
+}
+
+/// Exclusão FÍSICA do militar. Só chega aqui quem não tem vínculo nenhum —
+/// a conferência é do comando, e as FKs `RESTRICT` são a rede embaixo dela.
+pub async fn delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM policiais_militares WHERE id = $1::uuid")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}

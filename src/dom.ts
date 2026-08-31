@@ -479,11 +479,23 @@ export type Coluna = {
 };
 
 /** Célula de tabela: o texto já sai escapado, o alinhamento é opcional. */
+/** Botão de uma célula de ação. `classe` escolhe a cor do botão. */
+export type AcaoDeLinha = {
+  rotulo: string;
+  id: string;
+  icone?: IconeAcao;
+  classe?: string;
+  /** Sai como `data-<nome>` no lugar de `data-tabela-acao`. */
+  dado?: string;
+};
+
 export type Celula = string | {
   texto: string;
   numerica?: boolean;
   classe?: string;
-  acao?: { rotulo: string; id: string; icone?: IconeAcao };
+  acao?: AcaoDeLinha;
+  /** Mais de um botão na mesma célula, na ordem em que aparecem. */
+  acoes?: AcaoDeLinha[];
 };
 
 /**
@@ -532,8 +544,21 @@ export function tabela(
 
   const celula = (c: Celula, indice: number) => {
     const definicao = definicoes[indice] ?? { rotulo: "" };
-    if (c && typeof c === "object" && c.acao) {
-      return `<td class="row-actions ${escapeHtml(classeDaColuna(definicao))}">${botaoIcone(c.acao.icone ?? "abrir", c.acao.rotulo, { classe: "outline", dados: { "tabela-acao": c.acao.id } })}</td>`;
+    // Uma célula de ação pode ter um botão (`acao`) ou vários (`acoes`). O
+    // `data-` de cada um é `tabela-acao` por padrão: é o que a tela liga para
+    // abrir o registro. Quem precisa de mais de uma ação nomeia as outras
+    // (`dado`), senão os dois cliques cairiam no mesmo listener.
+    const acoes = c && typeof c === "object" ? (c.acoes ?? (c.acao ? [c.acao] : null)) : null;
+    if (acoes) {
+      const botoes = acoes
+        .map((a) =>
+          botaoIcone(a.icone ?? "abrir", a.rotulo, {
+            classe: a.classe ?? "outline",
+            dados: { [a.dado ?? "tabela-acao"]: a.id },
+          }),
+        )
+        .join("");
+      return `<td class="row-actions ${escapeHtml(classeDaColuna(definicao))}">${botoes}</td>`;
     }
     const texto = typeof c === "string" ? c : c.texto;
     const extra = typeof c === "string" ? "" : [c.numerica ? "num" : "", c.classe ?? ""].join(" ");

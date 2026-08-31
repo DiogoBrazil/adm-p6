@@ -67,6 +67,8 @@ entender X → olhe em Y".
 | Largura de coluna | vem de `dom.ts::Coluna.largura`, sai em `data-largura` e é aplicada por `aplicarLarguras` (chamada de `shell()`). Num `<col style="">` a CSP recusa igual, e a tabela volta a se dimensionar pelo conteúdo sem avisar |
 | Redesenhar **parte** de uma listagem | não passa pelo `shell()`, e por isso não passa por `aplicarLarguras`: chame-a você mesmo sobre a área (`aplicarLarguras(area)`), senão as larguras somem sem avisar |
 | Debounce de busca sem `aoDigitar` | o estado do módulo tem de mudar a **cada tecla**; só o redesenho espera. Quem exporta CSV ou aplica filtro dentro dos 250 ms lê a variável, não o campo. `dom.ts::ligarBuscaInstantanea` já separa os dois |
+| Mais de uma ação na mesma célula | `dom.ts::Celula.acoes`, e **cada botão com o seu `data-`** (`dado`): o padrão é `data-tabela-acao`, e repetido nos três os cliques caem todos no mesmo listener |
+| Comando cujo nome não é o que ele faz | `users_delete` desativava, e por isso tela nenhuma o chamava por sete rodadas. Verbo de comando descreve o efeito na linha; desativação é `users_deactivate` e grava `UPDATE` na trilha |
 | Mexer em regra de CSS que já existe duplicada no arquivo | qual vence é a ordem, não a intenção. Medir o computado antes e depois num navegador — foi como a rodada 14 provou que a listagem de processos não mudou |
 | Teste de limite que não passa do limite | a fixture tem 3 militares: o clamp de 200 nunca é exercido e o teste passa. Teste de limite monta **mais que o limite** |
 | Orientar a folha impressa por `@page` | o WebKitGTK (motor do Tauri no Linux) **ignora** o descritor `size`, e não tem página nomeada. Quem orienta é o `GtkPageSetup` — ver `print::commands::print_landscape`. E validar impressão em Chromium headless não prova nada: lá o `@page` funciona |
@@ -79,7 +81,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 167 testes
+cd src-tauri && cargo fmt --check && cargo test   # 169 testes
 cd .. && npm run typecheck
 ```
 

@@ -1067,3 +1067,125 @@ fn listagens_paginadas_falam_a_mesma_lingua_pelo_ipc() {
         assert_eq!(dados["per_page"], json!(200), "o envelope conta o teto");
     });
 }
+
+/// Desativar e excluir militar são comandos diferentes, e os dois passam pelo
+/// IPC — não só pelo repositório.
+///
+/// É a lição do `DEACTIVATE` que ficou latente desde a `0001`: o repositório
+/// tinha teste, o comando não, e o comando era quem estava quebrado. Aqui se
+/// exercita o que só existe na camada do comando: o guard de administrador, a
+/// mensagem que nomeia o vínculo e a linha de auditoria que cada um escreve.
+#[test]
+fn desativar_e_excluir_militar_sao_comandos_diferentes() {
+    com_app_banco_e_mundo("ipc_militar_exclusao", |app, webview, conta, mundo| {
+        // Operador comum não desativa nem exclui ninguém.
+        autenticar(&app, &conta, false);
+        for comando in ["users_deactivate", "users_delete"] {
+            let mensagem = erro(&invocar(&webview, comando, json!({ "id": mundo.pm_tres })));
+            assert!(
+                mensagem.to_lowercase().contains("somente leitura"),
+                "{comando} sem admin: {mensagem}"
+            );
+        }
+
+        autenticar(&app, &conta, true);
+
+        // Desativar mantém a linha e apenas derruba `ativo`.
+        ok(&invocar(
+            &webview,
+            "users_deactivate",
+            json!({ "id": mundo.pm_um }),
+        ));
+        let listados = ok(&invocar(&webview, "users_list", json!({ "perPage": 200 }))).clone();
+        let pm_um = listados["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|u| u["id"] == json!(mundo.pm_um))
+            .expect("o militar desativado continua na listagem");
+        assert_eq!(pm_um["ativo"], json!(false));
+
+        // E a trilha diz o que foi feito, sem chamar desativação de exclusão.
+        let trilha = ok(&invocar(&webview, "audit_list", json!({ "perPage": 200 }))).clone();
+        let linha = trilha["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["registro_id"] == json!(mundo.pm_um))
+            .expect("a desativação foi auditada");
+        assert_eq!(linha["acao"], json!("Desativou o militar"));
+        assert_eq!(
+            linha["operacao"],
+            json!("UPDATE"),
+            "desativar é UPDATE: a linha continua no banco"
+        );
+
+        // Excluir quem tem vínculo é recusado, e a mensagem nomeia qual é.
+        // Aqui o vínculo é a conta de acesso — a que nunca se apaga, e por isso
+        // a que tranca a exclusão para sempre. O vínculo por processo está
+        // coberto em `users_repository.rs`, onde há como montar um.
+        let pm_dois = ok(&invocar(
+            &webview,
+            "users_get",
+            json!({ "id": mundo.pm_dois }),
+        ))
+        .clone();
+        let perfil = ok(&invocar(
+            &webview,
+            "legal_catalogs_list",
+            json!({ "catalogo": "perfis_acesso" }),
+        ))
+        .as_array()
+        .unwrap()[0]["id"]
+            .clone();
+        ok(&invocar(
+            &webview,
+            "users_save",
+            json!({ "request": {
+                "id": mundo.pm_dois,
+                "nome": pm_dois["nome"],
+                "matricula": pm_dois["matricula"],
+                "posto_graduacao_id": pm_dois["posto_graduacao_id"],
+                "is_encarregado": pm_dois["is_encarregado"],
+                "conta": { "email": "pm.dois@teste.com", "perfil_id": perfil,
+                           "senha": "senha-de-teste" },
+            } }),
+        ));
+
+        let mensagem = erro(&invocar(
+            &webview,
+            "users_delete",
+            json!({ "id": mundo.pm_dois }),
+        ));
+        assert!(
+            mensagem.contains("conta de acesso"),
+            "a mensagem tem de dizer qual vínculo segurou: {mensagem}"
+        );
+        let ainda_la: Value = ok(&invocar(
+            &webview,
+            "users_get",
+            json!({ "id": mundo.pm_dois }),
+        ))
+        .clone();
+        assert!(
+            ainda_la.is_object(),
+            "recusar a exclusão não pode ter apagado nada"
+        );
+
+        // Quem não tem vínculo nenhum sai do banco de vez.
+        ok(&invocar(
+            &webview,
+            "users_delete",
+            json!({ "id": mundo.pm_tres }),
+        ));
+        let listados = ok(&invocar(&webview, "users_list", json!({ "perPage": 200 }))).clone();
+        assert!(
+            !listados["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|u| u["id"] == json!(mundo.pm_tres)),
+            "o militar excluído não volta em listagem nenhuma"
+        );
+    });
+}

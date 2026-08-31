@@ -144,6 +144,8 @@ export interface Commands {
   // ── Policiais militares e contas de acesso ────────────────────────
   users_list: { args: { search?: string | null, page?: number | null, perPage?: number | null }; result: UserListResult };
   users_save: { args: { request: SaveUserRequest }; result: SaveUserResult };
+  users_deactivate: { args: { id: string }; result: boolean };
+  /** Exclusão FÍSICA: só conclui para militar sem vínculo. Ver o comando. */
   users_delete: { args: { id: string }; result: boolean };
   users_reactivate: { args: { id: string }; result: boolean };
   users_list_ativos: { args: Record<string, never>; result: UserListItem[] };

@@ -104,8 +104,14 @@ pub async fn users_save(
     .await)
 }
 
+/// Desativa o militar — **não** apaga.
+///
+/// O nome anterior deste comando era `users_delete`, e ele desativava: quem
+/// lesse a lista de comandos entendia o contrário do que acontece. Quem apaga
+/// de verdade é `users_delete`, logo abaixo, e são coisas diferentes o
+/// bastante para não caberem no mesmo verbo.
 #[tauri::command]
-pub async fn users_delete(
+pub async fn users_deactivate(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<ApiResponse<bool>, String> {
@@ -136,8 +142,98 @@ pub async fn users_delete(
                 Acao {
                     entidade: "policiais_militares",
                     registro_id: &id,
-                    operacao: "DELETE",
+                    // Desativar é `UPDATE`: a linha continua lá, com `ativo`
+                    // em falso. Quem diz que foi desativação é a `acao`.
+                    operacao: "UPDATE",
                     acao: "Desativou o militar",
+                    assunto,
+                    alteracoes: None,
+                },
+                Some(&actor.id),
+            )
+            .await?;
+            tx.commit().await?;
+            Ok(true)
+        }
+        .await,
+    )
+    .await)
+}
+
+/// Junta os vínculos achados numa frase que diga **qual** deles segurou.
+///
+/// O PostgreSQL recusaria sozinho — as quatro FKs são `RESTRICT` —, mas a
+/// mensagem dele é a mesma para os quatro casos, e quem opera fica sem saber o
+/// que remover ou por que desativar basta.
+fn mensagem_de_vinculos(vinculos: &repository::Vinculos) -> String {
+    let mut partes: Vec<String> = Vec::new();
+    if vinculos.conta {
+        partes.push("conta de acesso".to_string());
+    }
+    if vinculos.designacoes > 0 {
+        partes.push(format!("{} designação(ões)", vinculos.designacoes));
+    }
+    if vinculos.envolvimentos > 0 {
+        partes.push(format!(
+            "{} envolvimento(s) em apuratório",
+            vinculos.envolvimentos
+        ));
+    }
+    if vinculos.prazos > 0 {
+        partes.push(format!(
+            "{} prorrogação(ões) como autoridade",
+            vinculos.prazos
+        ));
+    }
+    let lista = match partes.split_last() {
+        Some((ultima, [])) => ultima.clone(),
+        Some((ultima, resto)) => format!("{} e {}", resto.join(", "), ultima),
+        None => "registros vinculados".to_string(),
+    };
+    format!(
+        "Este militar não pode ser excluído porque tem {lista}. Desative-o em vez de \
+         excluir: ele sai das listas de escolha e o histórico continua inteiro."
+    )
+}
+
+/// Exclusão FÍSICA do militar — o cadastro digitado errado, que ainda não virou
+/// histórico.
+///
+/// Não é o caminho comum, e não deve ser: cadastro em uso se **desativa**, não
+/// se apaga (princípio 6), e é o que `users_deactivate` faz. Aqui a linha sai
+/// do banco de vez, e por isso só conclui para quem não tem vínculo nenhum.
+///
+/// A conferência prévia não substitui as FKs `RESTRICT` — elas continuam sendo
+/// a rede embaixo, e recusariam mesmo que esta função esquecesse um caso. Ela
+/// existe para a mensagem dizer **qual** vínculo segurou, que é o que o erro do
+/// banco não diz.
+#[tauri::command]
+pub async fn users_delete(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+
+            let vinculos = repository::vinculos(&mut tx, &id).await?;
+            if vinculos.existe() {
+                return Err(AppError::Domain(mensagem_de_vinculos(&vinculos)));
+            }
+
+            // A exclusão aqui é FÍSICA: o assunto tem de ser lido **antes**,
+            // senão a trilha guarda um UUID que não aponta mais para nada.
+            let assunto = assunto::de_militar(&mut tx, &id).await;
+            repository::delete(&mut tx, &id).await?;
+            audit_repository::registrar(
+                &mut tx,
+                Acao {
+                    entidade: "policiais_militares",
+                    registro_id: &id,
+                    operacao: "DELETE",
+                    acao: "Excluiu o militar",
                     assunto,
                     alteracoes: None,
                 },
