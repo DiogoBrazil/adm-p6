@@ -47,7 +47,7 @@ const paginas = { vencidos: 1, proximos: 1 };
 
 /** As seis colunas dividem 100% da largura. */
 const COLUNAS: Coluna[] = [
-  { rotulo: "Processo", largura: 16, alinhamento: "centro", truncar: true },
+  { rotulo: "Apuratório", largura: 16, alinhamento: "centro", truncar: true },
   { rotulo: "Unidade", largura: 18, alinhamento: "centro", truncar: true },
   { rotulo: "Responsável", largura: 32, truncar: true },
   { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
@@ -56,7 +56,7 @@ const COLUNAS: Coluna[] = [
 ];
 
 /** Os rótulos do CSV, sem acento no cabeçalho. */
-const COLUNAS_CSV = ["Processo", "Unidade", "Responsavel", "Vencimento"];
+const COLUNAS_CSV = ["Apuratorio", "Unidade", "Responsavel", "Vencimento"];
 
 /**
  * Os dois recortes da tela, e a razão de serem **exclusivos**.
@@ -129,7 +129,7 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Prazos</h1><p>Processos em andamento, pelo prazo vigente.</p></div>
+        <div><h1>Prazos</h1><p>Apuratórios em andamento, pelo prazo vigente.</p></div>
         <div class="page-head-right">
           <label>Janela
             <select id="janela">

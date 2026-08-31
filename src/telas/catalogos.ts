@@ -264,7 +264,7 @@ export async function abrirCadastroRapidoCatalogo(
 
     modal = montarModal(
       `<div class="page-head">
-         <div><h1>Novo — ${escapeHtml(cat.rotulo)}</h1><p>Cadastre sem sair do processo.</p></div>
+         <div><h1>Novo — ${escapeHtml(cat.rotulo)}</h1><p>Cadastre sem sair do apuratório.</p></div>
        </div>
        <div class="feedback feedback--error formulario-feedback" data-erro-cadastro hidden role="alert"></div>
        <form class="crud-form" data-form-cadastro-rapido>

@@ -41,7 +41,7 @@ sobre remover o schema `legado`.
 
 | No banco agora | |
 |---|---:|
-| Processos/procedimentos | **11** |
+| Apuratórios | **11** |
 | Envolvidos · designações · prazos | 12 · 18 · 12 |
 | Ofendidos/vítimas · pessoas inquiridas | 7 · 0 |
 | Militares · usuários · apuratórios · unidades | 235 · 7 · 10 · 11 |
@@ -141,21 +141,21 @@ Login inicial: `admin@sistema.com` / `123456`.
 > do zero, sem o dump de produção — outra unidade da PM, por exemplo.
 
 Os catálogos **legais** já vêm prontos (postos, municípios, RDPM, Estatuto, legislação
-penal). Os **operacionais** nascem vazios de propósito. Para chegar a um processo:
+penal). Os **operacionais** nascem vazios de propósito. Para chegar a um apuratório:
 
 1. **Catálogos → Tipos de apuratório** — ex.: `processo`, `procedimento`
 2. **Catálogos → Apuratórios** — sigla, nome, tipo, prazo base, `max_envolvidos`,
    `exige_natureza_fato`
 3. **Catálogos → Tipos de documento** — ex.: Portaria, Memorando Disciplinar
-4. **Catálogos → Funções no processo** — ex.: Encarregado, Escrivão, Presidente
+4. **Catálogos → Funções no apuratório** — ex.: Encarregado, Escrivão, Presidente
 5. **Catálogos → Unidades PM**, **Naturezas do fato**, **Status do envolvido**,
    **Soluções**, **Penalidades**, **Papéis de pessoa**, **Tipos de andamento**
 6. **Catálogos → Configuração de apuratórios** — para cada apuratório, habilitar ao menos
-   **um documento iniciador** e **um papel responsável**. Sem isso o banco recusa qualquer
-   processo, e a tela avisa. É também o que faz as colunas aparecerem em *Designações por
-   Militar* e nos painéis de *Estatísticas de Procedimentos*
+   **um documento iniciador** e **uma função responsável**. Sem isso o banco recusa qualquer
+   apuratório, e a tela avisa. É também o que faz as colunas aparecerem em *Designações por
+   Militar* e nos painéis de *Estatísticas dos Apuratórios*
 7. **Usuários** — cadastrar os policiais militares
-8. **Procedimentos → Novo**
+8. **Apuratórios → Novo**
 
 ### 1.2 ⚠ Acabou o `docker compose down -v`
 
@@ -1061,13 +1061,13 @@ Entre com `admin@sistema.com` / `123456` e **deixe o console aberto (F12)**.
 Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`**.
 
 - [ ] **Painel** (`/`) — os cartões trazem números, não zeros
-- [ ] **Procedimentos → lista** — a tabela lista processos
-- [ ] **Procedimentos → detalhe** — registrar/corrigir remessas, julgamento e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
+- [ ] **Apuratórios → lista** — a tabela lista os apuratórios
+- [ ] **Apuratórios → detalhe** — registrar/corrigir remessas, julgamento e conclusão; editar o resultado de um envolvido; confirmar que só **Reabrir** remove a conclusão
 - [ ] Em um **IPM**, a linha de Escrivão mostra apenas **“-”** na coluna Documento e o formulário de substituição não pede tipo/número
 - [ ] Depois de concluir, desaparecem os controles de nova substituição, prorrogação e andamento; o aviso orienta usar **Reabrir**
 - [ ] Com o processo concluído, chamadas diretas desses três comandos devolvem mensagem amigável e não gravam nada
 - [ ] **Catálogos → Apuratórios** — a coluna **Cita documento** aparece nas funções, a alternância grava, e tornar a mesma função responsável logo depois **não** religa a flag
-- [ ] **Procedimentos → formulário** — abrir "Novo" e confirmar que remessas, julgamento, conclusão, soluções e penalidade não aparecem antes do cadastro
+- [ ] **Apuratórios → formulário** — abrir "Novo" e confirmar que remessas, julgamento, conclusão, soluções e penalidade não aparecem antes do cadastro
 - [ ] **Indícios** — a partir do detalhe de um procedimento, num envolvido; em processo a ação não aparece
 - [ ] **Prazos** — o painel carrega
 - [ ] **Usuários → lista**
@@ -1077,8 +1077,8 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Catálogos** — abrir ao menos três catálogos diferentes do menu
 - [ ] **Auditoria** — a lista e os três filtros
 - [ ] **Designações por Militar**
-- [ ] **Estatísticas de Processos** — tabelas centralizadas, somente rótulo e quantidade
-- [ ] **Estatísticas de Procedimentos** — idem, sem barras percentuais
+- [ ] **Visão Geral dos Apuratórios** — tabelas centralizadas, somente rótulo e quantidade
+- [ ] **Estatísticas dos Apuratórios** — idem, sem barras percentuais
 - [ ] **Mapa do Período** — gerar o mês sem apuratório marcado e com uma espécie marcada; os registros devem obedecer à mesma regra da tabela
 - [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7ºBPM, mês/ano, A4 paisagem **sem mexer em Orientação no diálogo**, fichas compartilhando folha, marcadores de fim, “Continuação do …” e tabelas longas sem perda. Nos enquadramentos: um bloco por natureza, artigo antes da norma, **nenhum texto repetido**, analogia recuada sob a infração do Estatuto e Resultado empilhado
 - [ ] **Mapas Salvos**
@@ -1150,7 +1150,7 @@ alimentados por um comando paginado que trava em 200, e com 235 militares os 35
 
 - [ ] **Usuários** — o controle de página aparece no rodapé, "Próxima" avança, e
       o intervalo mostrado bate com o total (235)
-- [ ] **Procedimentos** — idem, com 128 (ou 129 se o IPM de teste ainda estiver lá)
+- [ ] **Apuratórios** — idem, com 128 (ou 129 se o IPM de teste ainda estiver lá)
 - [ ] Buscar ou trocar filtro **volta para a página 1** (não deixa tela vazia)
 
 #### Os filtros novos de indícios
@@ -1225,7 +1225,7 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
 
 - [ ] **Usuários** — dez linhas; o rodapé diz "1–10 de 235"; "Próxima" avança até
       a última página, e "Anterior" volta
-- [ ] **Procedimentos**, **Auditoria**, **Mapas Salvos** e **Catálogos** — idem,
+- [ ] **Apuratórios**, **Auditoria**, **Mapas Salvos** e **Catálogos** — idem,
       cada um com o seu total
 - [ ] **Auditoria** — o cabeçalho **não** diz mais "últimos 200 registros": diz o
       total real do escopo, e o 201º é alcançável
@@ -1264,7 +1264,7 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
 
 #### O desenho, e o que a CSP recusaria
 
-- [ ] **Procedimentos** — lado a lado com uma captura de antes: tem de estar
+- [ ] **Apuratórios** — lado a lado com uma captura de antes: tem de estar
       **idêntica**. Foi medida propriedade a propriedade, mas o olho é o juiz
 - [ ] **Larguras de coluna aparecem** em todas as listagens. Se
       `aplicarLarguras()` não rodar, as colunas voltam a se dimensionar pelo
@@ -1273,7 +1273,7 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
       largura que tenha escapado para um `style=""`
 - [ ] Texto longo (nome, unidade, descrição de infração) corta com **reticências**
       e entrega o inteiro no **tooltip**
-- [ ] **Estatísticas de Procedimentos** — a descrição das infrações não está mais
+- [ ] **Estatísticas dos Apuratórios** — a descrição das infrações não está mais
       cortada em 90 caracteres com "…" no meio do texto: corta por largura e o
       tooltip traz o texto legal inteiro
 - [ ] Em **1600, 1366, 1100 e 900px** nenhuma listagem operacional rola na

@@ -76,7 +76,7 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
         }
         ${tabela(
           [
-            { rotulo: "Processo", largura: 26, truncar: true, alinhamento: "centro" },
+            { rotulo: "Apuratório", largura: 26, truncar: true, alinhamento: "centro" },
             { rotulo: "Responsável", largura: 40, truncar: true, alinhamento: "centro" },
             { rotulo: "Venceu em", largura: 17, alinhamento: "centro", nowrap: true },
             { rotulo: "Atraso", largura: 17, alinhamento: "centro", nowrap: true },

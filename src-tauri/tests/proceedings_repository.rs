@@ -1144,7 +1144,7 @@ async fn exige_carta_precatoria_quando_o_apuratorio_tem_a_extensao() {
             .await
             .expect_err("trocar a especie com designacao registrada");
         assert!(
-            erro.contains("designacoes registradas") && erro.contains("TST-C"),
+            erro.contains("designações registradas") && erro.contains("TST-C"),
             "mensagem: {erro}"
         );
     })
@@ -1667,7 +1667,7 @@ async fn substituicao_intermediaria_nao_pode_ser_editada_nem_removida() {
         let erro = remover_substituicao(&pool, &id, &inicial)
             .await
             .expect_err("a inicial nao e substituicao");
-        assert!(erro.contains("é a inicial do processo"), "{erro}");
+        assert!(erro.contains("é a inicial do apuratório"), "{erro}");
 
         // A ponta, sim.
         remover_substituicao(&pool, &id, &ponta).await.unwrap();

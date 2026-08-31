@@ -135,21 +135,21 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
     Some(match constraint {
         // ── Duplicidade ──────────────────────────────────────────────────────
         "uq_processo_numero_documento" => {
-            "Já existe um processo ou procedimento ativo com este número de documento para a \
+            "Já existe um apuratório ativo com este número de documento para a \
              mesma unidade/subunidade, ano, apuratório e documento iniciador."
         }
         "uq_processo_numero_controle" => {
-            "Já existe um processo ou procedimento ativo com este número de controle para a \
+            "Já existe um apuratório ativo com este número de controle para a \
              mesma unidade/subunidade, ano e apuratório."
         }
         "uq_pm_matricula" => "Já existe um militar cadastrado com esta matrícula.",
         "uq_usuarios_email" => "Já existe uma conta de acesso com este e-mail.",
         "uq_usuario_pm" => "Este militar já tem conta de acesso. Edite a conta existente.",
-        "uq_envolvido_pm" => "Este militar já está lançado como envolvido neste processo.",
-        "uq_envolvido_ordem" => "Já existe um envolvido com esta ordem neste processo.",
-        "uq_envolvido_condutor" => "Só pode haver um condutor por processo.",
-        "uq_pessoa_ordem" => "Já existe uma pessoa com esta ordem neste processo.",
-        "uq_prazo_ordem" => "Já existe um prazo com esta ordem neste processo.",
+        "uq_envolvido_pm" => "Este militar já está lançado como envolvido neste apuratório.",
+        "uq_envolvido_ordem" => "Já existe um envolvido com esta ordem neste apuratório.",
+        "uq_envolvido_condutor" => "Só pode haver um condutor por apuratório.",
+        "uq_pessoa_ordem" => "Já existe uma pessoa com esta ordem neste apuratório.",
+        "uq_prazo_ordem" => "Já existe um prazo com esta ordem neste apuratório.",
         "uq_apdoc_padrao" => {
             "Só um documento iniciador pode ser o padrão do apuratório. Desmarque o atual antes."
         }
@@ -165,7 +165,7 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         "ex_designacao_sobreposicao" => {
             "Este militar já exerceu esta função em um período que se sobrepõe ao informado."
         }
-        "ex_prazo_sobreposicao" => "Os prazos deste processo não podem se sobrepor.",
+        "ex_prazo_sobreposicao" => "Os prazos deste apuratório não podem se sobrepor.",
         "ck_designacao_periodo" => "O fim da designação precisa ser posterior ao início.",
         "ck_designacao_cadeia" => {
             "A substituição precisa começar exatamente no dia em que a designação anterior \
@@ -199,7 +199,7 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
             "A espécie do apuratório não confere com a das designações já registradas."
         }
         "fk_processo_subunidade_unidade" => {
-            "Esta subunidade/seção já está vinculada a processos. Preserve a Unidade PM atual ou cadastre outra subunidade/seção."
+            "Esta subunidade/seção já está vinculada a apuratórios. Preserve a Unidade PM atual ou cadastre outra subunidade/seção."
         }
 
         // ── Campo obrigatório ────────────────────────────────────────────────
@@ -233,7 +233,7 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
             "O condutor precisa ser um policial militar identificado."
         }
         "uq_envolvido_a_apurar" => {
-            "Só pode haver um envolvido “À apurar” por processo."
+            "Só pode haver um envolvido “À apurar” por apuratório."
         }
 
         _ => return None,

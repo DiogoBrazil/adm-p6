@@ -26,9 +26,9 @@ pub async fn exigir_em_andamento(
     .await?;
 
     match conclusao {
-        None => Err(AppError::Domain("processo não encontrado".to_string())),
+        None => Err(AppError::Domain("apuratório não encontrado".to_string())),
         Some(Some(_)) => Err(AppError::Domain(format!(
-            "Este processo ou procedimento está concluído. Não é permitido {acao}. Reabra-o para continuar."
+            "Este apuratório está concluído. Não é permitido {acao}. Reabra-o para continuar."
         ))),
         Some(None) => Ok(()),
     }

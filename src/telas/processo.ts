@@ -413,7 +413,7 @@ function linhaDesignacao(
         <span class="badge badge--neutro">com histórico</span>
       </div>
       <p class="campo-efeito"><strong>${escapeHtml(travada.papel)}</strong> — ${escapeHtml(travada.ocupante)}</p>
-      <p class="campo-efeito">Esta função já foi substituída. Para trocar de novo, corrigir ou desfazer, use <strong>Substituir</strong> na página de detalhes do processo.</p>
+      <p class="campo-efeito">Esta função já foi substituída. Para trocar de novo, corrigir ou desfazer, use <strong>Substituir</strong> na página de detalhes do apuratório.</p>
     </div>`;
   }
 
@@ -562,7 +562,7 @@ export async function renderFormularioProcesso(
       ]);
       const d = r.data;
       if (!d) {
-        ctx.shell(`<section class="panel"><p class="error">Processo não encontrado.</p></section>`);
+        ctx.shell(`<section class="panel"><p class="error">Apuratório não encontrado.</p></section>`);
         return;
       }
       datasPosterioresEdicao = {
@@ -733,7 +733,7 @@ export async function renderFormularioProcesso(
     <section class="panel">
       <div class="page-head">
         <div>
-          <h1>${id ? "Editar" : "Novo"} processo</h1>
+          <h1>${id ? "Editar" : "Novo"} apuratório</h1>
           <p>${escapeHtml(apuratorio?.rotulo ?? "")}</p>
         </div>
       </div>
@@ -803,8 +803,8 @@ export async function renderFormularioProcesso(
         <fieldset>
           <legend>Designações</legend>
           ${papeis.length === 0 ? `<p class="empty">Nenhuma função habilitada para este apuratório.</p>` : ""}
-          ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Funções obrigatórias: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O processo não salva sem elas.</p>` : ""}
-          <p class="secao-ajuda">A designação inicial começa na data de instauração e é autorizada pelo documento que instaurou o processo — por isso não se digitam data nem documento aqui. Trocas posteriores são feitas em <strong>Substituir</strong>, na página de detalhes.</p>
+          ${papeis.some((p) => p.obrigatorio) ? `<p class="secao-ajuda">Funções obrigatórias: ${papeis.filter((p) => p.obrigatorio).map((p) => escapeHtml(p.papel)).join(", ")}. O apuratório não salva sem elas.</p>` : ""}
+          <p class="secao-ajuda">A designação inicial começa na data de instauração e é autorizada pelo documento que instaurou o apuratório — por isso não se digitam data nem documento aqui. Trocas posteriores são feitas em <strong>Substituir</strong>, na página de detalhes.</p>
           ${r.designacoes
             .map((d, i) => linhaDesignacao(d, i, papeis, cats.militares, r.designacoes))
             .join("")}
@@ -1380,7 +1380,7 @@ export async function renderFormularioProcesso(
     }
     limparFormularioPendente();
     await renderListaProcessos(ctx);
-    notificar("Processo salvo com sucesso.", "sucesso");
+    notificar("Apuratório salvo com sucesso.", "sucesso");
   });
 }
 
@@ -1527,7 +1527,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>Processos e procedimentos</h1><p>${total} registro(s)</p></div>
+        <div><h1>Apuratórios</h1><p>${total} registro(s)</p></div>
         ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
       </div>
       <div class="filtros">
@@ -1586,7 +1586,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
                   })
                   .join("")}
               </tbody></table></div>`
-          : `<p class="empty">Nenhum processo encontrado.</p>`
+          : `<p class="empty">Nenhum apuratório encontrado.</p>`
       }
       ${paginacao("processos", pagina, POR_PAGINA, total)}
     </section>
@@ -1728,7 +1728,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
   const d = detalheResp.data;
   if (!detalheResp.ok || !d) {
-    ctx.shell(`<section class="panel"><p class="error">${escapeHtml(detalheResp.error ?? "Processo não encontrado.")}</p></section>`);
+    ctx.shell(`<section class="panel"><p class="error">${escapeHtml(detalheResp.error ?? "Apuratório não encontrado.")}</p></section>`);
     return;
   }
 
@@ -1847,7 +1847,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
 
       ${
         podeEscrever && d.concluido
-          ? `<p class="aviso">Este processo ou procedimento está concluído. Para registrar substituições, prorrogações ou novos andamentos, use <strong>Reabrir</strong>.</p>`
+          ? `<p class="aviso">Este apuratório está concluído. Para registrar substituições, prorrogações ou novos andamentos, use <strong>Reabrir</strong>.</p>`
           : ""
       }
 
@@ -2259,7 +2259,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   document.querySelector("#voltar")?.addEventListener("click", () => void renderListaProcessos(ctx));
   document.querySelector("#editar")?.addEventListener("click", () => void renderFormularioProcesso(ctx, id));
   document.querySelector("#reabrir")?.addEventListener("click", async () => {
-    if (!confirm("Reabrir este processo?")) return;
+    if (!confirm("Reabrir este apuratório?")) return;
     const r = await call("proceedings_reopen", { id });
     reportar(r.ok, r.error);
   });

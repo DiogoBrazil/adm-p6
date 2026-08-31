@@ -365,7 +365,7 @@ impl SaveProceedingRequest {
     pub fn validate(&self) -> Result<(), String> {
         let hoje = Local::now().date_naive();
         if self.numero_documento.trim().is_empty() {
-            return Err("Informe o número do documento que instaurou o processo.".to_string());
+            return Err("Informe o número do documento que instaurou o apuratório.".to_string());
         }
         if self.data_instauracao > hoje {
             return Err("A data de instauração não pode ser futura.".to_string());
@@ -389,7 +389,7 @@ impl SaveProceedingRequest {
             return Err("Cada envolvido precisa de uma ordem diferente.".to_string());
         }
         if self.envolvidos.iter().filter(|e| e.e_condutor).count() > 1 {
-            return Err("Só pode haver um condutor por processo.".to_string());
+            return Err("Só pode haver um condutor por apuratório.".to_string());
         }
         if self
             .envolvidos
@@ -405,7 +405,7 @@ impl SaveProceedingRequest {
             .count()
             > 1
         {
-            return Err("Só pode haver um envolvido “À apurar” por processo.".to_string());
+            return Err("Só pode haver um envolvido “À apurar” por apuratório.".to_string());
         }
         for (i, envolvido) in self.envolvidos.iter().enumerate() {
             if envolvido

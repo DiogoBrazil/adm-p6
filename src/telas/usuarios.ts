@@ -278,7 +278,7 @@ export async function abrirCadastroRapidoMilitar(
     };
     modal = montarModal(
       `<div class="page-head">
-         <div><h1>Novo policial militar</h1><p>O cadastro será selecionado no processo.</p></div>
+         <div><h1>Novo policial militar</h1><p>O cadastro será selecionado no apuratório.</p></div>
        </div>
        <div class="feedback feedback--error formulario-feedback" data-erro-militar hidden role="alert"></div>
        <form class="crud-form" data-form-militar-rapido>
@@ -501,7 +501,7 @@ const OPCOES_CONTAGEM_USUARIO = {
 function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel" | "status_envolvido") {
   return tabela(
     [
-      { rotulo: "Processo", largura: 22, truncar: true, alinhamento: "centro" },
+      { rotulo: "Apuratório", largura: 22, truncar: true, alinhamento: "centro" },
       { rotulo: "Apuratório", largura: 24, truncar: true, alinhamento: "centro" },
       { rotulo: coluna, largura: 24, truncar: true, alinhamento: "centro" },
       { rotulo: "Instauração", largura: 15, alinhamento: "centro", nowrap: true },

@@ -69,8 +69,8 @@ type Route = {
 
 let routes: Route[] = [
   { path: ROTA_DASHBOARD, label: "Painel", group: "Geral" },
-  { path: ROTA_PROCESSOS, label: "Procedimentos", group: "Procedimentos" },
-  { path: ROTA_PRAZOS, label: "Prazos", group: "Procedimentos" },
+  { path: ROTA_PROCESSOS, label: "Processos e Procedimentos", group: "Apuratórios" },
+  { path: ROTA_PRAZOS, label: "Prazos", group: "Apuratórios" },
   { path: ROTA_USUARIOS, label: "Usuários", group: "Usuários" },
   { path: ROTA_USUARIO_NOVO, label: "Novo usuário", group: "Usuários", adminOnly: true },
   {
@@ -83,13 +83,13 @@ let routes: Route[] = [
   { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
   {
     path: ROTA_ESTATISTICAS_PROCESSOS,
-    label: "Estatísticas de Processos",
+    label: "Visão Geral dos Apuratórios",
     group: "Relatórios"
   },
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
   { path: ROTA_ANUAL, label: "Relatório Anual", group: "Relatórios" },
-  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
+  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas dos Apuratórios", group: "Relatórios" }
 ];
 
 /** Fallback quando `activePath` não casa com nenhuma rota. */
@@ -107,12 +107,12 @@ function carregarGruposAbertos(): Set<string> {
   try {
     const salvos = JSON.parse(localStorage.getItem(CHAVE_GRUPOS_ABERTOS) ?? "null") as unknown;
     if (Array.isArray(salvos) && salvos.every((grupo) => typeof grupo === "string")) {
-      return new Set(salvos);
+      return new Set(salvos.map((grupo) => (grupo === "Procedimentos" ? "Apuratórios" : grupo)));
     }
   } catch {
     // Estado visual corrompido não pode impedir a aplicação de abrir.
   }
-  return new Set(["Geral", "Procedimentos"]);
+  return new Set(["Geral", "Apuratórios"]);
 }
 
 const gruposAbertos = carregarGruposAbertos();

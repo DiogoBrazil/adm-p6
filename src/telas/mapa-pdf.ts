@@ -602,7 +602,7 @@ function adicionarSecao(
 }
 
 function paginarFicha(estado: EstadoPaginacao, ficha: HTMLElement): void {
-  const rotulo = ficha.dataset.rotulo ?? "processo ou procedimento";
+  const rotulo = ficha.dataset.rotulo ?? "apuratório";
   const cabecalho = ficha.querySelector<HTMLElement>(":scope > .mapa-pdf-cabecalho-ficha")!;
   const secoes = [
     ...ficha.querySelectorAll<HTMLElement>(":scope > .mapa-pdf-corpo-ficha > .mapa-pdf-secao"),

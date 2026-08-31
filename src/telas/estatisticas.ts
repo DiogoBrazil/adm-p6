@@ -1,4 +1,4 @@
-// Estatísticas de processos.
+// Visão geral dos apuratórios.
 //
 // A rota chamava `reports_by_type`, que nunca existiu no backend novo. Não é
 // omissão: "por tipo" era `GROUP BY tipo_detalhe`, uma coluna de texto que a
@@ -39,7 +39,7 @@ export function painelContagem(
 export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<void> {
   const resumo = (await call("dashboard_summary")).data;
   if (!resumo) {
-    ctx.shell(`<section class="panel"><h1>Estatísticas de Processos</h1>
+    ctx.shell(`<section class="panel"><h1>Visão Geral dos Apuratórios</h1>
       <p class="error">Não foi possível carregar o resumo.</p></section>`);
     return;
   }
@@ -48,8 +48,8 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
     <section class="panel">
       <div class="page-head">
         <div>
-          <h1>Estatísticas de Processos</h1>
-          <p>Panorama de todos os processos e procedimentos ativos.</p>
+          <h1>Visão Geral dos Apuratórios</h1>
+          <p>Panorama de todos os apuratórios ativos.</p>
         </div>
         <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: true })}</div>
       </div>
@@ -74,7 +74,7 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
     const bloco = (nome: string, itens: ContagemRotulada[]) =>
       itens.map((i) => [nome, i.rotulo, i.total]);
     return baixarCsv(
-      `estatisticas-processos-${new Date().toISOString().slice(0, 10)}.csv`,
+      `visao-geral-apuratorios-${new Date().toISOString().slice(0, 10)}.csv`,
       ["Quebra", "Item", "Quantidade"],
       [
         ["Totais", "No total", resumo.total],
@@ -91,7 +91,7 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
 }
 
 // =============================================================================
-// Estatísticas de procedimentos — painéis de escopo configurável
+// Estatísticas dos apuratórios — painéis de escopo configurável
 //
 // Esta tela chamava nove comandos que não existiam:
 // `proceedings_in_progress_stats`, `_pads_solutions`, `_ipm_evidence`,
@@ -215,7 +215,7 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
     <section class="panel">
       <div class="page-head">
         <div>
-          <h1>Estatísticas de Procedimentos</h1>
+          <h1>Estatísticas dos Apuratórios</h1>
           <p>O escopo é escolhido no filtro; todos os painéis o respeitam.</p>
         </div>
         <div class="page-head-right">${barraDeExportacao({ imprimir: true })}</div>
@@ -234,7 +234,7 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
             { rotulo: "Total", largura: 13, alinhamento: "centro", nowrap: true },
           ],
           situacaoLinhas,
-          "Nenhum processo neste escopo.",
+          "Nenhum apuratório neste escopo.",
           { listagem: true },
         )}
       </section>
@@ -243,12 +243,12 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
         ${painelContagem("Solução sugerida pelo encarregado", solucoes?.sugeridas ?? [], "Solução")}
         ${painelContagem("Solução decidida pela autoridade", solucoes?.decididas ?? [], "Solução")}
         ${painelContagem("Envolvidos por categoria de indício", categorias, "Categoria")}
-        ${painelContagem("Processos por natureza geral do fato", naturezas, "Natureza")}
+        ${painelContagem("Apuratórios por natureza geral do fato", naturezas, "Natureza")}
       </div>
 
       <section class="stat-panel">
         <h2>Condutores em sinistro</h2>
-        <p class="hint">Alcança os processos cuja natureza geral do fato exige condutor.</p>
+        <p class="hint">Alcança os apuratórios cuja natureza geral do fato exige condutor.</p>
         ${tabela(
           [
             { rotulo: "Militar", largura: 80, truncar: true },

@@ -133,7 +133,7 @@ pub async fn map_print_data(
     if let Some(processo_id) = request.processo_id.as_deref() {
         if !linhas.iter().any(|linha| linha.processo_id == processo_id) {
             return Err(AppError::Domain(
-                "O processo escolhido não pertence ao mês e aos apuratórios deste mapa. Gere o mapa novamente e selecione uma ficha da lista."
+                "O apuratório escolhido não pertence ao mês e ao escopo deste mapa. Gere o mapa novamente e selecione uma ficha da lista."
                     .to_string(),
             ));
         }
@@ -146,7 +146,7 @@ pub async fn map_print_data(
             .await?
             .ok_or_else(|| {
                 AppError::Domain(
-                    "Um processo do mapa não foi encontrado. Gere o mapa novamente antes de imprimir."
+                    "Um apuratório do mapa não foi encontrado. Gere o mapa novamente antes de imprimir."
                         .to_string(),
                     )
             })?;

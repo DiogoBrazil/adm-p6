@@ -90,7 +90,7 @@ pub async fn sync_initial(
     if tem_prorrogacao {
         if data_anterior != data_nova {
             return Err(AppError::Domain(
-                "A data de recebimento não pode ser alterada porque este processo já possui prorrogação de prazo.".to_string(),
+                "A data de recebimento não pode ser alterada porque este apuratório já possui prorrogação de prazo.".to_string(),
             ));
         }
         return Ok(());
@@ -194,7 +194,7 @@ pub async fn add_extension(
 
     let (ordem_atual, vencimento_atual) = atual.ok_or_else(|| {
         AppError::Domain(
-            "O processo ainda não tem prazo inicial. Informe a data de recebimento para que ele nasça."
+            "O apuratório ainda não tem prazo inicial. Informe a data de recebimento para que ele seja criado."
                 .to_string(),
         )
     })?;
@@ -251,7 +251,7 @@ pub async fn update_extension(
     .await?;
 
     let (prazo_atual_id, ordem, data_inicio) = atual.ok_or_else(|| {
-        AppError::Domain("O processo ainda não possui prazo para editar.".to_string())
+        AppError::Domain("O apuratório ainda não possui prazo para editar.".to_string())
     })?;
     if ordem == 0 {
         return Err(AppError::Domain(
@@ -309,7 +309,7 @@ pub async fn delete_extension(
     .await?;
 
     let (prazo_atual_id, ordem) = atual.ok_or_else(|| {
-        AppError::Domain("O processo ainda não possui prazo para excluir.".to_string())
+        AppError::Domain("O apuratório ainda não possui prazo para excluir.".to_string())
     })?;
     if ordem == 0 {
         return Err(AppError::Domain(

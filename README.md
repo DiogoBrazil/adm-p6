@@ -1,8 +1,8 @@
 # ADM P6
 
 Sistema da **Seção de Justiça e Disciplina do 7º BPM** (PMRO): cadastro e
-acompanhamento dos apuratórios disciplinares e dos procedimentos de apuração —
-IPM, sindicância, PADS, carta precatória e as demais espécies —, com prazos,
+acompanhamento de apuratórios — processos disciplinares e procedimentos de
+apuração, como IPM, sindicância, PADS e carta precatória —, com prazos,
 designações, enquadramento e os relatórios que a Seção emite.
 
 Aplicativo de desktop em **Rust + Tauri 2**, com frontend em TypeScript e

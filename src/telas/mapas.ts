@@ -317,7 +317,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       }
       const itens = resposta.data ?? [];
       if (!itens.length) {
-        notificar("Nenhum processo ou procedimento pertence a este mapa.", "erro");
+        notificar("Nenhum apuratório pertence a este mapa.", "erro");
         return;
       }
 

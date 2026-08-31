@@ -79,7 +79,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       <div class="page-head">
         <div>
           <h1>Configuração de apuratórios</h1>
-          <p>Define o que o banco aceita como processo desta espécie.</p>
+          <p>Define o que o banco aceita como apuratório desta espécie.</p>
         </div>
         <label class="seletor-apuratorio">Apuratório
           <select id="apuratorio">
@@ -91,8 +91,8 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       ${
         semDocumentoAtivo || semResponsavel
           ? `<p class="aviso">
-               ${semDocumentoAtivo ? "Sem documento iniciador ativo, nenhum processo pode ser criado neste apuratório. " : ""}
-               ${semResponsavel ? "Sem função responsável ativa, os processos aparecem sem responsável na listagem e nos relatórios." : ""}
+               ${semDocumentoAtivo ? "Sem documento iniciador ativo, nenhum registro pode ser criado neste apuratório. " : ""}
+               ${semResponsavel ? "Sem função responsável ativa, os apuratórios aparecem sem responsável na listagem e nos relatórios." : ""}
              </p>`
           : ""
       }
@@ -170,12 +170,12 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
 
       <h2>Funções</h2>
       <p class="secao-ajuda">
-        <strong>Obrigatório</strong> impede salvar o processo sem a designação.
+        <strong>Obrigatório</strong> impede salvar o apuratório sem a designação.
         <strong>Responsável</strong> é a função que responde pelo apuratório — é
         dele que saem o responsável da listagem, do dashboard e dos relatórios,
         e só pode haver um. <strong>Cita documento</strong> diz se a designação
         desta função informa tipo e número do documento que a autorizou; desligado,
-        o detalhe do processo mostra apenas “-” e o formulário de substituição
+        o detalhe do apuratório mostra apenas “-” e o formulário de substituição
         deixa de pedir os dois campos.
       </p>
       ${

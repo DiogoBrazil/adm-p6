@@ -686,7 +686,7 @@ pub async fn save(
         .bind(id)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
 
         validar_ordem_datas(
             request.data_instauracao,
@@ -703,7 +703,7 @@ pub async fn save(
         // generico de banco de dados.
         if tem_prorrogacao && anterior != request.data_recebimento {
             return Err(AppError::Domain(
-                    "A data de recebimento não pode ser alterada porque este processo já possui prorrogação de prazo.".to_string(),
+                    "A data de recebimento não pode ser alterada porque este apuratório já possui prorrogação de prazo.".to_string(),
                 ));
         }
         Some(anterior)
@@ -731,7 +731,7 @@ pub async fn save(
         .await?;
         if let Some(sigla) = conflito {
             return Err(AppError::Domain(format!(
-                "este processo ja tem designacoes registradas como {sigla}; nao e possivel trocar a especie do apuratorio"
+                "este apuratório já tem designações registradas como {sigla}; não é possível trocar a espécie do apuratório"
             )));
         }
     }
@@ -766,7 +766,7 @@ pub async fn save(
         .bind(request.resumo_fatos.as_deref())
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?,
+        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?,
         None => {
             sqlx::query_scalar(
                 "INSERT INTO processos_procedimentos
@@ -940,7 +940,7 @@ async fn gravar_envolvidos(
             .await?
             .ok_or_else(|| {
                 AppError::Domain(
-                    "Um dos envolvidos não pertence mais a este processo. Recarregue a página."
+                    "Um dos envolvidos não pertence mais a este apuratório. Recarregue a página."
                         .to_string(),
                 )
             })?
@@ -1153,7 +1153,7 @@ async fn gravar_designacoes(
                     && g.policial_militar_id == designacao.policial_militar_id
             }) {
                 return Err(AppError::Domain(format!(
-                    "Este militar já está designado como {} neste processo.",
+                    "Este militar já está designado como {} neste apuratório.",
                     repetida.papel
                 )));
             }
@@ -1163,7 +1163,7 @@ async fn gravar_designacoes(
 
         let Some(gravada) = gravadas.iter().find(|g| g.id == id) else {
             return Err(AppError::Domain(
-                "Uma das designações não existe mais neste processo. \
+                "Uma das designações não existe mais neste apuratório. \
                  Recarregue a página antes de salvar."
                     .to_string(),
             ));
@@ -1179,7 +1179,7 @@ async fn gravar_designacoes(
             {
                 return Err(AppError::Domain(format!(
                     "A designação de {} já tem histórico de substituição e não pode ser alterada aqui. \
-                     Use Substituir, na página de detalhes do processo.",
+                     Use Substituir, na página de detalhes do apuratório.",
                     gravada.papel
                 )));
             }
@@ -1203,7 +1203,7 @@ async fn gravar_designacoes(
         if gravada.imutavel() {
             return Err(AppError::Domain(format!(
                 "A designação de {} nasceu de uma substituição e não pode ser removida aqui. \
-                 Desfaça a substituição na página de detalhes do processo.",
+                 Desfaça a substituição na página de detalhes do apuratório.",
                 gravada.papel
             )));
         }
@@ -1443,7 +1443,7 @@ async fn travar_designacao(
     .map_err(AppError::from)
 }
 
-const DESIGNACAO_AUSENTE: &str = "A designação informada não pertence a este processo. \
+const DESIGNACAO_AUSENTE: &str = "A designação informada não pertence a este apuratório. \
                                   Recarregue a página e tente de novo.";
 
 /// Regras comuns a criar e a corrigir uma substituição: quem sai, quem entra e
@@ -1564,8 +1564,8 @@ async fn travar_ultima_substituicao(
 
     let Some(anterior_id) = sucessora.designacao_anterior_id.clone() else {
         return Err(AppError::Domain(format!(
-            "A designação de {} como {} é a inicial do processo, não uma substituição. \
-             Corrija-a pelo cadastro do processo.",
+            "A designação de {} como {} é a inicial do apuratório, não uma substituição. \
+             Corrija-a pelo cadastro do apuratório.",
             sucessora.ocupante, sucessora.papel
         )));
     };
@@ -1722,7 +1722,7 @@ pub async fn update_dates(
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))?;
+    .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
 
     validar_ordem_datas(
         data_instauracao,
@@ -1735,7 +1735,7 @@ pub async fn update_dates(
     .map_err(AppError::Domain)?;
     if conclusao_atual.is_some() && request.data_conclusao.is_none() {
         return Err(AppError::Domain(
-            "Para remover a conclusão, use a ação Reabrir processo.".to_string(),
+            "Para remover a conclusão, use a ação Reabrir apuratório.".to_string(),
         ));
     }
     if permite_remessa_comissao && request.data_remessa_encarregado.is_some() {
@@ -1800,7 +1800,7 @@ pub async fn update_involved_outcome(
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("envolvido nao encontrado neste processo".to_string()))?;
+    .ok_or_else(|| AppError::Domain("envolvido não encontrado neste apuratório".to_string()))?;
 
     if !permite_solucao_sugerida && request.solucao_sugerida_id.is_some() {
         return Err(AppError::Domain(
@@ -1881,7 +1881,7 @@ pub async fn soft_delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("processo nao encontrado".to_string()));
+        return Err(AppError::Domain("apuratório não encontrado".to_string()));
     }
     Ok(())
 }
@@ -1897,7 +1897,7 @@ pub async fn reopen(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), 
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("processo nao encontrado".to_string()));
+        return Err(AppError::Domain("apuratório não encontrado".to_string()));
     }
     Ok(())
 }
