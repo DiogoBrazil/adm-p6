@@ -62,6 +62,57 @@ export function faixasDePrazo(total: number, vencidos: number, proximos: number)
   ];
 }
 
+/**
+ * Os quatro estados de um apuratório sob a mão de um militar.
+ *
+ * `sem_prazo` é o apuratório em andamento cuja data de recebimento nunca foi
+ * informada: não há linha em `processo_prazos`, então ele não está nem no prazo
+ * nem vencido. Contá-lo junto com "no prazo" afirmaria um prazo que não existe.
+ */
+export type SituacaoContagem = {
+  concluidos: number;
+  no_prazo: number;
+  vencidos: number;
+  sem_prazo: number;
+};
+
+export type BaldeSituacao = {
+  chave: keyof SituacaoContagem;
+  rotulo: string;
+  cor: string;
+};
+
+/**
+ * A ordem em que os baldes são empilhados, e a cor de cada um.
+ *
+ * Da esquerda para a direita é a leitura que a Seção faz: o que já saiu, o que
+ * está sob controle, o que está atrasado e o que sequer tem prazo. As cores
+ * seguem as mesmas de `faixasDePrazo`, para que vermelho signifique "vencido"
+ * em toda tela do sistema.
+ */
+export const BALDES_SITUACAO: readonly BaldeSituacao[] = [
+  { chave: "concluidos", rotulo: "Concluídos", cor: CORES.success },
+  { chave: "no_prazo", rotulo: "Em andamento no prazo", cor: CORES.navy },
+  { chave: "vencidos", rotulo: "Em andamento vencido", cor: CORES.danger },
+  { chave: "sem_prazo", rotulo: "Sem prazo definido", cor: CORES.muted },
+];
+
+/**
+ * Só os baldes que têm algum registro no conjunto.
+ *
+ * Uma série inteira de zeros ocupa a legenda e não desenha nada — e "Sem prazo
+ * definido" é o caso comum de balde vazio, porque a maioria dos apuratórios tem
+ * o recebimento informado. A ordem de `BALDES_SITUACAO` é preservada.
+ */
+export function baldesComDado(itens: readonly SituacaoContagem[]): BaldeSituacao[] {
+  return BALDES_SITUACAO.filter((balde) => itens.some((item) => item[balde.chave] > 0));
+}
+
+/** Soma os quatro baldes. É o total do militar ou o da espécie. */
+export function totalDaSituacao(item: SituacaoContagem): number {
+  return item.concluidos + item.no_prazo + item.vencidos + item.sem_prazo;
+}
+
 export function corDaClassificacao(classificacao: string | null | undefined): string {
   const normalizada = String(classificacao ?? "")
     .normalize("NFD")

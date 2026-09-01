@@ -706,14 +706,18 @@ pub struct ContagemRotulada {
     pub total: i64,
 }
 
+/// Os quatro números do painel de entrada, e só eles.
+///
+/// As quatro quebras que moravam aqui (`por_apuratorio`, `por_natureza`,
+/// `por_unidade`, `por_ano`) saíram na rodada 29. Elas eram sempre do acervo
+/// inteiro, e por isso duas telas as desenhavam ao lado de cartões recortados
+/// por ano e espécie, dizendo números diferentes sobre a mesma coisa. As mesmas
+/// quebras agora vêm de `maps_reports` — `by_nature`, `by_unit`, `by_year` e
+/// `status_by_apuratorio` —, que respeitam o escopo. Uma quebra, uma fonte.
 #[derive(Debug, Serialize)]
 pub struct DashboardSummary {
     pub total: i64,
     pub em_andamento: i64,
     pub concluidos: i64,
     pub prazos_vencidos: i64,
-    pub por_apuratorio: Vec<ContagemRotulada>,
-    pub por_natureza: Vec<ContagemRotulada>,
-    pub por_unidade: Vec<ContagemRotulada>,
-    pub por_ano: Vec<ContagemRotulada>,
 }

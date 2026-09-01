@@ -2681,25 +2681,9 @@ async fn dashboard_conta_o_que_foi_criado() {
         assert_eq!(d.em_andamento, 2);
         assert_eq!(d.concluidos, 1);
 
-        // Contagens rotuladas dinâmicas: os rótulos vêm do catálogo, não de uma
-        // lista fixa de contadores.
-        let por_apuratorio: Vec<(&str, i64)> = d
-            .por_apuratorio
-            .iter()
-            .map(|c| (c.rotulo.as_str(), c.total))
-            .collect();
-        assert!(por_apuratorio.contains(&("TST-A", 2)), "{por_apuratorio:?}");
-        assert!(por_apuratorio.contains(&("TST-B", 1)), "{por_apuratorio:?}");
-
-        let anos: Vec<(&str, i64)> = d
-            .por_ano
-            .iter()
-            .map(|c| (c.rotulo.as_str(), c.total))
-            .collect();
-        assert!(
-            anos.contains(&("2026", 2)) && anos.contains(&("2025", 1)),
-            "{anos:?}"
-        );
+        // As quebras por apuratório e por ano saíram daqui na rodada 29 e agora
+        // são de `maps_reports`, onde aceitam escopo. Quem as cobre é
+        // `quebras_do_acervo_respeitam_o_escopo`.
     })
     .await;
 }

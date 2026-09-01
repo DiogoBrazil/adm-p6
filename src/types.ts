@@ -610,7 +610,55 @@ export interface DesignacaoMatrizFiltro {
   apuratorio_ids?: string[] | null;
   papel_ids?: string[] | null;
   ano?: number | null;
+  /** Recorta num militar só, para a ficha individual da tela. */
+  policial_militar_id?: string | null;
+  /**
+   * Um dos quatro baldes: `concluidos`, `no_prazo`, `vencidos`, `sem_prazo`.
+   *
+   * O recorte vale para os **apuratórios contados**, e as datas saem do
+   * conjunto filtrado — é o que faz "quem concluiu por último" responder.
+   */
+  situacao?: string | null;
+  /**
+   * `total` (padrão), `recebimento_recente`, `recebimento_antigo`,
+   * `conclusao_recente` ou `conclusao_antiga`.
+   */
+  ordenacao?: string | null;
+  /**
+   * Só as designações ainda vigentes. O padrão é **todas**, inclusive as
+   * encerradas por substituição — são duas perguntas diferentes, e quem
+   * escolhe é quem lê.
+   */
+  somente_vigentes?: boolean | null;
   limit?: number | null;
+}
+
+/**
+ * Situação dos apuratórios de uma célula ou de uma linha da matriz.
+ *
+ * Os quatro baldes são exclusivos e somam `total`. `sem_prazo` é o apuratório
+ * em andamento cuja data de recebimento nunca foi informada: não tem prazo
+ * nenhum, e contá-lo como "no prazo" afirmaria um prazo que não existe.
+ */
+export interface SituacaoDesignacao {
+  concluidos: number;
+  no_prazo: number;
+  vencidos: number;
+  sem_prazo: number;
+  total: number;
+  /**
+   * A maior data de recebimento do conjunto, e a maior de conclusão. Vêm do
+   * conjunto já filtrado, inclusive pelo balde. `null` quando nenhum
+   * apuratório do conjunto tem a data.
+   */
+  ultimo_recebimento: string | null;
+  ultima_conclusao: string | null;
+}
+
+/** Uma espécie de apuratório na linha do militar, com a situação dela. */
+export interface DesignacaoCelula extends SituacaoDesignacao {
+  id: string;
+  rotulo: string;
 }
 
 /**
@@ -619,13 +667,12 @@ export interface DesignacaoMatrizFiltro {
  * `celulas` traz só os apuratórios em que o militar foi designado (`id` =
  * apuratório, `rotulo` = sigla); as colunas da tabela saem do catálogo.
  */
-export interface DesignacaoMatrizLinha {
+export interface DesignacaoMatrizLinha extends SituacaoDesignacao {
   policial_militar_id: string;
   nome: string;
   matricula: string;
   posto_graduacao: string;
-  celulas: ContagemRotulada[];
-  total: number;
+  celulas: DesignacaoCelula[];
 }
 
 /** `movements` */
@@ -999,16 +1046,19 @@ export interface AttachmentContent {
   conteudo: string;
 }
 
-/** `proceedings` */
+/**
+ * `proceedings` — os quatro números do painel de entrada, e só eles.
+ *
+ * As quatro quebras que moravam aqui saíram na rodada 29: eram sempre do acervo
+ * inteiro, e por isso duas telas as desenhavam ao lado de cartões recortados por
+ * ano e espécie. Agora vêm de `reports_by_nature`, `reports_by_unit`,
+ * `reports_by_year` e `reports_status_by_apuratorio`, que respeitam o escopo.
+ */
 export interface DashboardSummary {
   total: number;
   em_andamento: number;
   concluidos: number;
   prazos_vencidos: number;
-  por_apuratorio: ContagemRotulada[];
-  por_natureza: ContagemRotulada[];
-  por_unidade: ContagemRotulada[];
-  por_ano: ContagemRotulada[];
 }
 
 /** `users` */

@@ -45,6 +45,12 @@ export function formatarDataHora(iso: string): string {
   return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}` : iso;
 }
 
+/** `2026-08-31` → `31/08/2026`. Vazio vira travessão, para a coluna não sumir. */
+export function formatarData(iso: string | null | undefined): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : "—";
+}
+
 /** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
 export function formatarQualificacaoMilitar(
   posto: string | null | undefined,
@@ -602,6 +608,34 @@ export function tabela(
         .join("")}</tr></thead>
       <tbody>${linhas.map(linha).join("")}</tbody>
     </table></div>`;
+}
+
+/**
+ * Painel de contagem rotulada, centralizado, com título próprio.
+ *
+ * Mora aqui, e não junto dos painéis analíticos, porque quem o usa é a ficha do
+ * usuário — que **não** virou painel analítico e não tem por que mudar de forma
+ * junto com eles. Suas colunas são próprias de propósito.
+ */
+export function painelContagem(
+  titulo: string,
+  itens: { rotulo: string; total: number }[],
+  rotuloColuna = "Item",
+): string {
+  if (!itens.length) {
+    return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>
+      <p class="empty">Nada registrado neste escopo.</p></section>`;
+  }
+  const html = tabela(
+    [
+      { rotulo: rotuloColuna, largura: 65, truncar: true, alinhamento: "centro" },
+      { rotulo: "Quantidade", largura: 35, alinhamento: "centro", nowrap: true },
+    ],
+    itens.map((i) => [i.rotulo, { texto: String(i.total), numerica: true }]),
+    "Nada registrado neste escopo.",
+    { listagem: true },
+  );
+  return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
 }
 
 /**

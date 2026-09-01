@@ -10,14 +10,15 @@
 // Esta tela absorveu a rota `/estatisticas/prazos`, que mostrava a mesma
 // listagem de vencidos e existia só pela exportação CSV. Duas telas para o
 // mesmo dado divergem; o CSV é um botão.
+//
+// O cartão "Criticidade dos prazos" saiu daqui na rodada 29. Ele desenhava
+// exatamente os três números da linha de KPIs logo acima — era a terceira vez
+// que os mesmos totais apareciam na mesma tela — e é o mesmo cartão do Painel.
+// Ficou no Painel, que é a tela de visão geral; aqui, o espaço voltou para as
+// duas listagens, que são o motivo de esta tela existir.
 
 import { call, type DeadlineReportFilter, type DeadlineReportItem } from "../api";
-import {
-  cartaoAnalitico,
-  graficoPrazos,
-  kpiAnalitico,
-  montarCartoesAnaliticos,
-} from "../graficos";
+import { kpiAnalitico } from "../graficos";
 import { faixasDePrazo } from "../graficos/dados";
 import {
   avisarSeCortado,
@@ -144,17 +145,9 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     return renderPrazos(ctx);
   }
 
+  // As faixas seguem servindo ao KPI "Regulares", que é o que sobra depois de
+  // vencidos e a vencer — a conta é a mesma, e mora num lugar só.
   const faixas = faixasDePrazo(resumo?.total ?? 0, resumo?.vencidos ?? 0, resumo?.proximos ?? 0);
-  const specPrazos = graficoPrazos("prazos-criticidade", faixas);
-  const tabelaCriticidade = tabela(
-    [
-      { rotulo: "Criticidade", largura: 68 },
-      { rotulo: "Quantidade", largura: 32, alinhamento: "centro", nowrap: true },
-    ],
-    faixas.map((faixa) => [faixa.rotulo, { texto: String(faixa.total), numerica: true }]),
-    "Nenhum prazo vigente.",
-    { listagem: true },
-  );
 
   ctx.shell(`
     <section class="panel panel--analytics">
@@ -182,17 +175,6 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         ${kpiAnalitico(faixas[2]?.total ?? 0, "Regulares", { tom: "sucesso" })}
       </div>
 
-      <div class="analytics-grid">
-        ${cartaoAnalitico({
-          id: "prazos-criticidade",
-          titulo: "Criticidade dos prazos",
-          descricao: `Vencidos, a vencer em até ${janelaDias} dias e regulares após essa janela.`,
-          grafico: specPrazos,
-          tabela: tabelaCriticidade,
-          classe: "analytics-card--wide",
-        })}
-      </div>
-
       <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
       ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
       ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
@@ -203,8 +185,6 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
       ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
     </section>
   `);
-
-  montarCartoesAnaliticos([specPrazos]);
 
   ligarPaginacao("vencidos", paginas.vencidos, (nova) => {
     paginas.vencidos = nova;

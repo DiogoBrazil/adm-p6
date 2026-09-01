@@ -264,6 +264,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
                 "maps_reports::repository::transgressoes",
                 "maps_reports::repository::infracoes_estatuto",
                 "maps_reports::repository::infracoes_penais",
+                "maps_reports::repository::designations_matrix",
             ],
         ),
         (

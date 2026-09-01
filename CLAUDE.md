@@ -84,14 +84,21 @@ entender X → olhe em Y".
 | Cortar rótulo de eixo sem reticências | o eixo passa a mentir o nome da categoria, e no papel não há tooltip para desmentir. `dados.ts::quebrarRotulo` marca o corte com `…` |
 | Esconder `.table-wrap` para imprimir o bloco completo | a tabela dentro de um cartão analítico não é listagem paginada: escondê-la imprime o cartão em branco. Filtre quem está em `[data-analytics-view]` |
 | Transformação de gráfico dentro de `graficos/index.ts` | ali não há teste possível — o módulo importa `chart.js` e chama `matchMedia`. Função pura vai para `graficos/dados.ts`, que o Vitest alcança |
+| Contar "em andamento" sem olhar o prazo | apuratório em andamento **sem recebimento informado** não tem linha em `processo_prazos`: `prazo_vencimento IS NULL` não é "no prazo" nem "vencido". São **quatro** baldes, e o quarto tem coluna própria — decisão 57 |
+| Testar prazo vencido inserindo `dias` negativo | `ck_prazo_dias` exige `dias > 0`, e o vencimento é coluna gerada (`data_inicio + dias`). Quem anda para trás é a **data de início** — ver `prazo_vencendo_em` em `tests/maps_reports_repository.rs` |
+| Acrescentar cartão a um painel | antes, ver se outra tela já o desenha. A rodada 29 nasceu de três telas mostrando os mesmos números, e duas delas sem escopo nenhum. Cada indicador tem **uma** tela dona — decisão 55 |
+| Agregar data sem olhar de qual conjunto ela sai | `max(data_conclusao)` calculado antes do recorte responde a pergunta errada — e devolve número plausível. A data sai do mesmo `WHERE` que os contadores |
+| Ordenar por `Option<data>` direto | `None` < `Some`, então no crescente a lista **abre** com quem não tem a data. Quem não tem vai para o fim nas duas direções — `ordenar_por_data` |
+| Distinguir duas telas só pelo filtro | vira a mesma tela com dois nomes no menu. Ou uma sai, ou elas diferem no **gênero** — uma se opera, a outra se imprime — e o dado vem de uma função só (decisão 59) |
+| Achatar struct na resposta com `serde(flatten)` | os campos sobem para o topo do JSON, e é isso que mantém `linha.total` onde a tela sempre o leu. Trocar por um objeto aninhado quebra o frontend **sem** erro de compilação no Rust |
 
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 169 testes
-cd .. && npm test && npm run typecheck            # 8 testes das transformações puras
+cd src-tauri && cargo fmt --check && cargo test   # 174 testes
+cd .. && npm test && npm run typecheck            # 11 testes das transformações puras
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

@@ -944,21 +944,40 @@ fn resposta_traz_os_campos_que_o_frontend_espera() {
 
         let resumo = invocar(&webview, "dashboard_summary", json!({}));
         let dados = ok(&resumo);
-        for campo in [
-            "total",
-            "em_andamento",
-            "concluidos",
-            "prazos_vencidos",
-            "por_apuratorio",
-            "por_natureza",
-            "por_unidade",
-            "por_ano",
-        ] {
+        for campo in ["total", "em_andamento", "concluidos", "prazos_vencidos"] {
             assert!(dados.get(campo).is_some(), "DashboardSummary sem '{campo}'");
+        }
+        // As quatro quebras saíram daqui na rodada 29 e viraram relatórios com
+        // escopo. Se alguma voltar para o resumo, são duas fontes de novo.
+        for campo in ["por_apuratorio", "por_natureza", "por_unidade", "por_ano"] {
+            assert!(
+                dados.get(campo).is_none(),
+                "quebra '{campo}' voltou ao resumo; ela é de maps_reports"
+            );
         }
 
         let anos = invocar(&webview, "reports_available_years", json!({}));
         assert!(ok(&anos).is_array());
+
+        // Os dois relatórios que substituíram as quebras do resumo.
+        for comando in ["reports_by_unit", "reports_by_year"] {
+            let resposta = invocar(
+                &webview,
+                comando,
+                json!({ "filter": { "apuratorio_ids": [] } }),
+            );
+            assert!(ok(&resposta).is_array(), "{comando} não devolveu lista");
+        }
+
+        // A matriz de designações achata a situação na própria linha: o
+        // `serde(flatten)` de `SituacaoDesignacao` é o que mantém `total` no
+        // topo, onde a tela sempre o leu.
+        let matriz = invocar(
+            &webview,
+            "reports_designations_matrix",
+            json!({ "filter": { "papel_ids": [], "somente_vigentes": false } }),
+        );
+        assert!(ok(&matriz).is_array());
     });
 }
 

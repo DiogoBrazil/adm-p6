@@ -4,16 +4,23 @@
 // `data.concluidos` e `data.prazos_vencidos` de `dashboard_summary`. Só três
 // desses campos existem: o primeiro se chama `total`. O cartão principal do
 // painel de entrada mostrava zero desde que o comando foi remodelado.
+//
+// O QUE ESTA TELA **NÃO** DESENHA, E POR QUÊ
+//
+// As distribuições por unidade, por apuratório e por ano saíram daqui na
+// rodada 29. Elas viviam em duplicata na "Visão Geral dos Apuratórios", e nas
+// duas telas eram sempre do acervo inteiro, porque `dashboard_summary` não
+// aceitava filtro. Agora moram em Estatísticas dos Apuratórios, com escopo.
+//
+// O Painel ficou com o que é dele: os quatro números do acervo, a criticidade
+// dos prazos e a lista do que já venceu — triagem, não exploração.
 
-import { call, type ContagemRotulada, type DeadlineReportItem } from "../api";
+import { call, type DeadlineReportItem } from "../api";
 import {
   cartaoAnalitico,
-  graficoBarras,
-  graficoLinha,
   graficoPrazos,
   kpiAnalitico,
   montarCartoesAnaliticos,
-  type GraficoSpec,
 } from "../graficos";
 import { faixasDePrazo } from "../graficos/dados";
 import {
@@ -29,18 +36,6 @@ export const ROTA = "/dashboard";
 
 /** Quantos vencidos cabem no painel antes de ele virar a tela de prazos. */
 const VENCIDOS_NO_PAINEL = 8;
-
-function tabelaContagem(itens: ContagemRotulada[], rotulo: string): string {
-  return tabela(
-    [
-      { rotulo, largura: 72, truncar: true },
-      { rotulo: "Quantidade", largura: 28, alinhamento: "centro", nowrap: true },
-    ],
-    itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
-    "Nada registrado neste escopo.",
-    { listagem: true },
-  );
-}
 
 export async function renderDashboard(ctx: ContextoTela): Promise<void> {
   const [resumoResposta, prazosResposta, vencidosResposta] = await Promise.all([
@@ -74,12 +69,7 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
   ];
 
   const faixas = faixasDePrazo(prazos.total, prazos.vencidos, prazos.proximos);
-  const specs: GraficoSpec[] = [
-    graficoPrazos("dashboard-prazos", faixas),
-    graficoBarras("dashboard-unidades", resumo.por_unidade, { limitar: true }),
-    graficoBarras("dashboard-apuratorios", resumo.por_apuratorio, { limitar: true }),
-    graficoLinha("dashboard-evolucao", resumo.por_ano),
-  ];
+  const specPrazos = graficoPrazos("dashboard-prazos", faixas);
   const tabelaPrazos = tabela(
     [
       { rotulo: "Criticidade", largura: 68 },
@@ -115,40 +105,20 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
           id: "dashboard-prazos",
           titulo: "Controle de prazos",
           descricao: "Criticidade dos prazos vigentes; janela de atenção de 30 dias.",
-          grafico: specs[0]!,
+          grafico: specPrazos,
           tabela: tabelaPrazos,
-          classe: "analytics-card--wide",
-        })}
-        ${cartaoAnalitico({
-          id: "dashboard-unidades",
-          titulo: "Distribuição por unidade de origem",
-          descricao: "Demanda acumulada por OPM ou unidade.",
-          grafico: specs[1]!,
-          tabela: tabelaContagem(resumo.por_unidade, "Unidade"),
-          limitado: resumo.por_unidade.length > 12,
-        })}
-        ${cartaoAnalitico({
-          id: "dashboard-apuratorios",
-          titulo: "Distribuição por apuratório",
-          grafico: specs[2]!,
-          tabela: tabelaContagem(resumo.por_apuratorio, "Apuratório"),
-          limitado: resumo.por_apuratorio.length > 12,
-        })}
-        ${cartaoAnalitico({
-          id: "dashboard-evolucao",
-          titulo: "Evolução das instaurações",
-          descricao: "Série histórica ordenada pelo ano de instauração.",
-          grafico: specs[3]!,
-          tabela: tabelaContagem(resumo.por_ano, "Ano"),
           classe: "analytics-card--wide",
         })}
       </div>
 
       <section class="stat-panel dashboard-overdue">
-        <h2>Prazos vencidos</h2>
+        <div class="page-head">
+          <h2>Prazos vencidos</h2>
+          <button type="button" class="ghost small" id="ir-para-prazos">Ver todos em Prazos</button>
+        </div>
         ${
           resumo.prazos_vencidos > VENCIDOS_NO_PAINEL
-            ? `<p class="hint">Os ${VENCIDOS_NO_PAINEL} mais antigos. Veja todos em Prazos.</p>`
+            ? `<p class="hint">Os ${VENCIDOS_NO_PAINEL} mais antigos.</p>`
             : ""
         }
         ${tabela(
@@ -165,6 +135,13 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
       </section>
     </section>
   `);
-  montarCartoesAnaliticos(specs);
+  montarCartoesAnaliticos([specPrazos]);
+
+  // Navega pelo mesmo caminho do menu: o `data-route` é lido pelo `shell()`, e
+  // assim o botão não precisa conhecer o roteador.
+  document.querySelector<HTMLButtonElement>("#ir-para-prazos")?.addEventListener("click", () => {
+    document.querySelector<HTMLButtonElement>('[data-route="/prazos"]')?.click();
+  });
+
   ligarExportacao(undefined, undefined, { paisagem: true });
 }

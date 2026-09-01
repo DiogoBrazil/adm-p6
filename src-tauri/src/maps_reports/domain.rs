@@ -202,18 +202,84 @@ pub struct DesignacaoMatrizFiltro {
     pub apuratorio_ids: Option<Vec<String>>,
     pub papel_ids: Option<Vec<String>>,
     pub ano: Option<i32>,
+    /// Recorta num militar só, para a ficha individual da tela.
+    pub policial_militar_id: Option<String>,
+    /// Recorta num dos quatro baldes: `concluidos`, `no_prazo`, `vencidos` ou
+    /// `sem_prazo`.
+    ///
+    /// O recorte vale para os **apuratórios contados**, não para os militares
+    /// listados: filtrando "vencidos", cada linha traz quantos vencidos aquele
+    /// militar tem, e as datas saem do conjunto filtrado — é o que faz "quem
+    /// concluiu por último" ser uma pergunta respondível.
+    pub situacao: Option<String>,
+    /// `total` (padrão), `recebimento_recente`, `recebimento_antigo`,
+    /// `conclusao_recente` ou `conclusao_antiga`.
+    pub ordenacao: Option<String>,
+    /// Só as designações ainda vigentes (`data_fim IS NULL`).
+    ///
+    /// O padrão é **todas**, inclusive as encerradas — é o que a matriz sempre
+    /// contou, e o porquê está no cabeçalho de `designations_matrix`. As duas
+    /// leituras são perguntas diferentes: "o que ele tem hoje na mão" e "o que
+    /// ele já tocou". Quem escolhe é quem lê, na tela.
+    pub somente_vigentes: Option<bool>,
     pub limit: Option<i64>,
 }
 
-/// Linha da matriz militar × apuratório. `celulas` traz uma entrada por
-/// apuratório em que o militar foi designado (`id` = apuratório, `rotulo` =
-/// sigla); a tela monta as colunas a partir do catálogo, não daqui.
+/// Situação dos apuratórios de uma célula ou de uma linha da matriz.
+///
+/// Os quatro baldes são exclusivos e somam `total`. **`sem_prazo` existe porque
+/// o estado existe**: apuratório em andamento cuja data de recebimento nunca
+/// foi informada não tem linha em `processo_prazos`, e contá-lo como "no prazo"
+/// afirmaria um prazo que não há. A tela só mostra a coluna quando ela é > 0.
+#[derive(Debug, Serialize, Default, Clone, Copy)]
+pub struct SituacaoDesignacao {
+    pub concluidos: i64,
+    pub no_prazo: i64,
+    pub vencidos: i64,
+    pub sem_prazo: i64,
+    pub total: i64,
+    /// A **maior** data de recebimento do conjunto, e a maior de conclusão.
+    ///
+    /// São o que responde "entre os encarregados de SR, qual recebeu ou
+    /// concluiu por último". Vêm do conjunto já filtrado, então mudam com o
+    /// escopo — inclusive com o filtro de situação. `None` quando nenhum
+    /// apuratório do conjunto tem a data.
+    pub ultimo_recebimento: Option<NaiveDate>,
+    pub ultima_conclusao: Option<NaiveDate>,
+}
+
+impl SituacaoDesignacao {
+    /// Acumula a situação de uma célula no total do militar.
+    pub fn somar(&mut self, outra: &SituacaoDesignacao) {
+        self.concluidos += outra.concluidos;
+        self.no_prazo += outra.no_prazo;
+        self.vencidos += outra.vencidos;
+        self.sem_prazo += outra.sem_prazo;
+        self.total += outra.total;
+        self.ultimo_recebimento = self.ultimo_recebimento.max(outra.ultimo_recebimento);
+        self.ultima_conclusao = self.ultima_conclusao.max(outra.ultima_conclusao);
+    }
+}
+
+/// Célula da matriz: um apuratório em que o militar foi designado, com a
+/// situação dos processos daquela espécie. `id` é o apuratório e `rotulo` a
+/// sigla — a tela monta as colunas a partir do catálogo, não daqui.
+#[derive(Debug, Serialize)]
+pub struct DesignacaoCelula {
+    pub id: String,
+    pub rotulo: String,
+    #[serde(flatten)]
+    pub situacao: SituacaoDesignacao,
+}
+
+/// Linha da matriz militar × apuratório, com a situação consolidada do militar.
 #[derive(Debug, Serialize)]
 pub struct DesignacaoMatrizLinha {
     pub policial_militar_id: String,
     pub nome: String,
     pub matricula: String,
     pub posto_graduacao: String,
-    pub celulas: Vec<ContagemRotulada>,
-    pub total: i64,
+    pub celulas: Vec<DesignacaoCelula>,
+    #[serde(flatten)]
+    pub situacao: SituacaoDesignacao,
 }

@@ -1344,6 +1344,174 @@ button.analytics-toggle__button[aria-pressed="true"] {
   margin-top: 16px;
 }
 
+/* O cabeçalho de um bloco interno reusa o `.page-head`, e ali o título é h2. */
+.page-head h2 {
+  margin: 0;
+}
+
+/* ── Relatório Anual: o documento ──────────────────────────────────────────
+   Ele não é um painel. Não tem cartão, alternador nem gráfico: capa, seções
+   numeradas e tabelas, na ordem em que se lê um relatório. O que o distingue
+   na tela é o que o faz funcionar no papel. */
+.relatorio-capa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 28px;
+  padding: 32px 24px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--surface-muted), #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.relatorio-capa img {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 6px;
+}
+
+.relatorio-capa__eyebrow {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.relatorio-capa strong {
+  color: var(--brand-800);
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+.relatorio-capa__ano {
+  color: var(--brand-700);
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.relatorio-capa__orgao {
+  margin-top: 8px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.relatorio-capa__emissao {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.relatorio-secao {
+  margin: 0 0 26px;
+}
+
+/* Seção não pode ser partida pela quebra de página: o título de uma tabela no
+   fim de uma folha e a tabela na seguinte é o defeito clássico do relatório
+   impresso. */
+.relatorio-secao h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--brand-600);
+  font-size: 1.05rem;
+}
+
+.relatorio-secao__numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  color: #fff;
+  background: var(--brand-700);
+  border-radius: 50%;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.relatorio-secao .hint {
+  margin: 0 0 8px;
+}
+
+/* O resumo do exercício é o único bloco que não é tabela: são quatro números
+   grandes, que é o que se lê primeiro num relatório anual. */
+.relatorio-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin: 8px 0 0;
+}
+
+.relatorio-resumo > div {
+  padding: 14px 16px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.relatorio-resumo dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.relatorio-resumo dd {
+  margin: 4px 0 0;
+  color: var(--brand-800);
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.relatorio-fecho {
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+@media print {
+  /* A capa ocupa a primeira folha sozinha, como capa de documento. */
+  .relatorio-capa {
+    background: #fff;
+    border: 0;
+    break-after: page;
+    padding-top: 22vh;
+  }
+
+  .relatorio-secao {
+    break-inside: avoid;
+  }
+}
+
+/* Campo largo da barra de filtro: a qualificação militar é posto + matrícula +
+   nome, e nos 150px mínimos do label ela sai truncada antes de ser escolhida. */
+.filtro-bar > label.filtro-campo--largo {
+  flex: 1 1 280px;
+  min-width: min(280px, 100%);
+}
+
+/* O `label` é um grid, e item de grid nasce com `min-width: auto`: sem o zero,
+   um nome longo estica a barra de filtro inteira em vez de caber no campo. */
+.filtro-bar > label .ts-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Conjunto de chips curto. As Funções são meia dúzia e não precisam da base de
+   500px que os apuratórios pedem — com ela, a barra quebra sem necessidade. */
+.filtro-bar > .filtro-apuratorios--compacto {
+  flex: 1 1 260px;
+  min-width: min(260px, 100%);
+}
+
 /* Enquanto os gráficos são medidos para o papel, a caixa vai a 960px e estoura
    o painel numa janela de 1024. Dura um quadro, mas o quadro aparece. Só na
    tela: `overflow: hidden` valendo na impressão recortaria o conteúdo na

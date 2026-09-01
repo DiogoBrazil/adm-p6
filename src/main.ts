@@ -22,7 +22,6 @@ import {
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
-import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
 import { ROTA as ROTA_ENCARREGADOS, renderEncarregados } from "./telas/encarregados";
 import { ROTA as ROTA_DASHBOARD, renderDashboard } from "./telas/dashboard";
 import { ROTA as ROTA_AUDITORIA, renderAuditoria } from "./telas/auditoria";
@@ -38,12 +37,8 @@ import {
   renderMapaMensal,
   renderMapasSalvos,
 } from "./telas/mapas";
-import {
-  ROTA as ROTA_ESTATISTICAS_PROCESSOS,
-  ROTA_PROCEDIMENTOS as ROTA_STATS_PROCEDIMENTOS,
-  renderEstatisticasProcedimentos,
-  renderEstatisticasProcessos,
-} from "./telas/estatisticas";
+import { ROTA as ROTA_ESTATISTICAS, renderEstatisticas } from "./telas/estatisticas";
+import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
 
 const brasaoUrl = new URL("../src-tauri/icons/icon.png", import.meta.url).href;
 
@@ -82,15 +77,14 @@ let routes: Route[] = [
   },
   { path: ROTA_AUDITORIA, label: "Auditoria", group: "Auditoria" },
   { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
-  {
-    path: ROTA_ESTATISTICAS_PROCESSOS,
-    label: "Visão Geral dos Apuratórios",
-    group: "Relatórios"
-  },
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
+  // São telas diferentes de propósito: o Anual é o documento que se imprime e
+  // se arquiva, Estatísticas é a tela de explorar. As duas leem o mesmo dado,
+  // por `carregarDadosDoEscopo`. "Visão Geral dos Apuratórios" saiu na rodada
+  // 29: era o Painel com dois cartões a mais, todos sem escopo.
   { path: ROTA_ANUAL, label: "Relatório Anual", group: "Relatórios" },
-  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas dos Apuratórios", group: "Relatórios" }
+  { path: ROTA_ESTATISTICAS, label: "Estatísticas dos Apuratórios", group: "Relatórios" }
 ];
 
 /** Fallback quando `activePath` não casa com nenhuma rota. */
@@ -373,11 +367,10 @@ async function renderRoute() {
   if (route.path === ROTA_ANUAL) return renderRelatorioAnual(contexto);
   if (route.path === ROTA_AUDITORIA) return renderAuditoria(contexto);
   if (route.path === ROTA_ENCARREGADOS) return renderEncarregados(contexto);
-  if (route.path === ROTA_ESTATISTICAS_PROCESSOS) return renderEstatisticasProcessos(contexto);
   if (route.path === ROTA_MAPA_MENSAL) return renderMapaMensal(contexto);
   if (route.path === ROTA_MAPAS_SALVOS) return renderMapasSalvos(contexto);
   if (route.path === ROTA_PRAZOS) return renderPrazos(contexto);
-  if (route.path === ROTA_STATS_PROCEDIMENTOS) return renderEstatisticasProcedimentos(contexto);
+  if (route.path === ROTA_ESTATISTICAS) return renderEstatisticas(contexto);
   if (route.path === ROTA_USUARIOS) return renderListaUsuarios(contexto);
   if (route.path === ROTA_USUARIO_NOVO) {
     activePath = ROTA_USUARIOS;

@@ -19,6 +19,7 @@ import {
 } from "chart.js";
 
 import {
+  baldesComDado,
   CORES,
   corDaClassificacao,
   denominadorPercentual,
@@ -30,6 +31,7 @@ import {
   type BasePercentual,
   type ContagemGrafico,
   type FaixaPrazo,
+  type SituacaoContagem,
   type SituacaoGrafico,
 } from "./dados";
 
@@ -388,6 +390,54 @@ export function graficoSituacao(chave: string, itens: readonly SituacaoGrafico[]
   };
 }
 
+/**
+ * Carga de trabalho empilhada: uma barra por categoria, um segmento por balde.
+ *
+ * Difere de `graficoSituacao` por não ser fixo em duas séries — os baldes que
+ * entram são os que têm dado (`baldesComDado`), então uma legenda nunca traz
+ * "Sem prazo definido" quando ninguém está nesse estado.
+ *
+ * O percentual do tooltip é `categoria`: num empilhado, o que interessa é
+ * quanto aquele segmento é **da barra** — 3 vencidos de 8 do militar, não 3 de
+ * todo o relatório.
+ */
+export function graficoCarga(
+  chave: string,
+  itensOriginais: readonly (SituacaoContagem & { rotulo: string })[],
+  opcoes: { limitar?: boolean; rotuloPercentual?: string } = {},
+): GraficoSpec {
+  const itens = opcoes.limitar ? limitarRanking(itensOriginais) : [...itensOriginais];
+  const rotulos = itens.map((item) => item.rotulo);
+  const baldes = baldesComDado(itens);
+  const base = opcoesComuns(true);
+  base.plugins.legend.display = true;
+  base.scales.x.stacked = true;
+  base.scales.y.stacked = true;
+  return {
+    chave,
+    rotulosCompletos: rotulos,
+    percentual: { base: "categoria", rotulo: opcoes.rotuloPercentual ?? "da carga" },
+    // Mesmos 42px por barra do ranking, pela mesma razão: é o que separa três
+    // linhas de rótulo sem elas se encavalarem, na tela e no papel.
+    altura: Math.max(250, itens.length * 42 + 70),
+    alturaImpressao: Math.min(700, Math.max(250, itens.length * 42 + 70)),
+    configuracao: {
+      type: "bar",
+      data: {
+        labels: rotulos.map((rotulo) => quebrarRotulo(rotulo)),
+        datasets: baldes.map((balde) => ({
+          label: balde.rotulo,
+          data: itens.map((item) => item[balde.chave]),
+          backgroundColor: balde.cor,
+          borderRadius: 4,
+          maxBarThickness: 30,
+        })),
+      },
+      options: { ...base, indexAxis: "y" },
+    },
+  };
+}
+
 export function graficoLinha(chave: string, itensOriginais: readonly ContagemGrafico[]): GraficoSpec {
   const itens = ordenarAnos(itensOriginais);
   const base = opcoesComuns(false);
@@ -644,4 +694,5 @@ export function restaurarGraficosDepoisDaImpressao(): void {
   }
 }
 
-export { CORES, totalDe } from "./dados";
+export { baldesComDado, BALDES_SITUACAO, CORES, totalDaSituacao, totalDe } from "./dados";
+export type { BaldeSituacao, SituacaoContagem } from "./dados";

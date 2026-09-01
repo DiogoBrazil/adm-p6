@@ -4,10 +4,10 @@ use sqlx::{PgPool, Postgres, Transaction};
 use crate::db::paginacao::Recorte;
 use crate::error::AppError;
 use crate::maps_reports::domain::{
-    ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
-    EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest, MapRow, ReportFilter,
-    SaveMapRequest, SavedMapFull, SavedMapListItem, SavedMapListResult, SolucoesResumo,
-    StatusPorApuratorio,
+    ContagemRotulada, CsvExport, DesignacaoCelula, DesignacaoMatrizFiltro, DesignacaoMatrizLinha,
+    DriverRankingItem, EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest,
+    MapRow, ReportFilter, SaveMapRequest, SavedMapFull, SavedMapListItem, SavedMapListResult,
+    SituacaoDesignacao, SolucoesResumo, StatusPorApuratorio,
 };
 use crate::{deadlines, evidence, movements, proceedings};
 
@@ -354,6 +354,57 @@ pub async fn by_nature(
     .await
 }
 
+/// Apuratórios por unidade de origem, no escopo do filtro.
+///
+/// Existe porque a quebra por unidade só vinha de `dashboard_summary`, que não
+/// aceita filtro nenhum: a mesma tela mostrava o acervo inteiro ao lado de
+/// cartões recortados por ano e espécie. Agora a unidade obedece ao escopo como
+/// os demais, e a quebra tem uma fonte só.
+pub async fn by_unit(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<ContagemRotulada>, sqlx::Error> {
+    sqlx::query_as::<_, ContagemRotulada>(
+        "SELECT un.id::text AS id, un.nome AS rotulo, count(*) AS total
+           FROM processos_procedimentos p
+           JOIN unidades_pm un ON un.id = p.unidade_origem_id
+          WHERE p.ativo
+            AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
+            AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $2)
+          GROUP BY un.id, un.nome
+          ORDER BY total DESC, un.nome",
+    )
+    .bind(escopo(&filter.apuratorio_ids))
+    .bind(filter.ano)
+    .fetch_all(pool)
+    .await
+}
+
+/// Instaurações por ano — a série histórica.
+///
+/// **`filter.ano` é ignorado aqui, e é de propósito.** O ano é o eixo desta
+/// série: aplicá-lo reduziria o gráfico a uma barra só, o que não é um recorte,
+/// é a destruição do relatório. O escopo de apuratórios, esse sim, vale — e a
+/// tela avisa na descrição do cartão que a evolução mostra todos os anos.
+pub async fn by_year(
+    pool: &PgPool,
+    filter: &ReportFilter,
+) -> Result<Vec<ContagemRotulada>, sqlx::Error> {
+    // Ano é derivado da data de instauração — não existe coluna `ano_instauracao`.
+    sqlx::query_as::<_, ContagemRotulada>(
+        "SELECT EXTRACT(YEAR FROM p.data_instauracao)::int::text AS id,
+                EXTRACT(YEAR FROM p.data_instauracao)::int::text AS rotulo,
+                count(*) AS total
+           FROM processos_procedimentos p
+          WHERE p.ativo
+            AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
+          GROUP BY 1 ORDER BY 1 DESC",
+    )
+    .bind(escopo(&filter.apuratorio_ids))
+    .fetch_all(pool)
+    .await
+}
+
 pub async fn available_years(pool: &PgPool) -> Result<Vec<i32>, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT DISTINCT EXTRACT(YEAR FROM data_instauracao)::int
@@ -642,7 +693,40 @@ pub async fn infracoes_penais(
     .await
 }
 
-/// Matriz militar × apuratório, contando designações.
+/// A regra dos quatro baldes, escrita **uma vez**.
+///
+/// Ela aparece em cinco lugares da mesma consulta — os quatro `FILTER` e o
+/// filtro de situação —, e cinco cópias divergiriam no primeiro ajuste. Como
+/// `CASE` de saída única, os baldes também são exclusivos por construção: não
+/// há como um apuratório cair em dois, nem em nenhum.
+const BALDE: &str = "CASE
+        WHEN p.data_conclusao IS NOT NULL          THEN 'concluidos'
+        WHEN prazo.data_vencimento IS NULL         THEN 'sem_prazo'
+        WHEN prazo.data_vencimento >= CURRENT_DATE THEN 'no_prazo'
+        ELSE 'vencidos' END";
+
+/// Ordena as linhas por uma data, com quem não tem data **sempre no fim**.
+///
+/// Nas duas direções: militar que nunca concluiu nada não é "o que concluiu há
+/// mais tempo", é o que não concluiu. `Option` ordenado direto poria `None`
+/// antes de tudo no crescente, e a lista abriria com quem não responde à
+/// pergunta. O desempate é o nome, para a ordem não oscilar entre recargas.
+fn ordenar_por_data(
+    linhas: &mut [DesignacaoMatrizLinha],
+    data: fn(&DesignacaoMatrizLinha) -> Option<chrono::NaiveDate>,
+    decrescente: bool,
+) {
+    linhas.sort_by(|a, b| match (data(a), data(b)) {
+        (Some(x), Some(y)) => {
+            if decrescente { y.cmp(&x) } else { x.cmp(&y) }.then_with(|| a.nome.cmp(&b.nome))
+        }
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.nome.cmp(&b.nome),
+    });
+}
+
+/// Matriz militar × apuratório, contando designações e a situação delas.
 ///
 /// Substitui `obter_estatisticas_encarregados`, que fazia 11 consultas por
 /// militar, uma por sigla, e lia colunas fixas de papel (`escrivao_id`,
@@ -651,8 +735,13 @@ pub async fn infracoes_penais(
 ///
 /// Conta **toda designação registrada**, inclusive as já encerradas: se um
 /// militar foi encarregado e depois substituído, o trabalho que ele teve não
-/// desaparece do panorama. Quem quer só o responsável vigente usa
-/// `by_responsible`.
+/// desaparece do panorama. `somente_vigentes` inverte essa escolha para quem
+/// pergunta "o que ele tem hoje". Quem quer só o responsável vigente de cada
+/// apuratório, independente de militar, usa `by_responsible`.
+///
+/// **A situação sai das tabelas base, não da view.** `v_processos_detalhados` já
+/// deriva o prazo vigente, mas `GROUP BY` sobre ela é 7× mais lento — então o
+/// mesmo `LATERAL` da view é repetido aqui, sobre `processo_prazos`.
 pub async fn designations_matrix(
     pool: &PgPool,
     filter: &DesignacaoMatrizFiltro,
@@ -665,32 +754,66 @@ pub async fn designations_matrix(
         posto_graduacao: String,
         apuratorio_id: String,
         apuratorio_sigla: String,
+        concluidos: i64,
+        no_prazo: i64,
+        vencidos: i64,
+        sem_prazo: i64,
         total: i64,
+        ultimo_recebimento: Option<chrono::NaiveDate>,
+        ultima_conclusao: Option<chrono::NaiveDate>,
     }
 
-    let celulas: Vec<Celula> = sqlx::query_as(
+    // Os quatro baldes contam `DISTINCT d.processo_id` pela mesma razão que o
+    // total: um militar pode ter duas designações no mesmo apuratório (papéis
+    // diferentes, ou uma substituição), e o processo é um só.
+    //
+    // As duas datas são `max()` sobre o conjunto **já filtrado** — inclusive
+    // pelo balde. É o que faz "quem concluiu por último entre os encarregados
+    // de SR" ser uma pergunta que a tela consegue fazer.
+    let celulas: Vec<Celula> = sqlx::query_as(&format!(
         "SELECT pm.id::text AS policial_militar_id,
                 pm.nome      AS nome,
                 pm.matricula AS matricula,
                 pg.sigla     AS posto_graduacao,
                 a.id::text   AS apuratorio_id,
                 a.sigla      AS apuratorio_sigla,
-                count(DISTINCT d.processo_id) AS total
+                count(DISTINCT d.processo_id)
+                    FILTER (WHERE {BALDE} = 'concluidos') AS concluidos,
+                count(DISTINCT d.processo_id)
+                    FILTER (WHERE {BALDE} = 'no_prazo')   AS no_prazo,
+                count(DISTINCT d.processo_id)
+                    FILTER (WHERE {BALDE} = 'vencidos')   AS vencidos,
+                count(DISTINCT d.processo_id)
+                    FILTER (WHERE {BALDE} = 'sem_prazo')  AS sem_prazo,
+                count(DISTINCT d.processo_id)             AS total,
+                max(p.data_recebimento)                   AS ultimo_recebimento,
+                max(p.data_conclusao)                     AS ultima_conclusao
            FROM processo_designacoes d
            JOIN processos_procedimentos p ON p.id = d.processo_id
            JOIN apuratorios a             ON a.id = p.apuratorio_id
            JOIN policiais_militares pm    ON pm.id = d.policial_militar_id
            JOIN postos_graduacoes pg      ON pg.id = pm.posto_graduacao_id
+           LEFT JOIN LATERAL (
+               SELECT pr.data_vencimento FROM processo_prazos pr
+                WHERE pr.processo_id = p.id
+                ORDER BY pr.ordem DESC LIMIT 1
+           ) prazo ON true
           WHERE p.ativo
             AND ($1::uuid[] IS NULL OR p.apuratorio_id = ANY($1::uuid[]))
             AND ($2::uuid[] IS NULL OR d.papel_id = ANY($2::uuid[]))
             AND ($3::int    IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $3)
+            AND ($4::uuid   IS NULL OR d.policial_militar_id = $4::uuid)
+            AND (NOT $5 OR d.data_fim IS NULL)
+            AND ($6::text   IS NULL OR {BALDE} = $6)
           GROUP BY pm.id, pm.nome, pm.matricula, pg.sigla, a.id, a.sigla
-          ORDER BY pm.nome, a.sigla",
-    )
+          ORDER BY pm.nome, a.sigla"
+    ))
     .bind(escopo(&filter.apuratorio_ids))
     .bind(escopo(&filter.papel_ids))
     .bind(filter.ano)
+    .bind(filter.policial_militar_id.as_deref())
+    .bind(filter.somente_vigentes.unwrap_or(false))
+    .bind(filter.situacao.as_deref())
     .fetch_all(pool)
     .await?;
 
@@ -706,21 +829,55 @@ pub async fn designations_matrix(
                     matricula: celula.matricula,
                     posto_graduacao: celula.posto_graduacao,
                     celulas: Vec::new(),
-                    total: 0,
+                    situacao: SituacaoDesignacao::default(),
                 });
                 linhas.last_mut().expect("acabou de ser inserida")
             }
         };
-        linha.total += celula.total;
-        linha.celulas.push(ContagemRotulada {
+        let situacao = SituacaoDesignacao {
+            concluidos: celula.concluidos,
+            no_prazo: celula.no_prazo,
+            vencidos: celula.vencidos,
+            sem_prazo: celula.sem_prazo,
+            total: celula.total,
+            ultimo_recebimento: celula.ultimo_recebimento,
+            ultima_conclusao: celula.ultima_conclusao,
+        };
+        linha.situacao.somar(&situacao);
+        linha.celulas.push(DesignacaoCelula {
             id: celula.apuratorio_id,
             rotulo: celula.apuratorio_sigla,
-            total: celula.total,
+            situacao,
         });
     }
 
-    linhas.sort_by(|a, b| b.total.cmp(&a.total).then_with(|| a.nome.cmp(&b.nome)));
-    let limite = filter.limit.unwrap_or(100).clamp(1, 500) as usize;
+    match filter.ordenacao.as_deref() {
+        Some("recebimento_recente") => {
+            ordenar_por_data(&mut linhas, |l| l.situacao.ultimo_recebimento, true)
+        }
+        Some("recebimento_antigo") => {
+            ordenar_por_data(&mut linhas, |l| l.situacao.ultimo_recebimento, false)
+        }
+        Some("conclusao_recente") => {
+            ordenar_por_data(&mut linhas, |l| l.situacao.ultima_conclusao, true)
+        }
+        Some("conclusao_antiga") => {
+            ordenar_por_data(&mut linhas, |l| l.situacao.ultima_conclusao, false)
+        }
+        // Inclusive para valor desconhecido: uma ordenação que a tela não
+        // reconhece devolve a lista útil, não uma lista vazia ou um erro.
+        _ => linhas.sort_by(|a, b| {
+            b.situacao
+                .total
+                .cmp(&a.situacao.total)
+                .then_with(|| a.nome.cmp(&b.nome))
+        }),
+    }
+
+    // O teto é o do clamp, e não 100: esta é uma listagem de relatório, não uma
+    // página. Com 235 militares no cadastro inteiro, ele não corta — e cortar
+    // em silêncio o fim de uma ordenação por data seria pior do que inútil.
+    let limite = filter.limit.unwrap_or(500).clamp(1, 500) as usize;
     linhas.truncate(limite);
     Ok(linhas)
 }

@@ -26,10 +26,10 @@ sobre remover o schema `legado`.
 | Código | |
 |---|---:|
 | Migrations (`0001`–`0018`) | **18** |
-| Comandos Tauri, todos no cliente tipado | **87** |
-| Testes | **169** no Rust · **8** no frontend (Vitest, sobre `src/graficos/dados.ts`) |
-| Módulos Rust · linhas de Rust | 13 · 10.193 |
-| Arquivos de frontend · linhas de TS/CSS | 22 · 16.554 |
+| Comandos Tauri, todos no cliente tipado | **89** |
+| Testes | **174** no Rust · **11** no frontend (Vitest, sobre `src/graficos/dados.ts`) |
+| Módulos Rust · linhas de Rust | 13 · 11.460 |
+| Arquivos de frontend · linhas de TS/CSS | 22 · 17.200 |
 | Catálogos administráveis | 26 |
 | Comandos que o frontend invoca e não existem | **0** |
 | Chamadas fora do cliente tipado | **0** |
@@ -61,7 +61,8 @@ sai só quando ela fechar.
 | 3c | **Conferir a pesquisa instantânea e o modal de filtros avançados** — é o primeiro modal do app com seletor pesquisável **e** CSP restritiva ao mesmo tempo | seção 11, item **(l)** | **Sim** |
 | 3d | **Conferir a pesquisa instantânea de Catálogos e Usuários** — o redesenho parcial pode perder a largura das colunas **sem acusar** | seção 11, item **(n)** | **Sim** |
 | 3e | **Conferir desativar e excluir militar** — a exclusão é física e não se desfaz; fazer em banco descartável ou com o responsável | seção 11, item **(o)** | **Sim** |
-| 3f | **Conferir os painéis analíticos e o PDF deles** — seis telas viraram gráfico, e o papel só se prova imprimindo: a geometria da folha é medida na tela, antes de a folha existir | seção 11, item **(p)** | **Sim** |
+| 3f | **Conferir os painéis analíticos e o PDF deles** — o papel só se prova imprimindo: a geometria da folha é medida na tela, antes de a folha existir | seção 11, item **(p)** | **Sim** |
+| 3g | **Conferir os painéis reorganizados e a carga por militar** — duas telas saíram do menu e uma trocou de pergunta; e a soma dos quatro baldes contra o Total é o tipo de erro que passa despercebido por parecer plausível | seção 11, item **(q)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -264,6 +265,12 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 52 | Como um militar é identificado depois, sem perder o que já foi apurado? | **A sincronização de envolvidos passou a ser pelo id do VÍNCULO, não pelo id do PM.** Enquanto a chave era o militar, identificar quem estava "À apurar" apagava a linha e criava outra — e enquadramentos, indícios, resultado, situação e ordem, que penduram em `processo_envolvidos.id`, iam junto pelo `ON DELETE CASCADE`. `EnvolvidoRequest.id` viaja na edição justamente para que a linha sobreviva à troca do PM, nos dois sentidos: identificar quem faltava, e devolver a "À apurar" um militar registrado por engano. Sem `id` — cliente antigo — o repositório ainda casa pelo PM, e o `IS NOT DISTINCT FROM` alcança o `NULL`. |
 | 53 | O formulário de processo pede cadastro que não existe. Cadastra ali? | **Sim, para os cadastros operacionais, em modal, sem perder o formulário em andamento.** PM, unidade, subunidade/seção, município, natureza geral do fato, situação do envolvido e papel de pessoa ganharam "+" ao lado do seletor. Ficam **de fora** apuratório, documento iniciador, papel de designação e as classificações jurídicas: dependem de configuração e de relações que uma caixinha não deveria decidir — esses seguem só na tela administrativa própria, e o seletor continua pesquisável. O modal **reusa** o formulário dirigido por metadados de Catálogos e o de militares, então não há segunda cópia das regras de validação; e **não cria conta de acesso**, que continua sendo escolha da tela de usuários. |
 | 54 | A listagem de militares não tem como desativar nem excluir ninguém. O que ela ganha? | **Os dois, e são coisas diferentes.** *Desativar* tira o militar das listas de escolha e desliga a conta de acesso junto, sem perder nada — é o caminho normal, e o único que serve para quem tem histórico (princípio 6). *Excluir* apaga a linha do banco e **só conclui para quem não tem vínculo nenhum**: sem conta, sem designação, sem envolvimento e sem prorrogação em que seja autoridade. É o cadastro digitado errado, e nada além disso. As quatro FKs são `ON DELETE RESTRICT` e recusariam sozinhas; o comando confere antes para poder dizer **qual** vínculo segurou, que é o que a mensagem do banco não diz. Militar que já teve conta nunca poderá ser apagado — a conta se desativa e nunca se apaga —, e isso é consequência aceita, não descuido. Na tela, os dois ícones só aparecem para administrador, porque é o que o backend exige. |
+| 55 | Os mesmos números aparecem em três telas de relatório. Qual fica com eles? | **Cada indicador tem uma tela dona, e as outras não o redesenham — princípio 4 aplicado à apresentação.** Seis telas viraram quatro. *Painel* fica com os quatro números do acervo, a criticidade dos prazos e os oito vencidos mais antigos: triagem. *Prazos* fica com as duas listagens completas, e **perdeu** o gráfico de criticidade, que era a terceira vez que aqueles três números apareciam na mesma tela. *Estatísticas dos Apuratórios* fica com **todas** as distribuições, agora com escopo — e é mais do que a Visão Geral fazia, porque lá elas vinham sempre do acervo inteiro. *Visão Geral dos Apuratórios* **sai**: era o Painel com dois cartões a mais. *Relatório Anual* continua no menu — e a decisão **59** conta o que aconteceu com ele. |
+| 56 | O relatório "encarregados por espécie" é uma tela nova? | **Não: é a tela de Designações com o filtro marcado.** Marcar `IPM` e a função `Encarregado` já responde "quais encarregados estão com IPM", com a quebra por situação. Uma segunda tela seria a mesma consulta com o filtro pré-marcado — exatamente o que a decisão 55 acabou de remover. Os filtros da tela passam a ser cinco, combináveis: ano, espécie de apuratório, função, militar e vínculo. |
+| 57 | Como se conta "em andamento" na carga de um militar? | **Em três estados, não um — e há um quarto que não é nenhum deles.** *No prazo* é `data_conclusao IS NULL` com o vencimento do prazo vigente de hoje em diante; *vencido* é o mesmo com o vencimento no passado; *sem prazo definido* é o apuratório em andamento cuja data de recebimento nunca foi informada, e que por isso **não tem linha em `processo_prazos`**. O quarto balde tem coluna própria, exibida só quando alguém está nele: somá-lo a "no prazo" afirmaria um prazo que não existe. Os quatro são exclusivos e somam o total. |
+| 58 | A carga de um militar conta a designação que já terminou? | **Conta, por padrão — e a tela oferece o contrário num alternador.** São duas perguntas: "o que ele já tocou" inclui a designação encerrada por substituição, e é o que a matriz sempre respondeu; "o que ele tem hoje na mão" é `data_fim IS NULL`. Fixar uma das duas esconderia a outra, e nenhuma delas é mais legítima. O padrão continua sendo o histórico, para não mudar em silêncio o significado de uma tela que já existia. |
+| 59 | O Relatório Anual como "modo" da tela de Estatísticas não se sustentou. O que ele é? | **Um documento, e não um painel — porque a diferença entre os dois não é o filtro, é o gênero.** Fixar o ano deixava duas entradas de menu abrindo a mesma tela, que é o defeito que a decisão 55 existia para corrigir. Estatísticas é tela de **operar**: filtra, alterna gráfico e tabela, compara. O Anual é peça que se imprime, assina e arquiva: capa com brasão, ano e unidade; onze seções numeradas em ordem fixa; **só tabelas**, nenhum alternador e nenhum chip no meio do texto — um relatório em que o leitor precisa clicar para ver o número não é um relatório. E o escopo é **o ano inteiro**, sem recorte por espécie: meio relatório anual não é o relatório anual do 7º BPM. O que as duas telas compartilham é o **dado** — `carregarDadosDoEscopo`, `tabelaContagem`, `tabelaSituacao` e `tabelaEnquadramento` moram em `estatisticas.ts` e servem às duas. Duas cargas separadas divergiriam no primeiro filtro novo, que foi exatamente como a Visão Geral passou a discordar do Painel. |
+| 60 | Como se pergunta "quem concluiu por último" em Designações? | **Filtro por balde + ordenação por data, com as datas saindo do conjunto já recortado.** O filtro de situação recorta **o que é contado**, não quem é listado: marcando "vencidos", cada linha traz quantos vencidos aquele militar tem, e a lista vira um ranking de atraso. As duas datas — maior `data_recebimento` e maior `data_conclusao` — são calculadas **depois** do recorte, e é isso que faz a pergunta ter resposta: com as datas do conjunto inteiro, filtrar por "vencido" ainda devolveria a conclusão de um processo que o filtro acabou de excluir. As ordenações são cinco (total, recebimento recente/antigo, conclusão recente/antiga), e **quem não tem a data vai para o fim nas duas direções** — militar que nunca concluiu nada não é "o que concluiu há mais tempo", é o que não concluiu. As duas colunas de data ficam sempre visíveis: ordenar por coluna que não aparece deixa a lista numa ordem que ninguém consegue conferir. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -810,6 +817,14 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Percentual de tooltip sobre o que está plotado | Num ranking limitado ao Top 12, somar só as doze barras infla todos os percentuais **em silêncio** (63/274 em vez de 63/277). E num empilhado, dividir pelo total do gráfico responde outra pergunta: 96 em andamento do IPM viram 20,9% do relatório, não os 70,1% do apuratório que o leitor espera | `GraficoSpec.totalReal` guarda o total do conjunto **antes** do recorte, e `percentual.base` diz se a conta é da categoria ou do total. `dados.ts::denominadorPercentual` decide, e tem teste |
 | Rótulo de eixo cortado sem reticências | `quebrarRotulo` limita a três linhas: "Acidente de trânsito envolvendo viatura policial militar" virava "envolvendo viatura", e o eixo passava a mentir o nome da categoria. Na tela o tooltip desmente; **no papel não há tooltip** | O corte é explícito, com `…`. E o texto inteiro continua no tooltip e na tabela do cartão |
 | Esconder toda `.table-wrap` para pôr o bloco completo na impressão | A tabela **dentro de um cartão analítico** não é a listagem paginada que o bloco vem substituir: escondê-la imprimia o cartão em branco sempre que o usuário tivesse escolhido ver a tabela em vez do gráfico | O filtro de `ligarExportacao` ignora quem está dentro de `[data-analytics-view]` |
+| Contar "em andamento" sem olhar se há prazo | O apuratório cuja **data de recebimento nunca foi informada** não tem linha em `processo_prazos`: `prazo_vencimento` é `NULL`, e ele não está nem no prazo nem vencido. Somá-lo a "no prazo" afirma um prazo que não existe, e o número fica plausível — que é o pior tipo de erro de relatório | São **quatro** baldes exclusivos, e o quarto ("Sem prazo definido") tem coluna própria, exibida só quando alguém está nele. Ver decisão 57 e `designations_matrix` |
+| Inserir `dias` negativo para forjar um prazo vencido num teste | `ck_prazo_dias` exige `dias > 0` e `data_vencimento` é coluna **gerada** (`data_inicio + dias`), então o `INSERT` é recusado — e o teste falha por um motivo que não é o que ele testa | Quem anda para trás é a `data_inicio`: um prazo vencido é um prazo de 30 dias que começou há mais de 30. Ver `prazo_vencendo_em`, em `tests/maps_reports_repository.rs` |
+| Acrescentar um cartão a um painel sem olhar as telas vizinhas | Foi assim que três telas passaram a desenhar os mesmos quatro KPIs e a mesma evolução por ano — duas delas **sem escopo nenhum**, ao lado de cartões filtrados, dizendo números diferentes sobre a mesma pergunta na mesma tela | Cada indicador tem **uma** tela dona (decisão 55). Antes de acrescentar, procurar o cartão nas outras telas de relatório |
+| Agregar data sem olhar de qual conjunto ela sai | `max(data_conclusao)` calculado antes do recorte responde a pergunta errada: filtrando "vencidos", ele devolveria a conclusão de um processo que o filtro **acabou de excluir**. O número é plausível, e por isso ninguém desconfia | A data sai do mesmo `WHERE` que os contadores — ver `designations_matrix` e o teste `recorte_por_situacao_leva_as_datas_junto` |
+| Ordenar por `Option<data>` direto | `None` é menor que qualquer `Some`, então no crescente a lista **abre** com quem não tem a data. Ordenando por "conclusão mais antiga", os primeiros da lista seriam justamente os que nunca concluíram nada | Quem não tem a data vai para o fim **nas duas direções** — `ordenar_por_data`, em `maps_reports/repository.rs` |
+| Distinguir duas telas só pelo filtro | "Relatório Anual" nasceu como a tela de Estatísticas com o ano fixo, e o resultado foram duas entradas de menu abrindo a mesma coisa — o defeito que a rodada 29 existia para corrigir | Se duas telas mostram os mesmos fatos, ou uma sai, ou elas diferem no **gênero**: uma se opera, a outra se imprime. E o **dado** continua vindo de uma função só — decisão 59 |
+| Repetir o SQL de uma regra em cada `FILTER` | Os quatro baldes apareciam em cinco lugares da mesma consulta, e cinco cópias divergem no primeiro ajuste — além de nada garantir que sejam exclusivos | Um `CASE` de saída única (`BALDE`), interpolado por `format!`. Consulta com `format!` **precisa** entrar na `COBERTURA` de `tests/sql_prepare.rs`, senão o `PREPARE` automático não a alcança |
+| Trocar `serde(flatten)` por struct aninhada numa resposta | Os campos achatados sobem para o topo do JSON, e é isso que mantém `linha.total` onde a tela sempre o leu. Aninhar quebra o frontend **sem** erro de compilação no Rust — o `tsc` só reclama se `types.ts` for atualizado junto | `SituacaoDesignacao` é achatada de propósito, na linha e na célula. Se mudar, mudar `types.ts` na mesma alteração — é o que o teste `resposta_traz_os_campos_que_o_frontend_espera` vigia |
 
 ---
 
@@ -917,7 +932,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que não usamos `sqlx::query!` | `src-tauri/tests/sql_prepare.rs` (cabeçalho) e `Cargo.toml` |
 | a composição comum de processo, e por que a contagem não a usa | `src-tauri/migrations/0004_view_processos_detalhados.sql`, sua ampliação na `0014_subunidade_secao_origem.sql` e `proceedings/repository.rs::BASE_CONTAGEM` |
 | o contrato de cada comando (Rust) | `src-tauri/src/*/domain.rs` |
-| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 87 |
+| o contrato de cada comando (TypeScript) | `src/api.ts::Commands` — é o mapa completo dos 89 |
 | como o escopo de um relatório é parametrizado | `maps_reports/repository.rs::FILTRO_ESCOPO` e `escopo()` |
 | por que o mapa não filtra por instauração | `maps_reports/repository.rs::map_rows` (cabeçalho) |
 | como um arquivo chega ao usuário | `src-tauri/src/files/commands.rs` (cabeçalho) |
@@ -984,7 +999,15 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que o alternador Gráfico/Tabela não é `role="tab"` | `graficos/index.ts::definirModo` (comentário) e a armadilha do roving tabindex na seção 7 |
 | onde fica a preferência de ver gráfico ou tabela | `localStorage`, chave `adm-p6:visualizacao:<id do cartão>`, em `graficos/index.ts::preferencia` |
 | por que o ranking mostra 12 e a tabela mostra tudo | `dados.ts::limitarRanking` e a nota "Top 12 no gráfico · tabela completa" do cabeçalho do cartão |
-| onde a matriz de designações vive, e por que não está dentro do cartão | `src/telas/encarregados.ts` — o cartão traz o ranking; a matriz é o conteúdo da tela, e continua fora dele |
+| onde a matriz de designações vive, e por que não está dentro do cartão | `src/telas/encarregados.ts` — o cartão traz a carga por situação; a matriz é o conteúdo da tela, e continua fora dele |
+| qual tela é dona de cada indicador | decisão **55**, e os cabeçalhos de `src/telas/dashboard.ts`, `prazos.ts` e `estatisticas.ts` — cada um diz o que **não** desenha, e por quê |
+| por que "Relatório Anual" e "Estatísticas" são telas diferentes | decisão **59**, e os cabeçalhos de `src/telas/anual.ts` e `estatisticas.ts` |
+| onde as duas telas de relatório buscam o mesmo dado | `estatisticas.ts::carregarDadosDoEscopo` — e `tabelaContagem`, `tabelaSituacao` e `tabelaEnquadramento`, ao lado dela |
+| como se pergunta "quem concluiu por último" | decisão **60**, e `designations_matrix` — o filtro de balde e as duas datas do conjunto recortado |
+| por que os quatro baldes são um `CASE` só | `maps_reports/repository.rs::BALDE` (cabeçalho) — a regra aparece em cinco lugares da mesma consulta |
+| como se conta a carga de trabalho de um militar | decisões **57** e **58**, e `maps_reports/repository.rs::designations_matrix` (cabeçalho) |
+| por que "sem prazo definido" é um balde e não um zero | decisão **57**, `SituacaoDesignacao` (cabeçalho) e `dados.ts::baldesComDado` |
+| por que a série por ano ignora o filtro de ano | `maps_reports/repository.rs::by_year` (cabeçalho) — o ano é o eixo dela |
 | o diagnóstico do estado anterior | `a seção 13` |
 
 ---
@@ -1034,6 +1057,20 @@ exclusão idempotente. Id inexistente, esse sim, é recusado com regra legível.
 `mapas_salvos.dados_mapa` (snapshot imutável de relatório já emitido) e
 `auditoria.alteracoes` (diff heterogêneo e imutável). O teste `migrations.rs` **falha** se
 aparecer um terceiro.
+
+**A Visão Geral dos Apuratórios foi absorvida, e o Relatório Anual virou documento — RESOLVIDO.**
+A primeira era o Painel com dois cartões a mais, e saiu. O segundo chegou a ser um "modo"
+da tela de Estatísticas — e isso durou uma volta, porque deixava duas entradas de menu
+abrindo o mesmo desenho: virou peça impressa, com capa e seções numeradas. Ver decisões 55
+e 59, e a rodada 29. O que **não** foi feito, e é escolha: fundir Painel e Prazos. Eles respondem perguntas
+diferentes — "como está o acervo" e "o que preciso cobrar" —, e a única sobreposição que
+havia (o gráfico de criticidade) já ficou num lugar só.
+
+**As preferências de visualização dos cartões que saíram continuam no `localStorage`.**
+Chaves `adm-p6:visualizacao:visao-*`, `dashboard-unidades`, `dashboard-apuratorios`,
+`dashboard-evolucao`, `anual-*` e `prazos-criticidade`, de cartões que não existem mais.
+São alguns bytes por navegador e nada os lê; limpá-las exigiria código que roda uma vez e
+depois é lixo. Ficam.
 
 **`ASP OF PM` no círculo "Praças".** A 0003 o inseriu assim porque o dump só tem dois
 círculos e um militar real usa esse posto. Aspirante a Oficial é praça especial; se a PMRO
@@ -1113,12 +1150,11 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Catálogos** — abrir ao menos três catálogos diferentes do menu
 - [ ] **Auditoria** — a lista e os três filtros
 - [ ] **Designações por Militar**
-- [ ] **Visão Geral dos Apuratórios** — tabelas centralizadas, somente rótulo e quantidade
-- [ ] **Estatísticas dos Apuratórios** — idem, sem barras percentuais
+- [ ] **Estatísticas dos Apuratórios** — os doze cartões, em dois blocos
 - [ ] **Mapa do Período** — gerar o mês sem apuratório marcado e com uma espécie marcada; os registros devem obedecer à mesma regra da tabela
 - [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7ºBPM, mês/ano, A4 paisagem **sem mexer em Orientação no diálogo**, fichas compartilhando folha, marcadores de fim, “Continuação do …” e tabelas longas sem perda. Nos enquadramentos: um bloco por natureza, artigo antes da norma, **nenhum texto repetido**, analogia recuada sob a infração do Estatuto e Resultado empilhado
 - [ ] **Mapas Salvos**
-- [ ] **Relatório Anual**
+- [ ] **Relatório Anual** — é a tela de Estatísticas em modo documento (rodada 29)
 
 ---
 
@@ -1754,9 +1790,13 @@ o responsável**: a exclusão é física e não se desfaz.
 
 ### p) Painéis analíticos e o PDF deles (seção 12, rodada 28)
 
-O binário de produção, e o console aberto. São **seis** telas: Painel, Prazos, Visão
-Geral dos Apuratórios, Relatório Anual, Designações por Militar e Estatísticas dos
-Apuratórios.
+> ⚠ **A rodada 29 mudou o elenco.** Onde este item diz "seis telas", leia **quatro**:
+> Painel, Prazos, Estatísticas dos Apuratórios (com o Relatório Anual como modo dela) e
+> Designações por Militar. "Visão Geral dos Apuratórios" não existe mais. O que se
+> confere em cada uma continua valendo — some com os cartões que saíram e veja o item
+> **(q)**.
+
+O binário de produção, e o console aberto.
 
 **Na tela**
 
@@ -1801,9 +1841,82 @@ Imprimir para arquivo em **cada uma das seis telas**, e abrir o PDF:
 - [ ] Em **Prazos**, as duas listagens saem **completas**, não com os dez itens da página
 - [ ] Filtros, alternadores e botões **não** aparecem no papel
 
+### q) Painéis sem repetição e carga por militar (seção 12, rodada 29)
+
+O binário de produção, e o console aberto. As quatro telas de relatório.
+
+**A repetição acabou — é o que este item existe para provar**
+
+- [ ] Os quatro KPIs do acervo (total, em andamento, concluídos, prazos vencidos)
+      aparecem **só** no Painel
+- [ ] "Evolução das instaurações", "Unidades de origem" e "Natureza geral do fato"
+      aparecem **só** em Estatísticas dos Apuratórios
+- [ ] O gráfico de criticidade dos prazos aparece **só** no Painel; em Prazos ficaram os
+      quatro KPIs e as duas listagens
+- [ ] "Visão Geral dos Apuratórios" **não está** no menu
+- [ ] "Relatório Anual" abre um **documento**, não o painel: capa com brasão, ano e
+      unidade, e onze seções numeradas, só com tabelas — sem chips, sem alternador
+      Gráfico/Tabela e sem gráfico nenhum
+- [ ] Trocar o ano e **Emitir** reemite o documento inteiro; o seletor não oferece "Todos"
+- [ ] O botão "Ver todos em Prazos", no Painel, leva à tela de Prazos — e **não** aparece
+      no papel
+
+**Estatísticas dos Apuratórios**
+
+- [ ] Os doze cartões aparecem em dois blocos, "Acervo" e "Apuração"
+- [ ] Marcar dois apuratórios e um ano e **Aplicar**: todos os cartões recarregam, os
+      chips continuam marcados e a linha "Escopo aplicado" acompanha
+- [ ] "Evolução das instaurações" continua mostrando **todos** os anos mesmo com um ano
+      escolhido — é o comportamento declarado na descrição do cartão, não um filtro que
+      não pegou. Marcar um apuratório, esse sim, muda a série
+- [ ] O CSV sai com todas as quebras e traz o escopo nas duas primeiras linhas
+
+**Designações por Militar**
+
+- [ ] A barra de filtro tem sete campos: Ano, Militar, Situação, Ordenar por, Vínculo,
+      Apuratórios e Funções
+- [ ] O seletor de militar é pesquisável (digitar filtra) e cabe na barra sem esticá-la
+- [ ] Sem militar escolhido: a tabela do cartão lista **todos** os militares do escopo com
+      as colunas de situação, e a matriz militar × espécie continua abaixo
+- [ ] Marcar `IPM` + função `Encarregado` responde "quais encarregados estão com IPM" —
+      confira um deles contra a tela de Prazos
+- [ ] Escolher um militar troca a tela: os KPIs passam a ser dele (total, concluídos, no
+      prazo, vencido), o cartão vira "Situação por espécie de apuratório" e a matriz sai
+- [ ] Escolher um militar **sem designação no escopo** mostra os KPIs zerados **com o nome
+      dele**, e a mensagem "Nenhuma designação deste militar neste escopo" — não pode cair
+      calado na visão de todos
+- [ ] "Sem prazo definido" só vira coluna e série quando alguém no escopo está nesse
+      estado; onde não há, a legenda tem três séries
+- [ ] O alternador de vínculo muda os números: um militar substituído tem menos em
+      "Somente as vigentes" do que em "Todas as designações"
+- [ ] A soma das colunas de situação bate com o Total, linha a linha
+- [ ] **Situação = Em andamento vencido**: cada militar passa a mostrar só os vencidos, as
+      colunas dos outros baldes somem e "Últ. conclusão" fica em "—" (vencido não tem
+      conclusão, e a data não pode vir do que o filtro excluiu)
+- [ ] **Situação = Concluídos + Ordenar por Conclusão mais recente**, com `SR` marcado:
+      o primeiro da lista é o encarregado que concluiu por último — confira a data dele
+      contra a tela do apuratório
+- [ ] **Conclusão mais antiga**: quem nunca concluiu nada continua **no fim** da lista, e
+      não no começo
+- [ ] **Recebimento mais antigo** responde quem está com procedimento na mão há mais tempo
+- [ ] As colunas "Últ. recebimento" e "Últ. conclusão" aparecem em qualquer ordenação, e
+      as datas saem em dd/mm/aaaa
+- [ ] O CSV traz as quatro colunas de situação, as espécies e as duas datas
+
+**No papel, e no teclado**
+
+- [ ] O **Relatório Anual** imprime com a capa sozinha na primeira folha, e nenhuma seção
+      é partida entre páginas (título numa folha e tabela na seguinte é o defeito clássico)
+- [ ] As telas imprimem em paisagem, com os gráficos não esticados e os rótulos do
+      empilhado sem se encavalar
+- [ ] Filtros, chips e alternadores não aparecem no papel
+- [ ] Em 1024px nenhuma das quatro ganha rolagem horizontal; a barra de filtro de
+      Designações quebra em linhas e os chips continuam legíveis
+- [ ] Tab alcança os dois botões do alternador Gráfico/Tabela em todos os cartões novos
+
 ---
 
-## 12. Changelog — as 28 rodadas
+## 12. Changelog — as 29 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1838,7 +1951,102 @@ A narrativa completa de cada uma está no histórico do git.
 | 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
 | 26 | **Pesquisa instantânea nas outras listagens** | Catálogos e Usuários passaram a filtrar ao digitar, como os apuratórios desde a 24. O "250 ms + Enter" saiu de dentro de `processo.ts` e virou `dom.ts::ligarBuscaInstantanea`, usado pelas três. Sem migration e sem comando novo — os dois backends já pesquisavam. Detalhe abaixo |
 | 27 | **Desativar e excluir militar** | A listagem de militares não tinha nem uma coisa nem outra: `users_delete` **desativava** apesar do nome, e tela nenhuma o chamava. O comando virou `users_deactivate`, e `users_delete` passou a apagar de verdade — só para quem não tem vínculo nenhum, com mensagem que nomeia o vínculo que segurou. Três ícones por linha, e o par do Reativar que faltava no detalhe. Decisão **54**. Sem migration. Detalhe abaixo |
+| 29 | **Painéis sem repetição, e a carga por militar** | Seis telas de relatório viraram quatro: os mesmos quatro KPIs, a mesma evolução por ano e a mesma unidade de origem eram desenhados em três endereços, e nas telas antigas sempre **sem escopo**. "Visão Geral dos Apuratórios" saiu e o gráfico de criticidade ficou só no Painel. Do outro lado, Designações por Militar passou a responder por **carga de trabalho**: concluído, em andamento no prazo, em andamento vencido e sem prazo definido, por militar e por espécie, com cinco filtros combináveis. Numa segunda volta, o Relatório Anual virou **documento** — capa e seções numeradas, só tabelas — em vez de um "modo" da tela de Estatísticas, e as Designações ganharam filtro por balde, cinco ordenações e as datas de último recebimento e última conclusão por militar. Duas consultas novas (`by_unit`, `by_year`), `dashboard_summary` enxugado aos quatro números, nenhuma migration. Decisões **55–60**. Detalhe abaixo |
 | 28 | **Painéis analíticos** | As seis telas de relatório deixaram de ser só tabela: KPIs, barras, barras empilhadas, linha/área e rosca, com alternador Gráfico/Tabela por cartão. Uma dependência nova (`chart.js`), nenhum comando e nenhuma migration — todo dado já vinha dos relatórios existentes. O Vitest entrou junto, sobre a camada pura de `src/graficos/dados.ts`. Detalhe abaixo |
+
+### A rodada 29, em detalhe
+
+Pedido: "muitas informações se repetem de uma página pra outra"; e, em Designações por
+Militar, poder saber quantos apuratórios um militar tem e quantos estão concluídos, em
+andamento no prazo e em andamento vencido — por ano, e por espécie de apuratório.
+
+**A repetição era real, e tinha uma causa.** A rodada 28 transformou seis telas em
+painéis, mas uma a uma: cada tela escolheu os seus cartões sem olhar para as vizinhas.
+O resultado media-se: a linha de quatro KPIs era **idêntica** no Painel e na Visão Geral;
+"Evolução das instaurações" e "Unidades de origem" apareciam nas duas; o gráfico de
+criticidade dos prazos estava no Painel **e** em Prazos; e cinco dos seis cartões do
+Relatório Anual já existiam em Estatísticas dos Apuratórios, que tem filtro de ano.
+
+**E era pior do que repetição.** As quebras da Visão Geral e do Painel vinham de
+`dashboard_summary`, que não aceita filtro: eram sempre do acervo inteiro. Na mesma tela,
+elas ficavam ao lado de cartões recortados por ano e espécie — dois números diferentes
+para a mesma pergunta, sem nada dizendo qual respondia o quê.
+
+**A saída foi dar dono a cada indicador** (decisão 55), que é o princípio 4 aplicado à
+apresentação. O Painel ficou com triagem: os quatro números, a criticidade e os oito
+vencidos mais antigos, com um botão para Prazos. Prazos ficou com as duas listagens e
+**perdeu** o gráfico — que era a terceira vez que aqueles três números apareciam ali,
+depois da linha de KPIs. Estatísticas ficou com as doze distribuições, todas com escopo,
+em dois blocos ("Acervo" e "Apuração"). E o Relatório Anual continua no menu, porque é
+como a Seção chama o entregável, mas é `renderEstatisticas(ctx, "anual")` — mesmo
+desenho, ano obrigatório.
+
+Para isso, duas consultas novas em `maps_reports`: `by_unit` e `by_year`. E
+`dashboard_summary` **encolheu** para os quatro números — as quatro quebras que moravam
+nele ficaram sem leitor no momento em que passaram a existir com escopo, e mantê-las
+seria guardar a segunda fonte que a rodada acabou de eliminar. São quatro agregações a
+menos no carregamento do Painel.
+
+**A carga de trabalho não virou comando novo.** `designations_matrix` já filtrava por ano,
+espécie e função, e já agrupava por militar × apuratório: o que faltava eram quatro
+`count(...) FILTER (WHERE ...)` no mesmo `GROUP BY`, mais dois filtros — militar e
+vínculo. Um comando paralelo duplicaria o SQL, e as duas respostas discordariam no dia em
+que uma mudasse. A agregação parte das tabelas base com o `LATERAL` do prazo vigente, e
+não da view: `GROUP BY` sobre `v_processos_detalhados` é 7× mais lento.
+
+**O terceiro estado que ninguém tinha contado.** "Em andamento" quebrado em "no prazo" e
+"vencido" deixa de fora o apuratório cujo **recebimento nunca foi informado** — sem linha
+em `processo_prazos`, ele não está em nenhum dos dois. São quatro baldes, e o quarto tem
+coluna própria, exibida só quando alguém está nele (decisão 57). Somá-lo a "no prazo"
+daria um número plausível e errado, que é o pior defeito possível num relatório.
+
+**Uma tela, duas perguntas.** O pedido mencionava "outro relatório" para filtrar por
+espécie de apuratório. Ele não virou tela: marcar `IPM` e a função `Encarregado` na
+própria tela de Designações já responde "quais encarregados estão com IPM", com a quebra
+por situação — e uma segunda tela seria a mesma consulta com o filtro pré-marcado, que é
+exatamente o que a decisão 55 acabou de remover (decisão 56). Escolher um militar troca a
+tela de pergunta: os KPIs passam a ser dele, e a matriz dá lugar à situação por espécie.
+
+**O que os testes novos travam.** Que os quatro baldes são exclusivos e somam o total; que
+recortar num militar não muda os números dele; que `somente_vigentes` esconde a designação
+encerrada por substituição e o padrão não (decisão 58); que `by_unit` e `by_year`
+respeitam o escopo e que `by_year` **ignora** o ano de propósito; e que
+`dashboard_summary` **não** voltou a trazer as quebras — este último pelo IPC, porque a
+divergência com `types.ts` não seria erro de compilação em lado nenhum.
+
+**Sem migration.** O schema não mudou: os quatro baldes são leitura de `data_conclusao` e
+do prazo vigente, que já existiam.
+
+#### A segunda volta da rodada, e o que ela corrigiu
+
+A conferência do responsável apontou duas coisas, e as duas eram justas.
+
+**"Relatório Anual e Estatísticas têm as mesmas informações."** Tinham mesmo: eram a
+mesma tela, e a única diferença era o ano ficar fixo — ou seja, duas entradas de menu
+para o mesmo desenho, que é o defeito que esta rodada existia para corrigir. A diferença
+entre os dois nunca foi o filtro; é o **gênero**. O Anual virou documento de verdade
+(decisão 59): capa com brasão, ano e unidade, onze seções numeradas em ordem fixa, só
+tabelas, nenhum controle no meio do texto, e a capa sozinha na primeira folha impressa.
+O dado continua vindo de uma função só, `carregarDadosDoEscopo`, que as duas telas
+chamam — o que muda é a forma, não os fatos.
+
+**"Aparece a informação, mas não dá para filtrar nem ordenar."** A tela mostrava os
+quatro baldes e não deixava recortar por eles, e a pergunta prática da Seção —
+"entre os encarregados de SR, qual foi o mais recente que recebeu ou concluiu" — não
+tinha como ser feita. Entraram o filtro por balde, cinco ordenações e as duas datas por
+militar (decisão 60).
+
+O detalhe que quase passou: as datas precisam sair do conjunto **já recortado**. Com o
+`max()` calculado antes do filtro, pedir "vencidos" ainda devolveria a conclusão de um
+processo que o filtro acabou de excluir — número plausível, e por isso ninguém
+desconfiaria. E ordenar por `Option<data>` direto põe quem **não tem** a data na frente
+no crescente: "conclusão mais antiga" abriria justamente com quem nunca concluiu nada.
+Nas duas direções, quem não tem a data vai para o fim.
+
+No caminho, os quatro baldes viraram um `CASE` só (`BALDE`), interpolado nos cinco
+lugares da consulta em que a regra aparece — o que os torna exclusivos por construção, e
+não por coincidência entre cinco condições escritas à mão. Com `format!` no SQL, a
+consulta passou a precisar da linha em `tests/sql_prepare.rs`.
 
 ### A rodada 28, em detalhe
 

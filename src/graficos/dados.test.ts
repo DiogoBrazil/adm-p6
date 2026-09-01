@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BALDES_SITUACAO,
+  baldesComDado,
   CORES,
   corDaClassificacao,
   denominadorPercentual,
@@ -10,8 +12,16 @@ import {
   ordenarContagens,
   percentual,
   quebrarRotulo,
+  totalDaSituacao,
   totalDe,
 } from "./dados";
+
+const carga = (
+  concluidos: number,
+  no_prazo: number,
+  vencidos: number,
+  sem_prazo: number,
+) => ({ concluidos, no_prazo, vencidos, sem_prazo });
 
 describe("transformações dos painéis analíticos", () => {
   it("deriva prazos regulares sem permitir contagem negativa", () => {
@@ -68,6 +78,34 @@ describe("transformações dos painéis analíticos", () => {
     const cortado = quebrarRotulo("Acidente de trânsito envolvendo viatura policial militar");
     expect(cortado).toHaveLength(3);
     expect(cortado[2]).toMatch(/…$/);
+  });
+
+  it("empilha a situação na ordem de leitura, com o vermelho no vencido", () => {
+    expect(BALDES_SITUACAO.map((b) => b.chave)).toEqual([
+      "concluidos",
+      "no_prazo",
+      "vencidos",
+      "sem_prazo",
+    ]);
+    // Vermelho significa "vencido" em toda tela do sistema, inclusive aqui.
+    expect(BALDES_SITUACAO.find((b) => b.chave === "vencidos")?.cor).toBe(CORES.danger);
+  });
+
+  it("omite o balde que ninguém no escopo tem", () => {
+    // O caso comum: todo mundo com recebimento informado, logo sem "Sem prazo".
+    expect(baldesComDado([carga(4, 2, 1, 0), carga(0, 3, 0, 0)]).map((b) => b.chave)).toEqual([
+      "concluidos",
+      "no_prazo",
+      "vencidos",
+    ]);
+    // Um único registro num balde já o traz de volta, e na posição dele.
+    expect(baldesComDado([carga(0, 0, 0, 1)]).map((b) => b.chave)).toEqual(["sem_prazo"]);
+    expect(baldesComDado([])).toEqual([]);
+  });
+
+  it("soma os quatro baldes como total do militar", () => {
+    expect(totalDaSituacao(carga(4, 2, 1, 1))).toBe(8);
+    expect(totalDaSituacao(carga(0, 0, 0, 0))).toBe(0);
   });
 
   it("escolhe o denominador do percentual sem inflar ranking cortado", () => {

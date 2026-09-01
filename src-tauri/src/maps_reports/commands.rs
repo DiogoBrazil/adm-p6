@@ -177,6 +177,38 @@ pub async fn reports_by_nature(
 }
 
 #[tauri::command]
+pub async fn reports_by_unit(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<ContagemRotulada>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::by_unit(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
+pub async fn reports_by_year(
+    state: State<'_, AppState>,
+    filter: Option<ReportFilter>,
+) -> Result<ApiResponse<Vec<ContagemRotulada>>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let pool = state.pool().await?;
+            Ok(repository::by_year(&pool, &filter.unwrap_or_default()).await?)
+        }
+        .await,
+    )
+    .await)
+}
+
+#[tauri::command]
 pub async fn reports_driver_ranking(
     state: State<'_, AppState>,
     filter: Option<ReportFilter>,

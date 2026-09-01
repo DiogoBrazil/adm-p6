@@ -224,6 +224,9 @@ export interface Commands {
   reports_delete_saved_map: { args: { id: string }; result: boolean };
   reports_by_responsible: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
   reports_by_nature: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
+  reports_by_unit: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
+  /** A série por ano **ignora** `filter.ano` de propósito: o ano é o eixo dela. */
+  reports_by_year: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
   reports_driver_ranking: { args: { filter?: ReportFilter | null }; result: DriverRankingItem[] };
   reports_available_years: { args: Record<string, never>; result: number[] };
   reports_export_csv: { args: { request: MapPeriodRequest }; result: CsvExport };

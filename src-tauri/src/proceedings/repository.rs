@@ -7,8 +7,8 @@ use crate::error::AppError;
 use crate::evidence::repository as evidence_repository;
 use crate::proceedings::domain::{
     validar_ordem_datas, AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest,
-    CartaPrecatoriaDetalhes, ContagemRotulada, DashboardSummary, DesignacaoItem, DesignacaoRequest,
-    EnvolvidoItem, PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingFilterOption,
+    CartaPrecatoriaDetalhes, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
+    PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingFilterOption,
     ProceedingFilterOptions, ProceedingListItem, ProceedingListResult,
     ProceedingMilitaryFilterOption, SaveProceedingRequest, SubstituirDesignacaoRequest,
     UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
@@ -2154,8 +2154,11 @@ pub async fn remove_anexo(
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
-/// Panorama geral. Todo agrupamento é por FK; nenhuma sigla ou nome aparece no
-/// SQL, então cadastrar um apuratório novo o inclui no painel automaticamente.
+/// Panorama geral: os quatro números do painel de entrada.
+///
+/// As quatro quebras por FK que ficavam aqui saíram na rodada 29 — ver o
+/// cabeçalho de `DashboardSummary`. Continuam existindo, em `maps_reports`, e lá
+/// aceitam o escopo que aqui nunca houve.
 pub async fn dashboard(pool: &PgPool) -> Result<DashboardSummary, sqlx::Error> {
     let (total, em_andamento, concluidos): (i64, i64, i64) = sqlx::query_as(
         "SELECT count(*),
@@ -2179,52 +2182,10 @@ pub async fn dashboard(pool: &PgPool) -> Result<DashboardSummary, sqlx::Error> {
     .fetch_one(pool)
     .await?;
 
-    let por_apuratorio = sqlx::query_as::<_, ContagemRotulada>(
-        "SELECT a.id::text AS id, a.sigla AS rotulo, count(*) AS total
-           FROM processos_procedimentos p
-           JOIN apuratorios a ON a.id = p.apuratorio_id
-          WHERE p.ativo GROUP BY a.id, a.sigla ORDER BY total DESC",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let por_natureza = sqlx::query_as::<_, ContagemRotulada>(
-        "SELECT nf.id::text AS id, nf.nome AS rotulo, count(*) AS total
-           FROM processos_procedimentos p
-           JOIN naturezas_fato nf ON nf.id = p.natureza_fato_id
-          WHERE p.ativo GROUP BY nf.id, nf.nome ORDER BY total DESC",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let por_unidade = sqlx::query_as::<_, ContagemRotulada>(
-        "SELECT un.id::text AS id, un.nome AS rotulo, count(*) AS total
-           FROM processos_procedimentos p
-           JOIN unidades_pm un ON un.id = p.unidade_origem_id
-          WHERE p.ativo GROUP BY un.id, un.nome ORDER BY total DESC",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    // Ano é derivado da data de instauração — não existe coluna `ano_instauracao`.
-    let por_ano = sqlx::query_as::<_, ContagemRotulada>(
-        "SELECT EXTRACT(YEAR FROM data_instauracao)::int::text AS id,
-                EXTRACT(YEAR FROM data_instauracao)::int::text AS rotulo,
-                count(*) AS total
-           FROM processos_procedimentos WHERE ativo
-          GROUP BY 1 ORDER BY 1 DESC",
-    )
-    .fetch_all(pool)
-    .await?;
-
     Ok(DashboardSummary {
         total,
         em_andamento,
         concluidos,
         prazos_vencidos,
-        por_apuratorio,
-        por_natureza,
-        por_unidade,
-        por_ano,
     })
 }

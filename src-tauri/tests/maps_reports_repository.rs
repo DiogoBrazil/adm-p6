@@ -40,6 +40,31 @@ async fn designar(pool: &PgPool, processo_id: &str, pm: &str, papel: &str) {
     .unwrap();
 }
 
+/// Dá ao processo um prazo inicial que vence daqui a `dias` (negativo = vencido).
+///
+/// O vencimento é coluna gerada (`data_inicio + dias`) e `ck_prazo_dias` exige
+/// `dias > 0`, então quem anda para trás é a data de início — um prazo vencido
+/// é um prazo de 30 dias que começou há mais de 30.
+///
+/// A fixture de processo não cria linha em `processo_prazos`; quem cria é o
+/// `save` do repositório. É isso que permite testar o balde "sem prazo": o
+/// processo sem esta chamada é um apuratório cuja data de recebimento nunca foi
+/// informada, que é o estado real de boa parte do acervo.
+async fn prazo_vencendo_em(pool: &PgPool, processo_id: &str, dias: i64) {
+    const DURACAO: i64 = 30;
+    let inicio = chrono::Utc::now().date_naive() + chrono::Duration::days(dias - DURACAO);
+    sqlx::query(
+        "INSERT INTO processo_prazos (processo_id, ordem, data_inicio, dias)
+         VALUES ($1::uuid, 0, $2, $3)",
+    )
+    .bind(processo_id)
+    .bind(inicio)
+    .bind(i32::try_from(DURACAO).unwrap())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 /// Um artigo qualquer do RDPM semeado pela 0003 — o relatório precisa de dado
 /// legal real, e a fixture só cobre os catálogos operacionais.
 async fn alguma_transgressao(pool: &PgPool) -> String {
@@ -550,11 +575,11 @@ async fn matriz_de_designacoes_isola_o_papel() {
             .iter()
             .find(|l| l.policial_militar_id == m.pm_um)
             .unwrap();
-        assert_eq!(um.total, 3);
+        assert_eq!(um.situacao.total, 3);
         // Duas colunas: TST-A com 2 e TST-B com 1.
         assert_eq!(um.celulas.len(), 2);
         let a = um.celulas.iter().find(|c| c.rotulo == "TST-A").unwrap();
-        assert_eq!(a.total, 2);
+        assert_eq!(a.situacao.total, 2);
 
         // Filtrado pelo papel de escrivão sobra só o segundo militar.
         let so_escrivao = repository::designations_matrix(
@@ -568,7 +593,430 @@ async fn matriz_de_designacoes_isola_o_papel() {
         .unwrap();
         assert_eq!(so_escrivao.len(), 1);
         assert_eq!(so_escrivao[0].policial_militar_id, m.pm_dois);
-        assert_eq!(so_escrivao[0].total, 1);
+        assert_eq!(so_escrivao[0].situacao.total, 1);
+    })
+    .await;
+}
+
+/// Os quatro baldes da situação, e por que são quatro.
+///
+/// "Em andamento" sozinho não responde à pergunta que a Seção faz — o que ela
+/// precisa saber é quanto está **no prazo** e quanto está **vencido**. E existe
+/// um quarto estado que não é nenhum dos três: o apuratório em andamento cuja
+/// data de recebimento nunca foi informada não tem prazo nenhum, e somá-lo a
+/// "no prazo" afirmaria um prazo que não há.
+#[tokio::test]
+async fn matriz_separa_concluido_no_prazo_vencido_e_sem_prazo() {
+    util::com_banco_descartavel("rel_matriz_situacao", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let concluido = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            data(2026, 1, 5),
+            Some(data(2026, 2, 5)),
+        )
+        .await;
+        let no_prazo = processo(&pool, &m, &m.apuratorio, "002", data(2026, 1, 6), None).await;
+        let vencido = processo(&pool, &m, &m.apuratorio, "003", data(2026, 1, 7), None).await;
+        // Sem chamada a `prazo_vencendo_em`: é o quarto balde.
+        let sem_prazo = processo(&pool, &m, &m.apuratorio, "004", data(2026, 1, 8), None).await;
+
+        prazo_vencendo_em(&pool, &concluido, 30).await;
+        prazo_vencendo_em(&pool, &no_prazo, 30).await;
+        prazo_vencendo_em(&pool, &vencido, -1).await;
+
+        for p in [&concluido, &no_prazo, &vencido, &sem_prazo] {
+            designar(&pool, p, &m.pm_um, &m.papel_encarregado).await;
+        }
+
+        let linhas = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
+            .await
+            .unwrap();
+        assert_eq!(linhas.len(), 1);
+        let s = linhas[0].situacao;
+        assert_eq!(s.concluidos, 1, "concluído sai do controle de prazo");
+        assert_eq!(s.no_prazo, 1);
+        assert_eq!(s.vencidos, 1, "vencimento anterior a hoje");
+        assert_eq!(s.sem_prazo, 1, "recebimento nunca informado");
+        assert_eq!(
+            s.total,
+            s.concluidos + s.no_prazo + s.vencidos + s.sem_prazo,
+            "os quatro baldes são exclusivos e somam o total"
+        );
+
+        // A célula do apuratório carrega a mesma quebra, para a ficha do militar
+        // conseguir dizer em que espécie o atraso está.
+        assert_eq!(linhas[0].celulas.len(), 1);
+        assert_eq!(linhas[0].celulas[0].situacao.vencidos, 1);
+    })
+    .await;
+}
+
+/// O recorte por balde e as duas datas — e por que elas saem do conjunto
+/// **já filtrado**.
+///
+/// A pergunta que motivou isto é "entre os encarregados de SR, qual concluiu por
+/// último". Ela só tem resposta se a maior `data_conclusao` for calculada depois
+/// do recorte: com as datas do conjunto inteiro, filtrar por "vencidos" ainda
+/// devolveria a conclusão de um processo que o filtro acabou de excluir.
+#[tokio::test]
+async fn recorte_por_situacao_leva_as_datas_junto() {
+    util::com_banco_descartavel("rel_situacao_datas", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // `processo` grava `data_recebimento = data_instauracao`.
+        let antigo = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            data(2026, 1, 10),
+            Some(data(2026, 2, 10)),
+        )
+        .await;
+        let recente = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "002",
+            data(2026, 3, 20),
+            Some(data(2026, 4, 20)),
+        )
+        .await;
+        let vencido = processo(&pool, &m, &m.apuratorio, "003", data(2026, 2, 1), None).await;
+        prazo_vencendo_em(&pool, &vencido, -5).await;
+
+        for p in [&antigo, &recente, &vencido] {
+            designar(&pool, p, &m.pm_um, &m.papel_encarregado).await;
+        }
+
+        let tudo = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
+            .await
+            .unwrap();
+        assert_eq!(tudo[0].situacao.total, 3);
+        assert_eq!(tudo[0].situacao.ultima_conclusao, Some(data(2026, 4, 20)));
+        assert_eq!(tudo[0].situacao.ultimo_recebimento, Some(data(2026, 3, 20)));
+
+        let so_vencidos = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                situacao: Some("vencidos".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(so_vencidos[0].situacao.total, 1);
+        assert_eq!(
+            so_vencidos[0].situacao.concluidos, 0,
+            "o balde recorta o que é contado"
+        );
+        assert_eq!(
+            so_vencidos[0].situacao.ultima_conclusao, None,
+            "vencido não tem conclusão, e a data não pode vir do que ficou de fora"
+        );
+        assert_eq!(
+            so_vencidos[0].situacao.ultimo_recebimento,
+            Some(data(2026, 2, 1))
+        );
+
+        let so_concluidos = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                situacao: Some("concluidos".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(so_concluidos[0].situacao.total, 2);
+        assert_eq!(
+            so_concluidos[0].situacao.ultima_conclusao,
+            Some(data(2026, 4, 20))
+        );
+
+        // A célula do apuratório carrega as mesmas datas do conjunto dela.
+        assert_eq!(
+            so_concluidos[0].celulas[0].situacao.ultima_conclusao,
+            Some(data(2026, 4, 20))
+        );
+    })
+    .await;
+}
+
+/// A ordenação por data, e quem não tem data.
+///
+/// Militar que nunca concluiu nada não é "o que concluiu há mais tempo": é o que
+/// não concluiu. Nas duas direções ele vai para o fim — do contrário a lista
+/// crescente abriria justamente com quem não responde à pergunta.
+#[tokio::test]
+async fn ordenacao_por_data_manda_quem_nao_tem_para_o_fim() {
+    util::com_banco_descartavel("rel_ordenacao", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let cedo = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            data(2026, 1, 5),
+            Some(data(2026, 2, 5)),
+        )
+        .await;
+        let tarde = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "002",
+            data(2026, 6, 5),
+            Some(data(2026, 7, 5)),
+        )
+        .await;
+        // O terceiro militar tem dois apuratórios e nenhuma conclusão: fica em
+        // primeiro por total, e em último por data de conclusão.
+        let aberto_um = processo(&pool, &m, &m.apuratorio, "003", data(2026, 3, 5), None).await;
+        let aberto_dois = processo(&pool, &m, &m.apuratorio, "004", data(2026, 4, 5), None).await;
+
+        designar(&pool, &cedo, &m.pm_um, &m.papel_encarregado).await;
+        designar(&pool, &tarde, &m.pm_dois, &m.papel_encarregado).await;
+        designar(&pool, &aberto_um, &m.pm_tres, &m.papel_encarregado).await;
+        designar(&pool, &aberto_dois, &m.pm_tres, &m.papel_encarregado).await;
+
+        let ordenado = |ordem: &str| {
+            let filtro = DesignacaoMatrizFiltro {
+                ordenacao: Some(ordem.to_string()),
+                ..Default::default()
+            };
+            let pool = pool.clone();
+            async move {
+                repository::designations_matrix(&pool, &filtro)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|l| l.policial_militar_id)
+                    .collect::<Vec<_>>()
+            }
+        };
+
+        // Padrão: por total. O pm_tres tem dois.
+        assert_eq!(ordenado("total").await[0], m.pm_tres);
+        // Valor desconhecido cai no padrão, e não em lista vazia.
+        assert_eq!(ordenado("ordem-que-nao-existe").await[0], m.pm_tres);
+
+        let recente = ordenado("conclusao_recente").await;
+        assert_eq!(recente[0], m.pm_dois, "concluiu em julho");
+        assert_eq!(recente[1], m.pm_um, "concluiu em fevereiro");
+        assert_eq!(recente[2], m.pm_tres, "não concluiu nada: vai para o fim");
+
+        let antiga = ordenado("conclusao_antiga").await;
+        assert_eq!(antiga[0], m.pm_um);
+        assert_eq!(antiga[1], m.pm_dois);
+        assert_eq!(
+            antiga[2], m.pm_tres,
+            "no crescente também vai para o fim, e não para a frente"
+        );
+
+        let receb = ordenado("recebimento_recente").await;
+        assert_eq!(receb[0], m.pm_dois, "recebeu em junho");
+        assert_eq!(receb[1], m.pm_tres, "recebeu em abril");
+        assert_eq!(receb[2], m.pm_um, "recebeu em janeiro");
+    })
+    .await;
+}
+
+/// O recorte por militar e o alternador de vínculo.
+///
+/// São duas perguntas diferentes: "o que ele já tocou" conta a designação
+/// encerrada por substituição, "o que ele tem hoje na mão" não. O padrão
+/// continua sendo a primeira, que é o que a matriz sempre respondeu.
+#[tokio::test]
+async fn matriz_recorta_por_militar_e_por_vinculo_vigente() {
+    util::com_banco_descartavel("rel_matriz_militar", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let p1 = processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 5), None).await;
+        let p2 = processo(&pool, &m, &m.apuratorio, "002", data(2026, 1, 6), None).await;
+        prazo_vencendo_em(&pool, &p1, 30).await;
+        prazo_vencendo_em(&pool, &p2, 30).await;
+
+        designar(&pool, &p1, &m.pm_um, &m.papel_encarregado).await;
+        designar(&pool, &p2, &m.pm_um, &m.papel_encarregado).await;
+        designar(&pool, &p1, &m.pm_dois, &m.papel_escrivao).await;
+
+        let todos = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
+            .await
+            .unwrap();
+        assert_eq!(todos.len(), 2);
+
+        let so_um = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                policial_militar_id: Some(m.pm_um.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(so_um.len(), 1, "o recorte devolve uma linha só");
+        assert_eq!(so_um[0].policial_militar_id, m.pm_um);
+        let na_matriz_inteira = todos
+            .iter()
+            .find(|l| l.policial_militar_id == m.pm_um)
+            .unwrap();
+        assert_eq!(
+            so_um[0].situacao.total, na_matriz_inteira.situacao.total,
+            "recortar num militar não pode mudar os números dele"
+        );
+
+        // O primeiro processo troca de encarregado: a designação do pm_um
+        // termina, mas o trabalho que ele teve continua registrado.
+        sqlx::query(
+            "UPDATE processo_designacoes SET data_fim = data_inicio + 1
+              WHERE processo_id = $1::uuid AND policial_militar_id = $2::uuid",
+        )
+        .bind(&p1)
+        .bind(&m.pm_um)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let historico = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                policial_militar_id: Some(m.pm_um.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            historico[0].situacao.total, 2,
+            "o padrão conta também a designação encerrada"
+        );
+
+        let vigentes = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                policial_militar_id: Some(m.pm_um.clone()),
+                somente_vigentes: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            vigentes[0].situacao.total, 1,
+            "somente_vigentes responde o que ele tem hoje na mão"
+        );
+    })
+    .await;
+}
+
+/// As quebras que saíram de `dashboard_summary` respeitam o escopo — e a série
+/// por ano ignora o filtro de ano de propósito, porque o ano é o eixo dela.
+#[tokio::test]
+async fn quebras_do_acervo_respeitam_o_escopo() {
+    util::com_banco_descartavel("rel_quebras", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let a1 = processo(&pool, &m, &m.apuratorio, "001", data(2026, 1, 5), None).await;
+        processo(&pool, &m, &m.apuratorio, "002", data(2025, 3, 5), None).await;
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "003",
+            data(2026, 4, 5),
+            None,
+        )
+        .await;
+
+        // Leitura de registro existente não filtra `ativo`: o apuratório de 2026
+        // continua contando pela unidade desativada depois.
+        sqlx::query(
+            "UPDATE processos_procedimentos SET unidade_origem_id = $2::uuid WHERE id = $1::uuid",
+        )
+        .bind(&a1)
+        .bind(&m.unidade_deprecada)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE unidades_pm SET ativo = false WHERE id = $1::uuid")
+            .bind(&m.unidade_deprecada)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let unidades = repository::by_unit(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        let deprecada = unidades
+            .iter()
+            .find(|c| c.rotulo == "Unidade Deprecada")
+            .expect("unidade desativada continua rotulando o que já foi registrado");
+        assert_eq!(deprecada.total, 1);
+
+        let unidades_2025 = repository::by_unit(
+            &pool,
+            &ReportFilter {
+                ano: Some(2025),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(unidades_2025.iter().map(|c| c.total).sum::<i64>(), 1);
+
+        let anos = repository::by_year(&pool, &ReportFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(anos.len(), 2);
+        assert_eq!(anos.iter().find(|c| c.rotulo == "2026").unwrap().total, 2);
+
+        // O ano é o eixo da série: filtrá-lo reduziria o gráfico a uma barra.
+        let anos_filtrados = repository::by_year(
+            &pool,
+            &ReportFilter {
+                ano: Some(2025),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            anos_filtrados.len(),
+            2,
+            "by_year ignora filter.ano, e isso é deliberado"
+        );
+
+        // Escopo de apuratórios, esse sim, vale nas duas.
+        let so_livre = repository::by_year(
+            &pool,
+            &ReportFilter {
+                apuratorio_ids: Some(vec![m.apuratorio_livre.clone()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(so_livre.len(), 1);
+        assert_eq!(so_livre[0].rotulo, "2026");
+        assert_eq!(so_livre[0].total, 1);
+
+        // Lista vazia continua significando "todos", não "nenhum".
+        let vazia = repository::by_unit(
+            &pool,
+            &ReportFilter {
+                apuratorio_ids: Some(vec![]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(vazia.iter().map(|c| c.total).sum::<i64>(), 3);
     })
     .await;
 }

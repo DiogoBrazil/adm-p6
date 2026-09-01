@@ -37,13 +37,13 @@ import {
   notificar,
   option,
   paginacao,
+  painelContagem,
   paginaValida,
   podeDescartarFormulario,
   protegerFormulario,
   tabela,
   type Coluna,
 } from "../dom";
-import { painelContagem } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA_LISTA = "/usuarios/lista";

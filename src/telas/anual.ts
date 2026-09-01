@@ -1,121 +1,94 @@
-// Relatório anual.
+// Relatório Anual — o documento.
 //
-// A tela chamava `reports_annual_statistics`, que não existe. O legado gerava
-// um PDF no servidor com ReportLab; o Rust não tem crate de PDF, e não vai ter
-// por causa disto: a página é montada aqui e o "Imprimir / PDF" usa a
-// impressão do sistema. O layout fica onde é fácil ajustar, e não há um
-// segundo desenho do relatório para manter em sincronia.
+// POR QUE ELE VOLTOU A SER UM ARQUIVO PRÓPRIO
 //
-// O relatório se compõe de comandos que já existem — não há comando
-// `annual_*`. A quebra processo × procedimento sai de `tipo_apuratorio_id` no
-// catálogo, não de uma lista de siglas: era `tipo_geral = 'processo'` no SQL
-// do legado, com `tipo_detalhe IN ('PAD','PADS')` para os punidos.
+// Na rodada 29 o Relatório Anual virou um "modo" da tela de Estatísticas, com
+// o ano fixado. Funcionava, e estava errado pelo motivo que a própria rodada
+// existia para corrigir: duas entradas de menu abrindo a **mesma tela** só
+// mudam de título. Quem olhava as duas via a mesma coisa.
+//
+// A diferença entre as duas não é o filtro — é o **gênero**. Estatísticas é
+// uma tela de operar: filtra, alterna gráfico e tabela, compara, explora.
+// O Relatório Anual é uma peça que se imprime, se assina e se arquiva: capa,
+// seções numeradas em ordem fixa, só tabelas, nenhum controle no meio do texto.
+// Um relatório em que o leitor precisa clicar para ver o número não é um
+// relatório.
+//
+// O que as duas compartilham é o **dado**: `carregarDadosDoEscopo`,
+// `tabelaContagem` e `tabelaSituacao` vêm de `estatisticas.ts`. Duas cargas
+// separadas divergiriam no dia em que uma delas ganhasse um filtro — e foi
+// exatamente assim que a Visão Geral passou a discordar do Painel.
+//
+// O escopo aqui é **o ano inteiro**, sem recorte por espécie. Um relatório
+// anual com metade das espécies não é o relatório anual do 7º BPM; quem quer
+// recortar tem a tela de Estatísticas ao lado.
 
-import { call, type ContagemRotulada, type StatusPorApuratorio } from "../api";
+import { call } from "../api";
+import { barraDeExportacao, escapeHtml, formatarData, ligarExportacao, option } from "../dom";
 import {
-  cartaoAnalitico,
-  graficoBarras,
-  graficoDonut,
-  graficoSituacao,
-  kpiAnalitico,
-  montarCartoesAnaliticos,
-  type GraficoSpec,
-} from "../graficos";
-import { barraDeExportacao, escapeHtml, ligarExportacao, option, tabela } from "../dom";
+  carregarDadosDoEscopo,
+  tabelaContagem,
+  tabelaEnquadramento,
+  tabelaSituacao,
+  totaisDoEscopo,
+} from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/estatisticas/anuais";
 
+const brasaoUrl = new URL("../../src-tauri/icons/icon.png", import.meta.url).href;
+
 let anoSelecionado = new Date().getFullYear();
 
-/** Soma um campo da situação por apuratório. */
-const somar = (linhas: StatusPorApuratorio[], campo: "em_andamento" | "concluidos" | "total") =>
-  linhas.reduce((acc, l) => acc + l[campo], 0);
-
-function tabelaContagem(itens: ContagemRotulada[], rotulo: string): string {
-  return tabela(
-    [
-      { rotulo, largura: 72, truncar: true },
-      { rotulo: "Quantidade", largura: 28, alinhamento: "centro", nowrap: true },
-    ],
-    itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
-    "Nada registrado neste escopo.",
-    { listagem: true },
-  );
+/** Uma seção numerada do documento. O número não é decorativo: é referência. */
+function secao(numero: number, titulo: string, corpo: string, nota = ""): string {
+  return `
+    <section class="relatorio-secao">
+      <h2><span class="relatorio-secao__numero">${numero}</span>${escapeHtml(titulo)}</h2>
+      ${nota ? `<p class="hint">${escapeHtml(nota)}</p>` : ""}
+      ${corpo}
+    </section>`;
 }
 
 export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
+  const falhar = (mensagem: string) =>
+    ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
+      <p class="error">${escapeHtml(mensagem)}</p></section>`);
+
   const anosResposta = await call("reports_available_years");
   if (!anosResposta.ok) {
-    ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
-      <p class="error">${escapeHtml(anosResposta.error ?? "Não foi possível carregar os anos disponíveis.")}</p></section>`);
+    falhar(anosResposta.error ?? "Não foi possível carregar os anos disponíveis.");
     return;
   }
   const anos = anosResposta.data ?? [];
-  if (anos.length && !anos.includes(anoSelecionado)) anoSelecionado = anos[0] ?? anoSelecionado;
+  // O ano é obrigatório: se o escolhido não existe mais no acervo, cai no mais
+  // recente em vez de virar "todos" em silêncio.
+  if (anos.length && !anos.includes(anoSelecionado)) anoSelecionado = anos[0]!;
   const anosDisponiveis = anos.length ? anos : [anoSelecionado];
 
-  const filter = { ano: anoSelecionado, apuratorio_ids: [] as string[] };
-  const respostas = await Promise.all([
-    call("reports_status_by_apuratorio", { filter }),
-    call("reports_by_solution", { filter }),
-    call("reports_by_evidence_category", { filter }),
-    call("reports_by_nature", { filter }),
-    call("reports_by_responsible", { filter }),
-  ] as const);
-  const falha = respostas.find((resposta) => !resposta.ok);
-  if (falha) {
-    ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
-      <p class="error">${escapeHtml(falha.error ?? "Não foi possível carregar o relatório anual.")}</p></section>`);
+  const resultado = await carregarDadosDoEscopo({ ano: anoSelecionado, apuratorio_ids: [] });
+  if ("erro" in resultado) {
+    falhar(resultado.erro);
     return;
   }
-  const situacao = respostas[0].data ?? [];
-  const solucoes = respostas[1].data;
-  const categorias = respostas[2].data ?? [];
-  const naturezas = respostas[3].data ?? [];
-  const responsaveis = respostas[4].data ?? [];
+  const d = resultado.dados;
+  const totais = totaisDoEscopo(d.situacao);
+  const hoje = formatarData(new Date().toISOString().slice(0, 10));
 
-  const decididas: ContagemRotulada[] = solucoes?.decididas ?? [];
-  const situacaoGrafico = situacao.map((item) => ({
-    sigla: item.sigla,
-    nome: item.nome,
-    tipo: item.tipo_apuratorio_nome,
-    emAndamento: item.em_andamento,
-    concluidos: item.concluidos,
-  }));
-  const specs: GraficoSpec[] = [
-    graficoSituacao("anual-situacao", situacaoGrafico),
-    graficoDonut("anual-decisoes", decididas),
-    graficoDonut("anual-sugestoes", solucoes?.sugeridas ?? []),
-    graficoBarras("anual-categorias", categorias, { limitar: true }),
-    graficoBarras("anual-naturezas", naturezas, { limitar: true }),
-    graficoBarras("anual-responsaveis", responsaveis, { limitar: true }),
-  ];
-  const tabelaSituacao = tabela(
-    [
-      { rotulo: "Apuratório", largura: 30, truncar: true },
-      { rotulo: "Tipo", largura: 24, truncar: true },
-      { rotulo: "Total", largura: 14, alinhamento: "centro", nowrap: true },
-      { rotulo: "Em andamento", largura: 18, alinhamento: "centro", nowrap: true },
-      { rotulo: "Concluídos", largura: 14, alinhamento: "centro", nowrap: true },
-    ],
-    situacao.map((item) => [
-      `${item.sigla} — ${item.nome}`,
-      item.tipo_apuratorio_nome,
-      { texto: String(item.total), numerica: true },
-      { texto: String(item.em_andamento), numerica: true },
-      { texto: String(item.concluidos), numerica: true },
-    ]),
-    "Nada instaurado neste ano.",
-    { listagem: true },
-  );
+  const resumo = `
+    <dl class="relatorio-resumo">
+      <div><dt>Instaurados no ano</dt><dd>${totais.total}</dd></div>
+      <div><dt>Ainda em andamento</dt><dd>${totais.emAndamento}</dd></div>
+      <div><dt>Concluídos</dt><dd>${totais.concluidos}</dd></div>
+      <div><dt>Espécies com registros</dt><dd>${totais.especies}</dd></div>
+    </dl>`;
 
   ctx.shell(`
-    <section class="panel panel--analytics relatorio">
+    <section class="panel relatorio-anual">
       <div class="page-head">
         <div>
           <h1>Relatório Anual — ${escapeHtml(anoSelecionado)}</h1>
-          <p>Seção de Justiça e Disciplina · 7º BPM</p>
+          <p>Documento de encerramento do exercício. Para explorar os dados, use Estatísticas dos Apuratórios.</p>
         </div>
         <div class="page-head-right">
           <form id="filtro-ano" class="filtro-bar">
@@ -124,31 +97,56 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
                 ${anosDisponiveis.map((a) => option(String(a), String(a), a === anoSelecionado)).join("")}
               </select>
             </label>
-            <button type="submit">Ver</button>
+            <button type="submit">Emitir</button>
           </form>
           ${barraDeExportacao({ imprimir: true })}
         </div>
       </div>
 
-      <div class="analytics-kpis">
-        ${kpiAnalitico(somar(situacao, "total"), "Instaurados no ano")}
-        ${kpiAnalitico(somar(situacao, "em_andamento"), "Ainda em andamento", { tom: "andamento" })}
-        ${kpiAnalitico(somar(situacao, "concluidos"), "Concluídos", { tom: "sucesso" })}
-        ${kpiAnalitico(situacao.length, "Espécies com registros")}
-      </div>
+      <header class="relatorio-capa">
+        <img src="${brasaoUrl}" alt="" />
+        <span class="relatorio-capa__eyebrow">Polícia Militar do Estado de Rondônia</span>
+        <strong>Relatório Anual</strong>
+        <span class="relatorio-capa__ano">${escapeHtml(anoSelecionado)}</span>
+        <span class="relatorio-capa__orgao">7º Batalhão de Polícia Militar<br />Seção de Justiça e Disciplina</span>
+        <span class="relatorio-capa__emissao">Emitido em ${escapeHtml(hoje)}</span>
+      </header>
 
-      <div class="analytics-grid">
-        ${cartaoAnalitico({ id: "anual-situacao", titulo: "Procedimentos e processos", descricao: "Situação por espécie e tipo de apuratório no ano selecionado.", grafico: specs[0]!, tabela: tabelaSituacao, classe: "analytics-card--wide" })}
-        ${cartaoAnalitico({ id: "anual-decisoes", titulo: "Soluções decididas pela autoridade", grafico: specs[1]!, tabela: tabelaContagem(decididas, "Solução") })}
-        ${cartaoAnalitico({ id: "anual-sugestoes", titulo: "Soluções sugeridas pelo encarregado", grafico: specs[2]!, tabela: tabelaContagem(solucoes?.sugeridas ?? [], "Solução") })}
-        ${cartaoAnalitico({ id: "anual-categorias", titulo: "Categorias de indício", grafico: specs[3]!, tabela: tabelaContagem(categorias, "Categoria"), limitado: categorias.length > 12 })}
-        ${cartaoAnalitico({ id: "anual-naturezas", titulo: "Natureza geral do fato", grafico: specs[4]!, tabela: tabelaContagem(naturezas, "Natureza"), limitado: naturezas.length > 12 })}
-        ${cartaoAnalitico({ id: "anual-responsaveis", titulo: "Responsabilidade vigente", descricao: "Apuratórios do ano atribuídos ao responsável vigente.", grafico: specs[5]!, tabela: tabelaContagem(responsaveis, "Responsável"), limitado: responsaveis.length > 12, classe: "analytics-card--wide" })}
-      </div>
+      ${secao(1, "Resumo do exercício", resumo)}
+      ${secao(
+        2,
+        "Processos e procedimentos por espécie",
+        tabelaSituacao(d.situacao),
+        "Situação derivada da data de conclusão registrada.",
+      )}
+      ${secao(3, "Unidades de origem", tabelaContagem(d.unidades, "Unidade"))}
+      ${secao(4, "Natureza geral do fato", tabelaContagem(d.naturezas, "Natureza"))}
+      ${secao(5, "Categorias de indício", tabelaContagem(d.categorias, "Categoria"))}
+      ${secao(
+        6,
+        "Soluções sugeridas pelo encarregado",
+        tabelaContagem(d.sugeridas, "Solução"),
+      )}
+      ${secao(
+        7,
+        "Soluções decididas pela autoridade",
+        tabelaContagem(d.decididas, "Solução"),
+      )}
+      ${secao(
+        8,
+        "Responsabilidade vigente",
+        tabelaContagem(d.responsaveis, "Responsável"),
+        "Apuratórios do ano atribuídos ao responsável vigente; não é o histórico de designações.",
+      )}
+      ${secao(9, "Transgressões do RDPM", tabelaEnquadramento(d.transgressoes, "Artigo / inciso"))}
+      ${secao(10, "Infrações do Estatuto", tabelaEnquadramento(d.estatuto, "Artigo / inciso"))}
+      ${secao(11, "Infrações penais", tabelaEnquadramento(d.penais, "Dispositivo / artigo"))}
+
+      <footer class="relatorio-fecho">
+        <p>Seção de Justiça e Disciplina · 7º BPM · Exercício de ${escapeHtml(anoSelecionado)}</p>
+      </footer>
     </section>
   `);
-
-  montarCartoesAnaliticos(specs);
 
   document.querySelector<HTMLFormElement>("#filtro-ano")?.addEventListener("submit", (evento) => {
     evento.preventDefault();
@@ -157,5 +155,7 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
     void renderRelatorioAnual(ctx);
   });
 
+  // Sem CSV: o documento é a saída. Quem quer a planilha usa Estatísticas, que
+  // exporta as mesmas quebras com o escopo que o operador escolher.
   ligarExportacao(undefined, undefined, { paisagem: true });
 }
