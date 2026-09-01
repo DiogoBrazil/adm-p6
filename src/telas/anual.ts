@@ -12,8 +12,16 @@
 // do legado, com `tipo_detalhe IN ('PAD','PADS')` para os punidos.
 
 import { call, type ContagemRotulada, type StatusPorApuratorio } from "../api";
+import {
+  cartaoAnalitico,
+  graficoBarras,
+  graficoDonut,
+  graficoSituacao,
+  kpiAnalitico,
+  montarCartoesAnaliticos,
+  type GraficoSpec,
+} from "../graficos";
 import { barraDeExportacao, escapeHtml, ligarExportacao, option, tabela } from "../dom";
-import { painelContagem } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/estatisticas/anuais";
@@ -24,70 +32,86 @@ let anoSelecionado = new Date().getFullYear();
 const somar = (linhas: StatusPorApuratorio[], campo: "em_andamento" | "concluidos" | "total") =>
   linhas.reduce((acc, l) => acc + l[campo], 0);
 
-function tabelaPorTipo(linhas: StatusPorApuratorio[]): string {
+function tabelaContagem(itens: ContagemRotulada[], rotulo: string): string {
   return tabela(
     [
-      { rotulo: "Apuratório", largura: 46, truncar: true },
-      { rotulo: "Total", largura: 18, alinhamento: "centro", nowrap: true },
-      { rotulo: "Em andamento", largura: 18, alinhamento: "centro", nowrap: true },
-      { rotulo: "Concluídos", largura: 18, alinhamento: "centro", nowrap: true },
+      { rotulo, largura: 72, truncar: true },
+      { rotulo: "Quantidade", largura: 28, alinhamento: "centro", nowrap: true },
     ],
-    linhas.map((l) => [
-      `${l.sigla} — ${l.nome}`,
-      { texto: String(l.total), numerica: true },
-      { texto: String(l.em_andamento), numerica: true },
-      { texto: String(l.concluidos), numerica: true },
-    ]),
-    "Nada instaurado neste ano.",
+    itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
+    "Nada registrado neste escopo.",
     { listagem: true },
   );
 }
 
-/** Um bloco por tipo de apuratório, na ordem em que o backend já os agrupa. */
-function blocosPorTipo(situacao: StatusPorApuratorio[]): string {
-  const tipos = new Map<string, { nome: string; linhas: StatusPorApuratorio[] }>();
-  for (const linha of situacao) {
-    const bloco = tipos.get(linha.tipo_apuratorio_id) ?? {
-      nome: linha.tipo_apuratorio_nome,
-      linhas: [],
-    };
-    bloco.linhas.push(linha);
-    tipos.set(linha.tipo_apuratorio_id, bloco);
-  }
-  if (!tipos.size) return `<p class="empty">Nada instaurado neste ano.</p>`;
-  return [...tipos.values()]
-    .map(
-      (bloco) => `<section class="stat-panel">
-        <h2>${escapeHtml(bloco.nome)} — ${somar(bloco.linhas, "total")} no ano</h2>
-        ${tabelaPorTipo(bloco.linhas)}
-      </section>`,
-    )
-    .join("");
-}
-
 export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
-  const anos = (await call("reports_available_years")).data ?? [];
+  const anosResposta = await call("reports_available_years");
+  if (!anosResposta.ok) {
+    ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
+      <p class="error">${escapeHtml(anosResposta.error ?? "Não foi possível carregar os anos disponíveis.")}</p></section>`);
+    return;
+  }
+  const anos = anosResposta.data ?? [];
   if (anos.length && !anos.includes(anoSelecionado)) anoSelecionado = anos[0] ?? anoSelecionado;
   const anosDisponiveis = anos.length ? anos : [anoSelecionado];
 
   const filter = { ano: anoSelecionado, apuratorio_ids: [] as string[] };
-  const [situacao, solucoes, categorias, naturezas, responsaveis] = await Promise.all([
-    call("reports_status_by_apuratorio", { filter }).then((r) => r.data ?? []),
-    call("reports_by_solution", { filter }).then((r) => r.data),
-    call("reports_by_evidence_category", { filter }).then((r) => r.data ?? []),
-    call("reports_by_nature", { filter }).then((r) => r.data ?? []),
-    call("reports_by_responsible", { filter }).then((r) => r.data ?? []),
-  ]);
-
-  const cartao = (valor: number | string, rotulo: string, alerta = false) =>
-    `<div class="stat-card${alerta ? " stat-card--alert" : ""}">
-       <span class="stat-value">${escapeHtml(valor)}</span><span>${escapeHtml(rotulo)}</span>
-     </div>`;
+  const respostas = await Promise.all([
+    call("reports_status_by_apuratorio", { filter }),
+    call("reports_by_solution", { filter }),
+    call("reports_by_evidence_category", { filter }),
+    call("reports_by_nature", { filter }),
+    call("reports_by_responsible", { filter }),
+  ] as const);
+  const falha = respostas.find((resposta) => !resposta.ok);
+  if (falha) {
+    ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
+      <p class="error">${escapeHtml(falha.error ?? "Não foi possível carregar o relatório anual.")}</p></section>`);
+    return;
+  }
+  const situacao = respostas[0].data ?? [];
+  const solucoes = respostas[1].data;
+  const categorias = respostas[2].data ?? [];
+  const naturezas = respostas[3].data ?? [];
+  const responsaveis = respostas[4].data ?? [];
 
   const decididas: ContagemRotulada[] = solucoes?.decididas ?? [];
+  const situacaoGrafico = situacao.map((item) => ({
+    sigla: item.sigla,
+    nome: item.nome,
+    tipo: item.tipo_apuratorio_nome,
+    emAndamento: item.em_andamento,
+    concluidos: item.concluidos,
+  }));
+  const specs: GraficoSpec[] = [
+    graficoSituacao("anual-situacao", situacaoGrafico),
+    graficoDonut("anual-decisoes", decididas),
+    graficoDonut("anual-sugestoes", solucoes?.sugeridas ?? []),
+    graficoBarras("anual-categorias", categorias, { limitar: true }),
+    graficoBarras("anual-naturezas", naturezas, { limitar: true }),
+    graficoBarras("anual-responsaveis", responsaveis, { limitar: true }),
+  ];
+  const tabelaSituacao = tabela(
+    [
+      { rotulo: "Apuratório", largura: 30, truncar: true },
+      { rotulo: "Tipo", largura: 24, truncar: true },
+      { rotulo: "Total", largura: 14, alinhamento: "centro", nowrap: true },
+      { rotulo: "Em andamento", largura: 18, alinhamento: "centro", nowrap: true },
+      { rotulo: "Concluídos", largura: 14, alinhamento: "centro", nowrap: true },
+    ],
+    situacao.map((item) => [
+      `${item.sigla} — ${item.nome}`,
+      item.tipo_apuratorio_nome,
+      { texto: String(item.total), numerica: true },
+      { texto: String(item.em_andamento), numerica: true },
+      { texto: String(item.concluidos), numerica: true },
+    ]),
+    "Nada instaurado neste ano.",
+    { listagem: true },
+  );
 
   ctx.shell(`
-    <section class="panel relatorio">
+    <section class="panel panel--analytics relatorio">
       <div class="page-head">
         <div>
           <h1>Relatório Anual — ${escapeHtml(anoSelecionado)}</h1>
@@ -106,24 +130,25 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
         </div>
       </div>
 
-      <div class="stat-row">
-        ${cartao(somar(situacao, "total"), "instaurados no ano")}
-        ${cartao(somar(situacao, "em_andamento"), "ainda em andamento")}
-        ${cartao(somar(situacao, "concluidos"), "concluídos")}
+      <div class="analytics-kpis">
+        ${kpiAnalitico(somar(situacao, "total"), "Instaurados no ano")}
+        ${kpiAnalitico(somar(situacao, "em_andamento"), "Ainda em andamento", { tom: "andamento" })}
+        ${kpiAnalitico(somar(situacao, "concluidos"), "Concluídos", { tom: "sucesso" })}
+        ${kpiAnalitico(situacao.length, "Espécies com registros")}
       </div>
 
-      ${blocosPorTipo(situacao)}
-
-      <div class="stat-grid">
-        ${painelContagem("Soluções decididas pela autoridade", decididas, "Solução")}
-        ${painelContagem("Soluções sugeridas pelo encarregado", solucoes?.sugeridas ?? [], "Solução")}
-        ${painelContagem("Envolvidos por categoria de indício", categorias, "Categoria")}
-        ${painelContagem("Por natureza geral do fato", naturezas, "Natureza")}
+      <div class="analytics-grid">
+        ${cartaoAnalitico({ id: "anual-situacao", titulo: "Procedimentos e processos", descricao: "Situação por espécie e tipo de apuratório no ano selecionado.", grafico: specs[0]!, tabela: tabelaSituacao, classe: "analytics-card--wide" })}
+        ${cartaoAnalitico({ id: "anual-decisoes", titulo: "Soluções decididas pela autoridade", grafico: specs[1]!, tabela: tabelaContagem(decididas, "Solução") })}
+        ${cartaoAnalitico({ id: "anual-sugestoes", titulo: "Soluções sugeridas pelo encarregado", grafico: specs[2]!, tabela: tabelaContagem(solucoes?.sugeridas ?? [], "Solução") })}
+        ${cartaoAnalitico({ id: "anual-categorias", titulo: "Categorias de indício", grafico: specs[3]!, tabela: tabelaContagem(categorias, "Categoria"), limitado: categorias.length > 12 })}
+        ${cartaoAnalitico({ id: "anual-naturezas", titulo: "Natureza geral do fato", grafico: specs[4]!, tabela: tabelaContagem(naturezas, "Natureza"), limitado: naturezas.length > 12 })}
+        ${cartaoAnalitico({ id: "anual-responsaveis", titulo: "Responsabilidade vigente", descricao: "Apuratórios do ano atribuídos ao responsável vigente.", grafico: specs[5]!, tabela: tabelaContagem(responsaveis, "Responsável"), limitado: responsaveis.length > 12, classe: "analytics-card--wide" })}
       </div>
-
-      ${painelContagem("Apuratórios por responsável vigente", responsaveis, "Responsável")}
     </section>
   `);
+
+  montarCartoesAnaliticos(specs);
 
   document.querySelector<HTMLFormElement>("#filtro-ano")?.addEventListener("submit", (evento) => {
     evento.preventDefault();
@@ -132,5 +157,5 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
     void renderRelatorioAnual(ctx);
   });
 
-  ligarExportacao();
+  ligarExportacao(undefined, undefined, { paisagem: true });
 }

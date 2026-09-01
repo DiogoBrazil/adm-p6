@@ -13,6 +13,13 @@
 
 import { call, type DeadlineReportFilter, type DeadlineReportItem } from "../api";
 import {
+  cartaoAnalitico,
+  graficoPrazos,
+  kpiAnalitico,
+  montarCartoesAnaliticos,
+} from "../graficos";
+import { faixasDePrazo } from "../graficos/dados";
+import {
   avisarSeCortado,
   barraDeExportacao,
   baixarCsv,
@@ -103,11 +110,22 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
   const pagina = (filtro: DeadlineReportFilter, page: number, perPage = ITENS_POR_PAGINA) =>
     call("deadlines_report", { filter: { ...filtro, page, per_page: perPage } });
 
-  const [resumo, aVencer, vencidos] = await Promise.all([
-    call("deadlines_dashboard", { diasJanela: janelaDias }).then((r) => r.data),
-    pagina(filtroProximos(), paginas.proximos).then((r) => r.data),
-    pagina(FILTRO_VENCIDOS, paginas.vencidos).then((r) => r.data),
+  const [resumoResposta, aVencerResposta, vencidosResposta] = await Promise.all([
+    call("deadlines_dashboard", { diasJanela: janelaDias }),
+    pagina(filtroProximos(), paginas.proximos),
+    pagina(FILTRO_VENCIDOS, paginas.vencidos),
   ]);
+  const falha = [resumoResposta, aVencerResposta, vencidosResposta].find(
+    (resposta) => !resposta.ok,
+  );
+  if (falha) {
+    ctx.shell(`<section class="panel"><h1>Prazos</h1>
+      <p class="error">${escapeHtml(falha.error ?? "Não foi possível carregar os prazos.")}</p></section>`);
+    return;
+  }
+  const resumo = resumoResposta.data;
+  const aVencer = aVencerResposta.data;
+  const vencidos = vencidosResposta.data;
 
   const itensVencidos = vencidos?.items ?? [];
   const itensAVencer = aVencer?.items ?? [];
@@ -126,8 +144,20 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     return renderPrazos(ctx);
   }
 
+  const faixas = faixasDePrazo(resumo?.total ?? 0, resumo?.vencidos ?? 0, resumo?.proximos ?? 0);
+  const specPrazos = graficoPrazos("prazos-criticidade", faixas);
+  const tabelaCriticidade = tabela(
+    [
+      { rotulo: "Criticidade", largura: 68 },
+      { rotulo: "Quantidade", largura: 32, alinhamento: "centro", nowrap: true },
+    ],
+    faixas.map((faixa) => [faixa.rotulo, { texto: String(faixa.total), numerica: true }]),
+    "Nenhum prazo vigente.",
+    { listagem: true },
+  );
+
   ctx.shell(`
-    <section class="panel">
+    <section class="panel panel--analytics">
       <div class="page-head">
         <div><h1>Prazos</h1><p>Apuratórios em andamento, pelo prazo vigente.</p></div>
         <div class="page-head-right">
@@ -142,10 +172,25 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         </div>
       </div>
 
-      <div class="stat-row">
-        <div class="stat-card"><span class="stat-value">${resumo?.total ?? 0}</span><span>com prazo</span></div>
-        <div class="stat-card stat-card--alert"><span class="stat-value">${resumo?.vencidos ?? 0}</span><span>vencidos</span></div>
-        <div class="stat-card"><span class="stat-value">${resumo?.proximos ?? 0}</span><span>vencem em ${janelaDias} dias</span></div>
+      <div class="analytics-kpis">
+        ${kpiAnalitico(resumo?.total ?? 0, "Com prazo vigente")}
+        ${kpiAnalitico(resumo?.vencidos ?? 0, "Vencidos", {
+          tom: resumo?.vencidos ? "alerta" : "sucesso",
+          detalhe: resumo?.vencidos ? "Fora do prazo" : "Nenhuma pendência crítica",
+        })}
+        ${kpiAnalitico(resumo?.proximos ?? 0, `Vencem em ${janelaDias} dias`, { tom: "andamento" })}
+        ${kpiAnalitico(faixas[2]?.total ?? 0, "Regulares", { tom: "sucesso" })}
+      </div>
+
+      <div class="analytics-grid">
+        ${cartaoAnalitico({
+          id: "prazos-criticidade",
+          titulo: "Criticidade dos prazos",
+          descricao: `Vencidos, a vencer em até ${janelaDias} dias e regulares após essa janela.`,
+          grafico: specPrazos,
+          tabela: tabelaCriticidade,
+          classe: "analytics-card--wide",
+        })}
       </div>
 
       <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
@@ -158,6 +203,8 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
       ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
     </section>
   `);
+
+  montarCartoesAnaliticos([specPrazos]);
 
   ligarPaginacao("vencidos", paginas.vencidos, (nova) => {
     paginas.vencidos = nova;
@@ -225,5 +272,6 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
         ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.", { listagem: true })}`;
     },
+    { paisagem: true },
   );
 }

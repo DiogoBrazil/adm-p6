@@ -7,6 +7,10 @@
 // largura calculada sai em `data-*` e é aplicada pela CSSOM.
 
 import { call } from "./api";
+import {
+  prepararGraficosParaImpressao,
+  restaurarGraficosDepoisDaImpressao,
+} from "./graficos";
 import TomSelect from "tom-select";
 
 /** Escapa para interpolação em corpo de elemento e em valor de atributo. */
@@ -883,6 +887,7 @@ export function avisarSeCortado(cortado: boolean): void {
 export function ligarExportacao(
   aoExportar?: () => unknown | Promise<unknown>,
   aoImprimir?: () => Promise<string>,
+  opcoes: { paisagem?: boolean } = {},
 ): void {
   const imprimir = document.querySelector<HTMLButtonElement>("#btn-imprimir");
   if (imprimir && aoImprimir) {
@@ -892,7 +897,12 @@ export function ligarExportacao(
       imprimir.textContent = "Preparando…";
       const bloco = document.createElement("div");
       bloco.className = "bloco-impressao";
-      const naTela = document.querySelectorAll<HTMLElement>(".table-wrap, .paginacao");
+      // A tabela de dentro de um cartão analítico não é a listagem paginada que
+      // o bloco completo vem substituir: escondê-la imprimia o cartão em branco
+      // sempre que o usuário tivesse escolhido ver a tabela em vez do gráfico.
+      const naTela = [
+        ...document.querySelectorAll<HTMLElement>(".table-wrap, .paginacao"),
+      ].filter((elemento) => !elemento.closest("[data-analytics-view]"));
       try {
         bloco.innerHTML = await aoImprimir();
         aplicarLarguras(bloco);
@@ -902,7 +912,7 @@ export function ligarExportacao(
         if (!destino) throw new Error("sem área principal para imprimir");
         destino.append(bloco);
         naTela.forEach((elemento) => elemento.classList.add("ocultar-na-impressao"));
-        window.print();
+        await abrirImpressao(opcoes.paisagem);
       } catch (erro) {
         // Sem isto a falha vira rejeição não tratada: o botão volta ao normal e
         // nada explica por que o diálogo de impressão não abriu.
@@ -918,7 +928,7 @@ export function ligarExportacao(
       }
     });
   } else {
-    imprimir?.addEventListener("click", () => window.print());
+    imprimir?.addEventListener("click", () => void abrirImpressao(opcoes.paisagem));
   }
 
   const botao = document.querySelector<HTMLButtonElement>("#btn-csv");
@@ -934,4 +944,45 @@ export function ligarExportacao(
       botao.textContent = rotulo;
     }
   });
+}
+
+/**
+ * Prepara os canvases e, nos relatórios analíticos, pede A4 paisagem também
+ * ao page setup nativo. O WebKitGTK ignora `@page size`, por isso o comando
+ * Tauri continua necessário; Chromium/WebView2 usam a regra CSSOM no fallback.
+ */
+async function abrirImpressao(paisagem = false): Promise<void> {
+  let folha: CSSStyleSheet | undefined;
+  // A classe existe só pelo quadro em que a caixa do gráfico fica maior que o
+  // painel; sem ela, uma janela estreita mostra a barra de rolagem aparecer e
+  // sumir antes de o diálogo abrir.
+  document.body.classList.add("preparando-impressao");
+  try {
+    if (paisagem) {
+      folha = new CSSStyleSheet();
+      folha.insertRule("@page { size: A4 landscape; margin: 12mm; }");
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, folha];
+    }
+    prepararGraficosParaImpressao();
+    // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
+    // antes de o documento virar papel. O canvas já foi redesenhado pelo
+    // `resize()`, que é síncrono; o layout ao redor dele não.
+    await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+    if (paisagem) {
+      const resposta = await call("print_landscape");
+      if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
+      if (!resposta.data) window.print();
+    } else {
+      window.print();
+    }
+  } catch (erro) {
+    notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
+  } finally {
+    if (folha) {
+      const atual = folha;
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== atual);
+    }
+    restaurarGraficosDepoisDaImpressao();
+    document.body.classList.remove("preparando-impressao");
+  }
 }

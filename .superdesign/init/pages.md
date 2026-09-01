@@ -7,6 +7,7 @@ Dependencies:
   - `src/types.ts`
 - `src/dom.ts`
   - `src/api.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -18,6 +19,7 @@ Dependencies:
 - `src/api.ts`
   - `src/types.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -28,10 +30,12 @@ Dependencies:
 - `src/api.ts`
   - `src/types.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/telas/indicios.ts`
   - `src/api.ts`
   - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/main.ts`
   - `src/styles.css`
 
@@ -39,8 +43,10 @@ Dependencies:
 Entry: `src/telas/dashboard.ts`
 Dependencies:
 - `src/api.ts`
+- `src/graficos/index.ts`
+- `src/graficos/dados.ts`
 - `src/dom.ts`
-- `src/telas/estatisticas.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -49,7 +55,10 @@ Dependencies:
 Entry: `src/telas/prazos.ts`
 Dependencies:
 - `src/api.ts`
+- `src/graficos/index.ts`
+- `src/graficos/dados.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -58,8 +67,9 @@ Dependencies:
 Entry: `src/telas/anual.ts`
 Dependencies:
 - `src/api.ts`
+- `src/graficos/index.ts`
 - `src/dom.ts`
-- `src/telas/estatisticas.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -68,7 +78,9 @@ Dependencies:
 Entry: `src/telas/estatisticas.ts`
 Dependencies:
 - `src/api.ts`
+- `src/graficos/index.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -77,7 +89,9 @@ Dependencies:
 Entry: `src/telas/encarregados.ts`
 Dependencies:
 - `src/api.ts`
+- `src/graficos/index.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`
@@ -87,6 +101,7 @@ Entry: `src/telas/usuarios.ts`
 Dependencies:
 - `src/api.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/estatisticas.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
@@ -97,6 +112,7 @@ Entry: `src/telas/auditoria.ts`
 Dependencies:
 - `src/api.ts`
 - `src/dom.ts`
+  - `src/graficos/index.ts`
 - `src/telas/catalogos.ts`
 - `src/main.ts`
   - `src/styles.css`

@@ -1,5 +1,9 @@
 # Tema
 
+> **Instantâneo, não fonte de verdade.** Este arquivo foi gerado colando trechos do
+> código, e o código andou desde então. Confira sempre no arquivo citado antes de se
+> apoiar num bloco daqui; a fonte de verdade do projeto é o `GUIA.md`.
+
 ## Resumo compacto de tokens
 
 - Fonte: Segoe UI, Tahoma, Geneva, Verdana, sans-serif.
@@ -2820,3 +2824,11 @@ tr.atrasado {
 
 ```
 
+## O que este dump não contém
+
+O bloco **Painéis analíticos** de `src/styles.css` (rodada 28) não foi capturado aqui:
+`analytics-kpi*`, `analytics-card*`, `analytics-toggle*`, `analytics-chart`,
+`analytics-tooltip`, `analytics-empty`, `analytics-filter-summary`, `filtro-chip-check`
+e as regras de impressão que os acompanham. As classes `stat-card` / `stat-grid` abaixo
+continuam válidas, mas deixaram de ser o indicador das seis telas de relatório — ver
+`extractable-components.md`.

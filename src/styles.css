@@ -999,6 +999,457 @@ tr.atrasado {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Painéis analíticos
+   Componentes próprios para visualizações; o escopo evita alterar cadastros.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.panel--analytics {
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(247 250 251 / 96%)),
+    var(--surface);
+}
+
+.analytics-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 14px;
+  margin: 0 0 20px;
+}
+
+.analytics-kpi {
+  position: relative;
+  display: grid;
+  align-content: space-between;
+  min-height: 126px;
+  padding: 17px 18px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-kpi::after {
+  position: absolute;
+  right: -26px;
+  bottom: -40px;
+  width: 118px;
+  height: 118px;
+  content: "";
+  background: var(--kpi-wash, rgb(23 96 95 / 7%));
+  border-radius: 50%;
+}
+
+.analytics-kpi__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.analytics-kpi__eyebrow i {
+  width: 8px;
+  height: 8px;
+  background: var(--kpi-color, var(--brand-700));
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--kpi-wash, rgb(23 96 95 / 9%));
+}
+
+.analytics-kpi strong {
+  position: relative;
+  z-index: 1;
+  color: #15384d;
+  font-size: clamp(1.9rem, 3vw, 2.65rem);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.analytics-kpi__detail {
+  position: relative;
+  z-index: 1;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.analytics-kpi--andamento {
+  --kpi-color: var(--gold-500);
+  --kpi-wash: rgb(189 139 24 / 10%);
+}
+
+.analytics-kpi--sucesso {
+  --kpi-color: var(--success);
+  --kpi-wash: rgb(24 121 78 / 9%);
+}
+
+.analytics-kpi--alerta {
+  --kpi-color: var(--danger);
+  --kpi-wash: rgb(180 35 24 / 10%);
+  border-color: #efc3bf;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.analytics-card {
+  min-width: 0;
+  padding: 17px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-card--wide {
+  grid-column: 1 / -1;
+}
+
+.analytics-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 45px;
+  margin-bottom: 14px;
+}
+
+.analytics-card__header h2 {
+  margin: 0;
+  color: #183a50;
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: -0.012em;
+}
+
+.analytics-card__description {
+  max-width: 72ch;
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.79rem;
+  line-height: 1.4;
+}
+
+.analytics-card__tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analytics-card__note {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.analytics-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  padding: 3px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+button.analytics-toggle__button {
+  min-height: 28px;
+  padding: 4px 9px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  box-shadow: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+button.analytics-toggle__button:hover:not(:disabled) {
+  color: var(--brand-700);
+  background: var(--brand-50);
+}
+
+button.analytics-toggle__button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--brand-700);
+  box-shadow: 0 1px 3px rgb(15 35 55 / 16%);
+}
+
+.analytics-view[hidden] {
+  display: none !important;
+}
+
+.analytics-chart {
+  position: relative;
+  width: 100%;
+  min-height: 180px;
+}
+
+.analytics-chart canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.analytics-tooltip {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  max-width: min(330px, calc(100% - 20px));
+  padding: 10px 12px;
+  color: #f8fbfd;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  background: rgb(10 36 56 / 96%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 20 35 / 28%);
+  transform: translate(-50%, calc(-100% - 12px));
+  transition: opacity 100ms ease;
+}
+
+.analytics-tooltip.is-visible {
+  visibility: visible;
+  opacity: 1;
+}
+
+.analytics-tooltip strong {
+  font-size: 0.78rem;
+}
+
+.analytics-tooltip__rows {
+  display: grid;
+  gap: 2px;
+  color: #dce8ee;
+  font-size: 0.74rem;
+}
+
+.analytics-tooltip small {
+  color: #aebfca;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.analytics-view--table .table-wrap {
+  max-height: 500px;
+}
+
+.analytics-empty {
+  display: grid;
+  place-items: center;
+  min-height: 230px;
+  padding: 28px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.analytics-empty__mark {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  border: 9px solid #dde7ec;
+  border-right-color: var(--brand-100);
+  border-radius: 50%;
+}
+
+.analytics-empty__mark::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  content: "";
+  background: #9aabb8;
+  transform: translate(-50%, -50%);
+}
+
+.analytics-empty strong {
+  color: #33475b;
+  font-size: 0.9rem;
+}
+
+.analytics-empty span:last-child {
+  font-size: 0.76rem;
+}
+
+.analytics-filter-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: -6px 0 16px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.analytics-filter-summary strong {
+  color: var(--brand-800);
+}
+
+.filtro-chip-check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.filtro-chip-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  opacity: 0;
+}
+
+.filtro-chip-check span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  color: var(--text-muted);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 750;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.filtro-chip-check input:checked + span {
+  color: #fff;
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  box-shadow: 0 2px 6px rgb(23 96 95 / 18%);
+}
+
+.filtro-chip-check input:focus-visible + span {
+  outline: 3px solid rgb(59 130 246 / 28%);
+  outline-offset: 2px;
+}
+
+.dashboard-overdue {
+  margin-top: 16px;
+}
+
+/* Enquanto os gráficos são medidos para o papel, a caixa vai a 960px e estoura
+   o painel numa janela de 1024. Dura um quadro, mas o quadro aparece. Só na
+   tela: `overflow: hidden` valendo na impressão recortaria o conteúdo na
+   quebra de página. */
+@media screen {
+  .preparando-impressao .panel {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 1180px) {
+  .analytics-kpis {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .analytics-grid,
+  .analytics-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-card--wide {
+    grid-column: auto;
+  }
+
+  .analytics-card__header {
+    flex-direction: column;
+  }
+
+  .analytics-card__tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .analytics-toggle {
+    margin-left: auto;
+  }
+
+  .analytics-kpi {
+    min-height: 108px;
+  }
+}
+
+@media (max-width: 420px) {
+  .analytics-card,
+  .analytics-kpi {
+    padding: 14px;
+    border-radius: var(--radius);
+  }
+
+  .analytics-card__note {
+    width: 100%;
+  }
+}
+
+@media print {
+  .panel--analytics {
+    background: #fff;
+  }
+
+  .analytics-kpis {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .analytics-kpi {
+    min-height: 88px;
+    padding: 10px 12px;
+    break-inside: avoid;
+  }
+
+  .analytics-kpi strong {
+    font-size: 1.75rem;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .analytics-card {
+    padding: 12px;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .analytics-card__tools,
+  .analytics-tooltip,
+  .analytics-filter-summary {
+    display: none !important;
+  }
+
+  /* A caixa sai da preparação com largura fixa em px — unidade absoluta no
+     papel. Centrar é o que falta para ela não ficar encostada à esquerda do
+     cartão, que no papel ocupa a folha inteira. */
+  .analytics-chart {
+    margin-inline: auto;
+  }
+
+  .analytics-view--table .table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 /* ── Mapa mensal detalhado para PDF ────────────────────────────────
    O documento vive fora de `#app` e só é revelado para a impressão. Isso
    preserva a tela operacional e permite controlar a folha A4 sem afetar os

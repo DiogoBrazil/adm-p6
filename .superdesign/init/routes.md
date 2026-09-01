@@ -62,7 +62,7 @@ let routes: Route[] = [
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
   { path: ROTA_ANUAL, label: "Relatório Anual", group: "Relatórios" },
-  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
+  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas dos Apuratórios", group: "Relatórios" }
 ];
 
 /** Fallback quando `activePath` não casa com nenhuma rota. */

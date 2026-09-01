@@ -533,3 +533,19 @@ export function ligarExportacao(
 
 ```
 
+## Camada de visualização — `src/graficos/`
+
+Introduzida na rodada 28. Separa transformação de renderização, e é a separação que
+torna a primeira testável: `index.ts` importa `chart.js` e chama `matchMedia`, então não
+roda no ambiente do Vitest; `dados.ts` não conhece nem um nem outro.
+
+- `dados.ts` — funções puras: ordenação, percentual e seu denominador, faixas de prazo,
+  cor por classificação de gravidade, recorte de ranking e quebra de rótulo de eixo. É o
+  arquivo que `dados.test.ts` cobre.
+- `index.ts` — registro do Chart.js (só os controladores usados), as fábricas de spec
+  (barras, barras empilhadas, linha/área, rosca, medidor de prazos, enquadramentos), o
+  cartão analítico, o tooltip em HTML e o ciclo de vida das instâncias: montagem
+  preguiçosa, destruição em `main.ts::shell()` e o par preparar/restaurar da impressão.
+
+Única dependência visual do projeto além do Tom Select: **`chart.js` 4**, empacotada pelo
+Vite. Nada de CDN — a CSP é `default-src 'self'`.

@@ -683,10 +683,6 @@ export async function renderFormularioUsuario(
 
 // ── Detalhe ───────────────────────────────────────────────────────────
 
-const OPCOES_CONTAGEM_USUARIO = {
-  listagem: true,
-} as const;
-
 function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel" | "status_envolvido") {
   return tabela(
     [
@@ -755,9 +751,9 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
       </div>
 
       <div class="stat-grid">
-        ${painelContagem("Designações por função", estatisticas?.designacoes_por_papel ?? [], "Função", OPCOES_CONTAGEM_USUARIO)}
-        ${painelContagem("Designações por apuratório", estatisticas?.designacoes_por_apuratorio ?? [], "Apuratório", OPCOES_CONTAGEM_USUARIO)}
-        ${painelContagem("Envolvimentos por status", estatisticas?.envolvimentos_por_status ?? [], "Status", OPCOES_CONTAGEM_USUARIO)}
+        ${painelContagem("Designações por função", estatisticas?.designacoes_por_papel ?? [], "Função")}
+        ${painelContagem("Designações por apuratório", estatisticas?.designacoes_por_apuratorio ?? [], "Apuratório")}
+        ${painelContagem("Envolvimentos por status", estatisticas?.envolvimentos_por_status ?? [], "Status")}
       </div>
 
       <div class="detail-section">

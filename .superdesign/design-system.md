@@ -45,7 +45,13 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 
 ## Impressão e responsividade
 
-- `@page { size: A4 landscape; margin: 0; }`, com margens físicas controladas pelas páginas explícitas do documento.
+- **A orientação da folha não vem do `@page`.** O WebKitGTK — motor do Tauri no Linux —
+  ignora o descritor `size`, e o documento sai retrato com o layout de 297mm espremido em
+  210mm, sem erro nenhum. Quem orienta é o `GtkPageSetup`, montado em
+  `print::commands::print_landscape`, declarando um papel de 297×210mm (pedir **rotação**
+  ao GTK imprime páginas em branco). O `@page` continua declarado para os motores que o
+  honram, e as margens físicas seguem controladas pelas páginas explícitas do documento.
+  Ver a seção 7 do `GUIA.md`, e não validar impressão em Chromium: lá o `@page` funciona.
 - Usar unidades físicas no layout impresso; controles na tela podem se adaptar a 900px e 600px.
 - `print-color-adjust: exact` apenas onde necessário.
 - `break-before: page` somente em capas e páginas explícitas; `break-inside: avoid` em linhas, cards curtos e blocos atômicos.
@@ -60,3 +66,17 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 - A unidade institucional da capa é sempre 7º BPM; a origem cadastrada permanece na ficha.
 - Nomes e siglas de apuratório vêm dos dados, nunca de hardcode.
 - O resultado precisa funcionar no WebView/Tauri sob CSP restritiva.
+
+## Painéis analíticos impressos
+
+Desde a rodada 28 os relatórios de tela também saem em A4 paisagem, pelo mesmo
+`print_landscape`. Valem as regras acima, mais três que são próprias de gráfico:
+
+- **Canvas é bitmap.** A caixa do gráfico é fixada em `px` — unidade absoluta na
+  impressão, 1/96 pol — **antes** de imprimir, para que a geometria medida na tela valha
+  para a folha. Mudar a caixa depois de o canvas ser desenhado estica o desenho.
+- **O bitmap sai ao dobro da densidade** (`devicePixelRatio` 2 na preparação): os 96 dpi
+  da tela saem borrados no papel.
+- **Legenda e rótulo não podem depender só de cor**, pela mesma razão da regra de escala
+  de cinza acima: a classificação de gravidade colore as barras, e o texto do rótulo e do
+  tooltip continua dizendo qual é.

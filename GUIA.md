@@ -27,13 +27,13 @@ sobre remover o schema `legado`.
 |---|---:|
 | Migrations (`0001`–`0018`) | **18** |
 | Comandos Tauri, todos no cliente tipado | **87** |
-| Testes | **169** |
+| Testes | **169** no Rust · **8** no frontend (Vitest, sobre `src/graficos/dados.ts`) |
 | Módulos Rust · linhas de Rust | 13 · 10.193 |
-| Arquivos de frontend · linhas de TS/CSS | 19 · 13.651 |
+| Arquivos de frontend · linhas de TS/CSS | 22 · 16.554 |
 | Catálogos administráveis | 26 |
 | Comandos que o frontend invoca e não existem | **0** |
 | Chamadas fora do cliente tipado | **0** |
-| Dependências de frontend | **2** — `@tauri-apps/api` e `tom-select`, empacotadas pelo Vite |
+| Dependências de frontend | **3** — `@tauri-apps/api`, `tom-select` e `chart.js`, empacotadas pelo Vite |
 
 | Schema | |
 |---|---:|
@@ -61,6 +61,7 @@ sai só quando ela fechar.
 | 3c | **Conferir a pesquisa instantânea e o modal de filtros avançados** — é o primeiro modal do app com seletor pesquisável **e** CSP restritiva ao mesmo tempo | seção 11, item **(l)** | **Sim** |
 | 3d | **Conferir a pesquisa instantânea de Catálogos e Usuários** — o redesenho parcial pode perder a largura das colunas **sem acusar** | seção 11, item **(n)** | **Sim** |
 | 3e | **Conferir desativar e excluir militar** — a exclusão é física e não se desfaz; fazer em banco descartável ou com o responsável | seção 11, item **(o)** | **Sim** |
+| 3f | **Conferir os painéis analíticos e o PDF deles** — seis telas viraram gráfico, e o papel só se prova imprimindo: a geometria da folha é medida na tela, antes de a folha existir | seção 11, item **(p)** | **Sim** |
 | 4 | **Decidir se os 11 registros atuais continuam como massa de teste.** Não os apague por suposição | — | **Sim** antes de carga real |
 | 5 | Repetir a conferência dos 6 processos históricos, restaurando o backup em banco descartável | seção 11, item (j) | não |
 | 6 | **Remover o schema `legado`** — só depois da conferência histórica. Refaça o backup antes: é irreversível | seção 6 | não |
@@ -82,7 +83,7 @@ Fora do git de propósito: tem dado pessoal de 235 militares, pela mesma razão 
 ### Antes de tocar em qualquer coisa, leia
 
 - **Seção 2** — os 6 princípios do modelo. Toda decisão futura tem de caber neles.
-- **Seção 3** — as 51 decisões já tomadas. Não reabra sem motivo novo.
+- **Seção 3** — as 54 decisões já tomadas. Não reabra sem motivo novo.
 - **Seção 7** — as armadilhas. Cada uma já custou tempo pelo menos uma vez.
 - **Acabou o `docker compose down -v`.** Com dado real dentro, recriar o volume apaga
   8 anos de registro. Mudança de schema agora é migration incremental (seção 5).
@@ -115,12 +116,13 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 146 testes, bancos descartáveis
+cargo test                           # 169 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
 cd ..
 npm install
+npm test                             # Vitest — as transformações puras de `src/graficos/dados.ts`
 npm run typecheck                    # tsc --noEmit — é aqui que erro de comando aparece
 npm run build                        # typecheck + vite build
 
@@ -773,7 +775,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a seção 12, rodada 14 provou que a listagem de processos não mudou |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Larguras calculadas de coluna vão em `data-*` e são aplicadas por `aplicarLarguras()` em `shell()` |
 | **`@page` para orientar a folha impressa** | O WebKitGTK — motor do Tauri no **Linux** — ignora o descritor `size` do `@page`. Medido no webkit2gtk-4.1 2.48 com `@page nome { size: A4 landscape }`, `@page { size: A4 landscape }` e `@page { size: 297mm 210mm }`: as três saíram 595×842 pt, **retrato**. A propriedade `page` (página nomeada) também não existe no WebKit, então uma `@page` nomeada nem chega a casar. O documento sai com o layout de 297mm espremido numa folha de 210mm, sem erro nenhum | A orientação vem do `GtkPageSetup`, e só. É o que `print::commands::print_landscape` monta, antes de rodar o diálogo. O `@page` continua no frontend só para os motores que o honram, e a chamada **espera** a impressão terminar — voltar antes desmonta o documento e imprime folha em branco |
-| **Concatenar a descrição a um `rotulo` de enquadramento** | O `rotulo` de `evidence/repository.rs` **já termina** em `' - ' || descricao`. Quem acrescentar `: ${descricao}` imprime o mesmo parágrafo duas vezes na mesma linha — foi o que o PDF do mapa mensal fez desde que nasceu, e com a transgressão saía pior ainda, repetindo também a gravidade | O rótulo é a citação **completa**. Exiba-o sozinho. `rotulo_cita_o_artigo_antes_da_norma_e_nao_repete_a_descricao` trava as duas metades |
+| **Concatenar a descrição a um `rotulo` de enquadramento** | O `rotulo` de `evidence/repository.rs` **já termina** em `' - ' \|\| descricao`. Quem acrescentar `: ${descricao}` imprime o mesmo parágrafo duas vezes na mesma linha — foi o que o PDF do mapa mensal fez desde que nasceu, e com a transgressão saía pior ainda, repetindo também a gravidade | O rótulo é a citação **completa**. Exiba-o sozinho. `rotulo_cita_o_artigo_antes_da_norma_e_nao_repete_a_descricao` trava as duas metades |
 | **Pedir ao GTK que gire a folha para paisagem** | Com `run_dialog`, o WebKitGTK sai com **as páginas em branco**: a contagem de páginas está certa, a folha sai 842×595, e não se pinta nada — nenhum texto no PDF. Não há erro, nem no console nem no `failed`. Com `print()` direto o mesmo page setup funciona, o que torna a armadilha fácil de "validar" errado | Declarar um **papel de 297×210mm** no `GtkPageSetup`, sem pedir rotação: a folha sai igual e o conteúdo aparece. É o que `folha_a4_paisagem` faz, e o comentário dela guarda a medição |
 | **Validar impressão em Chromium headless** | Não prova nada sobre o app: o Chromium honra `@page` e páginas nomeadas desde a v110, o WebKitGTK não honra nenhum dos dois. Foi assim que a rodada 20 deu o A4 paisagem por pronto enquanto o PDF saía retrato | Medir no motor que o app usa. `python3` + `gi` (`WebKit2` 4.1) imprime para arquivo, e `pdfinfo` lê `Page size` |
 | `csp` sem `devCsp` | Em desenvolvimento o Vite injeta o CSS por `<style>` e abre um WebSocket de HMR; a CSP de produção derruba os dois, e parece que o app quebrou | `devCsp` afrouxa só `style-src` e `connect-src`, e só em dev. Ver a seção 12, rodada 6 |
@@ -800,6 +802,14 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 | Redesenhar **parte** de uma listagem sem rechamar `aplicarLarguras` | As larguras declaradas em `Coluna.largura` saem em `data-largura` e são aplicadas pela CSSOM em `aplicarLarguras`, que só `main.ts::shell()` chama. A pesquisa instantânea troca o `innerHTML` da área de resultados sem passar pelo `shell()` — e a tabela volta a se dimensionar pelo conteúdo **sem erro nenhum**, num redesenho que acontece a cada tecla | `aplicarLarguras(area)` logo depois de escrever o `innerHTML`, como em `usuarios.ts::atualizarListaUsuarios` e `catalogos.ts::atualizarListaCatalogo`. A listagem de apuratórios não sofre disso porque o `<colgroup>` dela é de classes de CSS, não de `data-largura` |
 | Debounce sem atualizar o estado a cada tecla | Se o termo só entrar na variável do módulo **depois** dos 250 ms, quem exporta o CSV ou aplica o modal de filtros dentro dessa janela leva o termo **anterior** — os dois leem a variável no clique, não o campo | `dom.ts::ligarBuscaInstantanea` separa as duas coisas: `aoDigitar` corre a cada tecla e é onde o estado se atualiza; só o redesenho espera |
+| **Redimensionar o gráfico em vez da caixa** | `chart.resize(largura, altura)` muda o **bitmap** do canvas. Como `.analytics-chart canvas` fixa `width`/`height` em `100% !important` — é isso que faz o canvas seguir a caixa —, a caixa renderizada não acompanha, e o desenho sai **esticado**: medido, 4,8% na horizontal e 17,6% na vertical em todo gráfico impresso. Não há erro em lugar nenhum; só o PDF fica torto | Dimensione a **caixa** (`.analytics-chart`) e chame `resize()` **sem medidas**: aí o Chart.js relê o container e bitmap e caixa voltam a coincidir. É o que `graficos/index.ts::prepararGraficosParaImpressao` faz |
+| **`Chart.resize()` com animação em curso** | Ele **adia** o pedido (`_resizeBeforeDraw`) e quem o aplica é o `draw()` seguinte — com as medidas **guardadas**, não com as atuais. Um pedido do `ResizeObserver` pendente desde a montagem fazia o gráfico ir para a medida certa e voltar para a antiga no mesmo quadro: quatro dos nove saíam impressos com o bitmap de meia coluna esticado até a largura da folha, e só eles | `stop()` encerra a animação (senão o `resize()` novo também é adiado), `draw()` consome a pendência enquanto as medidas guardadas ainda são as que valem, e **só então** a caixa muda. Ver `graficos/index.ts::pararEredimensionar` |
+| **Medir a folha depois que a impressão começou** | Canvas é bitmap: a largura útil do papel só existe quando já é tarde para redesenhar. E o `@media print` esconde a sidebar e põe o grid em uma coluna, então a caixa do papel **não é** a da tela | `px` é unidade absoluta na impressão (1/96 pol): fixar a caixa em px antes de imprimir faz a geometria medida na tela valer para a folha. `LARGURA_IMPRESSAO = 960` (≈254mm) cabe na área útil de um A4 paisagem com folga para o page setup que o GTK escolher |
+| Altura de impressão menor que a da tela num ranking horizontal | Comprimir a caixa "para caber melhor" tira o espaço entre as barras, e os rótulos de três linhas **encavalam** — o primeiro cai em cima do segundo. Ficou invisível enquanto o desenho saía esticado; apareceu no instante em que a distorção foi corrigida | Mesmos 42px por barra da tela, com teto de 700px (≈185mm, a altura útil da A4 paisagem) |
+| **Roving tabindex sem tratador de setas** | `tabIndex = ativo ? 0 : -1` tira o botão não selecionado da ordem de Tab; sem `keydown` para as setas, ele fica **inalcançável pelo teclado**, e o que sobra no Tab é o botão que já está selecionado. O alternador Gráfico/Tabela nasceu assim, com `role="tab"` e sem `tabpanel` — semântica de aba pela metade | Alternador de dois estados é grupo de botões com `aria-pressed`, que o navegador opera sozinho. Roving tabindex só com o tratador de setas junto, e aí a semântica de aba tem de estar completa |
+| Percentual de tooltip sobre o que está plotado | Num ranking limitado ao Top 12, somar só as doze barras infla todos os percentuais **em silêncio** (63/274 em vez de 63/277). E num empilhado, dividir pelo total do gráfico responde outra pergunta: 96 em andamento do IPM viram 20,9% do relatório, não os 70,1% do apuratório que o leitor espera | `GraficoSpec.totalReal` guarda o total do conjunto **antes** do recorte, e `percentual.base` diz se a conta é da categoria ou do total. `dados.ts::denominadorPercentual` decide, e tem teste |
+| Rótulo de eixo cortado sem reticências | `quebrarRotulo` limita a três linhas: "Acidente de trânsito envolvendo viatura policial militar" virava "envolvendo viatura", e o eixo passava a mentir o nome da categoria. Na tela o tooltip desmente; **no papel não há tooltip** | O corte é explícito, com `…`. E o texto inteiro continua no tooltip e na tabela do cartão |
+| Esconder toda `.table-wrap` para pôr o bloco completo na impressão | A tabela **dentro de um cartão analítico** não é a listagem paginada que o bloco vem substituir: escondê-la imprimia o cartão em branco sempre que o usuário tivesse escolhido ver a tabela em vez do gráfico | O filtro de `ligarExportacao` ignora quem está dentro de `[data-analytics-view]` |
 
 ---
 
@@ -967,6 +977,14 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | como um `<select>` vira pesquisável sem deixar de ser `<select>` | `dom.ts::ativarSelectsPesquisaveis` / `destruirSelectsPesquisaveis`, e o atributo `data-select-pesquisavel` |
 | como o cadastro rápido em modal reusa o formulário da tela cheia | `catalogos.ts::abrirCadastroRapidoCatalogo`, `usuarios.ts::abrirCadastroRapidoMilitar` e `dom.ts::montarModal` |
 | quais cadastros têm "+" no formulário de processo, e por que os outros não | decisão **53** e o mapa `seletores` em `processo.ts` |
+| como um painel analítico é montado, do dado ao canvas | `src/graficos/dados.ts` (transformações puras, testadas) e `src/graficos/index.ts` (Chart.js, cartão, tooltip, impressão) |
+| por que o gráfico impresso não sai esticado | `graficos/index.ts::prepararGraficosParaImpressao` e `pararEredimensionar` (cabeçalhos) — e as três armadilhas de impressão de gráfico na seção 7 |
+| por que a caixa do gráfico é fixada em **px** para imprimir | o cabeçalho de `LARGURA_IMPRESSAO`: `px` é unidade absoluta no papel, e é o que permite medir a folha antes de ela existir |
+| de que total o percentual do tooltip fala | `dados.ts::denominadorPercentual` (cabeçalho) e `GraficoSpec.percentual` / `totalReal` |
+| por que o alternador Gráfico/Tabela não é `role="tab"` | `graficos/index.ts::definirModo` (comentário) e a armadilha do roving tabindex na seção 7 |
+| onde fica a preferência de ver gráfico ou tabela | `localStorage`, chave `adm-p6:visualizacao:<id do cartão>`, em `graficos/index.ts::preferencia` |
+| por que o ranking mostra 12 e a tabela mostra tudo | `dados.ts::limitarRanking` e a nota "Top 12 no gráfico · tabela completa" do cabeçalho do cartão |
+| onde a matriz de designações vive, e por que não está dentro do cartão | `src/telas/encarregados.ts` — o cartão traz o ranking; a matriz é o conteúdo da tela, e continua fora dele |
 | o diagnóstico do estado anterior | `a seção 13` |
 
 ---
@@ -1734,7 +1752,58 @@ o responsável**: a exclusão é física e não se desfaz.
 
 ---
 
-## 12. Changelog — as 27 rodadas
+### p) Painéis analíticos e o PDF deles (seção 12, rodada 28)
+
+O binário de produção, e o console aberto. São **seis** telas: Painel, Prazos, Visão
+Geral dos Apuratórios, Relatório Anual, Designações por Militar e Estatísticas dos
+Apuratórios.
+
+**Na tela**
+
+- [ ] Cada cartão tem o alternador **Gráfico / Tabela**, e a escolha **sobrevive** a sair
+      da tela e voltar — é por cartão, guardada no `localStorage`
+- [ ] O gráfico volta a desenhar ao voltar da tabela (não fica em branco nem cortado)
+- [ ] Passar o mouse numa barra mostra o **rótulo inteiro**, mesmo quando o eixo corta
+      com `…`; num empilhado, as duas séries e o tipo do apuratório
+- [ ] O percentual do tooltip diz **de que** ele é: "do apuratório" no empilhado,
+      "do total" nos rankings
+- [ ] Onde o gráfico mostra "Top 12", a **tabela do mesmo cartão mostra todos**
+- [ ] Cartão sem dado no escopo mostra "Nada registrado neste escopo" — e **falha de
+      backend não vira cartão vazio**: aparece a mensagem de erro da tela
+- [ ] Em Estatísticas, marcar dois ou três apuratórios e **Aplicar** recarrega todos os
+      cartões, os chips continuam marcados e a linha "Escopo aplicado" acompanha
+- [ ] **Designações por Militar**: a matriz militar × apuratório aparece **sem precisar
+      clicar em nada**, abaixo do cartão do ranking
+- [ ] Em janela de **1024px** (o mínimo da janela do Tauri) nenhuma tela ganha rolagem
+      horizontal; encolhendo mais, os cartões passam a uma coluna e as legendas
+      continuam legíveis
+
+**No teclado**
+
+- [ ] Tab alcança **os dois** botões do alternador, não só o selecionado
+- [ ] Espaço e Enter alternam, e o anel de foco aparece nos dois
+
+**No papel — é aqui que mora o risco**
+
+Imprimir para arquivo em **cada uma das seis telas**, e abrir o PDF:
+
+- [ ] A folha sai **paisagem** (o `GtkPageSetup`, não o `@page` — ver a rodada 21)
+- [ ] Os gráficos **não estão esticados**: círculo redondo na rosca, texto do eixo com a
+      mesma proporção da tela. Um texto "achatado" na vertical é o sintoma exato de a
+      caixa ter mudado depois de o canvas ser desenhado
+- [ ] Nos rankings, **os rótulos não se encavalam** — o de cima não invade a linha do de
+      baixo
+- [ ] O gráfico fica **centrado** no cartão, e nenhum cartão é partido pela quebra de
+      página
+- [ ] O texto do gráfico está **nítido**, não borrado (o bitmap sai ao dobro da densidade)
+- [ ] O PDF respeita a visualização escolhida: cartão em **Tabela** imprime a tabela, e
+      não um quadro branco
+- [ ] Em **Prazos**, as duas listagens saem **completas**, não com os dez itens da página
+- [ ] Filtros, alternadores e botões **não** aparecem no papel
+
+---
+
+## 12. Changelog — as 28 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1769,6 +1838,55 @@ A narrativa completa de cada uma está no histórico do git.
 | 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
 | 26 | **Pesquisa instantânea nas outras listagens** | Catálogos e Usuários passaram a filtrar ao digitar, como os apuratórios desde a 24. O "250 ms + Enter" saiu de dentro de `processo.ts` e virou `dom.ts::ligarBuscaInstantanea`, usado pelas três. Sem migration e sem comando novo — os dois backends já pesquisavam. Detalhe abaixo |
 | 27 | **Desativar e excluir militar** | A listagem de militares não tinha nem uma coisa nem outra: `users_delete` **desativava** apesar do nome, e tela nenhuma o chamava. O comando virou `users_deactivate`, e `users_delete` passou a apagar de verdade — só para quem não tem vínculo nenhum, com mensagem que nomeia o vínculo que segurou. Três ícones por linha, e o par do Reativar que faltava no detalhe. Decisão **54**. Sem migration. Detalhe abaixo |
+| 28 | **Painéis analíticos** | As seis telas de relatório deixaram de ser só tabela: KPIs, barras, barras empilhadas, linha/área e rosca, com alternador Gráfico/Tabela por cartão. Uma dependência nova (`chart.js`), nenhum comando e nenhuma migration — todo dado já vinha dos relatórios existentes. O Vitest entrou junto, sobre a camada pura de `src/graficos/dados.ts`. Detalhe abaixo |
+
+### A rodada 28, em detalhe
+
+Pedido: transformar os relatórios tabulares num painel analítico, sem perder a precisão
+da tabela.
+
+**Nenhum comando novo, nenhuma migration.** Os oito relatórios que os cartões desenham
+já existiam desde a rodada 1 — o que faltava era desenhá-los. `dashboard_summary`,
+`reports_status_by_apuratorio`, `reports_by_solution`, `reports_by_nature`,
+`reports_by_evidence_category`, as três de enquadramento e `reports_driver_ranking`
+continuam com o mesmo contrato, e o `ReportFilter` continua o mesmo.
+
+**Gráfico e tabela convivem, e quem escolhe é quem lê.** Cada cartão tem os dois lados;
+a escolha fica no `localStorage`, por cartão. O ranking mostra os 12 primeiros — a
+ordenação vem do `ORDER BY total DESC` do backend, não do frontend —, e a **tabela do
+mesmo cartão mostra todos**, o que é o ponto: o gráfico é resumo, a tabela é o registro.
+
+**A camada pura ficou separada da renderização, e é a que tem teste.** `graficos/dados.ts`
+não conhece Chart.js: ordenação, percentual, faixas de prazo, cor por gravidade, quebra de
+rótulo e escolha de denominador. É testável em Node — `graficos/index.ts` não seria, porque
+importa `chart.js` e chama `matchMedia`. Daí o Vitest, e os 8 testes.
+
+**A impressão foi a parte difícil, e por um motivo que não é óbvio.** Canvas é bitmap: a
+largura útil do papel só existe depois que a impressão começou, e o `@media print`
+esconde a sidebar e põe o grid em uma coluna — a caixa do papel não é a da tela. A
+primeira versão redimensionava o **gráfico** (`resize(980, altura)`), o que muda só o
+bitmap; com `.analytics-chart canvas` fixando `100% !important`, a caixa não acompanhava
+e todo gráfico saía esticado 4,8% na horizontal e 17,6% na vertical, sem erro nenhum.
+
+A saída foi dimensionar a **caixa** em `px` — unidade absoluta na impressão, 1/96 de
+polegada —, o que faz a medição feita na tela valer para a folha. E, no meio do caminho,
+duas armadilhas que a seção 7 agora guarda: `Chart.resize()` **adia** o pedido quando há
+animação em curso, e o `draw()` seguinte o aplica com as medidas velhas (quatro dos nove
+gráficos, e só eles, saíam com o bitmap de meia coluna esticado até a folha); e uma
+altura de impressão menor que a da tela faz os rótulos de três linhas se encavalarem —
+defeito que ficou invisível enquanto o desenho saía esticado.
+
+**O alternador não era operável pelo teclado.** Nasceu com `role="tab"` sem `tabpanel` e
+com *roving tabindex* sem tratador de setas: o botão não selecionado ficava fora da ordem
+de Tab, e o que sobrava era o que já estava selecionado. Virou grupo de botões com
+`aria-pressed`, que o navegador opera sozinho — menos código, e correto.
+
+**Duas coisas voltaram para onde estavam.** A matriz de designações tinha virado o lado
+"Tabela" do cartão do ranking, ou seja, o conteúdo principal daquela tela passou a exigir
+um clique; voltou para o corpo da tela, e o cartão ficou com uma tabela própria de militar
+× total. E `painelContagem`, que a ficha do usuário usa, tinha sido redirecionada para o
+formato dos cartões: voltou às colunas que tinha, porque aquela tela não virou painel
+analítico e não havia razão para mudar de forma junto.
 
 ### A rodada 27, em detalhe
 

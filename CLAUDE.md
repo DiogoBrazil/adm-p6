@@ -75,6 +75,15 @@ entender X → olhe em Y".
 | Exibir enquadramento concatenando a descrição | o `rotulo` de `evidence/repository.rs` **já termina** na descrição. Acrescentá-la de novo imprime o parágrafo duas vezes |
 | Folha em paisagem no `GtkPageSetup` | pedir **rotação** ao GTK imprime as páginas **em branco** pelo `run_dialog`, sem erro nenhum. Declare um papel de 297×210mm — ver `folha_a4_paisagem` |
 | Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build -- --no-bundle` |
+| Preparar um gráfico para a impressão | dimensione a **caixa** (`.analytics-chart`) e chame `resize()` **sem medidas**. `resize(l, a)` muda só o bitmap, e o `100% !important` do canvas segura a caixa: o desenho sai esticado no papel, sem erro nenhum |
+| `Chart.resize()` com animação em curso | ele **adia** o pedido, e o `draw()` seguinte o aplica com as medidas **velhas**. `stop()`, `draw()` para consumir a pendência, **depois** mudar a caixa — ver `graficos/index.ts::pararEredimensionar` |
+| Medir a folha para o canvas | não dá: a largura útil do papel só existe depois que a impressão começou. `px` é unidade absoluta na impressão, então fixe a caixa em px antes — é o que `LARGURA_IMPRESSAO` faz |
+| Altura de impressão menor que a da tela num ranking | tira o espaço entre as barras e os rótulos de três linhas **encavalam**. Mesmos 42px por barra, com teto de 700px (a altura útil da A4 paisagem) |
+| Roving tabindex sem tratador de setas | `tabIndex = -1` no botão inativo o tira do Tab, e sem `keydown` ele fica inalcançável pelo teclado. Alternador de dois estados é grupo de botões com `aria-pressed` |
+| Percentual de gráfico sobre o que está plotado | num ranking Top 12 o denominador tem de ser o total **real** (`GraficoSpec.totalReal`); num empilhado, o da categoria. `dados.ts::denominadorPercentual` decide, e diz de que o percentual fala |
+| Cortar rótulo de eixo sem reticências | o eixo passa a mentir o nome da categoria, e no papel não há tooltip para desmentir. `dados.ts::quebrarRotulo` marca o corte com `…` |
+| Esconder `.table-wrap` para imprimir o bloco completo | a tabela dentro de um cartão analítico não é listagem paginada: escondê-la imprime o cartão em branco. Filtre quem está em `[data-analytics-view]` |
+| Transformação de gráfico dentro de `graficos/index.ts` | ali não há teste possível — o módulo importa `chart.js` e chama `matchMedia`. Função pura vai para `graficos/dados.ts`, que o Vitest alcança |
 
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
@@ -82,7 +91,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo test   # 169 testes
-cd .. && npm run typecheck
+cd .. && npm test && npm run typecheck            # 8 testes das transformações puras
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

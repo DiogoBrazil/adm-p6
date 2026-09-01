@@ -1,5 +1,9 @@
 # Layouts compartilhados
 
+> **Instantâneo, não fonte de verdade.** Este arquivo foi gerado colando trechos do
+> código, e o código andou desde então. Confira sempre no arquivo citado antes de se
+> apoiar num bloco daqui; a fonte de verdade do projeto é o `GUIA.md`.
+
 ## AppShell — `src/main.ts`
 
 Shell global com login, barra lateral, navegação agrupada, topo, área principal e roteamento manual. O brasão oficial é carregado de `src-tauri/icons/icon.png`.
@@ -92,7 +96,7 @@ let routes: Route[] = [
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
   { path: ROTA_ANUAL, label: "Relatório Anual", group: "Relatórios" },
-  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas de Procedimentos", group: "Relatórios" }
+  { path: ROTA_STATS_PROCEDIMENTOS, label: "Estatísticas dos Apuratórios", group: "Relatórios" }
 ];
 
 /** Fallback quando `activePath` não casa com nenhuma rota. */

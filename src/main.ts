@@ -1,6 +1,7 @@
 import "tom-select/dist/css/tom-select.css";
 import "./styles.css";
 import { call, type SessionUser } from "./api";
+import { destruirGraficos } from "./graficos";
 import {
   aplicarLarguras,
   destruirSelectsPesquisaveis,
@@ -198,6 +199,7 @@ function groupedRoutes() {
 }
 
 function shell(content: string) {
+  destruirGraficos();
   destruirSelectsPesquisaveis(app);
   const grupoAtivo = routes.find((route) => route.path === activePath)?.group ?? "Geral";
   gruposAbertos.add(grupoAtivo);
@@ -307,6 +309,7 @@ function shell(content: string) {
 }
 
 function renderLogin(error = "") {
+  destruirGraficos();
   app.innerHTML = `
     <main class="login-screen">
       <form id="login-form" class="login-panel">

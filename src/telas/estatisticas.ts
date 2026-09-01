@@ -6,46 +6,121 @@
 // a tela precisa — por apuratório, natureza, unidade e ano — todas rotuladas
 // pelo catálogo, e nenhuma delas conhece sigla.
 
-import { call, type ContagemRotulada } from "../api";
+import {
+  call,
+  type ContagemRotulada,
+  type EnquadramentoContagem,
+} from "../api";
+import {
+  cartaoAnalitico,
+  graficoBarras,
+  graficoDonut,
+  graficoEnquadramentos,
+  graficoLinha,
+  graficoSituacao,
+  kpiAnalitico,
+  montarCartoesAnaliticos,
+  type GraficoSpec,
+} from "../graficos";
 import { barraDeExportacao, baixarCsv, escapeHtml, ligarExportacao, tabela } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/estatisticas/processos";
 
-/** Painel de contagem no mesmo padrão centralizado das demais tabelas. */
+function tabelaContagem(
+  itens: ContagemRotulada[],
+  rotuloColuna = "Item",
+  vazio = "Nada registrado neste escopo.",
+): string {
+  return tabela(
+    [
+      { rotulo: rotuloColuna, largura: 72, truncar: true },
+      { rotulo: "Quantidade", largura: 28, alinhamento: "centro", nowrap: true },
+    ],
+    itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
+    vazio,
+    { listagem: true },
+  );
+}
+
+/**
+ * Painel de contagem no mesmo padrão centralizado das demais tabelas.
+ *
+ * Tem colunas próprias, e não as do `tabelaContagem` dos cartões analíticos:
+ * quem o usa hoje é a ficha do usuário, que não virou painel analítico e não
+ * tem por que mudar de forma junto com eles.
+ */
 export function painelContagem(
   titulo: string,
   itens: ContagemRotulada[],
   rotuloColuna = "Item",
-  opcoes: { listagem?: boolean } = {},
 ): string {
   if (!itens.length) {
     return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>
       <p class="empty">Nada registrado neste escopo.</p></section>`;
   }
-  const linhas = itens.map((i) => [i.rotulo, { texto: String(i.total), numerica: true }]);
   const html = tabela(
     [
       { rotulo: rotuloColuna, largura: 65, truncar: true, alinhamento: "centro" },
       { rotulo: "Quantidade", largura: 35, alinhamento: "centro", nowrap: true },
     ],
-    linhas,
+    itens.map((i) => [i.rotulo, { texto: String(i.total), numerica: true }]),
     "Nada registrado neste escopo.",
-    { listagem: opcoes.listagem ?? true },
+    { listagem: true },
   );
   return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
 }
 
 export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<void> {
-  const resumo = (await call("dashboard_summary")).data;
-  if (!resumo) {
+  const [resumoResposta, situacaoResposta, responsaveisResposta] = await Promise.all([
+    call("dashboard_summary"),
+    call("reports_status_by_apuratorio", { filter: { apuratorio_ids: [] } }),
+    call("reports_by_responsible", { filter: { apuratorio_ids: [], limit: 50 } }),
+  ]);
+  const resumo = resumoResposta.data;
+  const situacao = situacaoResposta.data ?? [];
+  const responsaveis = responsaveisResposta.data ?? [];
+  if (!resumo || !resumoResposta.ok || !situacaoResposta.ok || !responsaveisResposta.ok) {
     ctx.shell(`<section class="panel"><h1>Visão Geral dos Apuratórios</h1>
-      <p class="error">Não foi possível carregar o resumo.</p></section>`);
+      <p class="error">${escapeHtml(resumoResposta.error ?? situacaoResposta.error ?? responsaveisResposta.error ?? "Não foi possível carregar o resumo.")}</p></section>`);
     return;
   }
 
+  const situacaoGrafico = situacao.map((item) => ({
+    sigla: item.sigla,
+    nome: item.nome,
+    tipo: item.tipo_apuratorio_nome,
+    emAndamento: item.em_andamento,
+    concluidos: item.concluidos,
+  }));
+  const specs: GraficoSpec[] = [
+    graficoSituacao("visao-situacao", situacaoGrafico),
+    graficoLinha("visao-evolucao", resumo.por_ano),
+    graficoBarras("visao-unidades", resumo.por_unidade, { limitar: true }),
+    graficoBarras("visao-naturezas", resumo.por_natureza, { limitar: true }),
+    graficoBarras("visao-responsaveis", responsaveis, { limitar: true }),
+  ];
+  const tabelaSituacao = tabela(
+    [
+      { rotulo: "Apuratório", largura: 30, truncar: true },
+      { rotulo: "Tipo", largura: 24, truncar: true },
+      { rotulo: "Em andamento", largura: 18, alinhamento: "centro", nowrap: true },
+      { rotulo: "Concluídos", largura: 14, alinhamento: "centro", nowrap: true },
+      { rotulo: "Total", largura: 14, alinhamento: "centro", nowrap: true },
+    ],
+    situacao.map((item) => [
+      `${item.sigla} — ${item.nome}`,
+      item.tipo_apuratorio_nome,
+      { texto: String(item.em_andamento), numerica: true },
+      { texto: String(item.concluidos), numerica: true },
+      { texto: String(item.total), numerica: true },
+    ]),
+    "Nenhum apuratório registrado.",
+    { listagem: true },
+  );
+
   ctx.shell(`
-    <section class="panel">
+    <section class="panel panel--analytics">
       <div class="page-head">
         <div>
           <h1>Visão Geral dos Apuratórios</h1>
@@ -54,21 +129,26 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
         <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: true })}</div>
       </div>
 
-      <div class="stat-row">
-        <div class="stat-card"><span class="stat-value">${resumo.total}</span><span>no total</span></div>
-        <div class="stat-card"><span class="stat-value">${resumo.em_andamento}</span><span>em andamento</span></div>
-        <div class="stat-card"><span class="stat-value">${resumo.concluidos}</span><span>concluídos</span></div>
-        <div class="stat-card stat-card--alert"><span class="stat-value">${resumo.prazos_vencidos}</span><span>com prazo vencido</span></div>
+      <div class="analytics-kpis">
+        ${kpiAnalitico(resumo.total, "Total de apuratórios")}
+        ${kpiAnalitico(resumo.em_andamento, "Em andamento", { tom: "andamento" })}
+        ${kpiAnalitico(resumo.concluidos, "Concluídos", { tom: "sucesso" })}
+        ${kpiAnalitico(resumo.prazos_vencidos, "Prazos vencidos", {
+          tom: resumo.prazos_vencidos ? "alerta" : "sucesso",
+        })}
       </div>
 
-      <div class="stat-grid">
-        ${painelContagem("Por apuratório", resumo.por_apuratorio, "Apuratório")}
-        ${painelContagem("Por natureza geral do fato", resumo.por_natureza, "Natureza")}
-        ${painelContagem("Por unidade de origem", resumo.por_unidade, "Unidade")}
-        ${painelContagem("Por ano de instauração", resumo.por_ano, "Ano")}
+      <div class="analytics-grid">
+        ${cartaoAnalitico({ id: "visao-situacao", titulo: "Situação por apuratório", descricao: "Processos e procedimentos segmentados por andamento e conclusão.", grafico: specs[0]!, tabela: tabelaSituacao, classe: "analytics-card--wide" })}
+        ${cartaoAnalitico({ id: "visao-evolucao", titulo: "Evolução das instaurações", grafico: specs[1]!, tabela: tabelaContagem(resumo.por_ano, "Ano"), classe: "analytics-card--wide" })}
+        ${cartaoAnalitico({ id: "visao-unidades", titulo: "Unidades de origem", grafico: specs[2]!, tabela: tabelaContagem(resumo.por_unidade, "Unidade"), limitado: resumo.por_unidade.length > 12 })}
+        ${cartaoAnalitico({ id: "visao-naturezas", titulo: "Natureza geral do fato", grafico: specs[3]!, tabela: tabelaContagem(resumo.por_natureza, "Natureza"), limitado: resumo.por_natureza.length > 12 })}
+        ${cartaoAnalitico({ id: "visao-responsaveis", titulo: "Responsabilidade vigente", descricao: "Apuratórios vinculados ao responsável vigente; não representa o histórico de designações.", grafico: specs[4]!, tabela: tabelaContagem(responsaveis, "Responsável"), limitado: responsaveis.length > 12, classe: "analytics-card--wide" })}
       </div>
     </section>
   `);
+
+  montarCartoesAnaliticos(specs);
 
   ligarExportacao(() => {
     const bloco = (nome: string, itens: ContagemRotulada[]) =>
@@ -87,7 +167,7 @@ export async function renderEstatisticasProcessos(ctx: ContextoTela): Promise<vo
         ...bloco("Por ano de instauracao", resumo.por_ano),
       ],
     );
-  });
+  }, undefined, { paisagem: true });
 }
 
 // =============================================================================
@@ -117,10 +197,10 @@ function barraDeFiltro(anos: number[], apuratorios: Apuratorio[]): string {
   const opcaoAno = (a: number) =>
     `<option value="${a}"${a === anoSelecionado ? " selected" : ""}>${a}</option>`;
   const caixa = (a: Apuratorio) => `
-    <label class="checkbox-inline" title="${escapeHtml(a.nome)}">
+    <label class="filtro-chip-check" title="${escapeHtml(a.nome)}">
       <input type="checkbox" name="apuratorio" value="${escapeHtml(a.id)}"
              ${apuratoriosSelecionados.includes(a.id) ? "checked" : ""} />
-      ${escapeHtml(a.sigla)}
+      <span>${escapeHtml(a.sigla)}</span>
     </label>`;
   return `
     <form id="filtro-stats" class="filtro-bar">
@@ -139,9 +219,8 @@ function barraDeFiltro(anos: number[], apuratorios: Apuratorio[]): string {
 }
 
 /** Enquadramentos: rótulo, classificação vinda de JOIN, texto e contagem. */
-function painelEnquadramento(
-  titulo: string,
-  itens: { rotulo: string; descricao: string; classificacao: string | null; total: number }[],
+function tabelaEnquadramento(
+  itens: EnquadramentoContagem[],
   rotuloColuna: string,
 ): string {
   const linhas = itens.map((i) => [
@@ -153,26 +232,31 @@ function painelEnquadramento(
     i.descricao,
     { texto: String(i.total), numerica: true },
   ]);
-  return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>
-    ${tabela(
-      [
-        { rotulo: rotuloColuna, largura: 18, truncar: true },
-        { rotulo: "Classificação", largura: 16, truncar: true },
-        { rotulo: "Descrição", largura: 58, truncar: true },
-        { rotulo: "Qtd.", largura: 8, alinhamento: "centro", nowrap: true },
-      ],
-      linhas,
-      "Nada registrado neste escopo.",
-      { listagem: true },
-    )}
-  </section>`;
+  return tabela(
+    [
+      { rotulo: rotuloColuna, largura: 18, truncar: true },
+      { rotulo: "Classificação", largura: 16, truncar: true },
+      { rotulo: "Descrição", largura: 58, truncar: true },
+      { rotulo: "Qtd.", largura: 8, alinhamento: "centro", nowrap: true },
+    ],
+    linhas,
+    "Nada registrado neste escopo.",
+    { listagem: true },
+  );
 }
 
 export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promise<void> {
-  const [anos, catalogo] = await Promise.all([
-    call("reports_available_years").then((r) => r.data ?? []),
-    call("legal_catalogs_list", { catalogo: "apuratorios" }).then((r) => r.data ?? []),
+  const [anosResposta, catalogoResposta] = await Promise.all([
+    call("reports_available_years"),
+    call("legal_catalogs_list", { catalogo: "apuratorios" }),
   ]);
+  if (!anosResposta.ok || !catalogoResposta.ok) {
+    ctx.shell(`<section class="panel"><h1>Estatísticas dos Apuratórios</h1>
+      <p class="error">${escapeHtml(anosResposta.error ?? catalogoResposta.error ?? "Não foi possível carregar os filtros.")}</p></section>`);
+    return;
+  }
+  const anos = anosResposta.data ?? [];
+  const catalogo = catalogoResposta.data ?? [];
   const apuratorios: Apuratorio[] = catalogo.map((l) => ({
     id: String(l.id),
     sigla: String(l.sigla ?? ""),
@@ -186,17 +270,30 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
     apuratorio_ids: apuratoriosSelecionados,
   };
 
-  const [situacao, solucoes, categorias, transgressoes, estatuto, penais, condutores, naturezas] =
-    await Promise.all([
-      call("reports_status_by_apuratorio", { filter }).then((r) => r.data ?? []),
-      call("reports_by_solution", { filter }).then((r) => r.data),
-      call("reports_by_evidence_category", { filter }).then((r) => r.data ?? []),
-      call("reports_transgressoes", { filter }).then((r) => r.data ?? []),
-      call("reports_infracoes_estatuto", { filter }).then((r) => r.data ?? []),
-      call("reports_infracoes_penais", { filter }).then((r) => r.data ?? []),
-      call("reports_driver_ranking", { filter }).then((r) => r.data ?? []),
-      call("reports_by_nature", { filter }).then((r) => r.data ?? []),
-    ]);
+  const respostas = await Promise.all([
+    call("reports_status_by_apuratorio", { filter }),
+    call("reports_by_solution", { filter }),
+    call("reports_by_evidence_category", { filter }),
+    call("reports_transgressoes", { filter }),
+    call("reports_infracoes_estatuto", { filter }),
+    call("reports_infracoes_penais", { filter }),
+    call("reports_driver_ranking", { filter }),
+    call("reports_by_nature", { filter }),
+  ] as const);
+  const falha = respostas.find((resposta) => !resposta.ok);
+  if (falha) {
+    ctx.shell(`<section class="panel"><h1>Estatísticas dos Apuratórios</h1>
+      <p class="error">${escapeHtml(falha.error ?? "Não foi possível carregar os indicadores.")}</p></section>`);
+    return;
+  }
+  const situacao = respostas[0].data ?? [];
+  const solucoes = respostas[1].data;
+  const categorias = respostas[2].data ?? [];
+  const transgressoes = respostas[3].data ?? [];
+  const estatuto = respostas[4].data ?? [];
+  const penais = respostas[5].data ?? [];
+  const condutores = respostas[6].data ?? [];
+  const naturezas = respostas[7].data ?? [];
 
   const situacaoLinhas = situacao.map((s) => [
     s.sigla,
@@ -211,8 +308,38 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
     { texto: String(c.total), numerica: true },
   ]);
 
+  const situacaoGrafico = situacao.map((item) => ({
+    sigla: item.sigla,
+    nome: item.nome,
+    tipo: item.tipo_apuratorio_nome,
+    emAndamento: item.em_andamento,
+    concluidos: item.concluidos,
+  }));
+  const condutoresContagem = condutores.map((item) => ({
+    rotulo: `${item.posto_graduacao} ${item.matricula} ${item.nome}`,
+    total: item.total,
+  }));
+  const specs: GraficoSpec[] = [
+    graficoSituacao("stats-situacao", situacaoGrafico),
+    graficoDonut("stats-solucoes-sugeridas", solucoes?.sugeridas ?? []),
+    graficoDonut("stats-solucoes-decididas", solucoes?.decididas ?? []),
+    graficoBarras("stats-categorias", categorias, { limitar: true }),
+    graficoBarras("stats-naturezas", naturezas, { limitar: true }),
+    graficoBarras("stats-condutores", condutoresContagem, { limitar: true }),
+    graficoEnquadramentos("stats-rdpm", transgressoes),
+    graficoEnquadramentos("stats-estatuto", estatuto),
+    graficoEnquadramentos("stats-penais", penais),
+  ];
+  const total = situacao.reduce((soma, item) => soma + item.total, 0);
+  const emAndamento = situacao.reduce((soma, item) => soma + item.em_andamento, 0);
+  const concluidos = situacao.reduce((soma, item) => soma + item.concluidos, 0);
+  const escopoAno = anoSelecionado === null ? "Todos os anos" : String(anoSelecionado);
+  const escopoApuratorios = apuratoriosSelecionados.length
+    ? `${apuratoriosSelecionados.length} apuratório(s) selecionado(s)`
+    : "Todos os apuratórios";
+
   ctx.shell(`
-    <section class="panel">
+    <section class="panel panel--analytics">
       <div class="page-head">
         <div>
           <h1>Estatísticas dos Apuratórios</h1>
@@ -223,9 +350,24 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
 
       ${barraDeFiltro(anos, apuratorios)}
 
-      <section class="stat-panel">
-        <h2>Situação por apuratório</h2>
-        ${tabela(
+      <div class="analytics-filter-summary" aria-live="polite">
+        <strong>Escopo aplicado:</strong><span>${escapeHtml(escopoAno)}</span><span>·</span><span>${escapeHtml(escopoApuratorios)}</span>
+      </div>
+
+      <div class="analytics-kpis">
+        ${kpiAnalitico(total, "Total no escopo")}
+        ${kpiAnalitico(emAndamento, "Em andamento", { tom: "andamento" })}
+        ${kpiAnalitico(concluidos, "Concluídos", { tom: "sucesso" })}
+        ${kpiAnalitico(situacao.length, "Espécies com registros")}
+      </div>
+
+      <div class="analytics-grid">
+        ${cartaoAnalitico({
+          id: "stats-situacao",
+          titulo: "Situação por apuratório",
+          descricao: "Comparação por espécie, tipo e situação derivada da data de conclusão.",
+          grafico: specs[0]!,
+          tabela: tabela(
           [
             { rotulo: "Apuratório", largura: 34, truncar: true },
             { rotulo: "Tipo", largura: 26, truncar: true },
@@ -236,20 +378,19 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
           situacaoLinhas,
           "Nenhum apuratório neste escopo.",
           { listagem: true },
-        )}
-      </section>
-
-      <div class="stat-grid">
-        ${painelContagem("Solução sugerida pelo encarregado", solucoes?.sugeridas ?? [], "Solução")}
-        ${painelContagem("Solução decidida pela autoridade", solucoes?.decididas ?? [], "Solução")}
-        ${painelContagem("Envolvidos por categoria de indício", categorias, "Categoria")}
-        ${painelContagem("Apuratórios por natureza geral do fato", naturezas, "Natureza")}
-      </div>
-
-      <section class="stat-panel">
-        <h2>Condutores em sinistro</h2>
-        <p class="hint">Alcança os apuratórios cuja natureza geral do fato exige condutor.</p>
-        ${tabela(
+          ),
+          classe: "analytics-card--wide",
+        })}
+        ${cartaoAnalitico({ id: "stats-solucoes-sugeridas", titulo: "Soluções sugeridas pelo encarregado", grafico: specs[1]!, tabela: tabelaContagem(solucoes?.sugeridas ?? [], "Solução") })}
+        ${cartaoAnalitico({ id: "stats-solucoes-decididas", titulo: "Soluções decididas pela autoridade", grafico: specs[2]!, tabela: tabelaContagem(solucoes?.decididas ?? [], "Solução") })}
+        ${cartaoAnalitico({ id: "stats-categorias", titulo: "Categorias de indício", grafico: specs[3]!, tabela: tabelaContagem(categorias, "Categoria"), limitado: categorias.length > 12 })}
+        ${cartaoAnalitico({ id: "stats-naturezas", titulo: "Natureza geral do fato", grafico: specs[4]!, tabela: tabelaContagem(naturezas, "Natureza"), limitado: naturezas.length > 12 })}
+        ${cartaoAnalitico({
+          id: "stats-condutores",
+          titulo: "Condutores em sinistro",
+          descricao: "Ocorrências cuja natureza geral do fato exige condutor.",
+          grafico: specs[5]!,
+          tabela: tabela(
           [
             { rotulo: "Militar", largura: 80, truncar: true },
             { rotulo: "Ocorrências", largura: 20, alinhamento: "centro", nowrap: true },
@@ -257,14 +398,18 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
           condutoresLinhas,
           "Nenhum condutor registrado neste escopo.",
           { listagem: true },
-        )}
-      </section>
-
-      ${painelEnquadramento("Transgressões do RDPM", transgressoes, "Artigo / inciso")}
-      ${painelEnquadramento("Infrações do Estatuto", estatuto, "Artigo / inciso")}
-      ${painelEnquadramento("Infrações penais", penais, "Dispositivo / artigo")}
+          ),
+          limitado: condutores.length > 12,
+          classe: "analytics-card--wide",
+        })}
+        ${cartaoAnalitico({ id: "stats-rdpm", titulo: "Transgressões do RDPM", descricao: "Artigos mais incidentes, coloridos pela classificação de gravidade.", grafico: specs[6]!, tabela: tabelaEnquadramento(transgressoes, "Artigo / inciso"), limitado: transgressoes.length > 12, classe: "analytics-card--wide" })}
+        ${cartaoAnalitico({ id: "stats-estatuto", titulo: "Infrações do Estatuto", grafico: specs[7]!, tabela: tabelaEnquadramento(estatuto, "Artigo / inciso"), limitado: estatuto.length > 12, classe: "analytics-card--wide" })}
+        ${cartaoAnalitico({ id: "stats-penais", titulo: "Infrações penais", descricao: "A esfera e a espécie permanecem vinculadas a cada ocorrência.", grafico: specs[8]!, tabela: tabelaEnquadramento(penais, "Dispositivo / artigo"), limitado: penais.length > 12, classe: "analytics-card--wide" })}
+      </div>
     </section>
   `);
+
+  montarCartoesAnaliticos(specs);
 
   document.querySelector<HTMLFormElement>("#filtro-stats")?.addEventListener("submit", (evento) => {
     evento.preventDefault();
@@ -275,5 +420,5 @@ export async function renderEstatisticasProcedimentos(ctx: ContextoTela): Promis
     void renderEstatisticasProcedimentos(ctx);
   });
 
-  ligarExportacao();
+  ligarExportacao(undefined, undefined, { paisagem: true });
 }

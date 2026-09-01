@@ -16,6 +16,12 @@
 
 import { call, type DesignacaoMatrizLinha } from "../api";
 import {
+  cartaoAnalitico,
+  graficoBarras,
+  kpiAnalitico,
+  montarCartoesAnaliticos,
+} from "../graficos";
+import {
   barraDeExportacao,
   baixarCsv,
   escapeHtml,
@@ -37,11 +43,22 @@ const totalDaColuna = (linhas: DesignacaoMatrizLinha[], apuratorioId: string) =>
   linhas.reduce((acc, l) => acc + (l.celulas.find((c) => c.id === apuratorioId)?.total ?? 0), 0);
 
 export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
-  const [anos, catalogoApuratorios, catalogoPapeis] = await Promise.all([
-    call("reports_available_years").then((r) => r.data ?? []),
-    call("legal_catalogs_list", { catalogo: "apuratorios" }).then((r) => r.data ?? []),
-    call("legal_catalogs_list", { catalogo: "papeis_processo" }).then((r) => r.data ?? []),
+  const [anosResposta, apuratoriosResposta, papeisResposta] = await Promise.all([
+    call("reports_available_years"),
+    call("legal_catalogs_list", { catalogo: "apuratorios" }),
+    call("legal_catalogs_list", { catalogo: "papeis_processo" }),
   ]);
+  const falhaInicial = [anosResposta, apuratoriosResposta, papeisResposta].find(
+    (resposta) => !resposta.ok,
+  );
+  if (falhaInicial) {
+    ctx.shell(`<section class="panel"><h1>Designações por Militar</h1>
+      <p class="error">${escapeHtml(falhaInicial.error ?? "Não foi possível carregar os filtros.")}</p></section>`);
+    return;
+  }
+  const anos = anosResposta.data ?? [];
+  const catalogoApuratorios = apuratoriosResposta.data ?? [];
+  const catalogoPapeis = papeisResposta.data ?? [];
 
   const apuratorios: Opcao[] = catalogoApuratorios.map((l) => ({
     id: String(l.id),
@@ -53,12 +70,15 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     rotulo: String(l.nome ?? ""),
   }));
 
-  const linhas =
-    (
-      await call("reports_designations_matrix", {
-        filter: { ano: anoSelecionado, papel_ids: papeisSelecionados, apuratorio_ids: [] },
-      })
-    ).data ?? [];
+  const linhasResposta = await call("reports_designations_matrix", {
+    filter: { ano: anoSelecionado, papel_ids: papeisSelecionados, apuratorio_ids: [] },
+  });
+  if (!linhasResposta.ok) {
+    ctx.shell(`<section class="panel"><h1>Designações por Militar</h1>
+      <p class="error">${escapeHtml(linhasResposta.error ?? "Não foi possível carregar as designações.")}</p></section>`);
+    return;
+  }
+  const linhas = linhasResposta.data ?? [];
 
   // Só as colunas com alguma designação no escopo entram: a matriz inteira do
   // catálogo ficaria larga e vazia assim que houver muitos apuratórios.
@@ -93,8 +113,44 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
       ]
     : [];
 
+  const totalDesignacoes = linhas.reduce((acc, linha) => acc + linha.total, 0);
+  const ranking = linhas.map((linha) => ({
+    rotulo: formatarQualificacaoMilitar(linha.posto_graduacao, linha.matricula, linha.nome),
+    total: linha.total,
+  }));
+  const specRanking = graficoBarras("designacoes-ranking", ranking, {
+    limitar: true,
+    rotuloPercentual: "das designações",
+  });
+  const tabelaRanking = tabela(
+    [
+      { rotulo: "Militar", largura: 72, truncar: true },
+      { rotulo: "Designações", largura: 28, alinhamento: "centro", nowrap: true },
+    ],
+    ranking.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
+    "Nenhuma designação neste escopo.",
+    { listagem: true },
+  );
+  // Matriz de coluna dinâmica: quantas colunas existem depende do dado, então
+  // largura percentual não se aplica. Rola na horizontal, que é o que uma
+  // matriz pede.
+  const tabelaMatriz = tabela(
+    [
+      { rotulo: "Militar", truncar: true },
+      ...colunasComDado.map((a) => ({
+        rotulo: a.rotulo,
+        alinhamento: "centro" as const,
+        nowrap: true,
+      })),
+      { rotulo: "Total", alinhamento: "centro" as const, nowrap: true },
+    ],
+    [...corpo, ...rodape.map((celulas) => ({ celulas, classe: "linha-total" }))],
+    "Nenhuma designação neste escopo.",
+    { larga: true, listagem: true },
+  );
+
   ctx.shell(`
-    <section class="panel">
+    <section class="panel panel--analytics">
       <div class="page-head">
         <div>
           <h1>Designações por Militar</h1>
@@ -125,40 +181,37 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
         <button type="submit">Aplicar</button>
       </form>
 
-      <div class="stat-row">
-        <div class="stat-card"><span class="stat-value">${linhas.length}</span><span>militares designados</span></div>
-        <div class="stat-card"><span class="stat-value">${escapeHtml(
-          linhas[0]
-            ? formatarQualificacaoMilitar(
-                linhas[0].posto_graduacao,
-                linhas[0].matricula,
-                linhas[0].nome,
-              )
-            : "—",
-        )}</span><span>mais designado</span></div>
+      <div class="analytics-kpis">
+        ${kpiAnalitico(linhas.length, "Militares designados")}
+        ${kpiAnalitico(totalDesignacoes, "Designações registradas")}
+        ${kpiAnalitico(linhas[0]?.total ?? 0, "Mais designado", {
+          tom: "andamento",
+          detalhe: linhas[0]
+            ? formatarQualificacaoMilitar(linhas[0].posto_graduacao, linhas[0].matricula, linhas[0].nome)
+            : "Nenhum militar no escopo",
+        })}
+        ${kpiAnalitico(colunasComDado.length, "Espécies com designação")}
       </div>
 
-      ${
-        // Matriz de coluna dinâmica: quantas colunas existem depende do dado,
-        // então largura percentual não se aplica. Rola na horizontal, que é o
-        // que uma matriz pede.
-        tabela(
-          [
-            { rotulo: "Militar", truncar: true },
-            ...colunasComDado.map((a) => ({
-              rotulo: a.rotulo,
-              alinhamento: "centro" as const,
-              nowrap: true,
-            })),
-            { rotulo: "Total", alinhamento: "centro" as const, nowrap: true },
-          ],
-          [...corpo, ...rodape.map((celulas) => ({ celulas, classe: "linha-total" }))],
-          "Nenhuma designação neste escopo.",
-          { larga: true, listagem: true },
-        )
-      }
+      <div class="analytics-grid">
+        ${cartaoAnalitico({
+          id: "designacoes-ranking",
+          titulo: "Histórico de designações por militar",
+          descricao: "Conta designações vigentes e encerradas, respeitando o ano e as funções selecionadas.",
+          grafico: specRanking,
+          tabela: tabelaRanking,
+          limitado: linhas.length > 12,
+          classe: "analytics-card--wide",
+        })}
+      </div>
+
+      <h2>Matriz de designações</h2>
+      <p class="hint">Militar × espécie de apuratório, no escopo do filtro.</p>
+      ${tabelaMatriz}
     </section>
   `);
+
+  montarCartoesAnaliticos([specRanking]);
 
   document
     .querySelector<HTMLFormElement>("#filtro-encarregados")
@@ -182,5 +235,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
         l.total,
       ]),
     ),
+    undefined,
+    { paisagem: true },
   );
 }
