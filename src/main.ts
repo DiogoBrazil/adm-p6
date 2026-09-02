@@ -5,11 +5,13 @@ import { call, type SessionUser } from "./api";
 import { destruirGraficos } from "./graficos";
 import {
   aplicarLarguras,
+  comCarregamento,
   destruirSelectsPesquisaveis,
   escapeHtml,
   formatarQualificacaoMilitar,
   formularioTemPendencia,
   instalarValidacaoAmigavel,
+  notificar,
   podeDescartarFormulario,
 } from "./dom";
 import {
@@ -315,28 +317,59 @@ function renderLogin(error = "") {
         <div class="login-copy"><strong>Acesso ao sistema</strong><span>Use suas credenciais para continuar.</span></div>
         <label>E-mail<input name="email" type="email" autocomplete="username" placeholder="nome@dominio.com" required /></label>
         <label>Senha<input name="senha" type="password" autocomplete="current-password" placeholder="Digite sua senha" required /></label>
-        ${error ? `<p class="feedback feedback--error" role="alert">${escapeHtml(error)}</p>` : ""}
+        <p id="login-erro" class="feedback feedback--error" role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
         <button type="submit">Entrar no ADM-P6</button>
       </form>
       <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     </main>
   `;
 
-  document.querySelector<HTMLFormElement>("#login-form")!.addEventListener("submit", async (event) => {
+  const formulario = document.querySelector<HTMLFormElement>("#login-form")!;
+  const erro = document.querySelector<HTMLElement>("#login-erro")!;
+
+  formulario.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget as HTMLFormElement);
-    const response = await call("auth_login", {
-      email: String(data.get("email") ?? ""),
-      senha: String(data.get("senha") ?? ""),
-    });
-    if (!response.ok || !response.data) {
-      renderLogin(response.error ?? "Falha ao autenticar.");
-      return;
+    const botao = formulario.querySelector<HTMLButtonElement>("button[type=submit]");
+    erro.hidden = true;
+
+    // O véu cobre as três esperas, e não só a primeira: `auth_login` roda um
+    // `bcrypt` (e, no primeiro acesso do processo, ainda abre o pool do
+    // Postgres), `montarRotasDeCatalogo` vai buscar as definições e o Painel
+    // dispara três consultas. Antes disto, o clique não mudava nada na tela.
+    const usuario = await comCarregamento(
+      "Entrando…",
+      async (passo) => {
+        const response = await call("auth_login", {
+          email: String(data.get("email") ?? ""),
+          senha: String(data.get("senha") ?? ""),
+        });
+        if (!response.ok || !response.data) {
+          // A falha escreve na mensagem que já está no formulário, em vez de
+          // redesenhar a tela: o `renderLogin(error)` de antes apagava e-mail e
+          // senha digitados, e quem errou a senha tinha de digitar os dois de novo.
+          erro.textContent = response.error ?? "Falha ao autenticar.";
+          erro.hidden = false;
+          return null;
+        }
+        session = response.data;
+        await passo("Carregando o sistema…");
+        await montarRotasDeCatalogo();
+        activePath = "/dashboard";
+        await renderRoute();
+        return response.data;
+      },
+      botao,
+    );
+
+    // Depois do `shell()` da primeira rota, porque é ele que desenha a
+    // `#toast-region` do app — `notificar` volta em silêncio se não a achar.
+    if (usuario) {
+      notificar(
+        `Bem-vindo(a), ${formatarQualificacaoMilitar(usuario.posto_graduacao, usuario.matricula, usuario.nome)}`,
+        "sucesso",
+      );
     }
-    session = response.data;
-    await montarRotasDeCatalogo();
-    activePath = "/dashboard";
-    await renderRoute();
   });
 }
 
@@ -352,12 +385,26 @@ function renderLogin(error = "") {
 
 
 
+/**
+ * Desenha a rota ativa, sob o véu de carregamento.
+ *
+ * Cada tela é `async` e só chama `ctx.shell()` **depois** de todas as consultas
+ * voltarem — Estatísticas dispara onze delas. Até aqui, nesse intervalo a tela
+ * anterior continuava inteira e clicável, e nada dizia que algo estava
+ * acontecendo: dava para clicar duas vezes no mesmo item do menu sem perceber.
+ *
+ * O véu vem do login também, e por isso `comCarregamento` conta profundidade:
+ * o `finally` de dentro não pode descobrir a tela com o de fora ainda correndo.
+ */
 async function renderRoute() {
   if (!session) {
     renderLogin();
     return;
   }
+  await comCarregamento("Carregando…", () => despacharRota());
+}
 
+async function despacharRota() {
   const chaveCatalogo = chaveDaRota(activePath);
   if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
   if (activePath === ROTA_CONFIG_APURATORIO) return renderConfiguracaoApuratorio(contexto);

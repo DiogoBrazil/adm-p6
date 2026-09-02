@@ -294,8 +294,16 @@ const CONJUNTOS: Record<string, Conjunto> = {
     envoltorio: "mapa-salvo__tabela",
     rotulo: "UNIDADE",
     colunas: [
-      "Apuratório", "Identificação", "Unidade", "Natureza", "Instauração",
-      "Conclusão", "Responsável", "Envolvidos", "Vencimento", "Último andamento",
+      { rotulo: "Apuratório", largura: 8, alinhamento: "centro", nowrap: true },
+      { rotulo: "Identificação", largura: 12, truncar: true },
+      { rotulo: "Unidade", largura: 11, truncar: true },
+      { rotulo: "Natureza", largura: 9, truncar: true },
+      { rotulo: "Instauração", largura: 9, alinhamento: "centro", nowrap: true },
+      { rotulo: "Conclusão", largura: 8, alinhamento: "centro", nowrap: true },
+      { rotulo: "Responsável", largura: 13, truncar: true },
+      { rotulo: "Envolvidos", largura: 11, truncar: true },
+      { rotulo: "Vencimento", largura: 9, alinhamento: "centro", nowrap: true },
+      { rotulo: "Último andamento", largura: 10, truncar: true },
     ],
     linha: (i) => [
       "IPM",

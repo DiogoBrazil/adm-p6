@@ -642,9 +642,27 @@ function paginarGrupo(grupo: HTMLElement): void {
   fonte.remove();
 }
 
-function paginarDocumentoMapa(raiz: HTMLElement): void {
-  for (const grupo of raiz.querySelectorAll<HTMLElement>(".mapa-pdf-grupo")) {
+/**
+ * Pagina cada grupo, cedendo um quadro **entre** eles.
+ *
+ * A paginação mede layout: para cada linha de tabela e cada palavra do resumo
+ * ela faz append e lê `scrollHeight`. São reflows síncronos em série, e é aqui
+ * que a interface congela por segundos — inclusive a animação do véu, que fica
+ * parada exatamente quando mais precisaria girar.
+ *
+ * A cessão fica **entre grupos**, e não dentro de um: cada grupo abre o seu
+ * `criarPaginaConteudo` e não compartilha estado com os outros, então ceder ali
+ * não atravessa a paginação de ficha nenhuma. Descer o `await` para dentro de
+ * `paginarGrupo` atravessaria — e um documento diferente não vale um véu mais
+ * animado.
+ */
+async function paginarDocumentoMapa(raiz: HTMLElement): Promise<void> {
+  const grupos = [...raiz.querySelectorAll<HTMLElement>(".mapa-pdf-grupo")];
+  for (const [indice, grupo] of grupos.entries()) {
     paginarGrupo(grupo);
+    if (indice < grupos.length - 1) {
+      await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+    }
   }
 }
 
@@ -683,8 +701,17 @@ function comFolhaPaisagem(): () => void {
   };
 }
 
-/** Insere, pagina e revela o documento somente durante a impressão. */
-export async function imprimirDocumentoMapa(html: string): Promise<void> {
+/**
+ * Insere, pagina e revela o documento somente durante a impressão.
+ *
+ * `aoImprimir` é avisado quando a montagem termina e a espera passa a ser do
+ * operador: `print_landscape` só volta quando o diálogo nativo fecha, e quem
+ * está olhando o véu precisa saber que a demora mudou de dono.
+ */
+export async function imprimirDocumentoMapa(
+  html: string,
+  aoImprimir?: () => Promise<void>,
+): Promise<void> {
   const raiz = document.createElement("div");
   raiz.className = "mapa-pdf-root mapa-pdf-root--medindo";
   raiz.innerHTML = html;
@@ -693,7 +720,7 @@ export async function imprimirDocumentoMapa(html: string): Promise<void> {
   let soltarFolha: (() => void) | undefined;
   try {
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-    paginarDocumentoMapa(raiz);
+    await paginarDocumentoMapa(raiz);
     await aguardarImagens(raiz);
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
 
@@ -708,6 +735,7 @@ export async function imprimirDocumentoMapa(html: string): Promise<void> {
 
     raiz.classList.remove("mapa-pdf-root--medindo");
     soltarFolha = comFolhaPaisagem();
+    await aoImprimir?.();
 
     // `print_landscape` só retorna quando a impressão termina ou o diálogo é
     // cancelado — o documento é desmontado no `finally` logo abaixo, e voltar

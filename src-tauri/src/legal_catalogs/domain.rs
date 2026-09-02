@@ -228,6 +228,10 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("sigla", "Sigla")),
             texto("nome", "Nome"),
             referencia("tipo_apuratorio_id", "Tipo", "tipos_apuratorio"),
+            inteiro("ordem", "Ordem no mapa",
+                "Posição desta espécie no mapa mensal — menor vem primeiro. \
+                 Empate cai na ordem alfabética da sigla. Vale para o documento \
+                 emitido e para a tabela da tela; não muda a ordem dos filtros."),
             inteiro("prazo_base_dias", "Prazo base (dias)",
                 "Prazo inicial padrão desta espécie. Um documento iniciador pode sobrescrevê-lo."),
             inteiro_opcional("max_envolvidos", "Máximo de envolvidos",

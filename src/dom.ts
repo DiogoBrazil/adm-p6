@@ -1026,6 +1026,72 @@ export function ligarBuscaInstantanea(
   return cancelar;
 }
 
+/** Cede um quadro ao navegador, para o que acabou de mudar chegar à tela. */
+export function proximoQuadro(): Promise<void> {
+  return new Promise((resolver) => requestAnimationFrame(() => resolver()));
+}
+
+/**
+ * Quantas chamadas de `comCarregamento` estão em curso.
+ *
+ * O login abre o véu e, lá dentro, chama `renderRoute`, que o abre de novo.
+ * Sem contar, o `finally` de dentro esconderia o véu com a ação de fora ainda
+ * correndo — e a tela ficaria "pronta" no meio do carregamento.
+ */
+let veusAbertos = 0;
+
+/**
+ * Cobre a tela enquanto a ação corre, e **garante que o véu pinta antes dela**.
+ *
+ * O quadro cedido antes de chamar `acao` não é zelo: quase todo trabalho pesado
+ * daqui é síncrono — a paginação do mapa mede layout linha a linha, a impressão
+ * fragmenta tabelas e converte canvas em PNG. Sem ceder, o navegador entra no
+ * bloqueio antes de ter pintado o véu, e o loader só apareceria depois de a
+ * ação terminar, que é quando ele não serve para nada.
+ *
+ * `passo` existe pela mesma razão, e é o que salva o caso mais duro: durante um
+ * bloqueio longo a animação do giro **congela junto**, então quem informa que
+ * algo avançou é a mensagem mudando de fase. Ela também cede um quadro.
+ *
+ * O `gatilho` é opcional e mantém o padrão que já existia antes deste helper —
+ * botão desabilitado com o rótulo trocado. Quando há os dois, o véu diz o que
+ * está acontecendo e o botão impede o segundo clique.
+ */
+export async function comCarregamento<T>(
+  mensagem: string,
+  acao: (passo: (texto: string) => Promise<void>) => Promise<T>,
+  gatilho?: HTMLButtonElement | null,
+): Promise<T> {
+  const veu = document.querySelector<HTMLElement>("#carregando");
+  const alvo = veu?.querySelector<HTMLElement>(".carregando__mensagem");
+  const rotulo = gatilho?.textContent ?? "";
+
+  const escrever = (texto: string) => {
+    if (alvo) alvo.textContent = texto;
+    if (gatilho) gatilho.textContent = texto;
+  };
+
+  if (gatilho) gatilho.disabled = true;
+  escrever(mensagem);
+  veusAbertos += 1;
+  if (veu) veu.hidden = false;
+
+  try {
+    await proximoQuadro();
+    return await acao(async (texto) => {
+      escrever(texto);
+      await proximoQuadro();
+    });
+  } finally {
+    veusAbertos -= 1;
+    if (veu && veusAbertos === 0) veu.hidden = true;
+    if (gatilho) {
+      gatilho.disabled = false;
+      gatilho.textContent = rotulo;
+    }
+  }
+}
+
 /**
  * O par que marca a área de resultados como "atualizando".
  *
@@ -1122,9 +1188,6 @@ export function ligarExportacao(
   const imprimir = document.querySelector<HTMLButtonElement>("#btn-imprimir");
   if (imprimir && aoImprimir) {
     imprimir.addEventListener("click", async () => {
-      imprimir.disabled = true;
-      const rotulo = imprimir.textContent;
-      imprimir.textContent = "Preparando…";
       const bloco = document.createElement("div");
       bloco.className = "bloco-impressao";
       let naTela: HTMLElement | null = null;
@@ -1134,14 +1197,22 @@ export function ligarExportacao(
         }
         naTela = document.querySelector<HTMLElement>(configuracao.seletorSubstituido);
         if (!naTela) throw new Error("a área paginada da impressão não foi encontrada");
-        bloco.innerHTML = await aoImprimir();
+        // O véu começa aqui, e não em `abrirImpressao`: `aoImprimir` carrega o
+        // filtro inteiro em lotes de 200 — até 25 idas ao backend em série antes
+        // de haver documento nenhum para preparar. É a espera mais longa deste
+        // caminho, e era a que não aparecia.
+        bloco.innerHTML = await comCarregamento(
+          "Carregando os registros…",
+          () => aoImprimir(),
+          imprimir,
+        );
         aplicarLarguras(bloco);
         // A cópia completa ocupa exatamente a posição da listagem paginada. Os
         // títulos que pertencem ao recorte também ficam dentro do alvo, por isso
         // não aparecem duplicados no papel.
         naTela.insertAdjacentElement("afterend", bloco);
         naTela.classList.add("ocultar-na-impressao");
-        await abrirImpressao(configuracao.orientacao, configuracao.perfil);
+        await abrirImpressao(configuracao.orientacao, configuracao.perfil, imprimir);
       } catch (erro) {
         // Sem isto a falha vira rejeição não tratada: o botão volta ao normal e
         // nada explica por que o diálogo de impressão não abriu.
@@ -1152,13 +1223,16 @@ export function ligarExportacao(
       } finally {
         bloco.remove();
         naTela?.classList.remove("ocultar-na-impressao");
-        imprimir.disabled = false;
-        imprimir.textContent = rotulo;
       }
     });
   } else {
+    // Este caminho servia seis telas — Painel, Estatísticas, Designações,
+    // Anual, Mapa Salvo e o detalhe do usuário — e era `void`: nem desabilitava
+    // o botão, nem esperava o `await`. O retorno visual mora dentro de
+    // `abrirImpressao`, que os dois caminhos atravessam; aqui basta passar o
+    // botão para ele ser desabilitado enquanto o diálogo está aberto.
     imprimir?.addEventListener("click", () =>
-      void abrirImpressao(configuracao.orientacao, configuracao.perfil),
+      void abrirImpressao(configuracao.orientacao, configuracao.perfil, imprimir),
     );
   }
 
@@ -1185,6 +1259,7 @@ export function ligarExportacao(
 async function abrirImpressao(
   orientacao: OrientacaoImpressao,
   perfil: PerfilImpressao,
+  gatilho?: HTMLButtonElement | null,
 ): Promise<void> {
   let folhaFallback: HTMLStyleElement | undefined;
   let limparOrdem = () => {};
@@ -1196,33 +1271,44 @@ async function abrirImpressao(
   const classePerfil = `impressao-perfil--${perfil}`;
   document.body.classList.add("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   try {
-    // Antes de fragmentar, para que o clone em blocos já nasça na posição final.
-    limparOrdem = adiarBlocosParaOFimDaImpressao();
-    limparFragmentos = fragmentarTabelasParaImpressao();
-    prepararGraficosParaImpressao();
-    // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
-    // antes de o documento virar papel. O canvas já foi redesenhado pelo
-    // `resize()`, que é síncrono; o layout ao redor dele não.
-    await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-    // Só agora: o PNG tem de sair do canvas já com a geometria da folha.
-    limparImagens = await congelarGraficosParaImpressao();
-    await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-    const comando = orientacao === "paisagem" ? "print_report_landscape" : "print_portrait";
-    const resposta = await call(comando);
-    if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
-    if (!resposta.data) {
-      // Fora do Linux não há GtkPageSetup. Uma folha construída em
-      // `adoptedStyleSheets` desapareceu dos PDFs reais embora as classes de
-      // sessão chegassem ao papel; um `<style>` no documento participa da
-      // árvore de estilos que Chromium/WebView2 efetivamente imprime.
-      const direcao = orientacao === "paisagem" ? "landscape" : "portrait";
-      folhaFallback = document.createElement("style");
-      folhaFallback.dataset.folhaRelatorio = "";
-      folhaFallback.textContent = `@page { size: A4 ${direcao}; margin: 15mm 12mm; }`;
-      document.head.append(folhaFallback);
-      await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-      window.print();
-    }
+    // O véu é o único retorno visual das seis telas que não passam `aoImprimir`,
+    // e as duas mensagens separam o que é trabalho nosso do que é espera pelo
+    // operador: o comando de impressão só volta quando o diálogo nativo fecha, e
+    // sem dizer isso o véu pareceria travado justamente na parte mais longa.
+    await comCarregamento(
+      "Preparando o documento…",
+      async (passo) => {
+        // Antes de fragmentar, para que o clone em blocos já nasça na posição final.
+        limparOrdem = adiarBlocosParaOFimDaImpressao();
+        limparFragmentos = fragmentarTabelasParaImpressao();
+        prepararGraficosParaImpressao();
+        // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
+        // antes de o documento virar papel. O canvas já foi redesenhado pelo
+        // `resize()`, que é síncrono; o layout ao redor dele não.
+        await proximoQuadro();
+        // Só agora: o PNG tem de sair do canvas já com a geometria da folha.
+        limparImagens = await congelarGraficosParaImpressao();
+
+        await passo("Abrindo a impressão…");
+        const comando = orientacao === "paisagem" ? "print_report_landscape" : "print_portrait";
+        const resposta = await call(comando);
+        if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
+        if (resposta.data) return;
+
+        // Fora do Linux não há GtkPageSetup. Uma folha construída em
+        // `adoptedStyleSheets` desapareceu dos PDFs reais embora as classes de
+        // sessão chegassem ao papel; um `<style>` no documento participa da
+        // árvore de estilos que Chromium/WebView2 efetivamente imprime.
+        const direcao = orientacao === "paisagem" ? "landscape" : "portrait";
+        folhaFallback = document.createElement("style");
+        folhaFallback.dataset.folhaRelatorio = "";
+        folhaFallback.textContent = `@page { size: A4 ${direcao}; margin: 15mm 12mm; }`;
+        document.head.append(folhaFallback);
+        await proximoQuadro();
+        window.print();
+      },
+      gatilho,
+    );
   } catch (erro) {
     notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
   } finally {

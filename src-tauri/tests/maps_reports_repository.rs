@@ -9,7 +9,7 @@
 
 use adm_p6_tauri_lib::db::paginacao::Recorte;
 use adm_p6_tauri_lib::maps_reports::domain::{
-    DesignacaoMatrizFiltro, MapPeriodRequest, MapPrintRequest, ReportFilter,
+    DesignacaoMatrizFiltro, MapPeriodRequest, MapPrintRequest, MapRow, ReportFilter,
 };
 use adm_p6_tauri_lib::maps_reports::repository;
 use base64::Engine;
@@ -363,6 +363,83 @@ async fn impressao_do_mapa_reune_os_dados_detalhados() {
         .await
         .unwrap();
         assert_eq!(responsaveis[0].rotulo, "TST PM 100000001 PM UM");
+    })
+    .await;
+}
+
+/// A ordem do mapa vem do **dado**, não do código.
+///
+/// O documento emitido precisa abrir por SR, IPM e PADS quando eles estão no
+/// escopo. Isso podia ter virado uma lista de siglas no `ORDER BY` — e teria
+/// quebrado em silêncio no dia em que o administrador renomeasse uma delas,
+/// porque sigla é apresentação (princípio 2). Virou `apuratorios.ordem`, coluna
+/// administrável semeada uma vez pela 0019.
+///
+/// O teste não menciona SR nem IPM: ele grava a ordem nas espécies da fixtura e
+/// exige que ela vença a sigla. É o mecanismo que está sob prova, e é ele que
+/// continuaria valendo se as três siglas mudassem de nome amanhã.
+///
+/// A segunda metade prova o outro lado: com `ordem` igual, o desempate continua
+/// sendo alfabético — que é o comportamento de antes da coluna existir, e o que
+/// mantém "o resto em qualquer ordem" previsível.
+#[tokio::test]
+async fn ordem_do_mapa_sai_da_coluna_e_desempata_pela_sigla() {
+    util::com_banco_descartavel("mapa_ordem", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // Um processo em cada espécie, no mesmo período.
+        processo(&pool, &m, &m.apuratorio, "001", data(2026, 3, 5), None).await;
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "002",
+            data(2026, 3, 6),
+            None,
+        )
+        .await;
+        processo(&pool, &m, &m.apuratorio_cp, "003", data(2026, 3, 7), None).await;
+
+        let pedido = MapPeriodRequest {
+            periodo_inicio: data(2026, 1, 1),
+            periodo_fim: data(2026, 12, 31),
+            apuratorio_ids: None,
+        };
+
+        // Sem ninguém nomeado, todos ficam no `DEFAULT 100` da 0019: alfabético.
+        let siglas = |linhas: &[MapRow]| {
+            linhas
+                .iter()
+                .map(|l| l.apuratorio_sigla.clone())
+                .collect::<Vec<_>>()
+        };
+        let padrao = repository::map_rows(&pool, &pedido).await.unwrap();
+        assert_eq!(
+            siglas(&padrao),
+            vec!["TST-A", "TST-B", "TST-C"],
+            "sem ordem declarada, o desempate por sigla mantém o de antes"
+        );
+
+        // Agora a ordem é declarada, e ela inverte o alfabeto de propósito.
+        sqlx::query("UPDATE apuratorios SET ordem = $2 WHERE id = $1::uuid")
+            .bind(&m.apuratorio_cp)
+            .bind(1_i32)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE apuratorios SET ordem = $2 WHERE id = $1::uuid")
+            .bind(&m.apuratorio_livre)
+            .bind(2_i32)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let declarada = repository::map_rows(&pool, &pedido).await.unwrap();
+        assert_eq!(
+            siglas(&declarada),
+            vec!["TST-C", "TST-B", "TST-A"],
+            "a coluna vence a sigla, e quem não foi nomeado vai para o fim"
+        );
     })
     .await;
 }

@@ -7,6 +7,18 @@
   </head>
   <body>
     <div id="app"></div>
+    <!--
+      O véu de carregamento vive FORA de `#app` de propósito: `main.ts::shell`
+      reescreve `app.innerHTML` inteiro a cada tela, e lá dentro o véu sumiria no
+      meio da própria navegação que ele existe para cobrir. Mesma razão pela qual
+      `mapa-pdf.ts` monta a raiz do documento em `document.body`.
+    -->
+    <div id="carregando" class="carregando" hidden>
+      <div class="carregando__caixa" role="status" aria-live="polite">
+        <span class="carregando__giro" aria-hidden="true"></span>
+        <span class="carregando__mensagem">Carregando…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

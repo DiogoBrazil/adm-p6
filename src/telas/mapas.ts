@@ -18,6 +18,7 @@ import { call, type MapRow, type SavedMapListItem } from "../api";
 import {
   barraDeExportacao,
   baixarCsvBase64,
+  comCarregamento,
   escapeHtml,
   formatarOrigem,
   formatarQualificacaoMilitar,
@@ -68,12 +69,30 @@ function tituloDoMapa(apuratorios: Apuratorio[]): string {
   return `Mapa de ${MESES[mesSelecionado - 1]}/${anoSelecionado} — ${escopo}`;
 }
 
-// Dez colunas de conteúdo imprevisível: o mapa é o documento emitido, e
-// espremer coluna aqui é pior que rolar. Por isso `larga: true` nas três
-// chamadas abaixo, e nenhuma largura declarada — ver o cabeçalho de `Coluna`.
-const COLUNAS_MAPA = [
-  "Apuratório", "Identificação", "Unidade", "Natureza", "Instauração",
-  "Conclusão", "Responsável", "Envolvidos", "Vencimento", "Último andamento",
+/**
+ * As dez colunas do mapa, com as proporções que a impressão já usava.
+ *
+ * Elas não são novas: viviam em `report-print.css`, como `th:nth-child(1..10)`,
+ * porque a tabela nascia sem largura nenhuma e o papel precisava de alguma.
+ * Somavam 100 lá e somam 100 aqui — o que mudou é que agora há **uma** fonte,
+ * e a tela passa a mostrar as mesmas proporções do documento (princípio 4).
+ *
+ * `larga: true` continua: o mapa é o documento emitido, e espremer dez colunas
+ * na largura do painel é pior que rolar. Com as larguras declaradas isso deixou
+ * de ser escolha entre duas perdas — as proporções valem, o texto longo trunca
+ * com `title`, e a tabela ainda rola quando a janela é estreita.
+ */
+const COLUNAS_MAPA: Coluna[] = [
+  { rotulo: "Apuratório", largura: 8, alinhamento: "centro", nowrap: true },
+  { rotulo: "Identificação", largura: 12, truncar: true },
+  { rotulo: "Unidade", largura: 11, truncar: true },
+  { rotulo: "Natureza", largura: 9, truncar: true },
+  { rotulo: "Instauração", largura: 9, alinhamento: "centro", nowrap: true },
+  { rotulo: "Conclusão", largura: 8, alinhamento: "centro", nowrap: true },
+  { rotulo: "Responsável", largura: 13, truncar: true },
+  { rotulo: "Envolvidos", largura: 11, truncar: true },
+  { rotulo: "Vencimento", largura: 9, alinhamento: "centro", nowrap: true },
+  { rotulo: "Último andamento", largura: 10, truncar: true },
 ];
 
 const linhaMapa = (l: MapRow) => [
@@ -144,6 +163,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       </div>
       ${tabela(COLUNAS_MAPA, linhasGeradas.map(linhaMapa), "Nada em mãos neste período.", {
         larga: true,
+        listagem: true,
       })}`;
 
   ctx.shell(`
@@ -296,46 +316,53 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
   document.querySelector<HTMLButtonElement>("#btn-gerar-pdf")?.addEventListener("click", async (evento) => {
     if (!linhasGeradas) return;
     const botao = evento.currentTarget as HTMLButtonElement;
-    const textoOriginal = botao.textContent ?? "Gerar PDF";
-    botao.disabled = true;
-    botao.textContent = "Preparando…";
 
     try {
-      const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
-      const processoId = document.querySelector<HTMLSelectElement>("#pdf-processo")?.value;
-      const resposta = await call("reports_map_print_data", {
-        request: {
-          periodo_inicio: inicio,
-          periodo_fim: fim,
-          apuratorio_ids: apuratoriosSelecionados,
-          processo_id: processoId || null,
-        },
-      });
-      if (!resposta.ok) {
-        notificar(resposta.error ?? "Falha ao preparar o PDF.", "erro");
-        return;
-      }
-      const itens = resposta.data ?? [];
-      if (!itens.length) {
-        notificar("Nenhum apuratório pertence a este mapa.", "erro");
-        return;
-      }
+      // As três fases são anunciadas porque a do meio **bloqueia a thread**: a
+      // paginação mede layout linha a linha, e enquanto ela corre a animação do
+      // véu congela junto. Quem informa que algo avançou é a mensagem, não o
+      // giro. A terceira existe por outro motivo: `print_landscape` só volta
+      // quando o operador fecha o diálogo nativo, e sem dizê-lo o véu pareceria
+      // travado justamente na espera que não é nossa.
+      await comCarregamento(
+        "Carregando os dados do mapa…",
+        async (passo) => {
+          const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
+          const processoId = document.querySelector<HTMLSelectElement>("#pdf-processo")?.value;
+          const resposta = await call("reports_map_print_data", {
+            request: {
+              periodo_inicio: inicio,
+              periodo_fim: fim,
+              apuratorio_ids: apuratoriosSelecionados,
+              processo_id: processoId || null,
+            },
+          });
+          if (!resposta.ok) {
+            notificar(resposta.error ?? "Falha ao preparar o PDF.", "erro");
+            return;
+          }
+          const itens = resposta.data ?? [];
+          if (!itens.length) {
+            notificar("Nenhum apuratório pertence a este mapa.", "erro");
+            return;
+          }
 
-      const documento = renderDocumentoMapa(itens, {
-        mes: MESES[mesSelecionado - 1]!,
-        ano: anoSelecionado,
-        periodoInicio: inicio,
-        periodoFim: fim,
-      });
-      await imprimirDocumentoMapa(documento);
+          await passo("Montando o documento…");
+          const documento = renderDocumentoMapa(itens, {
+            mes: MESES[mesSelecionado - 1]!,
+            ano: anoSelecionado,
+            periodoInicio: inicio,
+            periodoFim: fim,
+          });
+          await imprimirDocumentoMapa(documento, () => passo("Abrindo a impressão…"));
+        },
+        botao,
+      );
     } catch (erro) {
       notificar(
         erro instanceof Error ? erro.message : "Falha ao abrir a impressão do mapa.",
         "erro",
       );
-    } finally {
-      botao.disabled = false;
-      botao.textContent = textoOriginal;
     }
   });
 
@@ -467,7 +494,7 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
               // andamento por extenso: a folha em paisagem leva nove destas
               // linhas no melhor caso e menos que isso quando os dois textos
               // vêm longos (`medicao-mapa-salvo`).
-              { larga: true, linhasPorFragmentoImpressao: 5 },
+              { larga: true, listagem: true, linhasPorFragmentoImpressao: 5 },
             )}</div>`
           : `<pre class="mapa-salvo__conteudo-cru">${escapeHtml(JSON.stringify(mapa.dados_mapa, null, 2))}</pre>`
       }

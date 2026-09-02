@@ -76,6 +76,12 @@ pub async fn map_rows(
                andam.descricao     AS ultimo_andamento,
                andam.ocorrido_em   AS ultimo_andamento_em
           FROM v_processos_detalhados v
+          -- A ordem do documento sai daqui: `renderDocumentoMapa` monta as
+          -- capas preservando a primeira ocorrência de cada apuratório, então
+          -- este `ORDER BY` decide a sequência das seções do PDF **e** das
+          -- linhas da tela — as duas passam pelo mesmo caminho (`map_print_data`
+          -- reusa `map_rows`), e é por isso que elas concordam.
+          JOIN apuratorios ap ON ap.id = v.apuratorio_id
           -- Os envolvidos por extenso e o último andamento são do mapa, não da
           -- composição comum: ficam aqui.
           LEFT JOIN LATERAL (
@@ -103,7 +109,11 @@ pub async fn map_rows(
            AND (   (v.data_conclusao IS NULL     AND v.data_instauracao <= $2)
                 OR (v.data_conclusao IS NOT NULL AND v.data_conclusao BETWEEN $1 AND $2) )
            AND ($3::uuid[] IS NULL OR v.apuratorio_id = ANY($3::uuid[]))
-         ORDER BY v.apuratorio_sigla, v.data_instauracao, v.rotulo, v.id
+         -- `ap.ordem` é dado administrável (0019), não literal no código: a
+         -- sigla é apresentação e pode ser renomeada. Quem não foi nomeado fica
+         -- no `DEFAULT 100`, e o desempate por sigla mantém esse resto em ordem
+         -- alfabética, como era antes da coluna existir.
+         ORDER BY ap.ordem, v.apuratorio_sigla, v.data_instauracao, v.rotulo, v.id
         "#,
     )
     .bind(request.periodo_inicio)

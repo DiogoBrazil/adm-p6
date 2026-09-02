@@ -100,6 +100,11 @@ entender X → olhe em Y".
 | Fixtura de gráfico com o canvas nascendo oculto | canvas que nunca foi visível não ganha camada de composição: a fixtura aprova o que o PDF reprova. Pinte visível, deixe compor, ponha o `display:block` inline, e só então troque — `trocaPeloPng` |
 | Recorte que é **união** de baldes virando ramo novo do `CASE` | o `BALDE` é `CASE` de saída única, e é isso que torna os quatro exclusivos e somando o total. Um quinto `WHEN 'em_andamento'` roubaria linhas dos `FILTER`, que passariam a contar errado. União mora no **filtro** (`baldes_do_filtro` + `= ANY($n::text[])`), onde é pergunta e não classificação |
 | Rotular um recorte de "todos" sem conferir o que ele deixa de fora | "Em andamento (todos)" **não** inclui `sem_prazo`, então não fecha com `total - concluídos` (decisão 63). Escolha assim se registra em teste que diz o porquê, não só no código |
+| Véu de carregamento sem ceder um quadro antes da ação | o navegador entra no trabalho síncrono **antes de pintar**, e o loader só aparece quando a ação acabou. `comCarregamento` cede um `requestAnimationFrame` antes de chamar, e `passo()` cede outro a cada mensagem |
+| Contar com o giro do spinner durante trabalho que bloqueia a thread | a animação congela junto e parece app travado. Quem informa é o véu **mais a mensagem**, trocada por fase — e o `prefers-reduced-motion` global já zera toda animação do projeto |
+| `hidden` em elemento cujo CSS declara `display` | não há `[hidden]` global aqui: o `display` do seletor vence a regra do navegador. Declare o composto (`.carregando[hidden]{display:none!important}`) ou tire do DOM |
+| Dois modificadores de tabela que discordam no mesmo valor | `--larga` quer `min-width:1060px`, `--fixa` quer `0`, e a ordem no arquivo decide. Use seletor composto, que decide por especificidade e não por posição |
+| Ordem de exibição que o negócio pede | é coluna no banco (`apuratorios.ordem`, 0019), não lista de siglas no código — sigla é apresentação e pode ser renomeada. Carga inicial por sigla **na migration** é legítima (decisões 23, 31, 64) |
 | Medir impressão de gráfico com o compositing desligado | é o padrão de `tools/impressao/imprimir.py`, e ele **esconde** a faixa preta: o mesmo canvas sai pintado. Fixtura de gráfico declara `compositing: true`, e `semFaixaPreta` reprova folha com preto chapado |
 | Bloco indivisível alto logo abaixo da faixa de KPIs | `.analytics-card` não cabe nos 180mm úteis menos o cabeçalho, e o motor o desmancha por cima da folha seguinte. Ou ele desce (`data-impressao-ao-fim`), ou encolhe — e encolher ranking encavala rótulo |
 | Mudar o que vem antes de uma tabela fragmentada | o `linhasNoPrimeiroFragmentoImpressao` foi medido **com** o que estava lá. Mover um bloco na impressão obriga a remedir o primeiro bloco — em Designações, 18 → 12 |
@@ -109,7 +114,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 177 testes
+cd src-tauri && cargo fmt --check && cargo test   # 178 testes
 cd .. && npm test && npm run typecheck            # 19 testes frontend
 ```
 

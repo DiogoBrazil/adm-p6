@@ -249,6 +249,9 @@ async fn cada_tipo_de_coluna_e_lido_como_o_que_declara() {
                 "sigla": "TST-Z",
                 "nome": "Apuratório de Teste",
                 "tipo_apuratorio_id": tipo,
+                // Obrigatório como `prazo_base_dias`: `ordem` é `inteiro`, e o
+                // administrador decide onde a espécie entra no mapa (0019).
+                "ordem": 7,
                 "prazo_base_dias": 45,
                 "max_envolvidos": Value::Null,
                 "exige_natureza_fato": true,
@@ -259,6 +262,7 @@ async fn cada_tipo_de_coluna_e_lido_como_o_que_declara() {
         let cat = catalogo("apuratorios").unwrap();
         let linha = repository::get(&pool, cat, &id).await.unwrap().unwrap();
         assert_eq!(linha["sigla"], json!("TST-Z"));
+        assert_eq!(linha["ordem"], json!(7));
         assert_eq!(linha["prazo_base_dias"], json!(45));
         assert_eq!(linha["exige_natureza_fato"], json!(true));
         assert_eq!(

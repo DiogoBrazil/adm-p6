@@ -360,10 +360,6 @@
     white-space: nowrap;
   }
 
-  body.relatorio-pdf-ativo .mapa-salvo__tabela table {
-    table-layout: fixed;
-  }
-
   body.relatorio-pdf-ativo .mapa-salvo__conteudo-cru {
     max-width: 100%;
     white-space: pre-wrap;
@@ -375,14 +371,11 @@
     font-size: 7.5pt;
   }
 
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(1) { width: 8%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(2) { width: 12%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(3) { width: 11%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(4) { width: 9%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(5) { width: 9%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(6) { width: 8%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(7) { width: 13%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(8) { width: 11%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(9) { width: 9%; }
-  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(10) { width: 10%; }
+  /* As dez larguras saíam daqui, por `nth-child`, porque a tabela do mapa
+     nascia sem `Coluna.largura` e o papel precisava de alguma proporção.
+     Agora elas são declaradas na tela (`mapas.ts::COLUNAS_MAPA`), viram
+     `<col data-largura>` e chegam ao papel pelo mesmo caminho de todas as
+     outras listagens — uma fonte só, e a tela mostrando o que o PDF mostra.
+     O `table-layout: fixed` também saiu: vem de `.tabela-dados--fixa`, que a
+     largura declarada liga sozinha. */
 }

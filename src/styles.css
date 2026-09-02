@@ -3316,6 +3316,16 @@ tr.atrasado {
   table-layout: fixed;
 }
 
+/* A única tabela que declara os dois modificadores é a do mapa, e eles
+   discordam no `min-width`: 1060px em `--larga`, 0 em `--fixa`. Entre regras de
+   mesma especificidade quem vence é a **ordem no arquivo**, não a intenção —
+   e a ordem daria 0, espremendo dez colunas na largura do painel. Este seletor
+   composto tem especificidade maior, então ele decide de propósito e não por
+   acidente de posição: as proporções valem, e a tabela rola quando não cabe. */
+.tabela-dados--larga.tabela-dados--fixa {
+  min-width: 1060px;
+}
+
 .tabela-dados--fixa th,
 .tabela-dados--fixa td {
   height: 46px;
@@ -4477,6 +4487,64 @@ button.filtro-chip:focus-visible {
   }
 }
 
+/* ── Véu de carregamento ────────────────────────────────────────────────
+ *
+ * Mora fora de `#app` (ver `index.html`), porque `shell()` reescreve o
+ * `innerHTML` inteiro a cada tela.
+ *
+ * `z-index: 25` fica **abaixo** da `.toast-region` (30): quando a ação falha,
+ * quem conta o que houve é o toast, e ele precisa aparecer por cima do véu.
+ *
+ * A regra `[hidden]` abaixo é explícita de propósito. Este projeto não declara
+ * nenhum `[hidden]` global, e o `display: flex` daqui venceria a regra do
+ * navegador — foi exatamente assim que o canvas do gráfico continuou sendo
+ * impresso depois de "escondido" (seção 7).
+ *
+ * O giro é enfeite, não o recado: o bloco `prefers-reduced-motion` logo abaixo
+ * zera toda animação do app, e nessa condição quem informa é o véu com a
+ * mensagem. Por isso o anel é visível parado.
+ */
+.carregando {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(9 26 40 / 42%);
+}
+
+.carregando[hidden] {
+  display: none !important;
+}
+
+.carregando__caixa {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 15px 22px;
+  color: #12212e;
+  font-weight: 600;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(9 26 40 / 26%);
+}
+
+.carregando__giro {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgb(20 60 92 / 20%);
+  border-top-color: var(--brand-700);
+  border-radius: 50%;
+  animation: carregando-giro 700ms linear infinite;
+}
+
+@keyframes carregando-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -4489,6 +4557,10 @@ button.filtro-chip:focus-visible {
 }
 
 @media print {
+  .carregando {
+    display: none !important;
+  }
+
   .app-shell {
     display: block;
   }
