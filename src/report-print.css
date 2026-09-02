@@ -21,6 +21,15 @@
   display: none;
 }
 
+/* Nasce e morre dentro da janela de impressão (`dom.ts::abrirImpressao`), mas o
+   véu não é opaco a ponto de garantir que ninguém o veja aparecer. Classe
+   própria em vez de `.somente-impressao`: aquela vira `display: block
+   !important` no papel, e um `flex !important` de mesma especificidade
+   decidiria por posição no arquivo, não por intenção. */
+.cabecalho-institucional {
+  display: none;
+}
+
 /* O invólucro serve só como alvo de impressão; na tela não cria uma caixa que
    altere margens ou o fluxo original da matriz. */
 .matriz-designacoes--tela {
@@ -103,6 +112,46 @@
 
   body.relatorio-pdf-ativo .ocultar-na-impressao {
     display: none !important;
+  }
+
+  /* O brasão e a unidade encabeçam o documento; o `.page-head` logo abaixo
+     continua dono do título e da borda que separa cabeçalho de conteúdo — uma
+     borda só, e é a que já existia.
+
+     Tudo em `mm`, que é unidade absoluta no papel: a mesma caixa serve à A4
+     retrato e à paisagem sem depender da largura da folha, que só existe
+     depois que a impressão começou. */
+  body.relatorio-pdf-ativo .cabecalho-institucional {
+    display: flex;
+    margin: 0 0 4mm;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  /* O brasão é retrato (270×325). `contain` numa caixa quadrada o mantém
+     inteiro e centrado; `width`/`height` sozinhos o esticariam. */
+  body.relatorio-pdf-ativo .cabecalho-institucional img {
+    width: 16mm;
+    height: 16mm;
+    max-width: 100%;
+    object-fit: contain;
+  }
+
+  body.relatorio-pdf-ativo .cabecalho-institucional p {
+    margin: 1.5mm 0 0;
+    color: #173246;
+    font-size: 7.5pt;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  body.relatorio-pdf-ativo .cabecalho-institucional span {
+    margin-top: 0.6mm;
+    color: var(--print-muted);
+    font-size: 7pt;
+    letter-spacing: 0.03em;
   }
 
   body.relatorio-pdf-ativo .page-head {

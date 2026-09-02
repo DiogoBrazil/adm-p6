@@ -42,8 +42,7 @@ import {
 } from "./telas/mapas";
 import { ROTA as ROTA_ESTATISTICAS, renderEstatisticas } from "./telas/estatisticas";
 import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
-
-const brasaoUrl = new URL("../src-tauri/icons/icon.png", import.meta.url).href;
+import { brasaoUrl } from "./brasao";
 
 // Shell da aplicação: sessão, menu e roteamento. Nada mais.
 //
@@ -79,7 +78,7 @@ let routes: Route[] = [
     adminOnly: true
   },
   { path: ROTA_AUDITORIA, label: "Auditoria", group: "Auditoria" },
-  { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
+  { path: ROTA_ENCARREGADOS, label: "Designações por Policial Militar", group: "Relatórios" },
   { path: ROTA_MAPA_MENSAL, label: "Mapa do Período", group: "Mapas" },
   { path: ROTA_MAPAS_SALVOS, label: "Mapas Salvos", group: "Mapas" },
   // São telas diferentes de propósito: o Anual é o documento que se imprime e

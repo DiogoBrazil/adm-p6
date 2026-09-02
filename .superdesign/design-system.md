@@ -11,7 +11,7 @@ ADM-P6 é o sistema desktop da Seção de Justiça e Disciplina do 7º BPM/PMRO.
 - Depois da capa, processos e procedimentos seguem em fluxo contínuo e podem compartilhar a mesma página.
 - Cada registro começa com cabeçalho institucional inequívoco, termina com marcador “Fim do …” e, quando atravessa uma página, recebe “Continuação do …” no topo da seguinte.
 - Registros extensos podem continuar em páginas seguintes; nunca cortar informação nem comprimir tipografia até ficar ilegível. Cabeçalhos de tabelas se repetem quando a coleção é fragmentada.
-- Capa: brasão oficial, Polícia Militar do Estado de Rondônia, 7ºBPM, espécie e sigla, mês/ano e resumo quantitativo, sem faixa decorativa lateral ou superior.
+- Capa: brasão oficial, Polícia Militar de Rondônia, 7ºBPM, espécie e sigla, mês/ano e resumo quantitativo, sem faixa decorativa lateral ou superior.
 - Ficha: cabeçalho compacto com identificação e situação; grade de dados cadastrais; seções para pessoas, enquadramentos, designações, prazos, andamentos, anexos e resumo dos fatos.
 - Repetir cabeçalho de tabela quando uma coleção atravessar páginas; impedir quebra dentro de uma linha.
 

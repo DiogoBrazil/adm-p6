@@ -14,8 +14,7 @@ import type {
 } from "../api";
 import { call } from "../api";
 import { escapeHtml, formatarOrigem } from "../dom";
-
-const brasaoUrl = new URL("../../src-tauri/icons/icon.png", import.meta.url).href;
+import { brasaoUrl } from "../brasao";
 
 export type ContextoPdfMapa = {
   mes: string;
@@ -332,7 +331,7 @@ function renderFicha(item: MapPrintItem): string {
     <header class="mapa-pdf-cabecalho-ficha">
       <img src="${escapeHtml(brasaoUrl)}" alt="Brasão da Polícia Militar de Rondônia" />
       <div>
-        <p>Polícia Militar do Estado de Rondônia · 7º BPM</p>
+        <p>Polícia Militar de Rondônia · 7º BPM</p>
         <h1>${escapeHtml(processo.rotulo)}</h1>
         <span>${escapeHtml(processo.apuratorio_nome)} · Ficha individual</span>
       </div>
@@ -397,7 +396,7 @@ function renderCapa(grupo: MapPrintItem[], contexto: ContextoPdfMapa): string {
   return `<article class="mapa-pdf-pagina mapa-pdf-capa">
     <header>
       <img src="${escapeHtml(brasaoUrl)}" alt="Brasão da Polícia Militar de Rondônia" />
-      <p>Polícia Militar do Estado de Rondônia</p>
+      <p>Polícia Militar de Rondônia</p>
       <strong>7ºBPM</strong>
     </header>
     <main>

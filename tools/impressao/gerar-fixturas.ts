@@ -396,8 +396,38 @@ const CONJUNTOS: Record<string, Conjunto> = {
 
 // ── Montagem das páginas ──────────────────────────────────────────────
 
-function cabecalho(titulo: string, subtitulo: string): string {
-  return `<div class="page-head">
+/**
+ * O que `dom.ts::inserirCabecalhoInstitucional` monta no clique de imprimir.
+ *
+ * A fixtura não tem JS: é o retrato do DOM que o app leva ao papel, e o
+ * cabeçalho tem de estar nele — senão o arnês certifica uma folha com ~24mm a
+ * mais de espaço do que o app realmente imprime, e o primeiro bloco de cada
+ * tabela fica calibrado para uma folha que não existe.
+ *
+ * O `file://` é absoluto pelo mesmo motivo que o do CSS: a fixtura é aberta
+ * fora da árvore do Vite, e caminho relativo não acharia o asset.
+ */
+function cabecalhoInstitucional(): string {
+  const brasao = `file://${resolve("src/assets/brasao-pmro.png")}`;
+  return `<header class="cabecalho-institucional">
+    <img src="${escapeHtml(brasao)}" alt="" />
+    <p>Polícia Militar de Rondônia</p>
+    <span>7º BPM · Seção de Justiça e Disciplina</span>
+  </header>`;
+}
+
+/**
+ * `institucional: false` reproduz a guarda do perfil `documento`: ali o
+ * Relatório Anual já abre com a `.relatorio-capa`, e o app não insere o
+ * cabeçalho para não pôr dois brasões na mesma folha.
+ */
+function cabecalho(
+  titulo: string,
+  subtitulo: string,
+  opcoes: { institucional?: boolean } = {},
+): string {
+  const institucional = opcoes.institucional === false ? "" : cabecalhoInstitucional();
+  return `${institucional}<div class="page-head">
     <div><h1>${escapeHtml(titulo)}</h1><p>${escapeHtml(subtitulo)}</p></div>
     <div class="page-head-right">
       <div class="export-bar"><button class="outline small">Imprimir / PDF</button></div>
@@ -764,6 +794,40 @@ function catalogo(): Fixtura[] {
     paginasMaximas: 1,
   });
 
+  // O cabeçalho institucional entra em todo documento do caminho comum, e em
+  // nenhum do perfil `documento`. As duas fixturas são o par: uma exige o texto
+  // no papel, a outra o proíbe. Sem a segunda, uma regressão que trocasse a
+  // guarda de JS por CSS — ou a apagasse — só apareceria no Relatório Anual
+  // impresso com dois brasões, que é onde ninguém olha.
+  lista.push({
+    nome: "regressao-cabecalho-institucional",
+    orientacao: "retrato",
+    proposito: "brasão e unidade encabeçam o documento comum — src/dom.ts",
+    corpo: painel(
+      cabecalho("Auditoria", "Registros do escopo.") + tabelaFragmentada(auditoria, 12, 8),
+    ),
+    marcadores: 12,
+    textosObrigatorios: ["Polícia Militar de Rondônia", "Seção de Justiça e Disciplina"],
+    // Só na primeira folha: o caminho comum não repete cabeçalho por folha, e
+    // um dia em que passasse a repetir seria mudança a decidir, não a herdar.
+    textosNaMesmaPagina: [["Polícia Militar de Rondônia", "L0001"]],
+  });
+  lista.push({
+    nome: "regressao-cabecalho-documento",
+    orientacao: "paisagem",
+    perfil: "documento",
+    proposito: "o perfil documento tem capa própria e não recebe o cabeçalho — src/dom.ts",
+    corpo: painel(
+      `<div class="relatorio-anual">
+        ${cabecalho("Relatório Anual — 2026", "Não pertence ao PDF.", { institucional: false })}
+        <section class="relatorio-capa"><h1>Relatório Anual</h1><p>7º BPM — 2026</p></section>
+        <section class="relatorio-secao"><h2>1. Seção</h2>${tabelaInteira(auditoria, 4)}</section>
+      </div>`,
+    ),
+    marcadores: 4,
+    textosProibidos: ["Polícia Militar de Rondônia"],
+  });
+
   // Reproduções mínimas dos dois recortes encontrados nos PDFs enviados.
   // Não são aproximações: larguras, rótulos e `nowrap` são os das telas.
   const colunasDesignacoes: Coluna[] = [
@@ -781,7 +845,7 @@ function catalogo(): Fixtura[] {
     perfil: "analitico",
     proposito: "cabeçalhos estreitos de Designações quebram sem colisão geométrica",
     corpo: painel(
-      cabecalho("Designações por Militar", "Cabeçalhos reais do cartão de carga.") +
+      cabecalho("Designações por Policial Militar", "Cabeçalhos reais do cartão de carga.") +
         tabela(
           colunasDesignacoes,
           [["CEL PM 100000 Silva", "12", "8", "3", "23", "14/08/2026", "31/07/2026"]],
@@ -871,7 +935,9 @@ function catalogo(): Fixtura[] {
     rotuloCabecalho: rotuloDaPrimeiraColuna(contagem),
     corpo: painel(
       `<div class="relatorio-anual">
-        ${cabecalho("Relatório Anual — 2026", "Cabeçalho operacional que não pertence ao PDF.")}
+        ${cabecalho("Relatório Anual — 2026", "Cabeçalho operacional que não pertence ao PDF.", {
+          institucional: false,
+        })}
         <section class="relatorio-capa"><h1>Relatório Anual</h1><p>7º BPM — 2026</p></section>
         ${secoesLongas}${secaoCurta}
       </div>`,
@@ -990,7 +1056,16 @@ function catalogo(): Fixtura[] {
         ],
         classe: l.tipo === "item" ? "" : "linha-total",
       }));
-      const fragmentos = blocosDeImpressao(linhas.length, 22, 18)
+      // Os tamanhos vêm de `CONJUNTOS.matriz`, que é onde os valores da tela
+      // moram. Estavam escritos à mão aqui, e o primeiro bloco ficou em 18
+      // depois que `encarregados.ts` já o tinha baixado para 12: a fixtura
+      // passou a certificar uma folha que a tela não imprime mais.
+      const matrizDoConjunto = CONJUNTOS.matriz!;
+      const fragmentos = blocosDeImpressao(
+        linhas.length,
+        matrizDoConjunto.fragmentoAtual,
+        matrizDoConjunto.fragmentoPrimeiro ?? matrizDoConjunto.fragmentoAtual,
+      )
         .map(([inicio, fim]) =>
           tabela(colunas, linhas.slice(inicio, fim), "Nada.", { listagem: true }).replace(
             '<div class="table-wrap"',
@@ -999,9 +1074,9 @@ function catalogo(): Fixtura[] {
         )
         .join("");
       return painel(
-        cabecalho("Designações por Militar", "Escopo do filtro.") +
+        cabecalho("Designações por Policial Militar", "Escopo do filtro.") +
           `<div class="somente-impressao matriz-designacoes--impressao">
-            <h2>Designações por militar e espécie</h2>
+            <h2>Designações por Policial Militar e espécie</h2>
             <div class="tabela-impressao-fragmentada">${fragmentos}</div>
           </div>`,
       );
@@ -1072,13 +1147,13 @@ function catalogo(): Fixtura[] {
     });
   }
 
-  // Designações por Militar **como sai hoje**: título, faixa de KPIs, o cartão
+  // Designações por Policial Militar **como sai hoje**: título, faixa de KPIs, o cartão
   // indivisível de 532px (11 militares × 42px + 70) e só então a matriz. Mede
   // em que folha cada coisa cai — a folha 1 fica com título e KPIs sobre o
   // resto em branco, e é isso que a `calibrado-*` do mesmo par vem corrigir.
   const matriz = CONJUNTOS.matriz!;
   const kpisDeDesignacoes = `<div class="analytics-kpis">${[
-    kpiAnalitico(11, "Militares designados"),
+    kpiAnalitico(11, "POLICIAIS MILITARES DESIGNADOS"),
     kpiAnalitico(20, "Apuratórios no escopo"),
     kpiAnalitico(5, "Concluídos", { tom: "sucesso" }),
     kpiAnalitico(1, "Em andamento vencidos", {
@@ -1097,13 +1172,13 @@ function catalogo(): Fixtura[] {
     )}</div>`;
   const matrizDoPapel = (primeiro: number) =>
     `<div class="somente-impressao matriz-designacoes--impressao">
-      <h2>Designações por militar e espécie</h2>
+      <h2>Designações por Policial Militar e espécie</h2>
       <p class="hint">Combinações com quantidade zero foram omitidas; os totais preservam o escopo do filtro.</p>
       ${tabelaFragmentada(matriz, 120, matriz.fragmentoAtual, 0, "", primeiro)}
     </div>`;
   const cabecalhoDeDesignacoes = cabecalho(
-    "Designações por Militar",
-    "Carga de trabalho por militar e por espécie, na situação de hoje.",
+    "Designações por Policial Militar",
+    "Carga de trabalho por policial militar e por espécie, na situação de hoje.",
   );
   // Post-correção o canvas é composto, desenhado e **removido** do DOM antes de
   // imprimir, exatamente como `congelarGraficosParaImpressao` faz. Reproduzir a
@@ -1158,7 +1233,7 @@ function catalogo(): Fixtura[] {
         trocaPeloPng("removido"),
     ),
     marcadores: 120,
-    textosNaMesmaPagina: [["Designações por Militar", "L0001"]],
+    textosNaMesmaPagina: [["Designações por Policial Militar", "L0001"]],
   });
 
   // O `.stat-panel` também é indivisível no papel, e é onde moram os painéis de

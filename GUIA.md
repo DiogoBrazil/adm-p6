@@ -128,9 +128,10 @@ npm run typecheck                    # tsc --noEmit — é aqui que erro de coma
 npm run build                        # typecheck + vite build
 
 # Binário de produção — é o único que exerce a CSP restritiva.
-# `--no-bundle` compila o executável sem empacotar: necessário enquanto
-# `bundle.icon` estiver vazio (seção 12, rodada 9).
-npm run tauri build -- --no-bundle
+# Empacota deb, rpm e AppImage: `bundle.icon` deixou de estar vazio quando o
+# distintivo do 7º BPM virou ícone do app. `--no-bundle` continua servindo para
+# conferir só a CSP, sem esperar os três pacotes.
+npm run tauri build
 ./src-tauri/target/release/adm-p6-tauri
 ```
 
@@ -453,7 +454,7 @@ build; em desenvolvimento o Tauri usa a `devCsp`, que afrouxa `style-src` justam
 onde mora o risco:
 
 ```bash
-npm run tauri build -- --no-bundle
+npm run tauri build
 ./src-tauri/target/release/adm-p6-tauri
 ```
 
@@ -846,6 +847,9 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Esconder com `hidden` um elemento cujo próprio CSS declara `display` | O projeto **não tem** `[hidden]` global — só oito regras, todas com classe. Um `display: flex` no seletor vence a regra do navegador, e o elemento continua ocupando caixa. É a mesma família do canvas que seguiu sendo impresso depois de "escondido" | Quem declara `display` declara também o `[hidden]` composto: `.carregando[hidden] { display: none !important }`. Ou tira do DOM, como `congelarGraficosParaImpressao` faz |
 | Combinar dois modificadores de tabela que discordam | `--larga` pede `min-width: 1060px` e `--fixa` pede `0`. Mesma especificidade: quem vence é a **ordem no arquivo**, e a ordem dá `0` — dez colunas espremidas na largura do painel, sem ninguém ter escolhido isso | Seletor composto, de especificidade maior, decidindo de propósito: `.tabela-dados--larga.tabela-dados--fixa { min-width: 1060px }` |
 | Pôr um bloco indivisível alto logo abaixo de uma faixa de KPIs | `.analytics-card` é `break-inside: avoid` e o cartão de ranking mede 532px (11 militares) a 700px de altura — mais que os 180mm úteis da A4 paisagem menos o cabeçalho. O motor não tem onde o pôr: desmancha o cartão por cima da folha seguinte e ainda empurra o que vem depois. Medido em Designações, `medicao-designacoes-folha1`: **duas** folhas gastas antes da primeira linha da matriz — a primeira com título, KPIs e a faixa preta do gráfico, a segunda só com o `h2` da matriz | Ou o bloco desce, ou ele encolhe — e encolher um ranking encavala os rótulos de três linhas. Designações desce: `data-impressao-ao-fim` na `.analytics-grid`, e `dom.ts::adiarBlocosParaOFimDaImpressao` a move para o fim do `.panel` só enquanto o diálogo está aberto. O primeiro bloco da matriz é **remedido** depois disso — 18 valia para uma folha 1 que a matriz não alcançava |
+| Guardar o brasão dos documentos na pasta de ícones do Tauri | `src-tauri/icons/icon.png` era, ao mesmo tempo, o brasão da PMRO que quatro telas carregam (sidebar, login, capa do Anual e o Mapa Mensal inteiro) e a vaga que `npx tauri icon` sobrescreve ao gerar o ícone do app. Gerar o ícone **trocava o brasão de todos os documentos** pelo distintivo do batalhão, sem erro e sem aviso — e o Mapa Mensal, que ninguém pediu para mexer, sairia com o emblema errado | O brasão é `src/assets/brasao-pmro.png` e sai de `src/brasao.ts`, numa fonte só (estava triplicado em `main.ts`, `anual.ts` e `mapa-pdf.ts`). `src-tauri/icons/` passa a ser exclusivamente do empacotador. Quem prova que a separação funcionou é `controle-mapa.sh`: mesmos bytes em caminho novo têm de dar PDF idêntico ao de `HEAD`, texto **e** pixel |
+| Escrever à mão, na fixtura, o tamanho do bloco que a tela declara | `matriz-normalizada` chamava `blocosDeImpressao(linhas.length, 22, 18)` com os números digitados, e o `18` ficou para trás quando `encarregados.ts` baixou o primeiro bloco para 12. A fixtura passou a certificar uma folha que o app não imprime mais — e passou verde por várias rodadas, porque a folha maior acomodava o bloco maior. Só reprovou quando o cabeçalho institucional tirou 24mm do topo: a última linha do bloco de 18 cruzou a margem inferior por **0,8pt** | Tamanho de bloco sai de `CONJUNTOS`, que é onde o valor da tela mora — `fragmentoAtual` e `fragmentoPrimeiro`, como `calibrado-designacoes-folha1` já fazia. Fixtura que copia o número em vez de o ler mede a si mesma |
+| Criar a imagem no clique de imprimir e não esperar por ela | Uma `<img>` inserida no DOM durante a preparação da impressão ainda não está decodificada quando o comando nativo abre o diálogo, e o WebKitGTK imprime **o espaço em branco** no lugar dela — sem erro, sem console, sem nada. Um PDF oficial sem brasão parece um PDF que simplesmente não tem brasão | `await img.decode()` antes de chamar `print_portrait`/`print_report_landscape`, e falhar alto se não decodificar: `mapa-pdf.ts::aguardarImagens` foi o primeiro, `dom.ts::inserirCabecalhoInstitucional` é o segundo. Quem confere no arnês é `pdfimages -list`, que mostra a imagem e a `smask` na folha 1 — `pdftotext` não vê imagem nenhuma |
 
 ---
 
@@ -1029,6 +1033,8 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | como se conta a carga de trabalho de um militar | decisões **57** e **58**, e `maps_reports/repository.rs::designations_matrix` (cabeçalho) |
 | por que "sem prazo definido" é um balde e não um zero | decisão **57**, `SituacaoDesignacao` (cabeçalho) e `dados.ts::baldesComDado` |
 | por que a série por ano ignora o filtro de ano | `maps_reports/repository.rs::by_year` (cabeçalho) — o ano é o eixo dela |
+| onde mora o brasão, e por que não na pasta de ícones | `src/brasao.ts` (cabeçalho) e a armadilha do `tauri icon` na seção 7 |
+| quem põe o brasão no topo de todo relatório | `dom.ts::inserirCabecalhoInstitucional`, chamada por `abrirImpressao` — e a guarda do perfil `documento`, que evita o segundo brasão no Relatório Anual |
 | o diagnóstico do estado anterior | `a seção 13` |
 
 ---
@@ -1127,7 +1133,7 @@ Registrado para que ninguém gaste tempo redescobrindo que a decisão já foi to
 ```bash
 # 1. O binário de produção — é ele que carrega a CSP restritiva.
 #    `tauri dev` usa a `devCsp`, que afrouxa `style-src`: não serve para isto.
-npm run tauri build -- --no-bundle
+npm run tauri build
 
 # 2. O banco precisa estar de pé.
 docker compose up -d
@@ -1170,7 +1176,7 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 - [ ] **Configuração de apuratórios**
 - [ ] **Catálogos** — abrir ao menos três catálogos diferentes do menu
 - [ ] **Auditoria** — a lista e os três filtros
-- [ ] **Designações por Militar**
+- [ ] **Designações por Policial Militar**
 - [ ] **Estatísticas dos Apuratórios** — os doze cartões, em dois blocos
 - [ ] **Mapa do Período** — gerar o mês sem apuratório marcado e com uma espécie marcada; os registros devem obedecer à mesma regra da tabela
 - [ ] **PDF do Mapa do Período** — conferir o documento completo e uma ficha individual: capa por espécie, 7ºBPM, mês/ano, A4 paisagem **sem mexer em Orientação no diálogo**, fichas compartilhando folha, marcadores de fim, “Continuação do …” e tabelas longas sem perda. Nos enquadramentos: um bloco por natureza, artigo antes da norma, **nenhum texto repetido**, analogia recuada sob a infração do Estatuto e Resultado empilhado
@@ -1373,7 +1379,7 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
       tooltip traz o texto legal inteiro
 - [ ] Em **1600, 1366, 1100 e 900px** nenhuma listagem operacional rola na
       horizontal; em **899px** rola, em vez de espremer as colunas
-- [ ] **Designações por Militar** e **Mapa do Período** continuam rolando na
+- [ ] **Designações por Policial Militar** e **Mapa do Período** continuam rolando na
       horizontal e mostrando o conjunto completo — são matrizes, não listagens
 
 ---
@@ -1611,7 +1617,7 @@ etapa correspondente em `src-tauri/importacao/` e rode o roteiro do zero.
 
 A parte que o `cargo test` alcança está travada por teste. O que sobra aqui é o que só
 o olho vê — e a CSP restritiva, que **só vale no binário de produção**
-(`npm run tauri build -- --no-bundle`); em `tauri dev` a `devCsp` afrouxa `style-src` e
+(`npm run tauri build`); em `tauri dev` a `devCsp` afrouxa `style-src` e
 esconderia um `style` recusado.
 
 #### O envolvido ainda não identificado
@@ -1814,7 +1820,7 @@ o responsável**: a exclusão é física e não se desfaz.
 ### p) Painéis analíticos e o PDF deles (seção 12, rodada 28)
 
 > ⚠ **A rodada 29 mudou o elenco analítico para quatro telas:** Painel, Prazos,
-> Estatísticas dos Apuratórios e Designações por Militar. O Relatório Anual é
+> Estatísticas dos Apuratórios e Designações por Policial Militar. O Relatório Anual é
 > documento separado, não modo de Estatísticas; “Visão Geral” não existe mais.
 
 O binário de produção, e o console aberto.
@@ -1833,7 +1839,7 @@ O binário de produção, e o console aberto.
       backend não vira cartão vazio**: aparece a mensagem de erro da tela
 - [ ] Em Estatísticas, marcar dois ou três apuratórios e **Aplicar** recarrega todos os
       cartões, os chips continuam marcados e a linha "Escopo aplicado" acompanha
-- [ ] **Designações por Militar**: a matriz militar × apuratório aparece **sem precisar
+- [ ] **Designações por Policial Militar**: a matriz militar × apuratório aparece **sem precisar
       clicar em nada**, abaixo do cartão do ranking
 - [ ] Em janela de **1024px** (o mínimo da janela do Tauri) nenhuma tela ganha rolagem
       horizontal; encolhendo mais, os cartões passam a uma coluna e as legendas
@@ -1869,7 +1875,7 @@ Imprimir para arquivo nas **quatro telas analíticas**, e abrir o PDF:
 O binário de produção — o arnês imprime com `print_()`, e a armadilha da folha
 girada só aparece pelo `run_dialog`.
 
-- [ ] **Designações por Militar**, cartão em **Gráfico** → Imprimir/PDF: a folha 1
+- [ ] **Designações por Policial Militar**, cartão em **Gráfico** → Imprimir/PDF: a folha 1
       leva título, os quatro KPIs **e** as primeiras linhas da matriz; o gráfico
       sai desenhado (não uma faixa preta) e não esticado; o cartão está na
       **última** folha
@@ -1881,6 +1887,32 @@ girada só aparece pelo `run_dialog`.
 - [ ] **Cancelar** o diálogo devolve a tela ao normal: gráfico no lugar do `<img>`,
       cartão de volta à posição de tela, fragmentos removidos
 - [ ] **Mapa Mensal** inalterado
+
+### p-sexies) O brasão nos documentos e o ícone do app (seção 12, rodada 34)
+
+O binário de produção — é ele que carrega a CSP restritiva, e o brasão é uma
+imagem que ela precisa aceitar.
+
+- [ ] Imprimir as **oito** telas do caminho comum — Painel, Estatísticas,
+      Prazos, Auditoria, Usuários, detalhe do militar, Designações e Mapa
+      Salvo — e conferir em cada PDF: brasão **centralizado** no topo da folha 1,
+      as duas linhas abaixo dele, o título da tela em seguida
+- [ ] O brasão **aparece** — se sair um espaço em branco no lugar, o `decode()`
+      não foi esperado (seção 7). `pdfimages -list` mostra a imagem e a `smask`
+- [ ] Só na folha 1: o caminho comum não repete cabeçalho por folha
+- [ ] **Auditoria** e **detalhe do militar** são os dois em **retrato** — o
+      cabeçalho centraliza igual na folha mais estreita
+- [ ] **Relatório Anual**: a capa como sempre foi, com **um** brasão só
+- [ ] **Mapa Mensal → Gerar PDF**: capa e fichas idênticas às de antes. O
+      `controle-mapa.sh` já provou pixel a pixel, mas é o documento que ninguém
+      pediu para mexer
+- [ ] Nenhuma das oito telas mudou **na tela**: o cabeçalho não existe fora da
+      janela de impressão
+- [ ] O ícone do app na barra de tarefas e no lançador, em tema **claro e
+      escuro** — o fundo é transparente, e um halo claro em volta do distintivo
+      significa que a limpeza do PNG não pegou
+- [ ] `npm run tauri build` empacota sem `--no-bundle`, e o `.deb` traz
+      `usr/share/icons/hicolor/*/apps/adm-p6-tauri.png`
 
 ### p-quinquies) Loaders e a tabela do mapa (seção 12, rodada 33)
 
@@ -1906,7 +1938,7 @@ O binário, com o console aberto.
 
 ### p-quater) O recorte "em andamento" (seção 12, rodada 32)
 
-- [ ] Em **Designações por Militar**, "Situação" oferece "Em andamento (todos)"
+- [ ] Em **Designações por Policial Militar**, "Situação" oferece "Em andamento (todos)"
       entre "Concluídos" e "Em andamento no prazo"
 - [ ] Escolhendo-o, o total de cada militar é a soma do que "Em andamento no
       prazo" e "Em andamento vencido" devolvem separadamente
@@ -1976,7 +2008,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
       não pegou. Marcar um apuratório, esse sim, muda a série
 - [ ] O CSV sai com todas as quebras e traz o escopo nas duas primeiras linhas
 
-**Designações por Militar**
+**Designações por Policial Militar**
 
 - [ ] A barra de filtro tem sete campos: Ano, Militar, Situação, Ordenar por, Vínculo,
       Apuratórios e Funções
@@ -2021,7 +2053,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
 
 ---
 
-## 12. Changelog — as 30 rodadas
+## 12. Changelog — as 34 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -2056,12 +2088,13 @@ A narrativa completa de cada uma está no histórico do git.
 | 25 | **Auditoria legível** | a trilha passou a responder quando, quem, o que foi feito e sobre o quê, em português. A `0018` acrescenta `acao` e `assunto`, escritas pelo comando no momento da ação — o que faz o rastro sobreviver à exclusão da linha. No caminho, o `DEACTIVATE` que derrubava a desativação de configuração desde a `0001`. Detalhe abaixo |
 | 26 | **Pesquisa instantânea nas outras listagens** | Catálogos e Usuários passaram a filtrar ao digitar, como os apuratórios desde a 24. O "250 ms + Enter" saiu de dentro de `processo.ts` e virou `dom.ts::ligarBuscaInstantanea`, usado pelas três. Sem migration e sem comando novo — os dois backends já pesquisavam. Detalhe abaixo |
 | 27 | **Desativar e excluir militar** | A listagem de militares não tinha nem uma coisa nem outra: `users_delete` **desativava** apesar do nome, e tela nenhuma o chamava. O comando virou `users_deactivate`, e `users_delete` passou a apagar de verdade — só para quem não tem vínculo nenhum, com mensagem que nomeia o vínculo que segurou. Três ícones por linha, e o par do Reativar que faltava no detalhe. Decisão **54**. Sem migration. Detalhe abaixo |
-| 29 | **Painéis sem repetição, e a carga por militar** | Seis telas de relatório viraram quatro: os mesmos quatro KPIs, a mesma evolução por ano e a mesma unidade de origem eram desenhados em três endereços, e nas telas antigas sempre **sem escopo**. "Visão Geral dos Apuratórios" saiu e o gráfico de criticidade ficou só no Painel. Do outro lado, Designações por Militar passou a responder por **carga de trabalho**: concluído, em andamento no prazo, em andamento vencido e sem prazo definido, por militar e por espécie, com cinco filtros combináveis. Numa segunda volta, o Relatório Anual virou **documento** — capa e seções numeradas, só tabelas — em vez de um "modo" da tela de Estatísticas, e as Designações ganharam filtro por balde, cinco ordenações e as datas de último recebimento e última conclusão por militar. Duas consultas novas (`by_unit`, `by_year`), `dashboard_summary` enxugado aos quatro números, nenhuma migration. Decisões **55–60**. Detalhe abaixo |
+| 29 | **Painéis sem repetição, e a carga por militar** | Seis telas de relatório viraram quatro: os mesmos quatro KPIs, a mesma evolução por ano e a mesma unidade de origem eram desenhados em três endereços, e nas telas antigas sempre **sem escopo**. "Visão Geral dos Apuratórios" saiu e o gráfico de criticidade ficou só no Painel. Do outro lado, Designações por Policial Militar passou a responder por **carga de trabalho**: concluído, em andamento no prazo, em andamento vencido e sem prazo definido, por militar e por espécie, com cinco filtros combináveis. Numa segunda volta, o Relatório Anual virou **documento** — capa e seções numeradas, só tabelas — em vez de um "modo" da tela de Estatísticas, e as Designações ganharam filtro por balde, cinco ordenações e as datas de último recebimento e última conclusão por militar. Duas consultas novas (`by_unit`, `by_year`), `dashboard_summary` enxugado aos quatro números, nenhuma migration. Decisões **55–60**. Detalhe abaixo |
 | 28 | **Painéis analíticos** | As seis telas de relatório deixaram de ser só tabela: KPIs, barras, barras empilhadas, linha/área e rosca, com alternador Gráfico/Tabela por cartão. Uma dependência nova (`chart.js`), nenhum comando e nenhuma migration — todo dado já vinha dos relatórios existentes. O Vitest entrou junto, sobre a camada pura de `src/graficos/dados.ts`. Detalhe abaixo |
 | 30 | **PDFs dos relatórios comuns** | Impressão A4 escopada por sessão, perfis tabular/analítico/documento, cabeçalhos repetidos, linhas indivisíveis, textos sem elipse e orientação por conteúdo. Retrato ganhou `GtkPageSetup` próprio; listagens completas substituem somente seu wrapper; Designações normaliza a matriz só no papel e Mapa Salvo usa paisagem densa. O documento especial do Mapa Mensal ficou congelado e fora de todos os seletores novos. Numa segunda volta veio o **arnês** (`tools/impressao`), que imprime pelo WebKitGTK sem abrir a aplicação: ele mostrou que a linha partida pela quebra de página **some do PDF**, calibrou os nove tamanhos de bloco por medição, tirou a fragmentação de dentro dos cartões — onde o motor ignora o `break-inside` — e passou a provar o congelamento do Mapa Mensal pixel a pixel. Sem migration e sem biblioteca de PDF. Decisão **61**. |
 | 31 | **O gráfico no papel, e a folha órfã** | O gráfico saía como faixa preta e Designações gastava duas folhas antes da primeira linha da matriz. Eram dois defeitos com uma causa em comum: o arnês não alcançava nenhum dos dois. Nenhuma fixtura tinha `<canvas>`, e `imprimir.py` desligava o compositing — que é justamente o que faz o canvas ir para a GPU e sair chapado de preto. Com o compositing ligado o defeito se reproduziu na hora: 31,2% da folha em preto, contra 0,0% do mesmo desenho como `<img>`. A correção congela cada gráfico num PNG enquanto o diálogo está aberto, ao preço de `data:` no `img-src` — e o canvas tem de **sair do DOM**, porque `hidden` não o esconde (o Chart.js põe `display:block` inline): a primeira versão imprimiu o gráfico em duplicata, o PNG certo e a faixa preta ao lado. A folha órfã é geometria: cartão indivisível de 532px logo abaixo de uma faixa de KPIs, numa folha de 180mm úteis. O cartão desce para o fim do documento por `data-impressao-ao-fim`, a matriz sobe e o primeiro bloco foi remedido de 18 para 12. O arnês ficou mais honesto do que estava: imprime com compositing quando a fixtura pede, e reprova folha com preto chapado. Sem migration, sem CSS novo, sem dependência nova. Decisão **62**. |
 | 32 | **O recorte "em andamento"** | A tela de Designações passou a oferecer "Em andamento (todos)" no filtro de situação, somando no prazo e vencido. A união ficou **no filtro**, não no `BALDE`: os quatro baldes continuam exclusivos e somando o total, e o predicado virou `= ANY($6::text[])`. "Sem prazo definido" fica de fora por decisão, com a consequência — o filtro devolve menos que `total - concluídos` — travada em teste. Sem migration, sem comando novo. Decisão **63**. |
 | 33 | **Loaders, boas-vindas e a tabela do mapa** | O app não dizia que estava trabalhando: o login não desabilitava nem o botão, seis telas imprimiam sem retorno nenhum e a troca de rota deixava a tela anterior inteira e clicável enquanto onze consultas corriam. Entrou um helper único, `comCarregamento`, com véu fora de `#app` — `shell()` reescreve o `innerHTML` a cada tela — e a regra que o faz funcionar: **ceder um quadro antes do trabalho**, porque quase tudo aqui é síncrono e sem isso o véu só pintaria depois. No Mapa Mensal, onde a paginação bloqueia a thread e congela a própria animação, quem informa é a mensagem em três fases. O login parou de redesenhar a tela no erro, que apagava e-mail e senha digitados, e passou a dar as boas-vindas por toast. A tabela do conteúdo do mapa — a única listagem declarada como `string[]` — ganhou o padrão das demais, e as dez larguras saíram do `report-print.css` para `Coluna.largura`: o papel já as tinha, a tela não. E a ordem das seções do PDF virou coluna administrável (0019), com SR, IPM e PADS à frente. Decisão **64**. |
+| 34 | **O brasão em todo documento, e o ícone do app** | Só o Mapa Mensal e o Relatório Anual saíam identificados; os outros oito caminhos imprimíveis levavam ao papel o `<h1>` da tela e mais nada — documento oficial da Seção sem dizer de que Seção é. O cabeçalho institucional (brasão de 16mm, "Polícia Militar de Rondônia" e "7º BPM · Seção de Justiça e Disciplina") entra num lugar só, `dom.ts::abrirImpressao`, que é o gargalo por onde todo o caminho comum passa: tela nova nasce com cabeçalho sem ninguém lembrar. O perfil `documento` é pulado por guarda em JS, porque o Anual já tem capa e dois brasões na mesma folha é defeito. A parte que exigiu cuidado foi a colisão de arquivo: `src-tauri/icons/icon.png` era **ao mesmo tempo** o brasão que quatro telas carregam e a vaga que `tauri icon` sobrescreve — gerar o ícone teria trocado o brasão do Mapa Mensal pelo distintivo do batalhão, sem erro nenhum. O brasão saiu para `src/assets/brasao-pmro.png` com fonte única em `src/brasao.ts` (estava triplicado), e `controle-mapa.sh` provou o congelamento: idêntico a `HEAD`, texto e pixel. O distintivo do 7º BPM virou o ícone, e com isso `bundle.icon` deixou de estar vazio — o build volta a empacotar deb, rpm e AppImage, e o `--no-bundle` saiu de cinco pontos da documentação. O arnês passou a emitir o cabeçalho nas fixturas, ganhou o par de regressão que exige o texto no comum e o proíbe no `documento`, e no caminho **reprovou** `matriz-normalizada`: ela guardava `22, 18` escritos à mão enquanto a tela já estava em 12. Os nove blocos calibrados sobreviveram aos 24mm a mais — medido, não suposto: 38/38. Sem migration. |
 
 ### A rodada 31, em detalhe
 

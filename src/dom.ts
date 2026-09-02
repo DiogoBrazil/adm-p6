@@ -7,6 +7,7 @@
 // largura calculada sai em `data-*` e é aplicada pela CSSOM.
 
 import { call } from "./api";
+import { brasaoUrl } from "./brasao";
 import {
   congelarGraficosParaImpressao,
   prepararGraficosParaImpressao,
@@ -649,6 +650,67 @@ export function blocosDeImpressao(
 }
 
 /**
+ * Põe o brasão e a identificação da unidade no topo do documento, e tira depois.
+ *
+ * Até aqui só dois documentos saíam identificados: o Mapa Mensal, que tem
+ * paginador próprio, e o Relatório Anual, pela `.relatorio-capa`. Os outros oito
+ * caminhos imprimíveis levavam ao papel o `<h1>` da tela e mais nada — documento
+ * oficial da Seção sem dizer de que Seção é.
+ *
+ * Mora aqui, e não em cada tela, porque `abrirImpressao` é o gargalo por onde
+ * todo o caminho comum passa: tela nova nasce com cabeçalho sem ninguém
+ * lembrar, e não há oito cópias para divergirem entre si.
+ *
+ * O `perfil` decide se entra. No `documento` — hoje só o Relatório Anual — a
+ * `.relatorio-capa` já abre com o mesmo brasão e as mesmas duas linhas, e dois
+ * brasões na mesma folha é defeito. A guarda é aqui e não no CSS de propósito:
+ * assim a `<img>` nem chega a existir, e não há `decode()` para esperar.
+ *
+ * É `async` pelo mesmo motivo que `congelarGraficosParaImpressao`: a imagem
+ * nasce no clique, e o WebKitGTK imprime **espaço em branco** por uma `<img>`
+ * ainda não decodificada, sem erro nenhum. `mapa-pdf.ts::aguardarImagens` é o
+ * precedente, e falhar aqui é preferível a um PDF oficial sem brasão.
+ */
+async function inserirCabecalhoInstitucional(
+  perfil: PerfilImpressao,
+): Promise<() => void> {
+  if (perfil === "documento") return () => {};
+
+  // Acima do `.page-head`, que é onde as oito telas põem o título: o brasão
+  // encabeça o documento, e o título vem logo abaixo dele. Sem `.page-head` —
+  // nenhuma tela imprimível está nesse caso hoje — sobra o topo do painel.
+  const titulo = document.querySelector<HTMLElement>(".page-head");
+  const painel = titulo ? null : document.querySelector<HTMLElement>(".content-area .panel");
+  if (!titulo && !painel) return () => {};
+
+  const cabecalho = document.createElement("header");
+  cabecalho.className = "cabecalho-institucional";
+
+  const brasao = document.createElement("img");
+  brasao.src = brasaoUrl;
+  // Decorativo: as duas linhas abaixo já nomeiam a instituição, e um `alt`
+  // repetindo isso faria o leitor de tela dizer tudo duas vezes.
+  brasao.alt = "";
+  const orgao = document.createElement("p");
+  orgao.textContent = "Polícia Militar de Rondônia";
+  const secao = document.createElement("span");
+  secao.textContent = "7º BPM · Seção de Justiça e Disciplina";
+  cabecalho.append(brasao, orgao, secao);
+
+  if (titulo) titulo.before(cabecalho);
+  else painel!.prepend(cabecalho);
+
+  try {
+    await brasao.decode();
+  } catch {
+    cabecalho.remove();
+    throw new Error("Não foi possível carregar o brasão para a impressão. Tente novamente.");
+  }
+
+  return () => cabecalho.remove();
+}
+
+/**
  * Manda para o fim do documento, só no papel, os blocos com
  * `data-impressao-ao-fim`.
  *
@@ -1262,6 +1324,7 @@ async function abrirImpressao(
   gatilho?: HTMLButtonElement | null,
 ): Promise<void> {
   let folhaFallback: HTMLStyleElement | undefined;
+  let limparCabecalho = () => {};
   let limparOrdem = () => {};
   let limparFragmentos = () => {};
   let limparImagens = () => {};
@@ -1278,6 +1341,9 @@ async function abrirImpressao(
     await comCarregamento(
       "Preparando o documento…",
       async (passo) => {
+        // Primeiro de todos: o cabeçalho é o que vem ANTES da tabela, e tanto o
+        // adiamento quanto o clone em blocos têm de nascer já com ele no fluxo.
+        limparCabecalho = await inserirCabecalhoInstitucional(perfil);
         // Antes de fragmentar, para que o clone em blocos já nasça na posição final.
         limparOrdem = adiarBlocosParaOFimDaImpressao();
         limparFragmentos = fragmentarTabelasParaImpressao();
@@ -1316,6 +1382,7 @@ async function abrirImpressao(
     limparImagens();
     limparFragmentos();
     limparOrdem();
+    limparCabecalho();
     restaurarGraficosDepoisDaImpressao();
     document.body.classList.remove("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   }

@@ -647,7 +647,7 @@ async fn matriz_de_designacoes_isola_o_papel() {
         let todos = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
             .await
             .unwrap();
-        assert_eq!(todos.len(), 2, "dois militares designados");
+        assert_eq!(todos.len(), 2, "dois POLICIAIS MILITARES DESIGNADOS");
         let um = todos
             .iter()
             .find(|l| l.policial_militar_id == m.pm_um)

@@ -33,6 +33,7 @@ import {
   totaisDoEscopo,
 } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
+import { brasaoUrl } from "../brasao";
 
 /**
  * As seções do Anual correm no fluxo do documento, e não dentro de cartão.
@@ -46,7 +47,6 @@ const EM_DOCUMENTO = { fragmentar: true };
 
 export const ROTA = "/estatisticas/anuais";
 
-const brasaoUrl = new URL("../../src-tauri/icons/icon.png", import.meta.url).href;
 
 let anoSelecionado = new Date().getFullYear();
 
@@ -115,7 +115,7 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
 
       <header class="relatorio-capa">
         <img src="${brasaoUrl}" alt="" />
-        <span class="relatorio-capa__eyebrow">Polícia Militar do Estado de Rondônia</span>
+        <span class="relatorio-capa__eyebrow">Polícia Militar de Rondônia</span>
         <strong>Relatório Anual</strong>
         <span class="relatorio-capa__ano">${escapeHtml(anoSelecionado)}</span>
         <span class="relatorio-capa__orgao">7º Batalhão de Polícia Militar<br />Seção de Justiça e Disciplina</span>

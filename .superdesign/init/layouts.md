@@ -87,7 +87,7 @@ let routes: Route[] = [
     adminOnly: true
   },
   { path: ROTA_AUDITORIA, label: "Auditoria", group: "Auditoria" },
-  { path: ROTA_ENCARREGADOS, label: "Designações por Militar", group: "Relatórios" },
+  { path: ROTA_ENCARREGADOS, label: "Designações por Policial Militar", group: "Relatórios" },
   {
     path: ROTA_ESTATISTICAS_PROCESSOS,
     label: "Estatísticas de Processos",

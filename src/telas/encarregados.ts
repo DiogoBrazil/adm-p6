@@ -197,7 +197,7 @@ const totalDaColuna = (linhas: DesignacaoMatrizLinha[], apuratorioId: string) =>
 
 export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   const falhar = (mensagem: string) =>
-    ctx.shell(`<section class="panel"><h1>Designações por Militar</h1>
+    ctx.shell(`<section class="panel"><h1>Designações por Policial Militar</h1>
       <p class="error">${escapeHtml(mensagem)}</p></section>`);
 
   const [anosResposta, apuratoriosResposta, papeisResposta, militaresResposta] = await Promise.all([
@@ -464,7 +464,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
           : "Nenhuma pendência crítica",
       })}`
     : `
-      ${kpiAnalitico(linhas.length, "Militares designados")}
+      ${kpiAnalitico(linhas.length, "POLICIAIS MILITARES DESIGNADOS")}
       ${kpiAnalitico(totalDesignacoes, "Apuratórios no escopo")}
       ${kpiAnalitico(concluidosNoEscopo, "Concluídos", { tom: "sucesso" })}
       ${kpiAnalitico(vencidosNoEscopo, "Em andamento vencidos", {
@@ -476,11 +476,11 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     <section class="panel panel--analytics">
       <div class="page-head">
         <div>
-          <h1>Designações por Militar</h1>
+          <h1>Designações por Policial Militar</h1>
           <p>${escapeHtml(
             modoMilitar
               ? `Carga de ${nomeDoMilitar}, por espécie de apuratório.`
-              : "Carga de trabalho por militar e por espécie, na situação de hoje.",
+              : "Carga de trabalho por policial militar e por espécie, na situação de hoje.",
           )}</p>
         </div>
         <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: !!linhas.length })}</div>
@@ -574,11 +574,11 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
           ? ""
           : `<div class="matriz-designacoes--tela">
                <h2>Matriz de designações</h2>
-               <p class="hint">Militar × espécie de apuratório, no escopo do filtro.</p>
+               <p class="hint">Policial Militar × espécie de apuratório, no escopo do filtro.</p>
                ${tabelaMatriz}
              </div>
              <div class="somente-impressao matriz-designacoes--impressao">
-               <h2>Designações por militar e espécie</h2>
+               <h2>Designações por Policial Militar e espécie</h2>
                <p class="hint">Combinações com quantidade zero foram omitidas; os totais preservam o escopo do filtro.</p>
                ${tabelaMatrizImpressao}
              </div>`

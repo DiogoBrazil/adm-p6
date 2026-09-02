@@ -74,7 +74,7 @@ entender X → olhe em Y".
 | Orientar a folha impressa por `@page` | o WebKitGTK (motor do Tauri no Linux) **ignora** o descritor `size`, e não tem página nomeada. Quem orienta é o `GtkPageSetup` — `print_report_landscape` (297×210mm) ou `print_portrait` (210×297mm) nos relatórios; `print_landscape` fica exclusivo do Mapa Mensal. E validar impressão em Chromium headless não prova nada: lá o `@page` funciona |
 | Exibir enquadramento concatenando a descrição | o `rotulo` de `evidence/repository.rs` **já termina** na descrição. Acrescentá-la de novo imprime o parágrafo duas vezes |
 | Folha em paisagem no `GtkPageSetup` | pedir **rotação** ao GTK imprime as páginas **em branco** pelo `run_dialog`, sem erro nenhum. Declare um papel de 297×210mm — ver `folha_a4_paisagem` |
-| Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build -- --no-bundle` |
+| Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build` |
 | Preparar um gráfico para a impressão | dimensione a **caixa** (`.analytics-chart`) e chame `resize()` **sem medidas**. `resize(l, a)` muda só o bitmap, e o `100% !important` do canvas segura a caixa: o desenho sai esticado no papel, sem erro nenhum |
 | `Chart.resize()` com animação em curso | ele **adia** o pedido, e o `draw()` seguinte o aplica com as medidas **velhas**. `stop()`, `draw()` para consumir a pendência, **depois** mudar a caixa — ver `graficos/index.ts::pararEredimensionar` |
 | Medir a folha para o canvas | não dá: a largura útil do papel só existe depois que a impressão começou. `px` é unidade absoluta na impressão, então fixe a caixa em px antes — é o que `LARGURA_IMPRESSAO` faz |
@@ -108,6 +108,9 @@ entender X → olhe em Y".
 | Medir impressão de gráfico com o compositing desligado | é o padrão de `tools/impressao/imprimir.py`, e ele **esconde** a faixa preta: o mesmo canvas sai pintado. Fixtura de gráfico declara `compositing: true`, e `semFaixaPreta` reprova folha com preto chapado |
 | Bloco indivisível alto logo abaixo da faixa de KPIs | `.analytics-card` não cabe nos 180mm úteis menos o cabeçalho, e o motor o desmancha por cima da folha seguinte. Ou ele desce (`data-impressao-ao-fim`), ou encolhe — e encolher ranking encavala rótulo |
 | Mudar o que vem antes de uma tabela fragmentada | o `linhasNoPrimeiroFragmentoImpressao` foi medido **com** o que estava lá. Mover um bloco na impressão obriga a remedir o primeiro bloco — em Designações, 18 → 12 |
+| Guardar o brasão dos documentos em `src-tauri/icons/` | `tauri icon` **sobrescreve** `icon.png` ao gerar o ícone do app, e o brasão do Mapa Mensal e do login sairia trocado pelo ícone, sem erro nenhum. O brasão é `src/assets/brasao-pmro.png`, exportado por `src/brasao.ts`; `src-tauri/icons/` é só do empacotador |
+| Fixtura de impressão com o tamanho do bloco escrito à mão | `matriz-normalizada` guardava `22, 18` enquanto a tela já estava em 12: ela certificava uma folha que o app não imprime mais, e só reprovou quando o cabeçalho institucional entrou. Tamanho de bloco sai de `CONJUNTOS`, que é onde o valor da tela mora |
+| Imagem criada no clique de imprimir | o WebKitGTK imprime **espaço em branco** por uma `<img>` ainda não decodificada, sem erro. `await img.decode()` antes de chamar o comando de impressão — `mapa-pdf.ts::aguardarImagens` e `dom.ts::inserirCabecalhoInstitucional` |
 
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
