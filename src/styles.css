@@ -635,7 +635,7 @@ button.evidence-result-item:focus-visible {
   margin-top: 12px;
 }
 
-@media (max-width: 860px) {
+@media screen and (max-width: 860px) {
   .sidebar {
     position: static;
     width: auto;
@@ -1522,13 +1522,13 @@ button.analytics-toggle__button[aria-pressed="true"] {
   }
 }
 
-@media (max-width: 1180px) {
+@media screen and (max-width: 1180px) {
   .analytics-kpis {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 }
 
-@media (max-width: 760px) {
+@media screen and (max-width: 760px) {
   .analytics-grid,
   .analytics-kpis {
     grid-template-columns: 1fr;
@@ -3162,7 +3162,7 @@ button.toast__fechar:hover {
   width: max-content;
 }
 
-@media (max-width: 1180px) {
+@media screen and (max-width: 1180px) {
   .mapa-resultado-bar {
     grid-template-columns: 1fr;
     align-items: start;
@@ -3461,7 +3461,7 @@ tr.atrasado {
 
 /* Acima de 900px a listagem operacional cabe inteira e não rola na horizontal;
    abaixo disso, rolar é melhor que espremer as colunas até "7…" e "C…". */
-@media (max-width: 899px) {
+@media screen and (max-width: 899px) {
   .tabela-dados--fixa {
     min-width: 900px;
   }
@@ -4123,7 +4123,7 @@ tr.atrasado {
   }
 }
 
-@media (max-width: 1180px) {
+@media screen and (max-width: 1180px) {
   :root {
     --sidebar-width: 224px;
   }
@@ -4143,7 +4143,7 @@ tr.atrasado {
 
 /* O binário mantém minWidth 1024, mas o fallback evita quebrar quando o
    frontend é aberto diretamente no navegador para inspeção. */
-@media (max-width: 860px) {
+@media screen and (max-width: 860px) {
   .app-shell,
   .app-shell.sidebar-is-collapsed {
     grid-template-columns: 1fr;

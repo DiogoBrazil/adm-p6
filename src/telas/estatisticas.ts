@@ -129,11 +129,27 @@ export async function carregarApuratorios(): Promise<Apuratorio[] | null> {
   }));
 }
 
+/**
+ * Onde o bloco indivisível vale, e onde ele atrapalha.
+ *
+ * Estas três tabelas saem em dois lugares: no verso de um `cartaoAnalitico`,
+ * que é item de `.analytics-grid`, e nas seções do Relatório Anual, que correm
+ * no fluxo do documento. Dentro do item de grid o WebKitGTK **ignora** o
+ * `break-inside` das caixas de dentro — medido em `tools/impressao` —, então
+ * fragmentar ali gasta folha e ainda parte a linha; quem protege o cartão é o
+ * `break-inside: avoid` dele mesmo. No documento é o contrário: sem bloco, a
+ * linha da quebra de página some do papel.
+ *
+ * Por isso o fragmento é **opção de quem chama**, e não padrão da tabela.
+ */
+export type OpcoesTabelaRelatorio = { fragmentar?: boolean };
+
 /** Tabela rótulo × quantidade, a forma de quase todo relatório desta família. */
 export function tabelaContagem(
   itens: ContagemRotulada[],
   rotuloColuna = "Item",
   vazio = "Nada registrado neste escopo.",
+  opcoes: OpcoesTabelaRelatorio = {},
 ): string {
   return tabela(
     [
@@ -142,12 +158,17 @@ export function tabelaContagem(
     ],
     itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
     vazio,
-    { listagem: true },
+    // Vinte e três linhas destas cabem na folha em paisagem
+    // (`medicao-contagem`); 20 deixa a folga da linha alta.
+    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 20 : undefined },
   );
 }
 
 /** Situação por espécie: em andamento, concluídos e total. */
-export function tabelaSituacao(itens: StatusPorApuratorio[]): string {
+export function tabelaSituacao(
+  itens: StatusPorApuratorio[],
+  opcoes: OpcoesTabelaRelatorio = {},
+): string {
   return tabela(
     [
       { rotulo: "Apuratório", largura: 34, truncar: true },
@@ -164,7 +185,8 @@ export function tabelaSituacao(itens: StatusPorApuratorio[]): string {
       { texto: String(item.total), numerica: true },
     ]),
     "Nenhum apuratório neste escopo.",
-    { listagem: true },
+    // Vinte cabem na folha em paisagem (`medicao-situacao`).
+    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 16 : undefined },
   );
 }
 
@@ -172,6 +194,7 @@ export function tabelaSituacao(itens: StatusPorApuratorio[]): string {
 export function tabelaEnquadramento(
   itens: EnquadramentoContagem[],
   rotuloColuna: string,
+  opcoes: OpcoesTabelaRelatorio = {},
 ): string {
   const linhas = itens.map((i) => [
     i.rotulo,
@@ -191,7 +214,9 @@ export function tabelaEnquadramento(
     ],
     linhas,
     "Nada registrado neste escopo.",
-    { listagem: true },
+    // Dez cabem na folha em paisagem (`medicao-enquadramento`) — a descrição
+    // legal inteira faz destas as linhas mais altas do relatório.
+    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 8 : undefined },
   );
 }
 
@@ -425,6 +450,6 @@ export async function renderEstatisticas(ctx: ContextoTela): Promise<void> {
       );
     },
     undefined,
-    { paisagem: true },
+    { orientacao: "paisagem", perfil: "analitico" },
   );
 }

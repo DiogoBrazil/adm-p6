@@ -532,7 +532,13 @@ export function tabela(
   colunas: (string | Coluna)[],
   linhas: Linha[],
   vazio = "Nada a exibir.",
-  opcoes: { viewport?: boolean; larga?: boolean; listagem?: boolean } = {},
+  opcoes: {
+    viewport?: boolean;
+    larga?: boolean;
+    listagem?: boolean;
+    /** Quantas linhas formam cada bloco indivisível no PDF. */
+    linhasPorFragmentoImpressao?: number;
+  } = {},
 ): string {
   if (!linhas.length) return `<p class="empty">${escapeHtml(vazio)}</p>`;
 
@@ -598,7 +604,10 @@ export function tabela(
 
   // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
   // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
-  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
+  const fragmento = opcoes.linhasPorFragmentoImpressao
+    ? ` data-linhas-por-fragmento-impressao="${Math.max(1, Math.floor(opcoes.linhasPorFragmentoImpressao))}"`
+    : "";
+  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"${fragmento}><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
       ${colgroup}
       <thead><tr>${definicoes
         .map((c) => {
@@ -608,6 +617,81 @@ export function tabela(
         .join("")}</tr></thead>
       <tbody>${linhas.map(linha).join("")}</tbody>
     </table></div>`;
+}
+
+/**
+ * Os intervalos `[inicio, fim)` de cada bloco indivisível de uma tabela longa.
+ *
+ * Mora fora do DOM porque o arnês de `tools/impressao` monta as mesmas fatias
+ * sem navegador nenhum: se cada um contasse as suas, o PDF que o arnês confere
+ * deixaria de ser o PDF que o app imprime, e a divergência não daria erro.
+ */
+export function blocosDeImpressao(total: number, limite: number): [number, number][] {
+  if (total <= 0 || limite < 1) return [];
+  const blocos: [number, number][] = [];
+  for (let inicio = 0; inicio < total; inicio += limite) {
+    blocos.push([inicio, Math.min(inicio + limite, total)]);
+  }
+  return blocos;
+}
+
+/**
+ * O WebKitGTK 2.52 ainda fragmenta `<tr>` apesar de `break-inside: avoid`.
+ * Tabelas longas optam por cópias em blocos pequenos, montadas só enquanto o
+ * diálogo está aberto. Cada bloco é indivisível e repete o cabeçalho; a tabela
+ * operacional permanece única e intocada na tela.
+ */
+function fragmentarTabelasParaImpressao(): () => void {
+  const criados: HTMLElement[] = [];
+  const originais: HTMLElement[] = [];
+  const cartoes = new Set<HTMLElement>();
+
+  document
+    .querySelectorAll<HTMLElement>("[data-linhas-por-fragmento-impressao]")
+    .forEach((envoltorio) => {
+      if (envoltorio.closest("[hidden]")) return;
+      const tabelaOriginal = envoltorio.querySelector<HTMLTableElement>(":scope > table");
+      const limite = Number(envoltorio.dataset.linhasPorFragmentoImpressao);
+      if (!tabelaOriginal || !Number.isInteger(limite) || limite < 1) return;
+
+      const linhas = [...tabelaOriginal.tBodies].flatMap((corpo) => [...corpo.rows]);
+      if (!linhas.length) return;
+
+      const conjunto = document.createElement("div");
+      conjunto.className = "somente-impressao tabela-impressao-fragmentada";
+
+      for (const [inicio, fim] of blocosDeImpressao(linhas.length, limite)) {
+        const fragmento = document.createElement("div");
+        fragmento.className = "table-wrap tabela-impressao-fragmento";
+        const tabelaNova = tabelaOriginal.cloneNode(false) as HTMLTableElement;
+        const colgroup = tabelaOriginal.querySelector(":scope > colgroup");
+        const cabecalho = tabelaOriginal.querySelector(":scope > thead");
+        if (colgroup) tabelaNova.append(colgroup.cloneNode(true));
+        if (cabecalho) tabelaNova.append(cabecalho.cloneNode(true));
+        const corpo = document.createElement("tbody");
+        linhas.slice(inicio, fim).forEach((linha) => corpo.append(linha.cloneNode(true)));
+        tabelaNova.append(corpo);
+        fragmento.append(tabelaNova);
+        conjunto.append(fragmento);
+      }
+
+      envoltorio.insertAdjacentElement("afterend", conjunto);
+      envoltorio.classList.add("somente-tela-na-impressao");
+      aplicarLarguras(conjunto);
+      criados.push(conjunto);
+      originais.push(envoltorio);
+      const cartao = envoltorio.closest<HTMLElement>(".analytics-card");
+      if (cartao) {
+        cartao.classList.add("analytics-card--fragmentada-impressao");
+        cartoes.add(cartao);
+      }
+    });
+
+  return () => {
+    criados.forEach((elemento) => elemento.remove());
+    originais.forEach((elemento) => elemento.classList.remove("somente-tela-na-impressao"));
+    cartoes.forEach((cartao) => cartao.classList.remove("analytics-card--fragmentada-impressao"));
+  };
 }
 
 /**
@@ -633,6 +717,11 @@ export function painelContagem(
     ],
     itens.map((i) => [i.rotulo, { texto: String(i.total), numerica: true }]),
     "Nada registrado neste escopo.",
+    // Sem fragmento: o painel é item de `.stat-grid`, e dentro de um item de
+    // grid o WebKitGTK ignora o `break-inside` das caixas de dentro — medido
+    // em `tools/impressao` (`stat-panel-fragmentado` × `stat-panel-inteiro`:
+    // uma folha a mais, e a mesma linha partida). Quem protege aqui é o
+    // `break-inside: avoid` do próprio `.stat-panel`.
     { listagem: true },
   );
   return `<section class="stat-panel"><h2>${escapeHtml(titulo)}</h2>${html}</section>`;
@@ -909,6 +998,16 @@ export function avisarSeCortado(cortado: boolean): void {
   }
 }
 
+export type OrientacaoImpressao = "retrato" | "paisagem";
+export type PerfilImpressao = "tabular" | "analitico" | "documento";
+
+export type OpcoesImpressao = {
+  orientacao?: OrientacaoImpressao;
+  perfil?: PerfilImpressao;
+  /** Região da tela substituída pelo HTML completo devolvido por `aoImprimir`. */
+  seletorSubstituido?: string;
+};
+
 /**
  * Liga os botões de `barraDeExportacao`. `aoExportar` pode ser assíncrono.
  *
@@ -921,8 +1020,14 @@ export function avisarSeCortado(cortado: boolean): void {
 export function ligarExportacao(
   aoExportar?: () => unknown | Promise<unknown>,
   aoImprimir?: () => Promise<string>,
-  opcoes: { paisagem?: boolean } = {},
+  opcoes: OpcoesImpressao = {},
 ): void {
+  const configuracao = {
+    orientacao: opcoes.orientacao ?? "retrato",
+    perfil: opcoes.perfil ?? "tabular",
+    seletorSubstituido: opcoes.seletorSubstituido,
+  } satisfies Required<Pick<OpcoesImpressao, "orientacao" | "perfil">> &
+    Pick<OpcoesImpressao, "seletorSubstituido">;
   const imprimir = document.querySelector<HTMLButtonElement>("#btn-imprimir");
   if (imprimir && aoImprimir) {
     imprimir.addEventListener("click", async () => {
@@ -931,22 +1036,21 @@ export function ligarExportacao(
       imprimir.textContent = "Preparando…";
       const bloco = document.createElement("div");
       bloco.className = "bloco-impressao";
-      // A tabela de dentro de um cartão analítico não é a listagem paginada que
-      // o bloco completo vem substituir: escondê-la imprimia o cartão em branco
-      // sempre que o usuário tivesse escolhido ver a tabela em vez do gráfico.
-      const naTela = [
-        ...document.querySelectorAll<HTMLElement>(".table-wrap, .paginacao"),
-      ].filter((elemento) => !elemento.closest("[data-analytics-view]"));
+      let naTela: HTMLElement | null = null;
       try {
+        if (!configuracao.seletorSubstituido) {
+          throw new Error("a área paginada da impressão não foi identificada");
+        }
+        naTela = document.querySelector<HTMLElement>(configuracao.seletorSubstituido);
+        if (!naTela) throw new Error("a área paginada da impressão não foi encontrada");
         bloco.innerHTML = await aoImprimir();
         aplicarLarguras(bloco);
-        const destino = document.querySelector("main");
-        // Só esconde a tabela da tela depois de o bloco completo estar no
-        // documento: falhar entre uma coisa e outra imprimiria a folha em branco.
-        if (!destino) throw new Error("sem área principal para imprimir");
-        destino.append(bloco);
-        naTela.forEach((elemento) => elemento.classList.add("ocultar-na-impressao"));
-        await abrirImpressao(opcoes.paisagem);
+        // A cópia completa ocupa exatamente a posição da listagem paginada. Os
+        // títulos que pertencem ao recorte também ficam dentro do alvo, por isso
+        // não aparecem duplicados no papel.
+        naTela.insertAdjacentElement("afterend", bloco);
+        naTela.classList.add("ocultar-na-impressao");
+        await abrirImpressao(configuracao.orientacao, configuracao.perfil);
       } catch (erro) {
         // Sem isto a falha vira rejeição não tratada: o botão volta ao normal e
         // nada explica por que o diálogo de impressão não abriu.
@@ -956,13 +1060,15 @@ export function ligarExportacao(
         );
       } finally {
         bloco.remove();
-        naTela.forEach((elemento) => elemento.classList.remove("ocultar-na-impressao"));
+        naTela?.classList.remove("ocultar-na-impressao");
         imprimir.disabled = false;
         imprimir.textContent = rotulo;
       }
     });
   } else {
-    imprimir?.addEventListener("click", () => void abrirImpressao(opcoes.paisagem));
+    imprimir?.addEventListener("click", () =>
+      void abrirImpressao(configuracao.orientacao, configuracao.perfil),
+    );
   }
 
   const botao = document.querySelector<HTMLButtonElement>("#btn-csv");
@@ -981,34 +1087,36 @@ export function ligarExportacao(
 }
 
 /**
- * Prepara os canvases e, nos relatórios analíticos, pede A4 paisagem também
- * ao page setup nativo. O WebKitGTK ignora `@page size`, por isso o comando
- * Tauri continua necessário; Chromium/WebView2 usam a regra CSSOM no fallback.
+ * Prepara o relatório comum para A4. O WebKitGTK ignora `@page size`, por isso
+ * a orientação também segue ao page setup nativo; Chromium/WebView2 usam a
+ * regra CSSOM no fallback.
  */
-async function abrirImpressao(paisagem = false): Promise<void> {
+async function abrirImpressao(
+  orientacao: OrientacaoImpressao,
+  perfil: PerfilImpressao,
+): Promise<void> {
   let folha: CSSStyleSheet | undefined;
+  let limparFragmentos = () => {};
   // A classe existe só pelo quadro em que a caixa do gráfico fica maior que o
   // painel; sem ela, uma janela estreita mostra a barra de rolagem aparecer e
   // sumir antes de o diálogo abrir.
-  document.body.classList.add("preparando-impressao");
+  const classePerfil = `impressao-perfil--${perfil}`;
+  document.body.classList.add("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   try {
-    if (paisagem) {
-      folha = new CSSStyleSheet();
-      folha.insertRule("@page { size: A4 landscape; margin: 12mm; }");
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, folha];
-    }
+    folha = new CSSStyleSheet();
+    const direcao = orientacao === "paisagem" ? "landscape" : "portrait";
+    folha.insertRule(`@page { size: A4 ${direcao}; margin: 12mm; }`);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, folha];
+    limparFragmentos = fragmentarTabelasParaImpressao();
     prepararGraficosParaImpressao();
     // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
     // antes de o documento virar papel. O canvas já foi redesenhado pelo
     // `resize()`, que é síncrono; o layout ao redor dele não.
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-    if (paisagem) {
-      const resposta = await call("print_landscape");
-      if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
-      if (!resposta.data) window.print();
-    } else {
-      window.print();
-    }
+    const comando = orientacao === "paisagem" ? "print_landscape" : "print_portrait";
+    const resposta = await call(comando);
+    if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
+    if (!resposta.data) window.print();
   } catch (erro) {
     notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
   } finally {
@@ -1016,7 +1124,8 @@ async function abrirImpressao(paisagem = false): Promise<void> {
       const atual = folha;
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== atual);
     }
+    limparFragmentos();
     restaurarGraficosDepoisDaImpressao();
-    document.body.classList.remove("preparando-impressao");
+    document.body.classList.remove("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   }
 }

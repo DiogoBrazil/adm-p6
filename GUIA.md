@@ -271,6 +271,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 58 | A carga de um militar conta a designação que já terminou? | **Conta, por padrão — e a tela oferece o contrário num alternador.** São duas perguntas: "o que ele já tocou" inclui a designação encerrada por substituição, e é o que a matriz sempre respondeu; "o que ele tem hoje na mão" é `data_fim IS NULL`. Fixar uma das duas esconderia a outra, e nenhuma delas é mais legítima. O padrão continua sendo o histórico, para não mudar em silêncio o significado de uma tela que já existia. |
 | 59 | O Relatório Anual como "modo" da tela de Estatísticas não se sustentou. O que ele é? | **Um documento, e não um painel — porque a diferença entre os dois não é o filtro, é o gênero.** Fixar o ano deixava duas entradas de menu abrindo a mesma tela, que é o defeito que a decisão 55 existia para corrigir. Estatísticas é tela de **operar**: filtra, alterna gráfico e tabela, compara. O Anual é peça que se imprime, assina e arquiva: capa com brasão, ano e unidade; onze seções numeradas em ordem fixa; **só tabelas**, nenhum alternador e nenhum chip no meio do texto — um relatório em que o leitor precisa clicar para ver o número não é um relatório. E o escopo é **o ano inteiro**, sem recorte por espécie: meio relatório anual não é o relatório anual do 7º BPM. O que as duas telas compartilham é o **dado** — `carregarDadosDoEscopo`, `tabelaContagem`, `tabelaSituacao` e `tabelaEnquadramento` moram em `estatisticas.ts` e servem às duas. Duas cargas separadas divergiriam no primeiro filtro novo, que foi exatamente como a Visão Geral passou a discordar do Painel. |
 | 60 | Como se pergunta "quem concluiu por último" em Designações? | **Filtro por balde + ordenação por data, com as datas saindo do conjunto já recortado.** O filtro de situação recorta **o que é contado**, não quem é listado: marcando "vencidos", cada linha traz quantos vencidos aquele militar tem, e a lista vira um ranking de atraso. As duas datas — maior `data_recebimento` e maior `data_conclusao` — são calculadas **depois** do recorte, e é isso que faz a pergunta ter resposta: com as datas do conjunto inteiro, filtrar por "vencido" ainda devolveria a conclusão de um processo que o filtro acabou de excluir. As ordenações são cinco (total, recebimento recente/antigo, conclusão recente/antiga), e **quem não tem a data vai para o fim nas duas direções** — militar que nunca concluiu nada não é "o que concluiu há mais tempo", é o que não concluiu. As duas colunas de data ficam sempre visíveis: ordenar por coluna que não aparece deixa a lista numa ordem que ninguém consegue conferir. |
+| 61 | Como os relatórios comuns cabem no PDF sem mexer no Mapa Mensal? | **Sessão de impressão escopada, três perfis e orientação explícita por relatório.** `ligarExportacao` aplica `body.relatorio-pdf-ativo` somente enquanto o diálogo está aberto; `report-print.css` não tem regra de papel fora desse escopo. Tabular, analítico e documento compartilham A4, margens, quebra de linha/tabela e ocultação de controles, com exceções locais para a matriz de Designações e o detalhe de Mapa Salvo. Retrato e paisagem vão ao `GtkPageSetup` (`print_portrait`/`print_landscape`); o `@page` é fallback de WebView2/Chromium. A matriz dinâmica continua na tela e vira `Militar | Apuratório | Quantidade` só no papel. O documento especial do Mapa Mensal continua em `mapa-pdf.ts`, `html.mapa-pdf-ativo`, margem zero e fluxo próprio — nenhum seletor novo o alcança. **A segunda volta mediu tudo isso** (`tools/impressao`) e mudou três coisas: os nove tamanhos de bloco passaram a sair de medição, e não de estimativa; a fragmentação saiu de dentro dos cartões e painéis, onde o motor ignora o `break-inside` das caixas internas; e o congelamento do Mapa Mensal deixou de ser argumento — `controle-mapa.sh` prova, pixel a pixel, que o PDF dele não mudou. Dos três perfis, só `documento` tem regra própria hoje: as regras analíticas casam por classe e não precisam do perfil para se limitar. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -620,8 +621,13 @@ próprio, sem `LIMIT`, e um teste que monte mais linhas que qualquer teto imagin
                     avisarSeCortado(cortado); return baixarCsv(nome, COLUNAS_CSV, itens.map(…)); },
       async () => { const { itens, cortado } = await todosDoFiltro();
                     avisarSeCortado(cortado); return tabela(COLUNAS_IMPRESSAO, itens.map(…)); },
+      { orientacao: "paisagem", perfil: "tabular", seletorSubstituido: "#resultado-paginado" },
     );
     ```
+
+    O `seletorSubstituido` aponta para um wrapper que inclui **tabela,
+    paginação e títulos próprios do recorte**. O helper põe o bloco completo no
+    mesmo lugar e esconde só esse wrapper; nunca procura toda `.table-wrap` da tela.
 
     ⚠ **A coluna de ações sai do bloco de impressão.** A regra de impressão esconde
     `.row-actions`, e numa tabela de layout fixo isso colapsa a célula: o corpo fica com uma
@@ -781,7 +787,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Largura de coluna num `<col style="">`** | É `style` como qualquer outro, e a CSP recusa igual: o `<col>` fica sem largura e a tabela volta a se dimensionar pelo conteúdo, **sem erro de build e sem erro de console que aponte a tabela** | A largura sai em `data-largura` e é aplicada pela CSSOM em `dom.ts::aplicarLarguras`, chamada de `main.ts::shell()` |
 | **Duas gerações da mesma regra de CSS no arquivo** | Qual vence deixa de ser a intenção e passa a ser a ordem e a especificidade. `.tabela-dados thead th` mantinha o cabeçalho da listagem branco por ser mais específica que o `th` escrito depois — o efeito era bom, e ninguém sabia que era acidente | Ao mexer em regra que já existe duplicada, **medir o computado antes e depois** num navegador, sobre o CSS compilado. Foi como a seção 12, rodada 14 provou que a listagem de processos não mudou |
 | `style=""` no markup, com a CSP ligada | O atributo é recusado e o elemento aparece sem estilo, **sem erro de build**. Só a CSSOM (`elemento.style.width = …`) escapa da diretiva | Larguras calculadas de coluna vão em `data-*` e são aplicadas por `aplicarLarguras()` em `shell()` |
-| **`@page` para orientar a folha impressa** | O WebKitGTK — motor do Tauri no **Linux** — ignora o descritor `size` do `@page`. Medido no webkit2gtk-4.1 2.48 com `@page nome { size: A4 landscape }`, `@page { size: A4 landscape }` e `@page { size: 297mm 210mm }`: as três saíram 595×842 pt, **retrato**. A propriedade `page` (página nomeada) também não existe no WebKit, então uma `@page` nomeada nem chega a casar. O documento sai com o layout de 297mm espremido numa folha de 210mm, sem erro nenhum | A orientação vem do `GtkPageSetup`, e só. É o que `print::commands::print_landscape` monta, antes de rodar o diálogo. O `@page` continua no frontend só para os motores que o honram, e a chamada **espera** a impressão terminar — voltar antes desmonta o documento e imprime folha em branco |
+| **`@page` para orientar a folha impressa** | O WebKitGTK — motor do Tauri no **Linux** — ignora o descritor `size` do `@page`. Medido no webkit2gtk-4.1 2.48 com `@page nome { size: A4 landscape }`, `@page { size: A4 landscape }` e `@page { size: 297mm 210mm }`: as três saíram 595×842 pt, **retrato**. A propriedade `page` (página nomeada) também não existe no WebKit, então uma `@page` nomeada nem chega a casar. O documento sai com a geometria errada, sem erro nenhum | A orientação vem do `GtkPageSetup`: `print_landscape` declara 297×210mm e `print_portrait`, 210×297mm. O `@page` temporário continua só como fallback para os motores que o honram, e a chamada **espera** a impressão terminar |
 | **Concatenar a descrição a um `rotulo` de enquadramento** | O `rotulo` de `evidence/repository.rs` **já termina** em `' - ' \|\| descricao`. Quem acrescentar `: ${descricao}` imprime o mesmo parágrafo duas vezes na mesma linha — foi o que o PDF do mapa mensal fez desde que nasceu, e com a transgressão saía pior ainda, repetindo também a gravidade | O rótulo é a citação **completa**. Exiba-o sozinho. `rotulo_cita_o_artigo_antes_da_norma_e_nao_repete_a_descricao` trava as duas metades |
 | **Pedir ao GTK que gire a folha para paisagem** | Com `run_dialog`, o WebKitGTK sai com **as páginas em branco**: a contagem de páginas está certa, a folha sai 842×595, e não se pinta nada — nenhum texto no PDF. Não há erro, nem no console nem no `failed`. Com `print()` direto o mesmo page setup funciona, o que torna a armadilha fácil de "validar" errado | Declarar um **papel de 297×210mm** no `GtkPageSetup`, sem pedir rotação: a folha sai igual e o conteúdo aparece. É o que `folha_a4_paisagem` faz, e o comentário dela guarda a medição |
 | **Validar impressão em Chromium headless** | Não prova nada sobre o app: o Chromium honra `@page` e páginas nomeadas desde a v110, o WebKitGTK não honra nenhum dos dois. Foi assim que a rodada 20 deu o A4 paisagem por pronto enquanto o PDF saía retrato | Medir no motor que o app usa. `python3` + `gi` (`WebKit2` 4.1) imprime para arquivo, e `pdfinfo` lê `Page size` |
@@ -816,7 +822,11 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | **Roving tabindex sem tratador de setas** | `tabIndex = ativo ? 0 : -1` tira o botão não selecionado da ordem de Tab; sem `keydown` para as setas, ele fica **inalcançável pelo teclado**, e o que sobra no Tab é o botão que já está selecionado. O alternador Gráfico/Tabela nasceu assim, com `role="tab"` e sem `tabpanel` — semântica de aba pela metade | Alternador de dois estados é grupo de botões com `aria-pressed`, que o navegador opera sozinho. Roving tabindex só com o tratador de setas junto, e aí a semântica de aba tem de estar completa |
 | Percentual de tooltip sobre o que está plotado | Num ranking limitado ao Top 12, somar só as doze barras infla todos os percentuais **em silêncio** (63/274 em vez de 63/277). E num empilhado, dividir pelo total do gráfico responde outra pergunta: 96 em andamento do IPM viram 20,9% do relatório, não os 70,1% do apuratório que o leitor espera | `GraficoSpec.totalReal` guarda o total do conjunto **antes** do recorte, e `percentual.base` diz se a conta é da categoria ou do total. `dados.ts::denominadorPercentual` decide, e tem teste |
 | Rótulo de eixo cortado sem reticências | `quebrarRotulo` limita a três linhas: "Acidente de trânsito envolvendo viatura policial militar" virava "envolvendo viatura", e o eixo passava a mentir o nome da categoria. Na tela o tooltip desmente; **no papel não há tooltip** | O corte é explícito, com `…`. E o texto inteiro continua no tooltip e na tabela do cartão |
-| Esconder toda `.table-wrap` para pôr o bloco completo na impressão | A tabela **dentro de um cartão analítico** não é a listagem paginada que o bloco vem substituir: escondê-la imprimia o cartão em branco sempre que o usuário tivesse escolhido ver a tabela em vez do gráfico | O filtro de `ligarExportacao` ignora quem está dentro de `[data-analytics-view]` |
+| Esconder toda `.table-wrap` para pôr o bloco completo na impressão | A tabela **dentro de um cartão analítico** não é a listagem paginada que o bloco vem substituir; esconder por classe global também deixa títulos antigos soltos e pode duplicá-los no bloco completo | Envolva a região paginada — títulos, tabela e paginação — e passe seu id em `seletorSubstituido`. `ligarExportacao` esconde somente esse alvo |
+| Confiar em `break-inside: avoid` no `<tr>` | Pior do que dividir: o WebKitGTK 2.52.6 aceita a propriedade, parte a linha na quebra de página **e não imprime a metade que ficaria na folha anterior**. O registro some do PDF, sem erro, sem aviso e sem buraco visível — a folha seguinte simplesmente começa no meio de uma linha. Medido em `tools/impressao`: 14 de 400 linhas na listagem de auditoria, 40 de 400 no mapa salvo | Tabela longa opta por `linhasPorFragmentoImpressao`: no clique, `dom.ts` cria blocos indivisíveis com cabeçalho próprio e os remove ao fechar o diálogo. O tamanho do bloco é **medido**, nunca estimado |
+| Escolher o tamanho do bloco no olho | Os dois lados erram para pior. Bloco **menor** que a folha imprime o cabeçalho no meio da página — com 4 linhas por bloco a auditoria saía com dois cabeçalhos por folha, e 15 folhas viravam 16. Bloco **maior** que a folha deixa de ser indivisível: o motor volta a fatiar, e a linha some de novo | Roda-se `tools/impressao` com `--fragmento=nome:N` até achar o maior N que ainda dê **um** cabeçalho por folha e **zero** linha partida. Os nove valores atuais estão comentados no código, cada um dizendo de qual medição saiu |
+| Fragmentar a tabela que mora dentro de um cartão | Dentro de um item de `.analytics-grid` ou `.stat-grid` o WebKitGTK **ignora** o `break-inside` das caixas de dentro. Fragmentar ali não protege nada e ainda gasta folha: medido, o painel analítico saía com 4 folhas e uma linha partida contra 3 folhas e nenhuma | Ali quem protege é o `break-inside: avoid` do próprio cartão ou painel, que o motor respeita. `linhasPorFragmentoImpressao` é só para tabela no **fluxo do documento** — listagem substituída, seção do Anual, matriz normalizada. As três tabelas de `estatisticas.ts` servem aos dois lugares, e por isso o fragmento é opção de quem chama |
+| Dar CSS de impressão por pronto sem imprimir | Nada disto aparece lendo CSS: `@page size` ignorado, linha que desaparece, `break-inside` que não vale dentro de grid, coluna de dez colunas espremida a dois caracteres quando falta o invólucro que carrega as larguras. A rodada 30 escolheu margens, densidades e nove tamanhos de bloco sem imprimir uma folha, e três dessas escolhas estavam erradas | `tools/impressao`: monta as páginas com os helpers reais e o CSS compilado, imprime pelo WebKit2 e afere com `pdfinfo`/`pdftotext`/`pdftoppm`. `controle-mapa.sh` imprime o Mapa Mensal com o CSS de antes e o de agora e compara **texto e pixel** |
 | Contar "em andamento" sem olhar se há prazo | O apuratório cuja **data de recebimento nunca foi informada** não tem linha em `processo_prazos`: `prazo_vencimento` é `NULL`, e ele não está nem no prazo nem vencido. Somá-lo a "no prazo" afirma um prazo que não existe, e o número fica plausível — que é o pior tipo de erro de relatório | São **quatro** baldes exclusivos, e o quarto ("Sem prazo definido") tem coluna própria, exibida só quando alguém está nele. Ver decisão 57 e `designations_matrix` |
 | Inserir `dias` negativo para forjar um prazo vencido num teste | `ck_prazo_dias` exige `dias > 0` e `data_vencimento` é coluna **gerada** (`data_inicio + dias`), então o `INSERT` é recusado — e o teste falha por um motivo que não é o que ele testa | Quem anda para trás é a `data_inicio`: um prazo vencido é um prazo de 30 dias que começou há mais de 30. Ver `prazo_vencendo_em`, em `tests/maps_reports_repository.rs` |
 | Acrescentar um cartão a um painel sem olhar as telas vizinhas | Foi assim que três telas passaram a desenhar os mesmos quatro KPIs e a mesma evolução por ano — duas delas **sem escopo nenhum**, ao lado de cartões filtrados, dizendo números diferentes sobre a mesma pergunta na mesma tela | Cada indicador tem **uma** tela dona (decisão 55). Antes de acrescentar, procurar o cartão nas outras telas de relatório |
@@ -1331,6 +1341,8 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
       dizendo de qual bloco veio cada linha
 - [ ] **Imprimir / PDF** nas três: o papel sai com o conjunto completo, e a
       tabela de dez **não** sai impressa junto (duplicada)
+- [ ] Em **Prazos**, “Vencidos” e “Vencendo” aparecem uma vez cada; nenhum título
+      original fica solto antes do bloco completo
 - [ ] Se algum filtro passar de 5.000 registros, aparece o aviso dizendo que
       saíram os 5.000 mais recentes. **Não pode cortar calado**
 
@@ -1790,11 +1802,9 @@ o responsável**: a exclusão é física e não se desfaz.
 
 ### p) Painéis analíticos e o PDF deles (seção 12, rodada 28)
 
-> ⚠ **A rodada 29 mudou o elenco.** Onde este item diz "seis telas", leia **quatro**:
-> Painel, Prazos, Estatísticas dos Apuratórios (com o Relatório Anual como modo dela) e
-> Designações por Militar. "Visão Geral dos Apuratórios" não existe mais. O que se
-> confere em cada uma continua valendo — some com os cartões que saíram e veja o item
-> **(q)**.
+> ⚠ **A rodada 29 mudou o elenco analítico para quatro telas:** Painel, Prazos,
+> Estatísticas dos Apuratórios e Designações por Militar. O Relatório Anual é
+> documento separado, não modo de Estatísticas; “Visão Geral” não existe mais.
 
 O binário de produção, e o console aberto.
 
@@ -1825,7 +1835,7 @@ O binário de produção, e o console aberto.
 
 **No papel — é aqui que mora o risco**
 
-Imprimir para arquivo em **cada uma das seis telas**, e abrir o PDF:
+Imprimir para arquivo nas **quatro telas analíticas**, e abrir o PDF:
 
 - [ ] A folha sai **paisagem** (o `GtkPageSetup`, não o `@page` — ver a rodada 21)
 - [ ] Os gráficos **não estão esticados**: círculo redondo na rosca, texto do eixo com a
@@ -1840,6 +1850,34 @@ Imprimir para arquivo em **cada uma das seis telas**, e abrir o PDF:
       não um quadro branco
 - [ ] Em **Prazos**, as duas listagens saem **completas**, não com os dez itens da página
 - [ ] Filtros, alternadores e botões **não** aparecem no papel
+- [ ] A matriz geral de Designações vira a tabela vertical
+      `Militar | Apuratório | Quantidade`, com total por militar e total geral
+
+### p-bis) O arnês de impressão (seção 12, rodada 30)
+
+A conferência acima é de olho, e olho não pega registro que sumiu. O que dá para
+medir, mede-se antes — e **sem abrir a aplicação**:
+
+```bash
+npm run build
+npx vite-node tools/impressao/gerar-fixturas.ts
+python3 tools/impressao/imprimir.py --todas
+python3 tools/impressao/conferir.py --todas       # --imagens rasteriza em PNG
+tools/impressao/controle-mapa.sh                  # obrigatório: Mapa Mensal
+```
+
+O arnês imprime pelo **WebKitGTK**, com o mesmo page setup de
+`print/commands.rs`. Cada linha das fixturas carrega dois marcadores, e daí saem
+as três perguntas que a leitura do PDF não responde: nenhum registro se perdeu,
+nenhuma linha foi partida entre folhas, e o cabeçalho aparece **uma** vez por
+folha. As fixturas `medicao-*` não asseram — elas registram o que o motor faz
+sem a fragmentação, e é delas que sai cada `linhasPorFragmentoImpressao`.
+`tools/impressao/README.md` tem o resto.
+
+**O que o arnês não alcança**, e por isso continua no roteiro de olho acima:
+gráfico com dado real, cancelamento do diálogo, o teto de 5.000 registros, e a
+armadilha da folha girada — que só aparece pelo `run_dialog`, não pelo
+`print_()` do arnês.
 
 ### q) Painéis sem repetição e carga por militar (seção 12, rodada 29)
 
@@ -1916,7 +1954,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
 
 ---
 
-## 12. Changelog — as 29 rodadas
+## 12. Changelog — as 30 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -1953,6 +1991,7 @@ A narrativa completa de cada uma está no histórico do git.
 | 27 | **Desativar e excluir militar** | A listagem de militares não tinha nem uma coisa nem outra: `users_delete` **desativava** apesar do nome, e tela nenhuma o chamava. O comando virou `users_deactivate`, e `users_delete` passou a apagar de verdade — só para quem não tem vínculo nenhum, com mensagem que nomeia o vínculo que segurou. Três ícones por linha, e o par do Reativar que faltava no detalhe. Decisão **54**. Sem migration. Detalhe abaixo |
 | 29 | **Painéis sem repetição, e a carga por militar** | Seis telas de relatório viraram quatro: os mesmos quatro KPIs, a mesma evolução por ano e a mesma unidade de origem eram desenhados em três endereços, e nas telas antigas sempre **sem escopo**. "Visão Geral dos Apuratórios" saiu e o gráfico de criticidade ficou só no Painel. Do outro lado, Designações por Militar passou a responder por **carga de trabalho**: concluído, em andamento no prazo, em andamento vencido e sem prazo definido, por militar e por espécie, com cinco filtros combináveis. Numa segunda volta, o Relatório Anual virou **documento** — capa e seções numeradas, só tabelas — em vez de um "modo" da tela de Estatísticas, e as Designações ganharam filtro por balde, cinco ordenações e as datas de último recebimento e última conclusão por militar. Duas consultas novas (`by_unit`, `by_year`), `dashboard_summary` enxugado aos quatro números, nenhuma migration. Decisões **55–60**. Detalhe abaixo |
 | 28 | **Painéis analíticos** | As seis telas de relatório deixaram de ser só tabela: KPIs, barras, barras empilhadas, linha/área e rosca, com alternador Gráfico/Tabela por cartão. Uma dependência nova (`chart.js`), nenhum comando e nenhuma migration — todo dado já vinha dos relatórios existentes. O Vitest entrou junto, sobre a camada pura de `src/graficos/dados.ts`. Detalhe abaixo |
+| 30 | **PDFs dos relatórios comuns** | Impressão A4 escopada por sessão, perfis tabular/analítico/documento, cabeçalhos repetidos, linhas indivisíveis, textos sem elipse e orientação por conteúdo. Retrato ganhou `GtkPageSetup` próprio; listagens completas substituem somente seu wrapper; Designações normaliza a matriz só no papel e Mapa Salvo usa paisagem densa. O documento especial do Mapa Mensal ficou congelado e fora de todos os seletores novos. Numa segunda volta veio o **arnês** (`tools/impressao`), que imprime pelo WebKitGTK sem abrir a aplicação: ele mostrou que a linha partida pela quebra de página **some do PDF**, calibrou os nove tamanhos de bloco por medição, tirou a fragmentação de dentro dos cartões — onde o motor ignora o `break-inside` — e passou a provar o congelamento do Mapa Mensal pixel a pixel. Sem migration e sem biblioteca de PDF. Decisão **61**. |
 
 ### A rodada 29, em detalhe
 

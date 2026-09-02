@@ -178,15 +178,17 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
         <button type="button" class="secondary" id="limpar-filtro">Limpar</button>
       </form>
 
-      ${
-        resposta.ok
-          ? tabela(COLUNAS, itens.map(linhaDaTabela), "Nenhum registro neste escopo.", {
-              viewport: true,
-              listagem: true,
-            })
-          : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar a auditoria.")}</p>`
-      }
-      ${paginacao("auditoria", pagina, ITENS_POR_PAGINA, total)}
+      <div id="conteudo-paginado-auditoria">
+        ${
+          resposta.ok
+            ? tabela(COLUNAS, itens.map(linhaDaTabela), "Nenhum registro neste escopo.", {
+                viewport: true,
+                listagem: true,
+              })
+            : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar a auditoria.")}</p>`
+        }
+        ${paginacao("auditoria", pagina, ITENS_POR_PAGINA, total)}
+      </div>
     </section>
   `);
 
@@ -257,7 +259,16 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
       avisarSeCortado(cortado);
       return tabela(COLUNAS, todos.map(linhaDaTabela), "Nenhum registro neste escopo.", {
         listagem: true,
+        // Oito: a folha em retrato leva nove destas linhas no pior caso
+        // (`medicao-auditoria`), e um bloco que não cabe volta a partir a
+        // linha. Com quatro saíam dois cabeçalhos por folha.
+        linhasPorFragmentoImpressao: 8,
       });
+    },
+    {
+      orientacao: "retrato",
+      perfil: "tabular",
+      seletorSubstituido: "#conteudo-paginado-auditoria",
     },
   );
 }

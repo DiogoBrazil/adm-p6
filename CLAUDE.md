@@ -71,7 +71,7 @@ entender X → olhe em Y".
 | Comando cujo nome não é o que ele faz | `users_delete` desativava, e por isso tela nenhuma o chamava por sete rodadas. Verbo de comando descreve o efeito na linha; desativação é `users_deactivate` e grava `UPDATE` na trilha |
 | Mexer em regra de CSS que já existe duplicada no arquivo | qual vence é a ordem, não a intenção. Medir o computado antes e depois num navegador — foi como a rodada 14 provou que a listagem de processos não mudou |
 | Teste de limite que não passa do limite | a fixture tem 3 militares: o clamp de 200 nunca é exercido e o teste passa. Teste de limite monta **mais que o limite** |
-| Orientar a folha impressa por `@page` | o WebKitGTK (motor do Tauri no Linux) **ignora** o descritor `size`, e não tem página nomeada. Quem orienta é o `GtkPageSetup` — ver `print::commands::print_landscape`. E validar impressão em Chromium headless não prova nada: lá o `@page` funciona |
+| Orientar a folha impressa por `@page` | o WebKitGTK (motor do Tauri no Linux) **ignora** o descritor `size`, e não tem página nomeada. Quem orienta é o `GtkPageSetup` — `print_landscape` (297×210mm) ou `print_portrait` (210×297mm). E validar impressão em Chromium headless não prova nada: lá o `@page` funciona |
 | Exibir enquadramento concatenando a descrição | o `rotulo` de `evidence/repository.rs` **já termina** na descrição. Acrescentá-la de novo imprime o parágrafo duas vezes |
 | Folha em paisagem no `GtkPageSetup` | pedir **rotação** ao GTK imprime as páginas **em branco** pelo `run_dialog`, sem erro nenhum. Declare um papel de 297×210mm — ver `folha_a4_paisagem` |
 | Conferir a CSP com `tauri dev` | dev usa a `devCsp`, que afrouxa `style-src`. A restritiva só vale no build: `npm run tauri build -- --no-bundle` |
@@ -82,7 +82,11 @@ entender X → olhe em Y".
 | Roving tabindex sem tratador de setas | `tabIndex = -1` no botão inativo o tira do Tab, e sem `keydown` ele fica inalcançável pelo teclado. Alternador de dois estados é grupo de botões com `aria-pressed` |
 | Percentual de gráfico sobre o que está plotado | num ranking Top 12 o denominador tem de ser o total **real** (`GraficoSpec.totalReal`); num empilhado, o da categoria. `dados.ts::denominadorPercentual` decide, e diz de que o percentual fala |
 | Cortar rótulo de eixo sem reticências | o eixo passa a mentir o nome da categoria, e no papel não há tooltip para desmentir. `dados.ts::quebrarRotulo` marca o corte com `…` |
-| Esconder `.table-wrap` para imprimir o bloco completo | a tabela dentro de um cartão analítico não é listagem paginada: escondê-la imprime o cartão em branco. Filtre quem está em `[data-analytics-view]` |
+| Esconder `.table-wrap` para imprimir o bloco completo | a tabela dentro de um cartão analítico não é listagem paginada, e os títulos da listagem ficam soltos. Envolva exatamente títulos+tabela+paginação e passe o id em `ligarExportacao(..., { seletorSubstituido })` |
+| Confiar em `break-inside: avoid` no `<tr>` | o WebKitGTK 2.52.6 parte a linha na quebra de página **e não imprime a metade de cima**: o registro some do papel, sem erro. Medido em `tools/impressao` — 14 de 400 linhas. Tabela longa declara `linhasPorFragmentoImpressao` |
+| Escolher `linhasPorFragmentoImpressao` no olho | bloco menor que a folha repete o **cabeçalho no meio da página**; maior que a folha deixa de ser indivisível e volta a perder a linha. O valor é medido: `tools/impressao/README.md` |
+| Fragmentar tabela dentro de cartão ou painel | em item de `.analytics-grid`/`.stat-grid` o WebKitGTK **ignora** o `break-inside` das caixas de dentro: gasta uma folha a mais e parte a linha assim mesmo. Ali quem protege é o `break-inside: avoid` do próprio cartão — fragmento só no fluxo do documento |
+| Dar CSS de impressão por pronto sem imprimir | `@page size` ignorado, linha que some, `break-inside` que não vale dentro de grid: nada disso aparece lendo o CSS. `tools/impressao` imprime pelo WebKitGTK e afere com `pdfinfo`/`pdftotext`; `controle-mapa.sh` prova que o Mapa Mensal não mudou |
 | Transformação de gráfico dentro de `graficos/index.ts` | ali não há teste possível — o módulo importa `chart.js` e chama `matchMedia`. Função pura vai para `graficos/dados.ts`, que o Vitest alcança |
 | Contar "em andamento" sem olhar o prazo | apuratório em andamento **sem recebimento informado** não tem linha em `processo_prazos`: `prazo_vencimento IS NULL` não é "no prazo" nem "vencido". São **quatro** baldes, e o quarto tem coluna própria — decisão 57 |
 | Testar prazo vencido inserindo `dias` negativo | `ck_prazo_dias` exige `dias > 0`, e o vencimento é coluna gerada (`data_inicio + dias`). Quem anda para trás é a **data de início** — ver `prazo_vencendo_em` em `tests/maps_reports_repository.rs` |
@@ -97,8 +101,8 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 174 testes
-cd .. && npm test && npm run typecheck            # 11 testes das transformações puras
+cd src-tauri && cargo fmt --check && cargo test   # 175 testes
+cd .. && npm test && npm run typecheck            # 17 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

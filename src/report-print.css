@@ -1,0 +1,355 @@
+/*
+ * Impressão compartilhada dos relatórios comuns.
+ *
+ * Tudo daqui para baixo do `@media print` exige `body.relatorio-pdf-ativo`,
+ * classe que `dom.ts::ligarExportacao` põe e tira em volta do diálogo. O Mapa
+ * Mensal usa `html.mapa-pdf-ativo`, não passa pelo helper e permanece
+ * inteiramente sob as regras próprias de styles.css.
+ *
+ * As duas únicas regras globais são as de baixo, e são de tela: nenhuma delas
+ * casa com o DOM do mapa. Fora delas, o arquivo é inerte enquanto ninguém
+ * estiver imprimindo um relatório comum.
+ *
+ * Dos três perfis, só `documento` muda alguma coisa hoje — as regras
+ * analíticas casam por classe (`.analytics-*`), que só existe nas telas
+ * analíticas, e não precisam do perfil para se limitar. `--tabular` e
+ * `--analitico` ficam como gancho declarado: acrescentar regra a eles é
+ * barato, descobrir depois que a regra vazou para o perfil errado não é.
+ */
+
+.somente-impressao {
+  display: none;
+}
+
+/* O invólucro serve só como alvo de impressão; na tela não cria uma caixa que
+   altere margens ou o fluxo original da matriz. */
+.matriz-designacoes--tela {
+  display: contents;
+}
+
+@media print {
+  body.relatorio-pdf-ativo {
+    --print-border: #9aa7b3;
+    --print-border-soft: #cbd3da;
+    --print-muted: #526272;
+    margin: 0;
+    color: #15202b;
+    background: #fff;
+    font-size: 9pt;
+    line-height: 1.28;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.relatorio-pdf-ativo .app-shell {
+    display: block;
+  }
+
+  body.relatorio-pdf-ativo .main,
+  body.relatorio-pdf-ativo .content-area {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.relatorio-pdf-ativo .panel {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible;
+    background: #fff !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  body.relatorio-pdf-ativo .sidebar,
+  body.relatorio-pdf-ativo .topbar,
+  body.relatorio-pdf-ativo .page-head-right,
+  body.relatorio-pdf-ativo .row-actions,
+  body.relatorio-pdf-ativo .export-bar,
+  body.relatorio-pdf-ativo .search-bar,
+  body.relatorio-pdf-ativo .filtros,
+  body.relatorio-pdf-ativo .filtro-bar,
+  body.relatorio-pdf-ativo .paginacao,
+  body.relatorio-pdf-ativo .actions,
+  body.relatorio-pdf-ativo .form-actions,
+  body.relatorio-pdf-ativo .analytics-card__tools,
+  body.relatorio-pdf-ativo .analytics-tooltip,
+  body.relatorio-pdf-ativo .analytics-filter-summary,
+  body.relatorio-pdf-ativo .toast-region,
+  body.relatorio-pdf-ativo [data-nao-imprimir],
+  body.relatorio-pdf-ativo .somente-tela-na-impressao {
+    display: none !important;
+  }
+
+  body.relatorio-pdf-ativo .somente-impressao,
+  body.relatorio-pdf-ativo .bloco-impressao {
+    display: block !important;
+  }
+
+  body.relatorio-pdf-ativo .ocultar-na-impressao {
+    display: none !important;
+  }
+
+  body.relatorio-pdf-ativo .page-head {
+    display: block;
+    margin: 0 0 5mm;
+    padding: 0 0 2.5mm;
+    border-bottom: 0.3mm solid var(--print-border);
+  }
+
+  body.relatorio-pdf-ativo .page-head h1 {
+    margin: 0;
+    color: #173246;
+    font-size: 16pt;
+    line-height: 1.12;
+  }
+
+  body.relatorio-pdf-ativo .page-head p {
+    margin: 1.5mm 0 0;
+    color: var(--print-muted);
+    font-size: 8.5pt;
+  }
+
+  body.relatorio-pdf-ativo :is(h1, h2, h3) {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  body.relatorio-pdf-ativo h2 {
+    margin: 5mm 0 2mm;
+    font-size: 11pt;
+    line-height: 1.2;
+  }
+
+  body.relatorio-pdf-ativo .hint {
+    margin-top: 0;
+    color: var(--print-muted);
+  }
+
+  body.relatorio-pdf-ativo .table-wrap,
+  body.relatorio-pdf-ativo .bloco-impressao .table-wrap {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+  }
+
+  body.relatorio-pdf-ativo table,
+  body.relatorio-pdf-ativo .bloco-impressao table,
+  body.relatorio-pdf-ativo .tabela-dados--larga,
+  body.relatorio-pdf-ativo .tabela-dados--fixa {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    border-collapse: collapse;
+    border-spacing: 0;
+  }
+
+  body.relatorio-pdf-ativo .tabela-dados--fixa {
+    table-layout: fixed;
+  }
+
+  body.relatorio-pdf-ativo thead {
+    display: table-header-group;
+  }
+
+  body.relatorio-pdf-ativo tfoot {
+    display: table-footer-group;
+  }
+
+  /* O WebKitGTK pode ignorar a proibição posta apenas no <tr>. Repeti-la nas
+     células faz o fragmentador empurrar a linha inteira para a folha seguinte. */
+  body.relatorio-pdf-ativo :is(tr, th, td) {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  /* As tabelas longas são clonadas em blocos no clique de impressão: ao
+     contrário do <tr>, esta caixa normal é respeitada pelo WebKitGTK — desde
+     que caiba na folha.
+     Sem `overflow: hidden`. Um bloco mais alto que a página deixa de ser
+     indivisível, o motor volta a fatiar a linha, e a linha fatiada **some do
+     papel** — em `tools/impressao/fragmento-gigante`, quatro das 120 linhas
+     não chegam ao PDF. Tirar o `hidden` não mudou esse número (quem perde a
+     linha é a fatia, não o recorte), e foi por isso que ele saiu: não comprava
+     nada e acrescentava um segundo jeito de conteúdo sumir sem erro. Quem
+     impede o estouro é o tamanho do bloco, e cada tela mediu o seu. */
+  body.relatorio-pdf-ativo .tabela-impressao-fragmento {
+    margin-bottom: 3mm;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  /* Escape do cartão que contém uma tabela fragmentada: os dois `avoid` se
+     anulariam, e o de fora venceria. Hoje nenhuma tela cai aqui — tabela em
+     cartão não fragmenta, porque dentro de um item de grid o WebKitGTK ignora
+     o `break-inside` das caixas de dentro (medido em `tools/impressao`). A
+     regra fica porque `fragmentarTabelasParaImpressao` ainda põe a classe se
+     alguém declarar o fragmento ali, e sem ela a combinação sairia pior. */
+  body.relatorio-pdf-ativo .analytics-card--fragmentada-impressao {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  body.relatorio-pdf-ativo :is(th, td) {
+    height: auto;
+    min-width: 0;
+    padding: 1.6mm 1.8mm;
+    border: 0.2mm solid var(--print-border-soft) !important;
+    vertical-align: top;
+    font-size: 8.5pt;
+    line-height: 1.22;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+
+  body.relatorio-pdf-ativo th {
+    position: static;
+    color: #243746;
+    background: #eef2f4 !important;
+    font-size: 7.5pt;
+    font-weight: 800;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+
+  body.relatorio-pdf-ativo tbody tr:nth-child(even) {
+    background: #f7f9fa !important;
+  }
+
+  /* A zebra vem depois na cascata e apagava o realce do total da matriz de
+     Designações — uma linha "Total — SGT Fulano" saía igual às de cima. */
+  body.relatorio-pdf-ativo tbody tr.linha-total :is(th, td) {
+    background: #e6ecf0 !important;
+    font-weight: 700;
+  }
+
+  body.relatorio-pdf-ativo :is(th, td).col--nowrap {
+    white-space: nowrap;
+  }
+
+  body.relatorio-pdf-ativo .tabela-dados--fixa td.col--trunc {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  body.relatorio-pdf-ativo :is(.stat-panel, .analytics-kpi, .analytics-card) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.relatorio-pdf-ativo .stat-grid,
+  body.relatorio-pdf-ativo .analytics-grid {
+    grid-template-columns: 1fr;
+    gap: 4mm;
+  }
+
+  body.relatorio-pdf-ativo .analytics-kpis {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2.5mm;
+    margin-bottom: 4mm;
+  }
+
+  body.relatorio-pdf-ativo .analytics-kpi {
+    min-height: 22mm;
+    padding: 2.5mm 3mm;
+    border: 0.2mm solid var(--print-border-soft);
+    border-radius: 1.5mm;
+    box-shadow: none;
+  }
+
+  body.relatorio-pdf-ativo .analytics-kpi strong {
+    font-size: 17pt;
+  }
+
+  body.relatorio-pdf-ativo .analytics-card {
+    padding: 3mm;
+    border: 0.2mm solid var(--print-border-soft);
+    border-radius: 1.5mm;
+    box-shadow: none;
+  }
+
+  body.relatorio-pdf-ativo .analytics-chart {
+    max-width: 100%;
+    margin-inline: auto;
+  }
+
+  body.relatorio-pdf-ativo .analytics-view--table .table-wrap {
+    max-height: none;
+  }
+
+  body.relatorio-pdf-ativo.impressao-perfil--documento {
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-secao {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-secao > h2,
+  body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-secao > .hint {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  body.relatorio-pdf-ativo .matriz-designacoes--tela {
+    display: none !important;
+  }
+
+  body.relatorio-pdf-ativo .matriz-designacoes--impressao table {
+    table-layout: fixed;
+  }
+
+  body.relatorio-pdf-ativo .matriz-designacoes--impressao :is(th, td):nth-child(1) {
+    width: 44%;
+  }
+
+  body.relatorio-pdf-ativo .matriz-designacoes--impressao :is(th, td):nth-child(2) {
+    width: 44%;
+  }
+
+  body.relatorio-pdf-ativo .matriz-designacoes--impressao :is(th, td):nth-child(3) {
+    width: 12%;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  body.relatorio-pdf-ativo .mapa-salvo__tabela table {
+    table-layout: fixed;
+  }
+
+  body.relatorio-pdf-ativo .mapa-salvo__conteudo-cru {
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  body.relatorio-pdf-ativo .mapa-salvo__tabela :is(th, td) {
+    padding: 1.25mm 1mm;
+    font-size: 7.5pt;
+  }
+
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(1) { width: 8%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(2) { width: 12%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(3) { width: 11%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(4) { width: 9%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(5) { width: 9%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(6) { width: 8%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(7) { width: 13%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(8) { width: 11%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(9) { width: 9%; }
+  body.relatorio-pdf-ativo .mapa-salvo__tabela th:nth-child(10) { width: 10%; }
+}

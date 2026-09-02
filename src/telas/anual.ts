@@ -34,6 +34,16 @@ import {
 } from "./estatisticas";
 import type { ContextoTela } from "./catalogos";
 
+/**
+ * As seções do Anual correm no fluxo do documento, e não dentro de cartão.
+ *
+ * É a diferença que decide o bloco indivisível: aqui a tabela atravessa
+ * páginas, e sem bloco a linha que cai na quebra **some do papel** — medido em
+ * `tools/impressao/medicao-*`. Nos cartões da tela de Estatísticas a mesma
+ * tabela não fragmenta, e o comentário de `tabelaContagem` diz por quê.
+ */
+const EM_DOCUMENTO = { fragmentar: true };
+
 export const ROTA = "/estatisticas/anuais";
 
 const brasaoUrl = new URL("../../src-tauri/icons/icon.png", import.meta.url).href;
@@ -116,31 +126,31 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
       ${secao(
         2,
         "Processos e procedimentos por espécie",
-        tabelaSituacao(d.situacao),
+        tabelaSituacao(d.situacao, EM_DOCUMENTO),
         "Situação derivada da data de conclusão registrada.",
       )}
-      ${secao(3, "Unidades de origem", tabelaContagem(d.unidades, "Unidade"))}
-      ${secao(4, "Natureza geral do fato", tabelaContagem(d.naturezas, "Natureza"))}
-      ${secao(5, "Categorias de indício", tabelaContagem(d.categorias, "Categoria"))}
+      ${secao(3, "Unidades de origem", tabelaContagem(d.unidades, "Unidade", undefined, EM_DOCUMENTO))}
+      ${secao(4, "Natureza geral do fato", tabelaContagem(d.naturezas, "Natureza", undefined, EM_DOCUMENTO))}
+      ${secao(5, "Categorias de indício", tabelaContagem(d.categorias, "Categoria", undefined, EM_DOCUMENTO))}
       ${secao(
         6,
         "Soluções sugeridas pelo encarregado",
-        tabelaContagem(d.sugeridas, "Solução"),
+        tabelaContagem(d.sugeridas, "Solução", undefined, EM_DOCUMENTO),
       )}
       ${secao(
         7,
         "Soluções decididas pela autoridade",
-        tabelaContagem(d.decididas, "Solução"),
+        tabelaContagem(d.decididas, "Solução", undefined, EM_DOCUMENTO),
       )}
       ${secao(
         8,
         "Responsabilidade vigente",
-        tabelaContagem(d.responsaveis, "Responsável"),
+        tabelaContagem(d.responsaveis, "Responsável", undefined, EM_DOCUMENTO),
         "Apuratórios do ano atribuídos ao responsável vigente; não é o histórico de designações.",
       )}
-      ${secao(9, "Transgressões do RDPM", tabelaEnquadramento(d.transgressoes, "Artigo / inciso"))}
-      ${secao(10, "Infrações do Estatuto", tabelaEnquadramento(d.estatuto, "Artigo / inciso"))}
-      ${secao(11, "Infrações penais", tabelaEnquadramento(d.penais, "Dispositivo / artigo"))}
+      ${secao(9, "Transgressões do RDPM", tabelaEnquadramento(d.transgressoes, "Artigo / inciso", EM_DOCUMENTO))}
+      ${secao(10, "Infrações do Estatuto", tabelaEnquadramento(d.estatuto, "Artigo / inciso", EM_DOCUMENTO))}
+      ${secao(11, "Infrações penais", tabelaEnquadramento(d.penais, "Dispositivo / artigo", EM_DOCUMENTO))}
 
       <footer class="relatorio-fecho">
         <p>Seção de Justiça e Disciplina · 7º BPM · Exercício de ${escapeHtml(anoSelecionado)}</p>
@@ -157,5 +167,5 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
 
   // Sem CSV: o documento é a saída. Quem quer a planilha usa Estatísticas, que
   // exporta as mesmas quebras com o escopo que o operador escolher.
-  ligarExportacao(undefined, undefined, { paisagem: true });
+  ligarExportacao(undefined, undefined, { orientacao: "paisagem", perfil: "documento" });
 }

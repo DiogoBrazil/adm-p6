@@ -67,6 +67,60 @@ export const ROTA = "/estatisticas/encarregados";
 
 type Opcao = { id: string; rotulo: string; titulo?: string };
 
+export type DesignacaoNormalizadaImpressao = {
+  militar: string;
+  apuratorio: string;
+  quantidade: number;
+  tipo: "item" | "total-militar" | "total-geral";
+};
+
+/**
+ * Converte a matriz de largura variável numa listagem que cresce para baixo.
+ * A tela continua matricial; só o papel usa esta forma, que permanece legível
+ * quando o catálogo ganhar novas espécies de apuratório.
+ */
+export function normalizarDesignacoesParaImpressao(
+  linhas: readonly DesignacaoMatrizLinha[],
+  apuratorios: readonly Pick<Opcao, "id" | "rotulo">[],
+): DesignacaoNormalizadaImpressao[] {
+  const resultado: DesignacaoNormalizadaImpressao[] = [];
+
+  for (const linha of linhas) {
+    const militar = formatarQualificacaoMilitar(
+      linha.posto_graduacao,
+      linha.matricula,
+      linha.nome,
+    );
+    for (const apuratorio of apuratorios) {
+      const quantidade = linha.celulas.find((celula) => celula.id === apuratorio.id)?.total ?? 0;
+      if (quantidade === 0) continue;
+      resultado.push({
+        militar,
+        apuratorio: apuratorio.rotulo,
+        quantidade,
+        tipo: "item",
+      });
+    }
+    resultado.push({
+      militar: `Total — ${militar}`,
+      apuratorio: "Todas as espécies",
+      quantidade: linha.total,
+      tipo: "total-militar",
+    });
+  }
+
+  if (linhas.length) {
+    resultado.push({
+      militar: "Total geral",
+      apuratorio: "Todos os militares e espécies",
+      quantidade: linhas.reduce((total, linha) => total + linha.total, 0),
+      tipo: "total-geral",
+    });
+  }
+
+  return resultado;
+}
+
 /**
  * Uma linha do cartão de carga.
  *
@@ -282,6 +336,12 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
         { texto: formatarData(item.ultima_conclusao), numerica: true },
       ]),
       "Nenhuma designação neste escopo.",
+      // Sem fragmento: esta tabela é o verso de um `cartaoAnalitico`, e dentro
+      // de um item de `.analytics-grid` o WebKitGTK ignora o `break-inside`
+      // das caixas internas. Medido em `tools/impressao`
+      // (`analitico-cartoes` × `analitico-cartoes-inteiros`): fragmentar
+      // custava uma folha a mais **e** partia uma linha. Quem protege é o
+      // `break-inside: avoid` do próprio cartão.
       { listagem: true },
     );
 
@@ -332,6 +392,28 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     [...linhas.map((l) => [qualificacao(l), ...celulasDe(l), { texto: String(l.total), numerica: true, classe: "total" }]), ...rodape],
     "Nenhuma designação neste escopo.",
     { larga: true, listagem: true },
+  );
+
+  const matrizNormalizada = normalizarDesignacoesParaImpressao(linhas, colunasComDado);
+  const tabelaMatrizImpressao = tabela(
+    [
+      { rotulo: "Militar", largura: 44 },
+      { rotulo: "Apuratório", largura: 44 },
+      { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
+    ],
+    matrizNormalizada.map((linha) => ({
+      celulas: [
+        linha.militar,
+        linha.apuratorio,
+        { texto: String(linha.quantidade), numerica: true, classe: "total" },
+      ],
+      classe: linha.tipo === "item" ? "" : "linha-total",
+    })),
+    "Nenhuma designação neste escopo.",
+    // Vinte e cinco destas linhas cabem na folha em paisagem
+    // (`medicao-matriz`); 22 deixa a folga da linha alta. Aqui o fragmento
+    // vale: a matriz normalizada sai no fluxo do documento, não num cartão.
+    { listagem: true, linhasPorFragmentoImpressao: 22 },
   );
 
   const totalDesignacoes = linhas.reduce((acc, linha) => acc + linha.total, 0);
@@ -463,9 +545,16 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
       ${
         modoMilitar
           ? ""
-          : `<h2>Matriz de designações</h2>
-             <p class="hint">Militar × espécie de apuratório, no escopo do filtro.</p>
-             ${tabelaMatriz}`
+          : `<div class="matriz-designacoes--tela">
+               <h2>Matriz de designações</h2>
+               <p class="hint">Militar × espécie de apuratório, no escopo do filtro.</p>
+               ${tabelaMatriz}
+             </div>
+             <div class="somente-impressao matriz-designacoes--impressao">
+               <h2>Designações por militar e espécie</h2>
+               <p class="hint">Combinações com quantidade zero foram omitidas; os totais preservam o escopo do filtro.</p>
+               ${tabelaMatrizImpressao}
+             </div>`
       }
     </section>
   `);
@@ -531,6 +620,6 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
         ]),
       ),
     undefined,
-    { paisagem: true },
+    { orientacao: "paisagem", perfil: "analitico" },
   );
 }

@@ -1,4 +1,4 @@
-//! Impressão do documento em A4 paisagem.
+//! Impressão dos documentos em A4 com page setup nativo.
 //!
 //! POR QUE ISTO É UM COMANDO, E NÃO `window.print()` COM `@page`
 //!
@@ -16,15 +16,23 @@
 //! Ou seja: a orientação da folha vem exclusivamente do `GtkPageSetup` da
 //! operação de impressão. E `window.print()` não dá acesso a ele — quem monta a
 //! operação lá dentro é o próprio WebKitGTK, com o padrão do sistema, que é
-//! retrato. Por isso a operação é montada aqui, onde o page setup existe.
+//! retrato. Por isso a operação é montada aqui, onde o page setup existe. O
+//! Mapa Mensal continua no comando histórico de paisagem; os relatórios comuns
+//! em retrato usam um comando separado para não depender do padrão lembrado.
 //!
 //! A `@page` nomeada que havia no `styles.css` era pior que inócua: como a
 //! propriedade CSS `page` também não existe no WebKit, a regra nunca chegava a
 //! casar, e o documento saía com o layout de 297mm espremido numa folha de
 //! 210mm. Ela foi removida.
 //!
-//! O diálogo de impressão continua aparecendo — já com a folha deitada. Quem
+//! O diálogo de impressão continua aparecendo — já com a folha certa. Quem
 //! emite escolhe a impressora ou "Imprimir para arquivo", como antes.
+//!
+//! A medição acima é do 2.48, de quando o comando de paisagem nasceu, e
+//! continua valendo: `tools/impressao` a repetiu no **2.52.6** e a folha sai
+//! igual. O arnês de lá monta este mesmo page setup e imprime pelo
+//! `WebKit2.PrintOperation`, o que torna qualquer uma destas afirmações
+//! reproduzível sem abrir a aplicação.
 //!
 //! **Como a folha é declarada importa**, e a forma óbvia sai em branco: ver
 //! `folha_a4_paisagem` logo abaixo antes de mexer nela.
@@ -57,6 +65,26 @@ pub async fn print_landscape<R: Runtime>(
         async {
             require_session(&state).await?;
             imprimir_paisagem(webview).await
+        }
+        .await,
+    )
+    .await)
+}
+
+/// Imprime os relatórios comuns que usam A4 retrato.
+///
+/// Este comando é separado de `print_landscape` de propósito: o Mapa Mensal
+/// depende do caminho em paisagem já medido e não deve ser alcançado por uma
+/// refatoração dos demais relatórios.
+#[tauri::command]
+pub async fn print_portrait<R: Runtime>(
+    webview: WebviewWindow<R>,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            imprimir_retrato(webview).await
         }
         .await,
     )
@@ -136,6 +164,72 @@ async fn imprimir_paisagem<R: Runtime>(webview: WebviewWindow<R>) -> Result<bool
     }
 }
 
+/// Gêmeo de `imprimir_paisagem`, com a outra folha.
+///
+/// A duplicação é deliberada: fatorar as duas faria o caminho do Mapa Mensal —
+/// medido, e congelado pela decisão 61 — passar a depender de uma função que
+/// os relatórios comuns podem querer mudar. O preço é este corpo repetido; o
+/// porquê de cada peça dele está comentado na irmã, logo acima.
+#[cfg(target_os = "linux")]
+async fn imprimir_retrato<R: Runtime>(webview: WebviewWindow<R>) -> Result<bool, AppError> {
+    use gtk::prelude::*;
+    use webkit2gtk::{PrintOperation, PrintOperationExt, PrintOperationResponse};
+
+    let (envia, recebe) = tokio::sync::oneshot::channel::<Result<(), String>>();
+
+    // Os `Rc<RefCell<Option<_>>>` abaixo existem pelos mesmos dois motivos de
+    // `imprimir_paisagem`: sinal do glib é `Fn` e os dois competem pelo mesmo
+    // remetente, e a operação precisa de alguém que a segure viva depois que o
+    // diálogo fecha, porque a impressão só corre então.
+    webview
+        .with_webview(move |plataforma| {
+            use std::cell::RefCell;
+            use std::rc::Rc;
+
+            let vista = plataforma.inner();
+            let operacao = PrintOperation::new(&vista);
+            operacao.set_page_setup(&folha_a4_retrato());
+
+            let remetente = Rc::new(RefCell::new(Some(envia)));
+            let viva: Rc<RefCell<Option<PrintOperation>>> = Rc::new(RefCell::new(None));
+
+            let (r, v) = (remetente.clone(), viva.clone());
+            operacao.connect_finished(move |_| {
+                v.borrow_mut().take();
+                if let Some(s) = r.borrow_mut().take() {
+                    let _ = s.send(Ok(()));
+                }
+            });
+
+            let (r, v) = (remetente.clone(), viva.clone());
+            operacao.connect_failed(move |_, erro| {
+                v.borrow_mut().take();
+                if let Some(s) = r.borrow_mut().take() {
+                    let _ = s.send(Err(erro.to_string()));
+                }
+            });
+
+            let janela = vista
+                .toplevel()
+                .and_then(|topo| topo.downcast::<gtk::Window>().ok());
+
+            *viva.borrow_mut() = Some(operacao.clone());
+            if operacao.run_dialog(janela.as_ref()) == PrintOperationResponse::Cancel {
+                viva.borrow_mut().take();
+                if let Some(s) = remetente.borrow_mut().take() {
+                    let _ = s.send(Ok(()));
+                }
+            }
+        })
+        .map_err(|erro| AppError::Impressao(format!("webview indisponivel: {erro}")))?;
+
+    match recebe.await {
+        Ok(Ok(())) => Ok(true),
+        Ok(Err(motivo)) => Err(AppError::Impressao(motivo)),
+        Err(_) => Ok(false),
+    }
+}
+
 /// A folha do documento: 297×210mm, sem margem de página.
 ///
 /// PAPEL DEITADO, E NÃO A4 ROTACIONADO
@@ -173,9 +267,49 @@ fn folha_a4_paisagem() -> gtk::PageSetup {
     folha
 }
 
+/// A folha dos relatórios comuns em pé: 210×297mm, sem margem de página.
+///
+/// Declarada como papel físico pelo mesmo motivo da irmã deitada — não pedir
+/// nada ao caminho de rotação do WebKit — e para não depender do que o diálogo
+/// lembrou da última impressão: quem acabou de emitir um Mapa Mensal tem
+/// paisagem como padrão do sistema.
+///
+/// Medido no webkit2gtk-4.1 **2.52.6**, imprimindo o CSS compilado por
+/// `tools/impressao/imprimir.py`, que monta este mesmo page setup:
+///
+/// | page setup                       | folha do PDF        |
+/// |----------------------------------|---------------------|
+/// | papel de 210×297mm, sem rotação  | 595×842 pt, retrato |
+/// | papel de 297×210mm, sem rotação  | 842×595 pt, paisagem|
+///
+/// As margens ficam em zero porque quem as dá é o `@page { margin: 12mm }` que
+/// `dom.ts::abrirImpressao` adota pela CSSOM — o WebKitGTK ignora o `size`
+/// desse `@page`, mas honra a margem. Somar as duas encolheria a área útil.
+#[cfg(target_os = "linux")]
+fn folha_a4_retrato() -> gtk::PageSetup {
+    let folha = gtk::PageSetup::new();
+    folha.set_paper_size(&gtk::PaperSize::new_custom(
+        "a4-retrato",
+        "A4 retrato",
+        210.0,
+        297.0,
+        gtk::Unit::Mm,
+    ));
+    folha.set_top_margin(0.0, gtk::Unit::Mm);
+    folha.set_bottom_margin(0.0, gtk::Unit::Mm);
+    folha.set_left_margin(0.0, gtk::Unit::Mm);
+    folha.set_right_margin(0.0, gtk::Unit::Mm);
+    folha
+}
+
 /// Fora do Linux o `@page` do CSS resolve a orientação, e o frontend imprime
 /// pelo caminho comum.
 #[cfg(not(target_os = "linux"))]
 async fn imprimir_paisagem<R: Runtime>(_webview: WebviewWindow<R>) -> Result<bool, AppError> {
+    Ok(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn imprimir_retrato<R: Runtime>(_webview: WebviewWindow<R>) -> Result<bool, AppError> {
     Ok(false)
 }

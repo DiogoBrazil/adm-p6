@@ -250,6 +250,8 @@ export interface Commands {
    * Ver `src-tauri/src/print/commands.rs` para o porquê de não ser só CSS.
    */
   print_landscape: { args: Record<string, never>; result: boolean };
+  /** Equivalente em A4 retrato para os relatórios comuns. */
+  print_portrait: { args: Record<string, never>; result: boolean };
 
   // ── Auditoria ─────────────────────────────────────────────────────
   audit_list: { args: { page?: number | null, perPage?: number | null, entidade?: string | null, operacao?: string | null, usuarioId?: string | null }; result: AuditPageResult };

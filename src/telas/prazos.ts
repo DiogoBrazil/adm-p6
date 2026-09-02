@@ -63,6 +63,15 @@ const COLUNAS: Coluna[] = [
   { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
 ];
 
+/**
+ * Linhas por bloco indivisível no papel.
+ *
+ * A folha em paisagem leva 18 destas linhas no pior caso, medido em
+ * `tools/impressao` (`medicao-prazos`); 14 deixa margem para a linha alta sem
+ * empurrar o bloco inteiro para a folha seguinte.
+ */
+const LINHAS_POR_BLOCO = 14;
+
 /** Os rótulos do CSV, sem acento no cabeçalho. */
 const COLUNAS_CSV = ["Apuratorio", "Unidade", "Responsavel", "Vencimento"];
 
@@ -175,14 +184,16 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         ${kpiAnalitico(faixas[2]?.total ?? 0, "Regulares", { tom: "sucesso" })}
       </div>
 
-      <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
-      ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
-      ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
+      <div id="conteudo-paginado-prazos">
+        <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
+        ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
+        ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
 
-      <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
-        <span class="badge badge--warn">${totalAVencer}</span></h2>
-      ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", { listagem: true })}
-      ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
+        <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
+          <span class="badge badge--warn">${totalAVencer}</span></h2>
+        ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", { listagem: true })}
+        ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
+      </div>
     </section>
   `);
 
@@ -248,10 +259,20 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     async () => {
       const todos = await carregarOsDois();
       return `<h2>Vencidos</h2>
-        ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.", { listagem: true })}
+        ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.", {
+          listagem: true,
+          linhasPorFragmentoImpressao: LINHAS_POR_BLOCO,
+        })}
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
-        ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.", { listagem: true })}`;
+        ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.", {
+          listagem: true,
+          linhasPorFragmentoImpressao: LINHAS_POR_BLOCO,
+        })}`;
     },
-    { paisagem: true },
+    {
+      orientacao: "paisagem",
+      perfil: "tabular",
+      seletorSubstituido: "#conteudo-paginado-prazos",
+    },
   );
 }

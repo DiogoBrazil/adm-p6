@@ -158,6 +158,7 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
             ("proceedings_filter_options", json!({})),
             ("reports_available_years", json!({})),
             ("print_landscape", json!({})),
+            ("print_portrait", json!({})),
         ] {
             let envelope = invocar(&webview, comando, args);
             let mensagem = erro(&envelope);
@@ -309,6 +310,17 @@ fn impressao_em_paisagem_responde_pelo_ipc() {
     com_app_e_banco("ipc_print", |app, webview, conta| {
         autenticar(&app, &conta, false);
         let envelope = invocar(&webview, "print_landscape", json!({}));
+        assert_eq!(ok(&envelope), &json!(false), "{envelope}");
+    });
+}
+
+/// O caminho retrato tem o mesmo contrato assíncrono e o mesmo fallback do
+/// caminho em paisagem quando não existe GTK real no runtime de teste.
+#[test]
+fn impressao_em_retrato_responde_pelo_ipc() {
+    com_app_e_banco("ipc_print_portrait", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+        let envelope = invocar(&webview, "print_portrait", json!({}));
         assert_eq!(ok(&envelope), &json!(false), "{envelope}");
     });
 }

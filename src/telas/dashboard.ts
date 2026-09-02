@@ -114,7 +114,8 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
       <section class="stat-panel dashboard-overdue">
         <div class="page-head">
           <h2>Prazos vencidos</h2>
-          <button type="button" class="ghost small" id="ir-para-prazos">Ver todos em Prazos</button>
+          <button type="button" class="ghost small" id="ir-para-prazos"
+                  data-nao-imprimir>Ver todos em Prazos</button>
         </div>
         ${
           resumo.prazos_vencidos > VENCIDOS_NO_PAINEL
@@ -130,6 +131,8 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
           ],
           vencidos.map((i) => ({ celulas: linhaVencido(i), classe: "atrasado" })),
           "Nenhum prazo vencido.",
+          // São no máximo `VENCIDOS_NO_PAINEL` linhas dentro de um
+          // `.stat-panel` indivisível: não há quebra de página para proteger.
           { listagem: true },
         )}
       </section>
@@ -143,5 +146,5 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
     document.querySelector<HTMLButtonElement>('[data-route="/prazos"]')?.click();
   });
 
-  ligarExportacao(undefined, undefined, { paisagem: true });
+  ligarExportacao(undefined, undefined, { orientacao: "paisagem", perfil: "analitico" });
 }

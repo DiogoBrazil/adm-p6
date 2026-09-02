@@ -459,8 +459,17 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
       </div>
       ${
         linhas
-          ? tabela(COLUNAS_MAPA, linhas.map(linhaMapa), "O mapa foi salvo vazio.", { larga: true })
-          : `<pre>${escapeHtml(JSON.stringify(mapa.dados_mapa, null, 2))}</pre>`
+          ? `<div class="mapa-salvo__tabela">${tabela(
+              COLUNAS_MAPA,
+              linhas.map(linhaMapa),
+              "O mapa foi salvo vazio.",
+              // Cinco. São dez colunas com natureza do fato e último
+              // andamento por extenso: a folha em paisagem leva nove destas
+              // linhas no melhor caso e menos que isso quando os dois textos
+              // vêm longos (`medicao-mapa-salvo`).
+              { larga: true, linhasPorFragmentoImpressao: 5 },
+            )}</div>`
+          : `<pre class="mapa-salvo__conteudo-cru">${escapeHtml(JSON.stringify(mapa.dados_mapa, null, 2))}</pre>`
       }
     </section>
   `);
@@ -481,5 +490,5 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
     void renderMapasSalvos(ctx);
   });
 
-  ligarExportacao();
+  ligarExportacao(undefined, undefined, { orientacao: "paisagem", perfil: "tabular" });
 }

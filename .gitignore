@@ -17,3 +17,9 @@ dist
 
 # Arquivos temporários usados para revisar drafts do Superdesign.
 .superdesign/tmp/
+
+# Saída do arnês de impressão: HTML e PDF regenerados por
+# `tools/impressao/gerar-fixturas.ts` e `imprimir.py`. O que se versiona é o
+# arnês, não o que ele produz.
+tools/impressao/fixturas/
+tools/impressao/saida/

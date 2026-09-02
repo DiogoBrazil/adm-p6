@@ -1,5 +1,6 @@
 import "tom-select/dist/css/tom-select.css";
 import "./styles.css";
+import "./report-print.css";
 import { call, type SessionUser } from "./api";
 import { destruirGraficos } from "./graficos";
 import {

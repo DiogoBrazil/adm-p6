@@ -1,0 +1,857 @@
+/**
+ * Monta as páginas HTML que o arnês de impressão manda ao WebKitGTK.
+ *
+ * POR QUE ISTO EXISTE
+ *
+ * A rodada 30 escolheu margens, densidades e tamanhos de bloco sem imprimir uma
+ * folha sequer. CSS de impressão não se confere lendo: o WebKitGTK ignora
+ * `@page size`, parte `<tr>` que mandou não partir e mede a folha por conta
+ * própria. O arnês existe para que a próxima mexida em `report-print.css`
+ * possa ser medida em vez de argumentada.
+ *
+ * As fixturas usam os helpers **reais** (`dom.ts::tabela`,
+ * `graficos::kpiAnalitico`, `mapa-pdf.ts::renderDocumentoMapa`) e o CSS
+ * **compilado** por `npm run build` — é o cascade que o app tem, com os blocos
+ * `@media print` antigos de `styles.css` no meio. Reescrever o markup aqui
+ * mediria outra coisa.
+ *
+ * Este arquivo fica fora do `include` do `tsconfig.json` (que só cobre `src`) e
+ * portanto **não passa por `tsc --noEmit`**: typá-lo exigiria `@types/node`,
+ * uma dependência nova só para o arnês. Ele roda a cada validação, então o erro
+ * aparece na hora — mas não conte com o compilador aqui.
+ *
+ *   npm run build && npx vite-node tools/impressao/gerar-fixturas.ts
+ */
+
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { blocosDeImpressao, escapeHtml, tabela, type Coluna, type Linha } from "../../src/dom";
+import { kpiAnalitico } from "../../src/graficos";
+import { normalizarDesignacoesParaImpressao } from "../../src/telas/encarregados";
+import { renderDocumentoMapa } from "../../src/telas/mapa-pdf";
+
+type Orientacao = "retrato" | "paisagem";
+type Perfil = "tabular" | "analitico" | "documento";
+
+type Fixtura = {
+  nome: string;
+  orientacao: Orientacao;
+  /** O que a fixtura prova. Vai para o manifesto e para o relatório. */
+  proposito: string;
+  perfil?: Perfil;
+  corpo: string;
+  /** Quantos marcadores `L####` o PDF tem de conter, todos, um por linha. */
+  marcadores?: number;
+  /**
+   * A fixtura mede, não assere.
+   *
+   * As `medicao-*` imprimem **sem** fragmentação, para registrar quantas linhas
+   * cabem por folha e quantas o motor parte na quebra de página. O resultado é
+   * número, não veredito: quem assere é a `calibrado-*` correspondente. Marcar
+   * isso evita um arnês cronicamente vermelho, que ninguém lê.
+   */
+  medicao?: boolean;
+  /** O Mapa Mensal não passa pelo helper: nem `body`, nem perfil. */
+  documentoProprio?: boolean;
+  /**
+   * Rótulo da primeira coluna, em caixa alta como o `th` o imprime.
+   *
+   * `conferir.py` conta quantas vezes ele aparece por folha: mais de uma vez é
+   * fragmento menor que a página, com cabeçalho repetido no meio do papel.
+   */
+  rotuloCabecalho?: string;
+};
+
+const RAIZ = resolve(import.meta.dirname ?? ".", "../..");
+
+// ── Dados sintéticos ──────────────────────────────────────────────────
+
+/**
+ * Cada linha carrega um marcador único.
+ *
+ * É ele que transforma "o PDF parece certo" em asserção: `conferir.py` exige
+ * os N marcadores no texto extraído. Linha comida por uma quebra de página,
+ * célula cortada por `overflow: hidden` e fragmento perdido aparecem como
+ * marcador ausente — que é a única forma de esses defeitos darem erro.
+ */
+const marcador = (i: number) => `L${String(i + 1).padStart(4, "0")}`;
+
+/**
+ * O par do marcador, na **última** célula da linha.
+ *
+ * Com os dois, "a linha foi partida entre páginas" deixa de ser impressão
+ * visual e vira asserção: `L0042` numa folha e `F0042` na seguinte é o defeito
+ * que `break-inside: avoid` no `<tr>` deveria impedir e o WebKitGTK ignora.
+ */
+const marcadorFinal = (i: number) => `F${String(i + 1).padStart(4, "0")}`;
+
+/**
+ * Costura o par de marcadores na linha.
+ *
+ * O final vai na célula de **texto mais longo**, não na última coluna: é a
+ * célula alta que a quebra de página fatia, e é lá que o marcador prova o
+ * corte. Numa coluna estreita de `col--nowrap` — "Dias", "Total" — o marcador
+ * transbordaria a célula e sumiria do texto extraído, medindo o arnês em vez
+ * do papel.
+ */
+function comMarcadores(linha: Linha, i: number): Linha {
+  const celulas = Array.isArray(linha) ? [...linha] : [...linha.celulas];
+  const textoDe = (c: (typeof celulas)[number]) => (typeof c === "string" ? c : c.texto);
+  let alvo = 0;
+  celulas.forEach((c, indice) => {
+    if (textoDe(c).length > textoDe(celulas[alvo]!).length) alvo = indice;
+  });
+  const celula = celulas[alvo]!;
+  celulas[alvo] =
+    typeof celula === "string"
+      ? `${celula} ${marcadorFinal(i)}`
+      : { ...celula, texto: `${celula.texto} ${marcadorFinal(i)}` };
+  return Array.isArray(linha) ? celulas : { ...linha, celulas };
+}
+
+const NOMES = ["Silva", "Oliveira", "Souza", "Rodrigues", "Ferreira", "Alves", "Pereira", "Lima"];
+const POSTOS = ["CEL PM", "TEN CEL PM", "MAJ PM", "CAP PM", "1º TEN PM", "SGT PM", "CB PM", "SD PM"];
+
+const LONGO =
+  "Apuração de responsabilidade por conduta atribuída a militar estadual em serviço " +
+  "de policiamento ostensivo, com desdobramento administrativo e disciplinar";
+
+/** Palavra sem espaço: é ela que estoura a coluna quando falta `overflow-wrap`. */
+const SEM_ESPACO = "PROCESSO-ADMINISTRATIVO-DISCIPLINAR-2026-000000000000-RETIFICADO";
+
+function textoDaLinha(i: number): string {
+  if (i % 17 === 0) return `${marcador(i)} ${SEM_ESPACO}`;
+  if (i % 5 === 0) return `${marcador(i)} ${LONGO}`;
+  return `${marcador(i)} ${NOMES[i % NOMES.length]} do processo ${100 + i}`;
+}
+
+// ── Conjuntos de colunas, iguais aos das telas ────────────────────────
+
+type Conjunto = {
+  orientacao: Orientacao;
+  colunas: (string | Coluna)[];
+  larga?: boolean;
+  /** O valor que a tela declara hoje. Só existe para a fixtura calibrada. */
+  fragmentoAtual: number;
+  /** O mesmo, quando o perfil documento imprime a mesma tabela em 10pt. */
+  fragmentoAtualDocumento?: number;
+  /** Onde o valor mora, para que calibrar não vire caça ao arquivo. */
+  origem: string;
+  /**
+   * Classe do invólucro que a tela põe em volta da tabela.
+   *
+   * Não é enfeite: as larguras de `.mapa-salvo__tabela` moram nele. Sem o
+   * invólucro a fixtura mede uma tabela que a aplicação não imprime — foi o
+   * que fez a primeira medição sair com colunas de dois caracteres.
+   */
+  envoltorio?: string;
+  /**
+   * Rótulo curto de cabeçalho que cabe numa linha só.
+   *
+   * `conferir.py` conta o rótulo no texto extraído, e um rótulo que quebra em
+   * duas linhas some da contagem — "APURATÓRIO" nos 8% do mapa salvo sai
+   * "APURATÓRI/O". Quando a primeira coluna é estreita, escolha outra.
+   */
+  rotulo?: string;
+  linha: (i: number) => Linha;
+};
+
+const CONJUNTOS: Record<string, Conjunto> = {
+  // src/telas/auditoria.ts:55
+  auditoria: {
+    orientacao: "retrato",
+    fragmentoAtual: 8,
+    origem: "src/telas/auditoria.ts (aoImprimir)",
+    colunas: [
+      { rotulo: "Quando", largura: 18, alinhamento: "centro", nowrap: true },
+      { rotulo: "Quem fez", largura: 26, truncar: true },
+      { rotulo: "O que foi feito", largura: 28, truncar: true },
+      { rotulo: "Sobre o quê", largura: 28, truncar: true },
+    ],
+    linha: (i) => [
+      `${String((i % 28) + 1).padStart(2, "0")}/02/2026 08:${String(i % 60).padStart(2, "0")}`,
+      `${POSTOS[i % POSTOS.length]} ${100000 + i} ${NOMES[i % NOMES.length]}`,
+      textoDaLinha(i),
+      `Processo ${100 + i} — ${LONGO}`,
+    ],
+  },
+  // src/telas/prazos.ts:57
+  prazos: {
+    orientacao: "paisagem",
+    fragmentoAtual: 14,
+    origem: "src/telas/prazos.ts (aoImprimir)",
+    colunas: [
+      { rotulo: "Apuratório", largura: 16, alinhamento: "centro", truncar: true },
+      { rotulo: "Unidade", largura: 18, alinhamento: "centro", truncar: true },
+      { rotulo: "Responsável", largura: 32, truncar: true },
+      { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
+      { rotulo: "Dias", largura: 12, alinhamento: "centro", nowrap: true },
+      { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
+    ],
+    linha: (i) => [
+      "IPM",
+      `7º BPM — ${i % 3 === 0 ? "Subunidade de Policiamento Ostensivo" : "Sede"}`,
+      textoDaLinha(i),
+      `${String((i % 28) + 1).padStart(2, "0")}/03/2026`,
+      { texto: String(30 + (i % 30)), numerica: true },
+      i % 4 === 0 ? "Vencido" : "No prazo",
+    ],
+  },
+  // src/telas/usuarios.ts:99 (COLUNAS_IMPRESSAO)
+  usuarios: {
+    orientacao: "paisagem",
+    fragmentoAtual: 16,
+    origem: "src/telas/usuarios.ts (aoImprimir)",
+    colunas: [
+      {
+        rotulo: "Posto/Graduação",
+        largura: 16,
+        alinhamento: "centro",
+        truncar: true,
+        quebrarRotulo: true,
+      },
+      { rotulo: "Matrícula", largura: 10, alinhamento: "centro", nowrap: true },
+      { rotulo: "Nome", largura: 24, truncar: true },
+      { rotulo: "Encarregado", largura: 9, alinhamento: "centro", nowrap: true },
+      {
+        rotulo: "Usuário do sistema",
+        largura: 11,
+        alinhamento: "centro",
+        nowrap: true,
+        quebrarRotulo: true,
+      },
+      { rotulo: "Perfil", largura: 10, alinhamento: "centro", truncar: true },
+      { rotulo: "Situação", largura: 8, alinhamento: "centro", nowrap: true },
+    ],
+    linha: (i) => [
+      POSTOS[i % POSTOS.length]!,
+      String(100000 + i),
+      textoDaLinha(i),
+      i % 3 === 0 ? "Sim" : "Não",
+      i % 2 === 0 ? "Sim" : "Não",
+      i % 2 === 0 ? "Administrador" : "Leitura",
+      i % 7 === 0 ? "Inativo" : "Ativo",
+    ],
+  },
+  // src/telas/usuarios.ts (tabelaProcessos) — retrato, dentro de `.detail-section`
+  "usuario-processos": {
+    orientacao: "retrato",
+    fragmentoAtual: 14,
+    origem: "src/telas/usuarios.ts (tabelaProcessos)",
+    colunas: [
+      { rotulo: "Apuratório", largura: 22, truncar: true, alinhamento: "centro" },
+      { rotulo: "Apuratório", largura: 24, truncar: true, alinhamento: "centro" },
+      { rotulo: "Função", largura: 24, truncar: true, alinhamento: "centro" },
+      { rotulo: "Instauração", largura: 15, alinhamento: "centro", nowrap: true },
+      { rotulo: "Situação", largura: 15, alinhamento: "centro", nowrap: true },
+    ],
+    rotulo: "FUNÇÃO",
+    linha: (i) => [
+      `${marcador(i)} IPM nº ${100 + i}`,
+      i % 5 === 0 ? LONGO : "Inquérito Policial Militar",
+      i % 3 === 0 ? "Encarregado" : "Escrivão",
+      `${String((i % 28) + 1).padStart(2, "0")}/01/2026`,
+      i % 3 === 0 ? "em andamento" : "concluído em 30/06/2026",
+    ],
+  },
+
+  // src/telas/mapas.ts:74 (COLUNAS_MAPA) — dez colunas, a tabela mais larga do app
+  "mapa-salvo": {
+    orientacao: "paisagem",
+    larga: true,
+    fragmentoAtual: 5,
+    origem: "src/telas/mapas.ts (renderMapaSalvo)",
+    envoltorio: "mapa-salvo__tabela",
+    rotulo: "UNIDADE",
+    colunas: [
+      "Apuratório", "Identificação", "Unidade", "Natureza", "Instauração",
+      "Conclusão", "Responsável", "Envolvidos", "Vencimento", "Último andamento",
+    ],
+    linha: (i) => [
+      "IPM",
+      `${marcador(i)} 2026-7BPM`,
+      "7º BPM — Subunidade de Policiamento Ostensivo",
+      i % 5 === 0 ? LONGO : "Conduta disciplinar",
+      `${String((i % 28) + 1).padStart(2, "0")}/01/2026`,
+      i % 3 === 0 ? "em andamento" : `${String((i % 28) + 1).padStart(2, "0")}/06/2026`,
+      `${POSTOS[i % POSTOS.length]} ${100000 + i} ${NOMES[i % NOMES.length]}`,
+      `${POSTOS[(i + 1) % POSTOS.length]} ${200000 + i} ${NOMES[(i + 1) % NOMES.length]}`,
+      `${String((i % 28) + 1).padStart(2, "0")}/07/2026`,
+      i % 4 === 0 ? SEM_ESPACO : "Termo de declarações juntado aos autos",
+    ],
+  },
+  // src/telas/estatisticas.ts (tabelaSituacao) — cinco colunas, linhas curtas
+  situacao: {
+    orientacao: "paisagem",
+    fragmentoAtual: 16,
+    origem: "src/telas/estatisticas.ts (tabelaSituacao)",
+    colunas: [
+      { rotulo: "Apuratório", largura: 34, truncar: true },
+      { rotulo: "Tipo", largura: 26, truncar: true },
+      { rotulo: "Em andamento", largura: 14, alinhamento: "centro", nowrap: true },
+      { rotulo: "Concluídos", largura: 13, alinhamento: "centro", nowrap: true },
+      { rotulo: "Total", largura: 13, alinhamento: "centro", nowrap: true },
+    ],
+    rotulo: "TIPO",
+    linha: (i) => [
+      `${marcador(i)} IPM — ${i % 5 === 0 ? LONGO : "Inquérito Policial Militar"}`,
+      i % 3 === 0 ? "Apuratório disciplinar" : "Apuratório penal militar",
+      { texto: String(i % 40), numerica: true },
+      { texto: String(i % 25), numerica: true },
+      { texto: String(i % 60), numerica: true },
+    ],
+  },
+
+  // src/telas/estatisticas.ts (tabelaEnquadramento) — a descrição legal inteira
+  enquadramento: {
+    orientacao: "paisagem",
+    fragmentoAtual: 8,
+    origem: "src/telas/estatisticas.ts (tabelaEnquadramento)",
+    colunas: [
+      { rotulo: "Artigo / inciso", largura: 18, truncar: true },
+      { rotulo: "Classificação", largura: 16, truncar: true },
+      { rotulo: "Descrição", largura: 58, truncar: true },
+      { rotulo: "Qtd.", largura: 8, alinhamento: "centro", nowrap: true },
+    ],
+    rotulo: "CLASSIFICAÇÃO",
+    linha: (i) => [
+      `${marcador(i)} Art. ${12 + (i % 40)}, inciso ${1 + (i % 9)}`,
+      i % 3 === 0 ? "Transgressão grave" : "Transgressão média",
+      // A descrição legal é o texto mais longo que o app imprime.
+      `${LONGO}, ${LONGO.toLowerCase()}`,
+      { texto: String(1 + (i % 30)), numerica: true },
+    ],
+  },
+
+  // src/telas/encarregados.ts — a matriz normalizada do papel
+  matriz: {
+    orientacao: "paisagem",
+    fragmentoAtual: 22,
+    origem: "src/telas/encarregados.ts (tabelaMatrizImpressao)",
+    colunas: [
+      { rotulo: "Militar", largura: 44 },
+      { rotulo: "Apuratório", largura: 44 },
+      { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
+    ],
+    linha: (i) => ({
+      celulas: [
+        `${marcador(i)} ${POSTOS[i % POSTOS.length]} ${100000 + i} ${NOMES[i % NOMES.length]}`,
+        i % 4 === 0 ? "Sindicância Administrativa Disciplinar" : "Inquérito Policial Militar",
+        { texto: String(1 + (i % 9)), numerica: true, classe: "total" },
+      ],
+      classe: i % 9 === 8 ? "linha-total" : "",
+    }),
+  },
+  // dom.ts::painelContagem — duas colunas, a tabela mais estreita
+  contagem: {
+    orientacao: "paisagem",
+    fragmentoAtual: 20,
+    origem: "src/dom.ts (painelContagem)",
+    colunas: [
+      { rotulo: "Item", largura: 70 },
+      { rotulo: "Total", largura: 30, alinhamento: "direita", nowrap: true },
+    ],
+    linha: (i) => [textoDaLinha(i), { texto: String(i * 3), numerica: true }],
+  },
+};
+
+// ── Montagem das páginas ──────────────────────────────────────────────
+
+function cabecalho(titulo: string, subtitulo: string): string {
+  return `<div class="page-head">
+    <div><h1>${escapeHtml(titulo)}</h1><p>${escapeHtml(subtitulo)}</p></div>
+    <div class="page-head-right">
+      <div class="export-bar"><button class="outline small">Imprimir / PDF</button></div>
+    </div>
+  </div>`;
+}
+
+/** A tela vive dentro do `.app-shell` do `main.ts::shell`; o papel também. */
+function painel(conteudo: string): string {
+  return `<div class="app-shell">
+    <aside class="sidebar"><div class="brand"><strong>ADM-P6</strong></div></aside>
+    <main class="main">
+      <header class="topbar"><div class="session-info"><strong>Sessão de teste</strong></div></header>
+      <div class="content-area"><section class="panel">${conteudo}</section></div>
+    </main>
+  </div>`;
+}
+
+/**
+ * `aplicarLarguras` roda pela CSSOM no app, e a fixtura não tem JS. Aqui a
+ * largura vira `style` no `<col>` — o que a CSP proíbe **no app**, não num
+ * arquivo solto: o resultado renderizado é o mesmo que `shell()` produz.
+ */
+function comLarguras(html: string): string {
+  return html.replace(/<col data-largura="([\d.]+)" \/>/g, '<col style="width:$1%" />');
+}
+
+/** O mesmo recorte de `dom.ts::fragmentarTabelasParaImpressao`, sem DOM. */
+function envolver(conjunto: Conjunto, html: string): string {
+  return conjunto.envoltorio ? `<div class="${conjunto.envoltorio}">${html}</div>` : html;
+}
+
+function tabelaFragmentada(
+  conjunto: Conjunto,
+  total: number,
+  limite: number,
+  deslocamento = 0,
+): string {
+  const blocos = blocosDeImpressao(total, limite);
+  return `<div class="tabela-impressao-fragmentada">${blocos
+    .map(([inicio, fim]) => {
+      const linhas = Array.from({ length: fim - inicio }, (_, k) =>
+        comMarcadores(conjunto.linha(deslocamento + inicio + k), deslocamento + inicio + k),
+      );
+      const html = tabela(conjunto.colunas, linhas, "Nada a exibir.", {
+        listagem: true,
+        larga: conjunto.larga,
+      });
+      return envolver(
+        conjunto,
+        html.replace('<div class="table-wrap"', '<div class="table-wrap tabela-impressao-fragmento"'),
+      );
+    })
+    .join("")}</div>`;
+}
+
+function tabelaInteira(conjunto: Conjunto, total: number): string {
+  const linhas = Array.from({ length: total }, (_, i) => comMarcadores(conjunto.linha(i), i));
+  return envolver(
+    conjunto,
+    tabela(conjunto.colunas, linhas, "Nada a exibir.", {
+      listagem: true,
+      larga: conjunto.larga,
+    }),
+  );
+}
+
+function pagina(fixtura: Fixtura, css: string): string {
+  const classesHtml = fixtura.documentoProprio ? ' class="mapa-pdf-ativo"' : "";
+  const classesBody = fixtura.documentoProprio
+    ? ""
+    : ` class="relatorio-pdf-ativo impressao-perfil--${fixtura.perfil ?? "tabular"}"`;
+  const direcao = fixtura.orientacao === "paisagem" ? "landscape" : "portrait";
+  // A mesma folha temporária que `dom.ts::abrirImpressao` adota pela CSSOM. O
+  // WebKitGTK ignora o `size`; a margem, não — e é ela que define a área útil.
+  const folha = fixtura.documentoProprio
+    ? ""
+    : `<style>@page { size: A4 ${direcao}; margin: 12mm; }</style>`;
+  return `<!doctype html>
+<html lang="pt-BR"${classesHtml}>
+  <head>
+    <meta charset="UTF-8" />
+    <title>${escapeHtml(fixtura.nome)}</title>
+    <link rel="stylesheet" href="${escapeHtml(css)}" />
+    ${folha}
+  </head>
+  <body${classesBody}>${comLarguras(fixtura.corpo)}</body>
+</html>`;
+}
+
+// ── O Mapa Mensal, controle de regressão ──────────────────────────────
+
+/**
+ * Um `MapPrintItem` sintético, com todos os campos que `renderFicha` e
+ * `renderCapa` percorrem.
+ *
+ * Serve ao **controle**: o mesmo markup impresso com o CSS de antes e o de
+ * depois. A paginação real do mapa é medida no DOM por `mapa-pdf.ts` e não
+ * entra aqui — o que se prova é que nenhuma regra nova alcançou o documento.
+ */
+function itemDoMapa(i: number): any {
+  const processo = {
+    id: `p${i}`,
+    rotulo: `IPM ${String(i + 1).padStart(3, "0")}/2026-7BPM`,
+    apuratorio_id: "ipm",
+    apuratorio_sigla: "IPM",
+    apuratorio_nome: "Inquérito Policial Militar",
+    numero_rgf: `RGF-${1000 + i}`,
+    concluido: i % 2 === 0,
+    unidade_origem: "7º BPM",
+    subunidade_secao_origem: "Subunidade de Policiamento Ostensivo",
+    natureza_fato: LONGO,
+    resumo_fatos: `${LONGO}. ${LONGO}.`,
+    data_instauracao: "2026-01-12",
+    data_conclusao: i % 2 === 0 ? "2026-06-30" : null,
+    data_remessa_encarregado: "2026-01-15",
+    data_remessa_comissao: null,
+    data_julgamento: null,
+    envolvidos: [
+      {
+        id: `e${i}`,
+        ordem: 1,
+        nome: `${POSTOS[i % POSTOS.length]} ${100000 + i} ${NOMES[i % NOMES.length]}`,
+        status_envolvido: "Sindicado",
+        e_condutor: false,
+      },
+    ],
+    designacoes: [
+      {
+        id: `d${i}`,
+        papel: "Encarregado",
+        nome: `${POSTOS[(i + 2) % POSTOS.length]} ${200000 + i} ${NOMES[(i + 2) % NOMES.length]}`,
+        data_inicio: "2026-01-15",
+        data_fim: null,
+      },
+    ],
+    pessoas: [{ papel_pessoa: "Testemunha", nome: `${NOMES[i % NOMES.length]} da Silva`, ordem: 1 }],
+    vitimas: [{ ordem: 1, nome: `${NOMES[(i + 3) % NOMES.length]} de Souza` }],
+    anexos: [
+      {
+        nome_arquivo: "termo-de-declaracoes.pdf",
+        mime_type: "application/pdf",
+        tamanho_bytes: 148_233,
+        enviado_por: "Administrador",
+        created_at: "2026-02-01T10:00:00Z",
+      },
+    ],
+    carta_precatoria: null,
+  };
+  return {
+    processo,
+    permite_remessa_comissao: false,
+    prazos: [
+      {
+        id: `pr${i}`,
+        dias: 30,
+        data_inicio: "2026-01-15",
+        prazo_vencimento: "2026-02-14",
+        prorrogacao: false,
+      },
+    ],
+    andamentos: [
+      { id: `a${i}`, data_andamento: "2026-02-03", descricao: LONGO },
+    ],
+    enquadramentos: [],
+  };
+}
+
+// ── Catálogo de fixturas ──────────────────────────────────────────────
+
+/** Em caixa alta porque é assim que o `th` sai no papel (`text-transform`). */
+function rotuloDaPrimeiraColuna(conjunto: Conjunto): string {
+  if (conjunto.rotulo) return conjunto.rotulo.toUpperCase();
+  const primeira = conjunto.colunas[0]!;
+  return (typeof primeira === "string" ? primeira : primeira.rotulo).toUpperCase();
+}
+
+function catalogo(): Fixtura[] {
+  const lista: Fixtura[] = [];
+
+  for (const [nome, conjunto] of Object.entries(CONJUNTOS)) {
+    // Medição: tabela única e longa. Serve para contar linhas por folha e para
+    // ver se o WebKitGTK ainda parte `<tr>` — as duas perguntas que decidem
+    // cada `linhasPorFragmentoImpressao`.
+    lista.push({
+      nome: `medicao-${nome}`,
+      orientacao: conjunto.orientacao,
+      proposito: `linhas por folha e integridade de <tr> — ${conjunto.origem}`,
+      medicao: true,
+      rotuloCabecalho: rotuloDaPrimeiraColuna(conjunto),
+      corpo: painel(
+        cabecalho(`Medição — ${nome}`, "Tabela única, sem fragmentação.") +
+          tabelaInteira(conjunto, 400),
+      ),
+      marcadores: 400,
+    });
+
+    // Como a tela imprime hoje, com o valor que ela declara.
+    lista.push({
+      nome: `calibrado-${nome}`,
+      orientacao: conjunto.orientacao,
+      proposito: `fragmento de ${conjunto.fragmentoAtual} linhas — ${conjunto.origem}`,
+      rotuloCabecalho: rotuloDaPrimeiraColuna(conjunto),
+      corpo: painel(
+        cabecalho(`Fragmentado — ${nome}`, `Blocos de ${conjunto.fragmentoAtual} linhas.`) +
+          tabelaFragmentada(conjunto, 120, conjunto.fragmentoAtual),
+      ),
+      marcadores: 120,
+    });
+  }
+
+  // Volumes de borda: nenhuma linha, uma linha, e o suficiente para uma folha só.
+  const auditoria = CONJUNTOS.auditoria!;
+  lista.push({
+    nome: "volume-vazio",
+    orientacao: "retrato",
+    proposito: "listagem vazia não deve imprimir folha quebrada",
+    corpo: painel(cabecalho("Auditoria", "Sem registros.") + tabelaInteira(auditoria, 0)),
+  });
+  lista.push({
+    nome: "volume-um",
+    orientacao: "retrato",
+    proposito: "uma linha só, com cabeçalho",
+    corpo: painel(cabecalho("Auditoria", "Um registro.") + tabelaFragmentada(auditoria, 1, 4)),
+    marcadores: 1,
+  });
+
+  // Fragmento propositalmente maior que a folha: é o teste do `overflow:
+  // hidden` do `.tabela-impressao-fragmento`. Se ele cortar, faltam marcadores.
+  lista.push({
+    nome: "fragmento-gigante",
+    orientacao: "retrato",
+    proposito: "fragmento maior que a folha degrada ao comportamento sem bloco",
+    medicao: true,
+    corpo: painel(
+      cabecalho("Fragmento gigante", "Um bloco só, de 120 linhas.") +
+        tabelaFragmentada(auditoria, 120, 120),
+    ),
+    marcadores: 120,
+  });
+
+  // Perfil documento: capa própria e seções que passam de uma folha.
+  // O perfil documento imprime em 10pt, contra os 9pt dos demais: cabe menos
+  // linha por folha, e o mesmo `tabelaContagem` serve às duas telas. Por isso a
+  // medição do documento é separada.
+  const contagem = CONJUNTOS.contagem!;
+  lista.push({
+    nome: "medicao-documento",
+    orientacao: "paisagem",
+    perfil: "documento",
+    proposito: "linhas por folha em 10pt — `estatisticas.ts` servindo o Relatório Anual",
+    rotuloCabecalho: rotuloDaPrimeiraColuna(contagem),
+    medicao: true,
+    corpo: painel(
+      `<section class="relatorio-secao"><h2>Medição — documento</h2>${tabelaInteira(contagem, 400)}</section>`,
+    ),
+    marcadores: 400,
+  });
+
+  const secoes = Array.from({ length: 6 }, (_, s) =>
+    `<section class="relatorio-secao">
+      <h2>${s + 1}. Seção longa</h2>
+      <p class="hint">Cada seção passa de uma folha; o título não pode ficar órfão.</p>
+      ${tabelaFragmentada(contagem, 40, contagem.fragmentoAtualDocumento ?? contagem.fragmentoAtual, s * 40)}
+    </section>`,
+  ).join("");
+  lista.push({
+    nome: "anual-documento",
+    orientacao: "paisagem",
+    perfil: "documento",
+    proposito: "capa isolada, seção longa atravessando páginas, título não órfão",
+    rotuloCabecalho: rotuloDaPrimeiraColuna(contagem),
+    corpo: painel(
+      `<section class="relatorio-capa"><h1>Relatório Anual</h1><p>7º BPM — 2026</p></section>${secoes}`,
+    ),
+    marcadores: 240,
+  });
+
+  // Perfil analítico: KPIs e cartões com tabela dentro.
+  const cartoes = Array.from({ length: 4 }, (_, c) => {
+    const inicio = 300 + c * 12;
+    return `<article class="analytics-card analytics-card--fragmentada-impressao">
+      <div class="analytics-card__header"><h2>Cartão ${c + 1}</h2>
+        <div class="analytics-card__tools"><button>Gráfico</button><button>Tabela</button></div>
+      </div>
+      <div class="analytics-view analytics-view--table" data-analytics-view="tabela">
+        ${tabelaFragmentada(contagem, 12, contagem.fragmentoAtual, inicio)}
+      </div>
+    </article>`;
+  }).join("");
+  // O mesmo painel, com as tabelas dos cartões **sem** fragmentação: quem
+  // protege a linha aqui é o `break-inside: avoid` do próprio cartão.
+  const cartoesInteiros = Array.from({ length: 4 }, (_, c) => {
+    const inicio = 300 + c * 12;
+    const linhas = Array.from({ length: 12 }, (_, k) =>
+      comMarcadores(contagem.linha(inicio + k), inicio + k),
+    );
+    return `<article class="analytics-card">
+      <div class="analytics-card__header"><h2>Cartão ${c + 1}</h2>
+        <div class="analytics-card__tools"><button>Gráfico</button><button>Tabela</button></div>
+      </div>
+      <div class="analytics-view analytics-view--table" data-analytics-view="tabela">
+        ${tabela(contagem.colunas, linhas, "Nada.", { listagem: true })}
+      </div>
+    </article>`;
+  }).join("");
+  lista.push({
+    nome: "analitico-cartoes",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    proposito: "como o Painel e Estatísticas imprimem: KPIs e cartões indivisíveis",
+    corpo: painel(
+      cabecalho("Painel", "Indicadores do escopo.") +
+        `<div class="analytics-grid">${cartoesInteiros}</div>`,
+    ),
+    marcadores: 48,
+  });
+
+  lista.push({
+    nome: "analitico-cartoes-fragmentados",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    medicao: true,
+    proposito: "por que o cartão não fragmenta: uma folha a mais e uma linha partida",
+    corpo: painel(
+      cabecalho("Painel", "Indicadores do escopo.") +
+        `<div class="analytics-kpis">${[
+          kpiAnalitico(128, "Com prazo vigente"),
+          kpiAnalitico(12, "Vencidos", { tom: "alerta", detalhe: "Fora do prazo" }),
+          kpiAnalitico(30, "Vencem em 7 dias", { tom: "andamento" }),
+          kpiAnalitico(86, "Regulares", { tom: "sucesso" }),
+        ].join("")}</div><div class="analytics-grid">${cartoes}</div>`,
+    ),
+    marcadores: 48,
+  });
+
+  // A matriz normalizada como `encarregados.ts` a monta, pela função real.
+  const normalizada = normalizarDesignacoesParaImpressao(
+    Array.from({ length: 24 }, (_, i) => ({
+      policial_militar_id: `m${i}`,
+      nome: NOMES[i % NOMES.length]!,
+      matricula: String(100000 + i),
+      posto_graduacao: POSTOS[i % POSTOS.length]!,
+      concluidos: i,
+      no_prazo: 0,
+      vencidos: 0,
+      sem_prazo: 0,
+      total: 3 + (i % 5),
+      ultimo_recebimento: null,
+      ultima_conclusao: null,
+      celulas: [
+        { id: "ipm", rotulo: "IPM", concluidos: 0, no_prazo: 0, vencidos: 0, sem_prazo: 0, total: 1 + (i % 3), ultimo_recebimento: null, ultima_conclusao: null },
+        { id: "sind", rotulo: "SIND", concluidos: 0, no_prazo: 0, vencidos: 0, sem_prazo: 0, total: 2 + (i % 2), ultimo_recebimento: null, ultima_conclusao: null },
+      ],
+    })) as any,
+    [
+      { id: "ipm", rotulo: "Inquérito Policial Militar" },
+      { id: "sind", rotulo: "Sindicância Administrativa Disciplinar" },
+    ],
+  );
+  lista.push({
+    nome: "matriz-normalizada",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    proposito: "a matriz que só existe no papel, com totais por militar e geral",
+    corpo: painel(
+      cabecalho("Designações por Militar", "Escopo do filtro.") +
+        `<div class="somente-impressao matriz-designacoes--impressao">
+          <h2>Designações por militar e espécie</h2>
+          ${tabela(
+            [
+              { rotulo: "Militar", largura: 44 },
+              { rotulo: "Apuratório", largura: 44 },
+              { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
+            ],
+            normalizada.map((l) => ({
+              celulas: [l.militar, l.apuratorio, { texto: String(l.quantidade), numerica: true, classe: "total" }],
+              classe: l.tipo === "item" ? "" : "linha-total",
+            })),
+            "Nada.",
+            { listagem: true },
+          )}
+        </div>`,
+    ),
+  });
+
+  // O `.stat-panel` também é indivisível no papel, e é onde moram os painéis de
+  // contagem do detalhe de usuário e a tabela de vencidos do Painel. Mesma
+  // pergunta dos cartões: fragmentar dentro dele ajuda ou atrapalha?
+  for (const [sufixo, conteudo] of [
+    ["fragmentado", tabelaFragmentada(contagem, 40, 20, 500)],
+    [
+      "inteiro",
+      tabela(
+        contagem.colunas,
+        Array.from({ length: 40 }, (_, k) => comMarcadores(contagem.linha(500 + k), 500 + k)),
+        "Nada.",
+        { listagem: true },
+      ),
+    ],
+  ] as const) {
+    lista.push({
+      nome: `stat-panel-${sufixo}`,
+      orientacao: "retrato",
+      medicao: sufixo === "fragmentado",
+      proposito:
+        sufixo === "fragmentado"
+          ? "por que `painelContagem` não fragmenta: uma folha a mais, a mesma linha partida"
+          : "como o detalhe de usuário imprime: painel indivisível, tabela inteira",
+      corpo: painel(
+        cabecalho("Detalhe do militar", "Painéis de contagem.") +
+          `<div class="stat-grid">${[0, 1, 2]
+            .map((n) => `<section class="stat-panel"><h2>Painel ${n + 1}</h2>${conteudo}</section>`)
+            .join("")}</div>`,
+      ),
+      // Os três painéis repetem as mesmas 14 linhas: o marcador é o mesmo, e o
+      // que se confere aqui é a integridade da linha, não a contagem.
+      marcadores: 0,
+    });
+  }
+
+  // Controle do Mapa Mensal: documento próprio, fora do helper e dos perfis.
+  lista.push({
+    nome: "mapa-mensal-controle",
+    orientacao: "paisagem",
+    documentoProprio: true,
+    proposito: "regressão do Mapa Mensal — tem de sair idêntico ao CSS anterior",
+    corpo: `<div class="mapa-pdf-root">${renderDocumentoMapa(
+      Array.from({ length: 3 }, (_, i) => itemDoMapa(i)),
+      { mes: "Fevereiro", ano: "2026", periodoInicio: "2026-02-01", periodoFim: "2026-02-28", geradoEm: new Date("2026-03-01T12:00:00Z") } as any,
+    )}</div>`,
+  });
+
+  return lista;
+}
+
+// ── Execução ──────────────────────────────────────────────────────────
+
+function cssCompilado(argumento?: string): string {
+  if (argumento) return `file://${resolve(argumento)}`;
+  const pasta = join(RAIZ, "dist", "assets");
+  const arquivo = readdirSync(pasta).find((n) => n.startsWith("index-") && n.endsWith(".css"));
+  if (!arquivo) throw new Error("CSS compilado não encontrado — rode `npm run build` antes.");
+  return `file://${join(pasta, arquivo)}`;
+}
+
+const argumentos = new Map(
+  process.argv.slice(2).map((a) => {
+    const [chave, valor] = a.replace(/^--/, "").split("=");
+    return [chave, valor ?? ""] as const;
+  }),
+);
+
+// Calibrar é varrer valores: `--fragmento=auditoria:8,prazos:16` sobrescreve o
+// que os conjuntos declaram, sem editar arquivo a cada tentativa.
+for (const par of (argumentos.get("fragmento") || "").split(",").filter(Boolean)) {
+  const [nome, valor] = par.split(":");
+  const conjunto = CONJUNTOS[nome ?? ""];
+  if (!conjunto) throw new Error(`conjunto desconhecido em --fragmento: ${nome}`);
+  conjunto.fragmentoAtual = Number(valor);
+}
+
+const css = cssCompilado(argumentos.get("css"));
+const saida = resolve(argumentos.get("saida") || join(RAIZ, "tools/impressao/fixturas"));
+rmSync(saida, { recursive: true, force: true });
+mkdirSync(saida, { recursive: true });
+
+const fixturas = catalogo();
+for (const fixtura of fixturas) {
+  writeFileSync(join(saida, `${fixtura.nome}.html`), pagina(fixtura, css), "utf8");
+}
+writeFileSync(
+  join(saida, "manifesto.json"),
+  JSON.stringify(
+    {
+      css,
+      fixturas: fixturas.map((f) => ({
+        nome: f.nome,
+        arquivo: `${f.nome}.html`,
+        orientacao: f.orientacao,
+        perfil: f.documentoProprio ? "mapa" : (f.perfil ?? "tabular"),
+        proposito: f.proposito,
+        marcadores: f.marcadores ?? 0,
+        rotuloCabecalho: f.rotuloCabecalho ?? null,
+        medicao: f.medicao ?? false,
+      })),
+    },
+    null,
+    2,
+  ),
+  "utf8",
+);
+
+console.log(`${fixturas.length} fixturas em ${saida}`);
+console.log(`CSS: ${css}`);

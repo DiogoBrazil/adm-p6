@@ -118,6 +118,7 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             maps_reports::commands::reports_designations_matrix,
             files::commands::files_save_download,
             print::commands::print_landscape,
+            print::commands::print_portrait,
             audit::commands::audit_list,
             audit::commands::audit_get,
             audit::commands::audit_by_record,

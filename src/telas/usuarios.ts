@@ -442,8 +442,14 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
           return { ...linha, celulas: linha.celulas.slice(0, -1) };
         }),
         "Nenhum militar cadastrado.",
-        { listagem: true },
+        // Vinte cabem na folha em paisagem no pior caso (`medicao-usuarios`).
+        { listagem: true, linhasPorFragmentoImpressao: 16 },
       );
+    },
+    {
+      orientacao: "paisagem",
+      perfil: "tabular",
+      seletorSubstituido: "#resultados-usuarios",
     },
   );
 }
@@ -700,7 +706,9 @@ function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel
       p.data_conclusao ? `concluído em ${p.data_conclusao}` : "em andamento",
     ]),
     "Nenhum.",
-    { listagem: true },
+    // Dezesseis cabem na folha em retrato (`medicao-usuario-processos`); 14
+    // mantém um cabeçalho por folha, que com 8 eram dois.
+    { listagem: true, linhasPorFragmentoImpressao: 14 },
   );
 }
 
@@ -812,5 +820,5 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
     void renderDetalheUsuario(ctx, id);
   });
 
-  ligarExportacao();
+  ligarExportacao(undefined, undefined, { orientacao: "retrato", perfil: "tabular" });
 }
