@@ -250,6 +250,8 @@ export interface Commands {
    * Ver `src-tauri/src/print/commands.rs` para o porquê de não ser só CSS.
    */
   print_landscape: { args: Record<string, never>; result: boolean };
+  /** A4 paisagem com margens nativas, exclusivo dos relatórios comuns. */
+  print_report_landscape: { args: Record<string, never>; result: boolean };
   /** Equivalente em A4 retrato para os relatórios comuns. */
   print_portrait: { args: Record<string, never>; result: boolean };
 

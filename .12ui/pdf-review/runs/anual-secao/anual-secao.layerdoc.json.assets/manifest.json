@@ -1,0 +1,15 @@
+{
+  "conversionId": "3c7b9cb4-5024-4f4a-ac4f-0b8ef02b9bbd",
+  "operationExpiresAt": "2026-09-09T13:44:20.329Z",
+  "manifestFile": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/anual-secao/anual-secao.layerdoc.json.assets/manifest.json",
+  "artifacts": [
+    {
+      "id": "source",
+      "role": "source",
+      "mediaType": "image/png",
+      "sha256": "1745cd58ef3aeeff9a07cf8b494a68754e828ebc0816d714ad03fb72dd27b581",
+      "sourceHref": "https://12ui.com/api/v1/convert/3c7b9cb4-5024-4f4a-ac4f-0b8ef02b9bbd?artifact=source&expires=1788961460&signature=9qiEkngea1Lj9XcIHum9fxrO3mbYVo16HNa_X4hBpYk",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/anual-secao/anual-secao.layerdoc.json.assets/source-1745cd58ef3a.png"
+    }
+  ]
+}

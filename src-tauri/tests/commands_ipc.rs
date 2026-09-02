@@ -158,6 +158,7 @@ fn sem_sessao_todo_comando_recusa_com_envelope() {
             ("proceedings_filter_options", json!({})),
             ("reports_available_years", json!({})),
             ("print_landscape", json!({})),
+            ("print_report_landscape", json!({})),
             ("print_portrait", json!({})),
         ] {
             let envelope = invocar(&webview, comando, args);
@@ -310,6 +311,17 @@ fn impressao_em_paisagem_responde_pelo_ipc() {
     com_app_e_banco("ipc_print", |app, webview, conta| {
         autenticar(&app, &conta, false);
         let envelope = invocar(&webview, "print_landscape", json!({}));
+        assert_eq!(ok(&envelope), &json!(false), "{envelope}");
+    });
+}
+
+/// A paisagem dos relatórios comuns tem comando próprio para que a margem
+/// física nunca alcance o Mapa Mensal, que continua em `print_landscape`.
+#[test]
+fn impressao_de_relatorio_em_paisagem_responde_pelo_ipc() {
+    com_app_e_banco("ipc_print_report_landscape", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+        let envelope = invocar(&webview, "print_report_landscape", json!({}));
         assert_eq!(ok(&envelope), &json!(false), "{envelope}");
     });
 }

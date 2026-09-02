@@ -61,6 +61,16 @@ type Fixtura = {
    * fragmento menor que a página, com cabeçalho repetido no meio do papel.
    */
   rotuloCabecalho?: string;
+  /** Textos que precisam sobreviver completos à composição do PDF. */
+  textosObrigatorios?: string[];
+  /** Textos de tela que não podem alcançar o documento. */
+  textosProibidos?: string[];
+  /** Pares que precisam aparecer juntos em pelo menos uma folha. */
+  textosNaMesmaPagina?: [string, string][];
+  /** Ativa a detecção geométrica de palavras sobrepostas. */
+  semSobreposicao?: boolean;
+  /** Limite para detectar folhas vazias acrescentadas pelo shell. */
+  paginasMaximas?: number;
 };
 
 const RAIZ = resolve(import.meta.dirname ?? ".", "../..");
@@ -187,7 +197,7 @@ const CONJUNTOS: Record<string, Conjunto> = {
       { rotulo: "Responsável", largura: 32, truncar: true },
       { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
       { rotulo: "Dias", largura: 12, alinhamento: "centro", nowrap: true },
-      { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
+      { rotulo: "Prazo", largura: 8, alinhamento: "centro" },
     ],
     linha: (i) => [
       "IPM",
@@ -397,6 +407,7 @@ function tabelaFragmentada(
   total: number,
   limite: number,
   deslocamento = 0,
+  cabecalhoPrimeiro = "",
 ): string {
   const blocos = blocosDeImpressao(total, limite);
   return `<div class="tabela-impressao-fragmentada">${blocos
@@ -404,20 +415,29 @@ function tabelaFragmentada(
       const linhas = Array.from({ length: fim - inicio }, (_, k) =>
         comMarcadores(conjunto.linha(deslocamento + inicio + k), deslocamento + inicio + k),
       );
-      const html = tabela(conjunto.colunas, linhas, "Nada a exibir.", {
+      let html = tabela(conjunto.colunas, linhas, "Nada a exibir.", {
         listagem: true,
         larga: conjunto.larga,
       });
+      html = html.replace(
+        '<div class="table-wrap"',
+        '<div class="table-wrap tabela-impressao-fragmento"',
+      );
+      if (inicio === 0 && cabecalhoPrimeiro) {
+        html = html.replace("><table", `>${cabecalhoPrimeiro}<table`);
+      }
       return envolver(
         conjunto,
-        html.replace('<div class="table-wrap"', '<div class="table-wrap tabela-impressao-fragmento"'),
+        html,
       );
     })
     .join("")}</div>`;
 }
 
-function tabelaInteira(conjunto: Conjunto, total: number): string {
-  const linhas = Array.from({ length: total }, (_, i) => comMarcadores(conjunto.linha(i), i));
+function tabelaInteira(conjunto: Conjunto, total: number, deslocamento = 0): string {
+  const linhas = Array.from({ length: total }, (_, i) =>
+    comMarcadores(conjunto.linha(deslocamento + i), deslocamento + i),
+  );
   return envolver(
     conjunto,
     tabela(conjunto.colunas, linhas, "Nada a exibir.", {
@@ -433,11 +453,12 @@ function pagina(fixtura: Fixtura, css: string): string {
     ? ""
     : ` class="relatorio-pdf-ativo impressao-perfil--${fixtura.perfil ?? "tabular"}"`;
   const direcao = fixtura.orientacao === "paisagem" ? "landscape" : "portrait";
-  // A mesma folha temporária que `dom.ts::abrirImpressao` adota pela CSSOM. O
-  // WebKitGTK ignora o `size`; a margem, não — e é ela que define a área útil.
+  // No Linux tamanho e margens vêm do GtkPageSetup. A regra fica com margem
+  // zero para provar que o CSS não soma uma segunda margem à folha nativa; o
+  // fallback de Chromium/WebView2 é coberto separadamente.
   const folha = fixtura.documentoProprio
     ? ""
-    : `<style>@page { size: A4 ${direcao}; margin: 12mm; }</style>`;
+    : `<style>@page { size: A4 ${direcao}; margin: 0; }</style>`;
   return `<!doctype html>
 <html lang="pt-BR"${classesHtml}>
   <head>
@@ -578,6 +599,7 @@ function catalogo(): Fixtura[] {
     orientacao: "retrato",
     proposito: "listagem vazia não deve imprimir folha quebrada",
     corpo: painel(cabecalho("Auditoria", "Sem registros.") + tabelaInteira(auditoria, 0)),
+    paginasMaximas: 1,
   });
   lista.push({
     nome: "volume-um",
@@ -585,6 +607,55 @@ function catalogo(): Fixtura[] {
     proposito: "uma linha só, com cabeçalho",
     corpo: painel(cabecalho("Auditoria", "Um registro.") + tabelaFragmentada(auditoria, 1, 4)),
     marcadores: 1,
+    paginasMaximas: 1,
+  });
+
+  // Reproduções mínimas dos dois recortes encontrados nos PDFs enviados.
+  // Não são aproximações: larguras, rótulos e `nowrap` são os das telas.
+  const colunasDesignacoes: Coluna[] = [
+    { rotulo: "Militar", largura: 32, truncar: true },
+    { rotulo: "Concluídos", largura: 11, alinhamento: "centro", nowrap: true },
+    { rotulo: "Em andamento no prazo", largura: 11, alinhamento: "centro", nowrap: true },
+    { rotulo: "Em andamento vencido", largura: 11, alinhamento: "centro", nowrap: true },
+    { rotulo: "Total", largura: 8, alinhamento: "centro", nowrap: true },
+    { rotulo: "Últ. recebimento", largura: 13, alinhamento: "centro", nowrap: true },
+    { rotulo: "Últ. conclusão", largura: 13, alinhamento: "centro", nowrap: true },
+  ];
+  lista.push({
+    nome: "regressao-designacoes-cabecalho",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    proposito: "cabeçalhos estreitos de Designações quebram sem colisão geométrica",
+    corpo: painel(
+      cabecalho("Designações por Militar", "Cabeçalhos reais do cartão de carga.") +
+        tabela(
+          colunasDesignacoes,
+          [["CEL PM 100000 Silva", "12", "8", "3", "23", "14/08/2026", "31/07/2026"]],
+          "Nada.",
+          { listagem: true },
+        ),
+    ),
+    textosObrigatorios: ["NO PRAZO", "VENCIDO", "TOTAL"],
+    semSobreposicao: true,
+    paginasMaximas: 1,
+  });
+
+  lista.push({
+    nome: "regressao-prazos-prorrogacao",
+    orientacao: "paisagem",
+    proposito: "o rótulo 1ª prorrogação chega completo à coluna final",
+    corpo: painel(
+      cabecalho("Prazos", "Colunas reais da listagem.") +
+        tabela(
+          CONJUNTOS.prazos!.colunas,
+          [["IPM nº 123/2026", "7º BPM — Sede", "CAP PM 100000 Silva", "30/09/2026", "4 restantes", "1ª prorrogação"]],
+          "Nada.",
+          { listagem: true },
+        ),
+    ),
+    textosObrigatorios: ["1ª prorrogação"],
+    semSobreposicao: true,
+    paginasMaximas: 1,
   });
 
   // Fragmento propositalmente maior que a folha: é o teste do `overflow:
@@ -619,13 +690,25 @@ function catalogo(): Fixtura[] {
     marcadores: 400,
   });
 
-  const secoes = Array.from({ length: 6 }, (_, s) =>
-    `<section class="relatorio-secao">
-      <h2>${s + 1}. Seção longa</h2>
-      <p class="hint">Cada seção passa de uma folha; o título não pode ficar órfão.</p>
-      ${tabelaFragmentada(contagem, 40, contagem.fragmentoAtualDocumento ?? contagem.fragmentoAtual, s * 40)}
-    </section>`,
-  ).join("");
+  const secoesLongas = Array.from({ length: 6 }, (_, s) => {
+    const cabecalhoSecao = `<h2>${s + 1}. Seção longa</h2>
+      <p class="hint">Cada seção passa de uma folha; o título não pode ficar órfão.</p>`;
+    return `<section class="relatorio-secao relatorio-secao--fragmentada-impressao">
+      <div class="somente-tela-na-impressao">${cabecalhoSecao}</div>
+      ${tabelaFragmentada(
+        contagem,
+        40,
+        contagem.fragmentoAtualDocumento ?? contagem.fragmentoAtual,
+        s * 40,
+        cabecalhoSecao,
+      )}
+    </section>`;
+  }).join("");
+  const secaoCurta = `<section class="relatorio-secao">
+    <h2>7. Seção curta</h2>
+    <p class="hint">Título e tabela precisam mudar de folha juntos.</p>
+    ${tabelaInteira(contagem, 4, 240)}
+  </section>`;
   lista.push({
     nome: "anual-documento",
     orientacao: "paisagem",
@@ -633,9 +716,23 @@ function catalogo(): Fixtura[] {
     proposito: "capa isolada, seção longa atravessando páginas, título não órfão",
     rotuloCabecalho: rotuloDaPrimeiraColuna(contagem),
     corpo: painel(
-      `<section class="relatorio-capa"><h1>Relatório Anual</h1><p>7º BPM — 2026</p></section>${secoes}`,
+      `<div class="relatorio-anual">
+        ${cabecalho("Relatório Anual — 2026", "Cabeçalho operacional que não pertence ao PDF.")}
+        <section class="relatorio-capa"><h1>Relatório Anual</h1><p>7º BPM — 2026</p></section>
+        ${secoesLongas}${secaoCurta}
+      </div>`,
     ),
-    marcadores: 240,
+    marcadores: 244,
+    textosProibidos: ["Cabeçalho operacional que não pertence ao PDF."],
+    textosNaMesmaPagina: [
+      ["1. Seção longa", "L0001"],
+      ["2. Seção longa", "L0041"],
+      ["3. Seção longa", "L0081"],
+      ["4. Seção longa", "L0121"],
+      ["5. Seção longa", "L0161"],
+      ["6. Seção longa", "L0201"],
+      ["7. Seção curta", "L0241"],
+    ],
   });
 
   // Perfil analítico: KPIs e cartões com tabela dentro.
@@ -725,25 +822,36 @@ function catalogo(): Fixtura[] {
     orientacao: "paisagem",
     perfil: "analitico",
     proposito: "a matriz que só existe no papel, com totais por militar e geral",
-    corpo: painel(
-      cabecalho("Designações por Militar", "Escopo do filtro.") +
-        `<div class="somente-impressao matriz-designacoes--impressao">
-          <h2>Designações por militar e espécie</h2>
-          ${tabela(
-            [
-              { rotulo: "Militar", largura: 44 },
-              { rotulo: "Apuratório", largura: 44 },
-              { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
-            ],
-            normalizada.map((l) => ({
-              celulas: [l.militar, l.apuratorio, { texto: String(l.quantidade), numerica: true, classe: "total" }],
-              classe: l.tipo === "item" ? "" : "linha-total",
-            })),
-            "Nada.",
-            { listagem: true },
-          )}
-        </div>`,
-    ),
+    corpo: (() => {
+      const colunas: Coluna[] = [
+        { rotulo: "Militar", largura: 44 },
+        { rotulo: "Apuratório", largura: 44 },
+        { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
+      ];
+      const linhas = normalizada.map((l) => ({
+        celulas: [
+          l.militar,
+          l.apuratorio,
+          { texto: String(l.quantidade), numerica: true, classe: "total" },
+        ],
+        classe: l.tipo === "item" ? "" : "linha-total",
+      }));
+      const fragmentos = blocosDeImpressao(linhas.length, 22, 18)
+        .map(([inicio, fim]) =>
+          tabela(colunas, linhas.slice(inicio, fim), "Nada.", { listagem: true }).replace(
+            '<div class="table-wrap"',
+            '<div class="table-wrap tabela-impressao-fragmento"',
+          ),
+        )
+        .join("");
+      return painel(
+        cabecalho("Designações por Militar", "Escopo do filtro.") +
+          `<div class="somente-impressao matriz-designacoes--impressao">
+            <h2>Designações por militar e espécie</h2>
+            <div class="tabela-impressao-fragmentada">${fragmentos}</div>
+          </div>`,
+      );
+    })(),
   });
 
   // O `.stat-panel` também é indivisível no papel, e é onde moram os painéis de
@@ -841,10 +949,16 @@ writeFileSync(
         arquivo: `${f.nome}.html`,
         orientacao: f.orientacao,
         perfil: f.documentoProprio ? "mapa" : (f.perfil ?? "tabular"),
+        documentoProprio: f.documentoProprio ?? false,
         proposito: f.proposito,
         marcadores: f.marcadores ?? 0,
         rotuloCabecalho: f.rotuloCabecalho ?? null,
         medicao: f.medicao ?? false,
+        textosObrigatorios: f.textosObrigatorios ?? [],
+        textosProibidos: f.textosProibidos ?? [],
+        textosNaMesmaPagina: f.textosNaMesmaPagina ?? [],
+        semSobreposicao: f.semSobreposicao ?? false,
+        paginasMaximas: f.paginasMaximas ?? null,
       })),
     },
     null,

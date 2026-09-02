@@ -39,19 +39,24 @@ tools/impressao/controle-mapa.sh                # Mapa Mensal, contra o HEAD
 |---|---|
 | `gerar-fixturas.ts` | monta as páginas com os helpers **reais** (`dom.ts::tabela`, `kpiAnalitico`, `renderDocumentoMapa`) e o CSS compilado |
 | `imprimir.py` | imprime pelo `WebKit2.PrintOperation`, com o mesmo papel físico que `print/commands.rs` declara |
-| `conferir.py` | folha, páginas, linhas por folha, cabeçalhos por folha, linhas perdidas e linhas partidas |
+| `conferir.py` | folha, margens, páginas vazias, linhas por folha, cabeçalhos por folha, textos truncados/órfãos, sobreposição geométrica, linhas perdidas e linhas partidas |
 | `controle-mapa.sh` | imprime o Mapa Mensal com o CSS de antes e o de agora e compara texto e pixel |
 
 ## Como as asserções funcionam
 
 Cada linha das fixturas carrega dois marcadores: `L####` na primeira célula e
 `F####` na célula de texto mais longo — a que a quebra de página fatia. Daí
-saem as três perguntas que "olhar o PDF" não responde com segurança:
+saem as perguntas que "olhar o PDF" não responde com segurança:
 
 - **nada se perdeu?** os N marcadores `L` e os N `F` estão no texto extraído;
 - **alguma linha foi partida?** `L0042` e `F0042` têm de estar na mesma folha;
 - **o cabeçalho está no lugar?** o rótulo da primeira coluna aparece **uma** vez
   por folha. Duas é bloco menor que a página, com cabeçalho no meio do papel.
+
+As regressões dirigidas também extraem as caixas de cada palavra. Assim o
+arnês reprova texto fora dos 15×12mm, palavras realmente sobrepostas, folha
+final vazia, rótulo cortado e título que não compartilha a folha com o primeiro
+conteúdo da seção.
 
 As fixturas `medicao-*` imprimem **sem** fragmentação: elas não asseram nada,
 elas registram quantas linhas cabem na folha e quantas o motor parte. Quem

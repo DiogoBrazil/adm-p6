@@ -1,0 +1,15 @@
+{
+  "conversionId": "31b72cda-b305-4cc7-9794-91ff28c8e423",
+  "operationExpiresAt": "2026-09-09T13:48:08.152Z",
+  "manifestFile": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/anual-capa/rendered/anual-capa.png.assets/manifest.json",
+  "artifacts": [
+    {
+      "id": "source",
+      "role": "source",
+      "mediaType": "image/png",
+      "sha256": "d173674c69803dfd66227816e8ecd51c6838ffa5edc9b46b42dc40a2fbee8b2e",
+      "sourceHref": "https://12ui.com/api/v1/convert/31b72cda-b305-4cc7-9794-91ff28c8e423?artifact=source&expires=1788961688&signature=7wzCd1rJO6kJf_HMVjGsvUC99osul5Zx7Mu0tZEZx4U",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/anual-capa/rendered/anual-capa.png.assets/source-d173674c6980.png"
+    }
+  ]
+}

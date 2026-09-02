@@ -28,6 +28,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 RAIZ = pathlib.Path(__file__).resolve().parents[2]
 
@@ -54,6 +55,35 @@ def texto_da_pagina(pdf: pathlib.Path, pagina: int) -> str:
     ).stdout
 
 
+def palavras_da_pagina(pdf: pathlib.Path, pagina: int) -> list[tuple[str, float, float, float, float]]:
+    """Extrai palavra e caixa em pontos, para conferir margem e colisão."""
+    xml = subprocess.run(
+        ["pdftotext", "-bbox", "-f", str(pagina), "-l", str(pagina), str(pdf), "-"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    raiz = ET.fromstring(xml)
+    palavras = []
+    for elemento in raiz.iter():
+        if elemento.tag.rsplit("}", 1)[-1] != "word":
+            continue
+        palavras.append(
+            (
+                "".join(elemento.itertext()),
+                float(elemento.attrib["xMin"]),
+                float(elemento.attrib["yMin"]),
+                float(elemento.attrib["xMax"]),
+                float(elemento.attrib["yMax"]),
+            )
+        )
+    return palavras
+
+
+def normalizar(texto: str) -> str:
+    return re.sub(r"\s+", "", texto).casefold()
+
+
 def conferir(pdf: pathlib.Path, fixtura: dict, imagens: bool) -> list[str]:
     """Devolve a lista de falhas. Vazia significa aprovado."""
     falhas: list[str] = []
@@ -67,10 +97,18 @@ def conferir(pdf: pathlib.Path, fixtura: dict, imagens: bool) -> list[str]:
     fim: dict[str, int] = {}
     por_pagina: list[int] = []
     cabecalhos: list[int] = []
+    textos: list[str] = []
     rotulo = fixtura.get("rotuloCabecalho")
 
     for numero in range(1, paginas + 1):
         bruto = texto_da_pagina(pdf, numero)
+        textos.append(bruto)
+        if (
+            not fixtura.get("medicao")
+            and not fixtura.get("documentoProprio")
+            and not any(c.isalnum() for c in bruto)
+        ):
+            falhas.append(f"folha {numero} sem conteúdo textual")
         # A quebra de palavra do `overflow-wrap: anywhere` pode partir o
         # marcador em duas linhas; sem espaço nenhum, ele volta a ser um só.
         colado = re.sub(r"\s+", "", bruto)
@@ -82,6 +120,47 @@ def conferir(pdf: pathlib.Path, fixtura: dict, imagens: bool) -> list[str]:
         por_pagina.append(len(set(achados)))
         if rotulo:
             cabecalhos.append(len(re.findall(re.escape(re.sub(r"\s+", "", rotulo)), colado)))
+
+        if not fixtura.get("documentoProprio") and not fixtura.get("medicao"):
+            palavras = palavras_da_pagina(pdf, numero)
+            largura, altura = folha
+            # Gtk usa 12 mm nas laterais e 15 mm em cima/baixo. Dois pontos de
+            # tolerância absorvem a caixa da fonte e o arredondamento do PDF.
+            fora = [
+                p for p in palavras
+                if p[1] < 32 or p[3] > largura - 32 or p[2] < 40 or p[4] > altura - 40
+            ]
+            if fora:
+                amostra = ", ".join(repr(p[0]) for p in fora[:4])
+                falhas.append(f"folha {numero} tem texto fora das margens A4: {amostra}")
+
+            if fixtura.get("semSobreposicao"):
+                colisoes = []
+                for indice, atual in enumerate(palavras):
+                    for outra in palavras[indice + 1:]:
+                        intersecao_x = min(atual[3], outra[3]) - max(atual[1], outra[1])
+                        intersecao_y = min(atual[4], outra[4]) - max(atual[2], outra[2])
+                        if intersecao_x > 1.5 and intersecao_y > 1.5:
+                            colisoes.append((atual[0], outra[0]))
+                if colisoes:
+                    amostra = ", ".join(f"{a!r}×{b!r}" for a, b in colisoes[:4])
+                    falhas.append(f"folha {numero} tem palavras sobrepostas: {amostra}")
+
+    paginas_maximas = fixtura.get("paginasMaximas")
+    if paginas_maximas is not None and paginas > paginas_maximas:
+        falhas.append(f"{paginas} folhas, máximo esperado {paginas_maximas}")
+
+    documento = normalizar("\n".join(textos))
+    for esperado_texto in fixtura.get("textosObrigatorios", []):
+        if normalizar(esperado_texto) not in documento:
+            falhas.append(f"texto obrigatório ausente: {esperado_texto!r}")
+    for proibido in fixtura.get("textosProibidos", []):
+        if normalizar(proibido) in documento:
+            falhas.append(f"texto proibido presente: {proibido!r}")
+    paginas_normalizadas = [normalizar(texto) for texto in textos]
+    for primeiro, segundo in fixtura.get("textosNaMesmaPagina", []):
+        if not any(normalizar(primeiro) in texto and normalizar(segundo) in texto for texto in paginas_normalizadas):
+            falhas.append(f"textos órfãos, sem folha comum: {primeiro!r} / {segundo!r}")
 
     esperados = fixtura["marcadores"]
     if esperados:

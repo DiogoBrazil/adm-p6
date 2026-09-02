@@ -71,6 +71,28 @@ pub async fn print_landscape<R: Runtime>(
     .await)
 }
 
+/// Imprime os relatórios comuns em A4 paisagem, com margem física própria.
+///
+/// Não reutiliza `print_landscape`: aquele comando é o contrato congelado do
+/// Mapa Mensal, cujo documento mede 297×210mm e põe as margens dentro de cada
+/// página. Os relatórios comuns fluem pelo paginador do motor e precisam que a
+/// margem venha do `GtkPageSetup`, para existir mesmo quando o WebKit ignora
+/// uma folha construída dinamicamente no frontend.
+#[tauri::command]
+pub async fn print_report_landscape<R: Runtime>(
+    webview: WebviewWindow<R>,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            imprimir_relatorio(webview, OrientacaoRelatorio::Paisagem).await
+        }
+        .await,
+    )
+    .await)
+}
+
 /// Imprime os relatórios comuns que usam A4 retrato.
 ///
 /// Este comando é separado de `print_landscape` de propósito: o Mapa Mensal
@@ -84,7 +106,7 @@ pub async fn print_portrait<R: Runtime>(
     Ok(from_result(
         async {
             require_session(&state).await?;
-            imprimir_retrato(webview).await
+            imprimir_relatorio(webview, OrientacaoRelatorio::Retrato).await
         }
         .await,
     )
@@ -164,14 +186,23 @@ async fn imprimir_paisagem<R: Runtime>(webview: WebviewWindow<R>) -> Result<bool
     }
 }
 
-/// Gêmeo de `imprimir_paisagem`, com a outra folha.
+#[derive(Clone, Copy)]
+enum OrientacaoRelatorio {
+    Retrato,
+    Paisagem,
+}
+
+/// Caminho comum somente aos relatórios de fluxo.
 ///
-/// A duplicação é deliberada: fatorar as duas faria o caminho do Mapa Mensal —
-/// medido, e congelado pela decisão 61 — passar a depender de uma função que
-/// os relatórios comuns podem querer mudar. O preço é este corpo repetido; o
-/// porquê de cada peça dele está comentado na irmã, logo acima.
+/// O Mapa Mensal permanece em `imprimir_paisagem`, sem compartilhar função,
+/// folha nem margem com este caminho. Retrato e paisagem comuns diferem apenas
+/// nas dimensões físicas e podem dividir a operação sem alcançar o documento
+/// especial.
 #[cfg(target_os = "linux")]
-async fn imprimir_retrato<R: Runtime>(webview: WebviewWindow<R>) -> Result<bool, AppError> {
+async fn imprimir_relatorio<R: Runtime>(
+    webview: WebviewWindow<R>,
+    orientacao: OrientacaoRelatorio,
+) -> Result<bool, AppError> {
     use gtk::prelude::*;
     use webkit2gtk::{PrintOperation, PrintOperationExt, PrintOperationResponse};
 
@@ -188,7 +219,7 @@ async fn imprimir_retrato<R: Runtime>(webview: WebviewWindow<R>) -> Result<bool,
 
             let vista = plataforma.inner();
             let operacao = PrintOperation::new(&vista);
-            operacao.set_page_setup(&folha_a4_retrato());
+            operacao.set_page_setup(&folha_a4_relatorio(orientacao));
 
             let remetente = Rc::new(RefCell::new(Some(envia)));
             let viva: Rc<RefCell<Option<PrintOperation>>> = Rc::new(RefCell::new(None));
@@ -267,12 +298,12 @@ fn folha_a4_paisagem() -> gtk::PageSetup {
     folha
 }
 
-/// A folha dos relatórios comuns em pé: 210×297mm, sem margem de página.
+/// A folha dos relatórios comuns, com margens físicas de 15×12mm.
 ///
-/// Declarada como papel físico pelo mesmo motivo da irmã deitada — não pedir
-/// nada ao caminho de rotação do WebKit — e para não depender do que o diálogo
-/// lembrou da última impressão: quem acabou de emitir um Mapa Mensal tem
-/// paisagem como padrão do sistema.
+/// Declarada como papel físico pelo mesmo motivo da folha do Mapa — não pedir
+/// nada ao caminho de rotação do WebKit. A margem fica no GTK porque os PDFs
+/// reais provaram que uma regra `@page` em `adoptedStyleSheets` não chega à
+/// impressão, embora o restante do CSS escopado chegue.
 ///
 /// Medido no webkit2gtk-4.1 **2.52.6**, imprimindo o CSS compilado por
 /// `tools/impressao/imprimir.py`, que monta este mesmo page setup:
@@ -282,23 +313,24 @@ fn folha_a4_paisagem() -> gtk::PageSetup {
 /// | papel de 210×297mm, sem rotação  | 595×842 pt, retrato |
 /// | papel de 297×210mm, sem rotação  | 842×595 pt, paisagem|
 ///
-/// As margens ficam em zero porque quem as dá é o `@page { margin: 12mm }` que
-/// `dom.ts::abrirImpressao` adota pela CSSOM — o WebKitGTK ignora o `size`
-/// desse `@page`, mas honra a margem. Somar as duas encolheria a área útil.
 #[cfg(target_os = "linux")]
-fn folha_a4_retrato() -> gtk::PageSetup {
+fn folha_a4_relatorio(orientacao: OrientacaoRelatorio) -> gtk::PageSetup {
+    let (nome, rotulo, largura, altura) = match orientacao {
+        OrientacaoRelatorio::Retrato => ("a4-retrato", "A4 retrato", 210.0, 297.0),
+        OrientacaoRelatorio::Paisagem => ("a4-paisagem-relatorio", "A4 paisagem", 297.0, 210.0),
+    };
     let folha = gtk::PageSetup::new();
     folha.set_paper_size(&gtk::PaperSize::new_custom(
-        "a4-retrato",
-        "A4 retrato",
-        210.0,
-        297.0,
+        nome,
+        rotulo,
+        largura,
+        altura,
         gtk::Unit::Mm,
     ));
-    folha.set_top_margin(0.0, gtk::Unit::Mm);
-    folha.set_bottom_margin(0.0, gtk::Unit::Mm);
-    folha.set_left_margin(0.0, gtk::Unit::Mm);
-    folha.set_right_margin(0.0, gtk::Unit::Mm);
+    folha.set_top_margin(15.0, gtk::Unit::Mm);
+    folha.set_bottom_margin(15.0, gtk::Unit::Mm);
+    folha.set_left_margin(12.0, gtk::Unit::Mm);
+    folha.set_right_margin(12.0, gtk::Unit::Mm);
     folha
 }
 
@@ -310,6 +342,9 @@ async fn imprimir_paisagem<R: Runtime>(_webview: WebviewWindow<R>) -> Result<boo
 }
 
 #[cfg(not(target_os = "linux"))]
-async fn imprimir_retrato<R: Runtime>(_webview: WebviewWindow<R>) -> Result<bool, AppError> {
+async fn imprimir_relatorio<R: Runtime>(
+    _webview: WebviewWindow<R>,
+    _orientacao: OrientacaoRelatorio,
+) -> Result<bool, AppError> {
     Ok(false)
 }

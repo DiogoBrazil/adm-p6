@@ -413,7 +413,14 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     // Vinte e cinco destas linhas cabem na folha em paisagem
     // (`medicao-matriz`); 22 deixa a folga da linha alta. Aqui o fragmento
     // vale: a matriz normalizada sai no fluxo do documento, não num cartão.
-    { listagem: true, linhasPorFragmentoImpressao: 22 },
+    {
+      listagem: true,
+      linhasPorFragmentoImpressao: 22,
+      // O título ocupa o topo da primeira folha. Sem um primeiro bloco menor,
+      // as 22 linhas eram empurradas juntas e deixavam uma página inteira
+      // apenas com "Designações por militar e espécie".
+      linhasNoPrimeiroFragmentoImpressao: 18,
+    },
   );
 
   const totalDesignacoes = linhas.reduce((acc, linha) => acc + linha.total, 0);

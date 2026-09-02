@@ -41,6 +41,15 @@
     -webkit-print-color-adjust: exact;
   }
 
+  /* As três caixas herdavam `min-height: 100vh` do shell de tela. Em
+     Chromium/WebKit isso acrescentava uma folha vazia depois de Painel e
+     Prazos, mesmo quando todo o conteúdo cabia na primeira. */
+  body.relatorio-pdf-ativo,
+  body.relatorio-pdf-ativo .app-shell,
+  body.relatorio-pdf-ativo .main {
+    min-height: 0 !important;
+  }
+
   body.relatorio-pdf-ativo .app-shell {
     display: block;
   }
@@ -222,6 +231,14 @@
     text-transform: uppercase;
   }
 
+  /* `nowrap` continua protegendo datas e números no corpo, mas um cabeçalho
+     como "Em andamento no prazo" precisa usar duas linhas. Mantê-lo inteiro
+     em 11% da folha foi o que fundiu três colunas no PDF de Designações. */
+  body.relatorio-pdf-ativo th.col--nowrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
   body.relatorio-pdf-ativo tbody tr:nth-child(even) {
     background: #f7f9fa !important;
   }
@@ -233,7 +250,9 @@
     font-weight: 700;
   }
 
-  body.relatorio-pdf-ativo :is(th, td).col--nowrap {
+  /* No corpo, datas e números continuam inteiros. O cabeçalho fica fora
+     deliberadamente: ele precisa quebrar nas colunas estreitas. */
+  body.relatorio-pdf-ativo td.col--nowrap {
     white-space: nowrap;
   }
 
@@ -251,8 +270,12 @@
 
   body.relatorio-pdf-ativo .stat-grid,
   body.relatorio-pdf-ativo .analytics-grid {
-    grid-template-columns: 1fr;
-    gap: 4mm;
+    display: block;
+  }
+
+  body.relatorio-pdf-ativo :is(.stat-panel, .analytics-card) +
+  :is(.stat-panel, .analytics-card) {
+    margin-top: 4mm;
   }
 
   body.relatorio-pdf-ativo .analytics-kpis {
@@ -294,9 +317,19 @@
     line-height: 1.35;
   }
 
+  body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-anual > .page-head {
+    display: none !important;
+  }
+
   body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-secao {
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  body.relatorio-pdf-ativo.impressao-perfil--documento
+  .relatorio-secao--fragmentada-impressao {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   body.relatorio-pdf-ativo.impressao-perfil--documento .relatorio-secao > h2,

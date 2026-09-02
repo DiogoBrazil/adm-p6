@@ -1,0 +1,31 @@
+{
+  "conversionId": "df537d60-3fd3-4ca8-8521-49701c44ca93",
+  "operationExpiresAt": "2026-09-09T13:50:16.149Z",
+  "manifestFile": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-prazos/prazos.layerdoc.json.assets/manifest.json",
+  "artifacts": [
+    {
+      "id": "cutout-17",
+      "role": "layer-cutout",
+      "mediaType": "image/png",
+      "sha256": "359bbe1494ba493f819af12ba01bcdb5497ef4de26098d9408faae28ce591797",
+      "sourceHref": "https://12ui.com/api/v1/convert/df537d60-3fd3-4ca8-8521-49701c44ca93?artifact=cutout-17&expires=1788961816&signature=y63TBAF8RbpdvXljRIldhsIyvuL1H_CnQ9cHuxs8sq4",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-prazos/prazos.layerdoc.json.assets/cutout-17-359bbe1494ba.png"
+    },
+    {
+      "id": "cutout-22",
+      "role": "layer-cutout",
+      "mediaType": "image/png",
+      "sha256": "03c9f39ad512ccc0571f8d68167b24b18d3cbe38e20656a2c496085444d49669",
+      "sourceHref": "https://12ui.com/api/v1/convert/df537d60-3fd3-4ca8-8521-49701c44ca93?artifact=cutout-22&expires=1788961816&signature=0uRDoooKCMc5rSDRrLxValJQxcWmKvUbS7vhglcnHrg",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-prazos/prazos.layerdoc.json.assets/cutout-22-03c9f39ad512.png"
+    },
+    {
+      "id": "source",
+      "role": "source",
+      "mediaType": "image/png",
+      "sha256": "40f78dc171c46ce8f62000f7442a12d8a3d5ca64b9c7a395cc9bcf52e4f4f1f0",
+      "sourceHref": "https://12ui.com/api/v1/convert/df537d60-3fd3-4ca8-8521-49701c44ca93?artifact=source&expires=1788961816&signature=y5GbUjCCBFO_hsYX_gqHDLbLdQ18g-WEP9-aaiGyxWM",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-prazos/prazos.layerdoc.json.assets/source-40f78dc171c4.png"
+    }
+  ]
+}

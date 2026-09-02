@@ -60,7 +60,9 @@ const COLUNAS: Coluna[] = [
   { rotulo: "Responsável", largura: 32, truncar: true },
   { rotulo: "Vencimento", largura: 14, alinhamento: "centro", nowrap: true },
   { rotulo: "Dias", largura: 12, alinhamento: "centro", nowrap: true },
-  { rotulo: "Prazo", largura: 8, alinhamento: "centro", nowrap: true },
+  // "1ª prorrogação" precisa quebrar: com `nowrap`, os 8% da coluna
+  // terminavam na borda física da folha e o PDF perdia o último caractere.
+  { rotulo: "Prazo", largura: 8, alinhamento: "centro" },
 ];
 
 /**

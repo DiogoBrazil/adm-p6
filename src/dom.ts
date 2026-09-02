@@ -538,6 +538,8 @@ export function tabela(
     listagem?: boolean;
     /** Quantas linhas formam cada bloco indivisível no PDF. */
     linhasPorFragmentoImpressao?: number;
+    /** Primeiro bloco menor, quando um título ocupa o topo da mesma folha. */
+    linhasNoPrimeiroFragmentoImpressao?: number;
   } = {},
 ): string {
   if (!linhas.length) return `<p class="empty">${escapeHtml(vazio)}</p>`;
@@ -605,7 +607,11 @@ export function tabela(
   // `tabela-dados` traz cabeçalho fixo, zebra e realce de linha. Vale para toda
   // listagem montada por este helper — ver o bloco "Listagem densa" no CSS.
   const fragmento = opcoes.linhasPorFragmentoImpressao
-    ? ` data-linhas-por-fragmento-impressao="${Math.max(1, Math.floor(opcoes.linhasPorFragmentoImpressao))}"`
+    ? ` data-linhas-por-fragmento-impressao="${Math.max(1, Math.floor(opcoes.linhasPorFragmentoImpressao))}"${
+        opcoes.linhasNoPrimeiroFragmentoImpressao
+          ? ` data-linhas-no-primeiro-fragmento-impressao="${Math.max(1, Math.floor(opcoes.linhasNoPrimeiroFragmentoImpressao))}"`
+          : ""
+      }`
     : "";
   return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"${fragmento}><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
       ${colgroup}
@@ -626,10 +632,16 @@ export function tabela(
  * sem navegador nenhum: se cada um contasse as suas, o PDF que o arnês confere
  * deixaria de ser o PDF que o app imprime, e a divergência não daria erro.
  */
-export function blocosDeImpressao(total: number, limite: number): [number, number][] {
-  if (total <= 0 || limite < 1) return [];
+export function blocosDeImpressao(
+  total: number,
+  limite: number,
+  limitePrimeiro = limite,
+): [number, number][] {
+  if (total <= 0 || limite < 1 || limitePrimeiro < 1) return [];
   const blocos: [number, number][] = [];
-  for (let inicio = 0; inicio < total; inicio += limite) {
+  const fimPrimeiro = Math.min(total, limitePrimeiro);
+  blocos.push([0, fimPrimeiro]);
+  for (let inicio = fimPrimeiro; inicio < total; inicio += limite) {
     blocos.push([inicio, Math.min(inicio + limite, total)]);
   }
   return blocos;
@@ -645,6 +657,7 @@ function fragmentarTabelasParaImpressao(): () => void {
   const criados: HTMLElement[] = [];
   const originais: HTMLElement[] = [];
   const cartoes = new Set<HTMLElement>();
+  const secoes = new Set<HTMLElement>();
 
   document
     .querySelectorAll<HTMLElement>("[data-linhas-por-fragmento-impressao]")
@@ -652,17 +665,52 @@ function fragmentarTabelasParaImpressao(): () => void {
       if (envoltorio.closest("[hidden]")) return;
       const tabelaOriginal = envoltorio.querySelector<HTMLTableElement>(":scope > table");
       const limite = Number(envoltorio.dataset.linhasPorFragmentoImpressao);
-      if (!tabelaOriginal || !Number.isInteger(limite) || limite < 1) return;
+      const limitePrimeiro = Number(
+        envoltorio.dataset.linhasNoPrimeiroFragmentoImpressao ?? limite,
+      );
+      if (
+        !tabelaOriginal ||
+        !Number.isInteger(limite) ||
+        limite < 1 ||
+        !Number.isInteger(limitePrimeiro) ||
+        limitePrimeiro < 1
+      ) return;
 
       const linhas = [...tabelaOriginal.tBodies].flatMap((corpo) => [...corpo.rows]);
       if (!linhas.length) return;
+      // Uma tabela que cabe num bloco não ganha cópia. O clone interpunha
+      // uma caixa entre o título e a tabela; foi assim que seções curtas do
+      // Relatório Anual deixaram o título órfão na folha anterior.
+      if (linhas.length <= limite) return;
 
       const conjunto = document.createElement("div");
       conjunto.className = "somente-impressao tabela-impressao-fragmentada";
 
-      for (const [inicio, fim] of blocosDeImpressao(linhas.length, limite)) {
+      const secao = envoltorio.closest<HTMLElement>(".relatorio-secao");
+      const cabecalhoDaSecao = secao
+        ? [...secao.querySelectorAll<HTMLElement>(":scope > h2, :scope > .hint")]
+        : [];
+      cabecalhoDaSecao.forEach((elemento) => {
+        elemento.classList.add("somente-tela-na-impressao");
+        originais.push(elemento);
+      });
+
+      for (const [inicio, fim] of blocosDeImpressao(linhas.length, limite, limitePrimeiro)) {
         const fragmento = document.createElement("div");
         fragmento.className = "table-wrap tabela-impressao-fragmento";
+        // O WebKitGTK ignora `break-after: avoid` quando o próximo irmão é um
+        // bloco indivisível. Levar o título para dentro do primeiro fragmento
+        // torna a relação estrutural e impede a folha só com o título.
+        if (inicio === 0) {
+          cabecalhoDaSecao.forEach((elemento) => {
+            const copia = elemento.cloneNode(true) as HTMLElement;
+            // O original já recebeu esta classe para desaparecer no papel;
+            // `cloneNode` também a copia, então ela precisa sair da versão que
+            // efetivamente encabeça o primeiro fragmento.
+            copia.classList.remove("somente-tela-na-impressao");
+            fragmento.append(copia);
+          });
+        }
         const tabelaNova = tabelaOriginal.cloneNode(false) as HTMLTableElement;
         const colgroup = tabelaOriginal.querySelector(":scope > colgroup");
         const cabecalho = tabelaOriginal.querySelector(":scope > thead");
@@ -685,12 +733,17 @@ function fragmentarTabelasParaImpressao(): () => void {
         cartao.classList.add("analytics-card--fragmentada-impressao");
         cartoes.add(cartao);
       }
+      if (secao) {
+        secao.classList.add("relatorio-secao--fragmentada-impressao");
+        secoes.add(secao);
+      }
     });
 
   return () => {
     criados.forEach((elemento) => elemento.remove());
     originais.forEach((elemento) => elemento.classList.remove("somente-tela-na-impressao"));
     cartoes.forEach((cartao) => cartao.classList.remove("analytics-card--fragmentada-impressao"));
+    secoes.forEach((secao) => secao.classList.remove("relatorio-secao--fragmentada-impressao"));
   };
 }
 
@@ -1088,14 +1141,14 @@ export function ligarExportacao(
 
 /**
  * Prepara o relatório comum para A4. O WebKitGTK ignora `@page size`, por isso
- * a orientação também segue ao page setup nativo; Chromium/WebView2 usam a
- * regra CSSOM no fallback.
+ * orientação e margens seguem ao page setup nativo; Chromium/WebView2 usam
+ * um `<style>` temporário no fallback.
  */
 async function abrirImpressao(
   orientacao: OrientacaoImpressao,
   perfil: PerfilImpressao,
 ): Promise<void> {
-  let folha: CSSStyleSheet | undefined;
+  let folhaFallback: HTMLStyleElement | undefined;
   let limparFragmentos = () => {};
   // A classe existe só pelo quadro em que a caixa do gráfico fica maior que o
   // painel; sem ela, uma janela estreita mostra a barra de rolagem aparecer e
@@ -1103,27 +1156,32 @@ async function abrirImpressao(
   const classePerfil = `impressao-perfil--${perfil}`;
   document.body.classList.add("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   try {
-    folha = new CSSStyleSheet();
-    const direcao = orientacao === "paisagem" ? "landscape" : "portrait";
-    folha.insertRule(`@page { size: A4 ${direcao}; margin: 12mm; }`);
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, folha];
     limparFragmentos = fragmentarTabelasParaImpressao();
     prepararGraficosParaImpressao();
     // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
     // antes de o documento virar papel. O canvas já foi redesenhado pelo
     // `resize()`, que é síncrono; o layout ao redor dele não.
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
-    const comando = orientacao === "paisagem" ? "print_landscape" : "print_portrait";
+    const comando = orientacao === "paisagem" ? "print_report_landscape" : "print_portrait";
     const resposta = await call(comando);
     if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao abrir a impressão.");
-    if (!resposta.data) window.print();
+    if (!resposta.data) {
+      // Fora do Linux não há GtkPageSetup. Uma folha construída em
+      // `adoptedStyleSheets` desapareceu dos PDFs reais embora as classes de
+      // sessão chegassem ao papel; um `<style>` no documento participa da
+      // árvore de estilos que Chromium/WebView2 efetivamente imprime.
+      const direcao = orientacao === "paisagem" ? "landscape" : "portrait";
+      folhaFallback = document.createElement("style");
+      folhaFallback.dataset.folhaRelatorio = "";
+      folhaFallback.textContent = `@page { size: A4 ${direcao}; margin: 15mm 12mm; }`;
+      document.head.append(folhaFallback);
+      await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+      window.print();
+    }
   } catch (erro) {
     notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
   } finally {
-    if (folha) {
-      const atual = folha;
-      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((item) => item !== atual);
-    }
+    folhaFallback?.remove();
     limparFragmentos();
     restaurarGraficosDepoisDaImpressao();
     document.body.classList.remove("preparando-impressao", "relatorio-pdf-ativo", classePerfil);

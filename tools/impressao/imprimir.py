@@ -9,8 +9,8 @@ enquanto o PDF saía retrato. Medir aqui é medir no motor que o usuário tem.
 
 O caminho abaixo espelha `src-tauri/src/print/commands.rs`: papel declarado
 como tamanho físico (297×210mm ou 210×297mm), **sem pedir rotação ao GTK** —
-pedir rotação imprime páginas em branco, sem erro nenhum —, margens zero no
-page setup porque quem dá a margem é o `@page` do CSS.
+pedir rotação imprime páginas em branco, sem erro nenhum —, margens nativas
+de 15×12mm para os relatórios e zero apenas para o Mapa Mensal.
 
 A diferença é o `print_()` em vez do `run_dialog()`: aqui não há operador para
 escolher a impressora. Vale a ressalva registrada no GUIA — a armadilha da
@@ -52,7 +52,7 @@ RAIZ = pathlib.Path(__file__).resolve().parents[2]
 FOLHAS = {"retrato": (210.0, 297.0), "paisagem": (297.0, 210.0)}
 
 
-def page_setup(orientacao: str) -> Gtk.PageSetup:
+def page_setup(orientacao: str, documento_proprio: bool) -> Gtk.PageSetup:
     largura, altura = FOLHAS[orientacao]
     folha = Gtk.PageSetup()
     folha.set_paper_size(
@@ -60,12 +60,21 @@ def page_setup(orientacao: str) -> Gtk.PageSetup:
             f"a4-{orientacao}", f"A4 {orientacao}", largura, altura, Gtk.Unit.MM
         )
     )
-    for margem in ("top", "bottom", "left", "right"):
-        getattr(folha, f"set_{margem}_margin")(0.0, Gtk.Unit.MM)
+    vertical = 0.0 if documento_proprio else 15.0
+    horizontal = 0.0 if documento_proprio else 12.0
+    folha.set_top_margin(vertical, Gtk.Unit.MM)
+    folha.set_bottom_margin(vertical, Gtk.Unit.MM)
+    folha.set_left_margin(horizontal, Gtk.Unit.MM)
+    folha.set_right_margin(horizontal, Gtk.Unit.MM)
     return folha
 
 
-def imprimir(entrada: pathlib.Path, saida: pathlib.Path, orientacao: str) -> None:
+def imprimir(
+    entrada: pathlib.Path,
+    saida: pathlib.Path,
+    orientacao: str,
+    documento_proprio: bool,
+) -> None:
     janela = Gtk.OffscreenWindow()
     # A janela em px não decide a folha, mas uma janela estreita faz o layout de
     # tela nascer no ponto errado antes de o motor trocar para a mídia impressa.
@@ -97,7 +106,7 @@ def imprimir(entrada: pathlib.Path, saida: pathlib.Path, orientacao: str) -> Non
         # `requestAnimationFrame` em `dom.ts::abrirImpressao`.
         def disparar():
             operacao = WebKit2.PrintOperation.new(vista)
-            operacao.set_page_setup(page_setup(orientacao))
+            operacao.set_page_setup(page_setup(orientacao, documento_proprio))
             ajustes_impressao = Gtk.PrintSettings()
             ajustes_impressao.set(Gtk.PRINT_SETTINGS_OUTPUT_URI, saida.as_uri())
             ajustes_impressao.set(Gtk.PRINT_SETTINGS_OUTPUT_FILE_FORMAT, "pdf")
@@ -147,7 +156,12 @@ def main() -> int:
 
     for fixtura in escolhidas:
         destino = saida / f"{fixtura['nome']}.pdf"
-        imprimir(pasta / fixtura["arquivo"], destino, fixtura["orientacao"])
+        imprimir(
+            pasta / fixtura["arquivo"],
+            destino,
+            fixtura["orientacao"],
+            fixtura.get("documentoProprio", False),
+        )
         print(f"{fixtura['nome']:24} {fixtura['orientacao']:9} -> {destino.name}")
 
     (saida / "manifesto.json").write_text(json.dumps(manifesto, indent=2), "utf8")

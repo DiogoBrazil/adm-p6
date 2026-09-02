@@ -1,0 +1,15 @@
+{
+  "conversionId": "ba4a04d9-d979-452c-a500-5071f7f60eec",
+  "operationExpiresAt": "2026-09-09T13:48:08.121Z",
+  "manifestFile": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/prazos/rendered/prazos.png.assets/manifest.json",
+  "artifacts": [
+    {
+      "id": "source",
+      "role": "source",
+      "mediaType": "image/png",
+      "sha256": "d8ccea683f55cc642abe6e12ee8916c007ef4bba0d6006d3ce2da137b8a961ba",
+      "sourceHref": "https://12ui.com/api/v1/convert/ba4a04d9-d979-452c-a500-5071f7f60eec?artifact=source&expires=1788961688&signature=1qxpNDL9ZvposgLVu89IZPHIq0epd5DxvQXNPA1YjT0",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/prazos/rendered/prazos.png.assets/source-d8ccea683f55.png"
+    }
+  ]
+}
