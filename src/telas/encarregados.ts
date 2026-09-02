@@ -416,10 +416,13 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     {
       listagem: true,
       linhasPorFragmentoImpressao: 22,
-      // O título ocupa o topo da primeira folha. Sem um primeiro bloco menor,
-      // as 22 linhas eram empurradas juntas e deixavam uma página inteira
-      // apenas com "Designações por militar e espécie".
-      linhasNoPrimeiroFragmentoImpressao: 18,
+      // A primeira folha divide espaço com o título da tela, a faixa de KPIs e
+      // o título da matriz: sobram ~128mm dos 180mm úteis. Doze é o maior bloco
+      // que ainda cabe ali — com 13 a tabela transborda a margem inferior e a
+      // última folha sai vazia (`tools/impressao`, `calibrado-designacoes-folha1`,
+      // varrido de 10 a 17). Os 18 anteriores foram medidos quando o cartão
+      // ficava entre os KPIs e a matriz, e a matriz só começava na folha 3.
+      linhasNoPrimeiroFragmentoImpressao: 12,
     },
   );
 
@@ -532,7 +535,11 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
 
       <div class="analytics-kpis">${kpis}</div>
 
-      <div class="analytics-grid">
+      <!-- No papel este cartão desce para o fim do documento, por
+           adiarBlocosParaOFimDaImpressao: ele é indivisível e mais alto que a
+           folha menos o cabeçalho, e ficando aqui gastava duas folhas antes da
+           primeira linha da matriz. -->
+      <div class="analytics-grid" data-impressao-ao-fim>
         ${cartaoAnalitico({
           id: "designacoes-carga",
           titulo: modoMilitar ? "Situação por espécie de apuratório" : "Carga de trabalho por militar",

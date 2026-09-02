@@ -95,14 +95,20 @@ entender X → olhe em Y".
 | Ordenar por `Option<data>` direto | `None` < `Some`, então no crescente a lista **abre** com quem não tem a data. Quem não tem vai para o fim nas duas direções — `ordenar_por_data` |
 | Distinguir duas telas só pelo filtro | vira a mesma tela com dois nomes no menu. Ou uma sai, ou elas diferem no **gênero** — uma se opera, a outra se imprime — e o dado vem de uma função só (decisão 59) |
 | Achatar struct na resposta com `serde(flatten)` | os campos sobem para o topo do JSON, e é isso que mantém `linha.total` onde a tela sempre o leu. Trocar por um objeto aninhado quebra o frontend **sem** erro de compilação no Rust |
+| Mandar um `<canvas>` para a impressão | com o compositing ligado — como o app roda — o WebKitGTK o pinta de **preto chapado**, sem erro nenhum. Congele em `<img>` antes: `graficos/index.ts::congelarGraficosParaImpressao`, que custa `data:` no `img-src` da CSP |
+| Esconder com `hidden` um canvas do Chart.js | não esconde: ele põe `display:block` inline ao montar, e não há `[hidden]` global no projeto. O canvas continua ocupando caixa e sai preto **ao lado** do PNG — o gráfico imprime em duplicata. Tire do **DOM**, e leia o vizinho antes para devolvê-lo ao lugar |
+| Fixtura de gráfico com o canvas nascendo oculto | canvas que nunca foi visível não ganha camada de composição: a fixtura aprova o que o PDF reprova. Pinte visível, deixe compor, ponha o `display:block` inline, e só então troque — `trocaPeloPng` |
+| Medir impressão de gráfico com o compositing desligado | é o padrão de `tools/impressao/imprimir.py`, e ele **esconde** a faixa preta: o mesmo canvas sai pintado. Fixtura de gráfico declara `compositing: true`, e `semFaixaPreta` reprova folha com preto chapado |
+| Bloco indivisível alto logo abaixo da faixa de KPIs | `.analytics-card` não cabe nos 180mm úteis menos o cabeçalho, e o motor o desmancha por cima da folha seguinte. Ou ele desce (`data-impressao-ao-fim`), ou encolhe — e encolher ranking encavala rótulo |
+| Mudar o que vem antes de uma tabela fragmentada | o `linhasNoPrimeiroFragmentoImpressao` foi medido **com** o que estava lá. Mover um bloco na impressão obriga a remedir o primeiro bloco — em Designações, 18 → 12 |
 
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 175 testes
-cd .. && npm test && npm run typecheck            # 17 testes frontend
+cd src-tauri && cargo fmt --check && cargo test   # 176 testes
+cd .. && npm test && npm run typecheck            # 19 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

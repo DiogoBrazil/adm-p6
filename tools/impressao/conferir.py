@@ -16,6 +16,13 @@ dá com segurança:
     aparece por folha. Mais de uma vez é fragmento menor que a página, com
     cabeçalho no meio do papel.
 
+E, para o que nenhuma dessas responde, uma quarta:
+
+  * **o gráfico foi pintado** — folha com mais de 3% de preto chapado reprova.
+    O WebKitGTK não pinta um `<canvas>` no caminho de impressão quando o
+    compositing está ligado: sai um retângulo preto, e o PDF continua com todas
+    as palavras no lugar. Nenhuma asserção de texto vê isso.
+
 E mede o que calibra os fragmentos: linhas por folha, por conjunto de colunas e
 por orientação.
 
@@ -35,6 +42,57 @@ RAIZ = pathlib.Path(__file__).resolve().parents[2]
 # 595×842 pt é o A4 em retrato; 842×595, em paisagem. É a folha que o
 # `GtkPageSetup` entrega — o `@page size` do CSS o WebKitGTK ignora.
 FOLHAS = {"retrato": (595, 842), "paisagem": (842, 595)}
+
+
+def pixels_da_pagina(pdf: pathlib.Path, pagina: int) -> tuple[int, int, bytes]:
+    """Rasteriza uma folha em PPM cru — largura, altura e os bytes RGB.
+
+    PPM porque o formato é três bytes por pixel depois de um cabeçalho de texto:
+    dá para lê-lo sem Pillow nem numpy, que seriam dependência nova só para o
+    arnês. 60 dpi basta: o que se procura aqui é área chapada, não detalhe.
+    """
+    bruto = subprocess.run(
+        ["pdftoppm", "-r", "60", "-f", str(pagina), "-l", str(pagina), str(pdf)],
+        capture_output=True,
+        check=True,
+    ).stdout
+    campos: list[bytes] = []
+    i = 0
+    while len(campos) < 4:
+        while bruto[i : i + 1].isspace():
+            i += 1
+        if bruto[i : i + 1] == b"#":
+            while bruto[i : i + 1] != b"\n":
+                i += 1
+            continue
+        j = i
+        while not bruto[j : j + 1].isspace():
+            j += 1
+        campos.append(bruto[i:j])
+        i = j
+    return int(campos[1]), int(campos[2]), bruto[i + 1 :]
+
+
+def proporcao_de_preto(pdf: pathlib.Path, pagina: int) -> float:
+    """Fatia de preto puro na folha, entre 0 e 1.
+
+    É a assinatura da faixa preta que o WebKitGTK imprime no lugar de um
+    `<canvas>` quando o compositing está ligado: o desenho vira textura de GPU e
+    o caminho de impressão a pinta chapada. Texto não confunde a medida — o
+    corpo dos relatórios é `#15202b`, e numa folha cheia de tabela o preto puro
+    nem aparece entre as seis cores mais frequentes.
+    """
+    largura, altura, px = pixels_da_pagina(pdf, pagina)
+    pretos = 0
+    total = 0
+    for y in range(0, altura, 2):
+        base = y * largura * 3
+        for x in range(0, largura, 2):
+            o = base + x * 3
+            total += 1
+            if px[o] == 0 and px[o + 1] == 0 and px[o + 2] == 0:
+                pretos += 1
+    return pretos / total if total else 0.0
 
 
 def paginas_e_folha(pdf: pathlib.Path) -> tuple[int, tuple[int, int]]:
@@ -145,6 +203,17 @@ def conferir(pdf: pathlib.Path, fixtura: dict, imagens: bool) -> list[str]:
                 if colisoes:
                     amostra = ", ".join(f"{a!r}×{b!r}" for a, b in colisoes[:4])
                     falhas.append(f"folha {numero} tem palavras sobrepostas: {amostra}")
+
+    # Um gráfico que não foi pintado sai como retângulo preto, e nenhuma
+    # asserção de texto vê isso: o PDF continua com todas as palavras no lugar.
+    if fixtura.get("semFaixaPreta"):
+        for numero in range(1, paginas + 1):
+            fatia = proporcao_de_preto(pdf, numero)
+            if fatia > 0.03:
+                falhas.append(
+                    f"folha {numero} tem {fatia:.1%} de preto chapado — "
+                    "gráfico não pintado?"
+                )
 
     paginas_maximas = fixtura.get("paginasMaximas")
     if paginas_maximas is not None and paginas > paginas_maximas:

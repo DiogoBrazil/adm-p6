@@ -11,7 +11,14 @@ faz coisas que o CSS não avisa:
 - parte o `<tr>` apesar de `break-inside: avoid` — **e a parte que ficaria na
   folha anterior não é impressa**: a linha some do papel, sem erro;
 - ignora o `break-inside` das caixas de dentro de um item de grid
-  (`.analytics-card`, `.stat-panel`), onde fragmentar custa folha e não protege.
+  (`.analytics-card`, `.stat-panel`), onde fragmentar custa folha e não protege;
+- **não pinta o conteúdo de um `<canvas>`** quando o compositing está ligado — o
+  gráfico sai como retângulo preto, e o PDF continua com todas as palavras no
+  lugar. Ver "O compositing" abaixo.
+
+Um atalho que vale guardar: `pdfimages -list` distingue as duas coisas sem abrir o
+PDF. O gráfico bom vem com `smask` e 12–114 KB; o retângulo chapado vem sem
+`smask` e com 3–5 KB, na mesma dimensão.
 
 Validar em Chromium não prova nada sobre o aplicativo: lá o `@page` funciona.
 
@@ -41,6 +48,38 @@ tools/impressao/controle-mapa.sh                # Mapa Mensal, contra o HEAD
 | `imprimir.py` | imprime pelo `WebKit2.PrintOperation`, com o mesmo papel físico que `print/commands.rs` declara |
 | `conferir.py` | folha, margens, páginas vazias, linhas por folha, cabeçalhos por folha, textos truncados/órfãos, sobreposição geométrica, linhas perdidas e linhas partidas |
 | `controle-mapa.sh` | imprime o Mapa Mensal com o CSS de antes e o de agora e compara texto e pixel |
+
+## O compositing, e por que ele não é detalhe
+
+`imprimir.py` põe `WEBKIT_DISABLE_COMPOSITING_MODE=1` porque a janela offscreen
+não consegue o contexto GL na sessão Wayland e o processo morre antes de
+renderizar. O problema é que desligar o compositing **esconde um defeito real**:
+com ele ligado — que é como o aplicativo roda — o `<canvas>` vira textura de GPU
+e o caminho de impressão a pinta de preto chapado.
+
+Medido em `medicao-grafico-canvas`, o mesmo desenho, na mesma folha:
+
+| | compositing desligado | compositing ligado |
+|---|---|---|
+| `<canvas>` | barras coloridas | **31,2% da folha em preto puro** |
+| `<img>` de `toDataURL()` | barras coloridas | barras coloridas |
+
+E não basta o compositing: a fixtura tem de reproduzir a **sequência**, não só o
+resultado. Um `<canvas>` que nasce `hidden` no HTML nunca ganha camada de
+composição, e a fixtura aprova o que o PDF reprova — foi assim que a primeira
+volta da rodada 31 deu por resolvida uma faixa preta que continuava saindo.
+`trocaPeloPng` pinta o canvas **visível**, deixa o motor compor 120ms de quadros,
+escreve nele o `display:block` inline que o Chart.js escreve ao montar, e só
+então troca. Com isso `medicao-grafico-oculto` sai com 31,2% de preto e **duas**
+imagens de 1920×600 — a assinatura do PDF real —, e `calibrado-grafico-removido`
+com uma imagem e 0,0%.
+
+Por isso a fixtura que precisa da resposta honesta declara `compositing: true`, e
+`imprimir.py` a imprime **num processo à parte** — a variável tem de valer antes
+de o GTK inicializar, e não há como trocá-la depois. E `semFaixaPreta: true`
+reprova a folha com mais de 3% de preto chapado: numa folha cheia de tabela o
+preto puro nem aparece entre as seis cores mais frequentes, porque o corpo dos
+relatórios é `#15202b`.
 
 ## Como as asserções funcionam
 
@@ -77,8 +116,10 @@ fragmento de dentro dos cartões e dos painéis.
 - O arnês usa `print_()`; o aplicativo usa `run_dialog()`. A armadilha da folha
   girada só aparece no segundo, então isto não substitui uma conferência final
   no binário — ver a seção 11 do `GUIA.md`.
-- Não cobre gráfico com dado real, cancelamento do diálogo nem o teto de 5.000
-  registros.
+- Não cobre gráfico com **dado real**: o desenho das fixturas é sintético, feito
+  por `<script>` na própria página. O que elas provam é a diferença entre
+  `<canvas>` e `<img>` no papel, não o desenho que o Chart.js produz.
+- Não cobre cancelamento do diálogo nem o teto de 5.000 registros.
 - `gerar-fixturas.ts` está fora do `include` do `tsconfig.json`, que só cobre
   `src`: tipá-lo exigiria `@types/node`, dependência nova só para o arnês. Ele
   roda a cada validação, então o erro aparece na hora — mas o compilador não

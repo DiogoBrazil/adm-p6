@@ -272,6 +272,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 59 | O Relatório Anual como "modo" da tela de Estatísticas não se sustentou. O que ele é? | **Um documento, e não um painel — porque a diferença entre os dois não é o filtro, é o gênero.** Fixar o ano deixava duas entradas de menu abrindo a mesma tela, que é o defeito que a decisão 55 existia para corrigir. Estatísticas é tela de **operar**: filtra, alterna gráfico e tabela, compara. O Anual é peça que se imprime, assina e arquiva: capa com brasão, ano e unidade; onze seções numeradas em ordem fixa; **só tabelas**, nenhum alternador e nenhum chip no meio do texto — um relatório em que o leitor precisa clicar para ver o número não é um relatório. E o escopo é **o ano inteiro**, sem recorte por espécie: meio relatório anual não é o relatório anual do 7º BPM. O que as duas telas compartilham é o **dado** — `carregarDadosDoEscopo`, `tabelaContagem`, `tabelaSituacao` e `tabelaEnquadramento` moram em `estatisticas.ts` e servem às duas. Duas cargas separadas divergiriam no primeiro filtro novo, que foi exatamente como a Visão Geral passou a discordar do Painel. |
 | 60 | Como se pergunta "quem concluiu por último" em Designações? | **Filtro por balde + ordenação por data, com as datas saindo do conjunto já recortado.** O filtro de situação recorta **o que é contado**, não quem é listado: marcando "vencidos", cada linha traz quantos vencidos aquele militar tem, e a lista vira um ranking de atraso. As duas datas — maior `data_recebimento` e maior `data_conclusao` — são calculadas **depois** do recorte, e é isso que faz a pergunta ter resposta: com as datas do conjunto inteiro, filtrar por "vencido" ainda devolveria a conclusão de um processo que o filtro acabou de excluir. As ordenações são cinco (total, recebimento recente/antigo, conclusão recente/antiga), e **quem não tem a data vai para o fim nas duas direções** — militar que nunca concluiu nada não é "o que concluiu há mais tempo", é o que não concluiu. As duas colunas de data ficam sempre visíveis: ordenar por coluna que não aparece deixa a lista numa ordem que ninguém consegue conferir. |
 | 61 | Como os relatórios comuns cabem no PDF sem mexer no Mapa Mensal? | **Sessão de impressão escopada, três perfis e orientação explícita por relatório.** `ligarExportacao` aplica `body.relatorio-pdf-ativo` somente enquanto o diálogo está aberto; `report-print.css` não tem regra de papel fora desse escopo. Tabular, analítico e documento compartilham A4, margens físicas de **15mm na vertical e 12mm na horizontal**, quebra de linha/tabela e ocultação de controles, com exceções locais para a matriz de Designações e o detalhe de Mapa Salvo. Retrato e paisagem vão ao `GtkPageSetup` (`print_portrait`/`print_report_landscape`); o `<style>@page` é fallback de WebView2/Chromium. `print_landscape` permanece exclusivo do Mapa Mensal, que continua em `mapa-pdf.ts`, `html.mapa-pdf-ativo`, margem zero e fluxo próprio. Cabeçalhos estreitos quebram linha mesmo quando o corpo pede `nowrap`; tabelas longas são fragmentadas em blocos, levando o título da seção para dentro do primeiro; tabelas curtas mantêm seção e título indivisíveis. A matriz dinâmica continua na tela e vira `Militar | Apuratório | Quantidade` só no papel, com primeiro bloco menor para dividir a primeira folha com o título. **A validação é executável** (`tools/impressao`): mede folha, margens, conteúdo perdido, linhas partidas, páginas vazias, texto truncado, títulos órfãos e colisões geométricas; `controle-mapa.sh` prova, pixel a pixel, que o PDF mensal não mudou. |
+| 62 | Como o gráfico chega ao papel, e quem paga a primeira folha de Designações? | **O gráfico vira imagem na hora de imprimir; o cartão é que desce, não o gráfico que encolhe.** O `<canvas>` não é pintado pelo caminho de impressão do WebKitGTK com o compositing ligado — sai preto chapado, sem erro —, então `congelarGraficosParaImpressao` troca cada gráfico visível pelo PNG dele mesmo (`toBase64Image()`) enquanto o diálogo está aberto, e o desfaz no `finally`. **Trocar é tirar do DOM, não esconder**: `hidden` no canvas não faz nada, porque o Chart.js escreve `display:block` inline ao montar e o projeto não tem regra `[hidden]` global — a primeira versão desta rodada escondeu o canvas e o PDF saiu com o gráfico **em duplicata**, o PNG certo e a faixa preta do canvas ainda ocupando caixa. O preço é **um** afrouxamento de CSP: `img-src 'self' data:`, nas duas políticas. Não abre canal de rede, e `script-src`, `style-src` e `connect-src` ficam como estavam; a alternativa seria imprimir sempre a tabela, o que apagaria do papel o resumo que a tela oferece. Cartão em modo "Tabela" continua imprimindo a tabela: quem está sob `[hidden]` não vai ao papel, e é o mesmo filtro que `prepararGraficosParaImpressao` já usava. **A folha órfã é outro defeito, e tem outra causa**: o cartão é indivisível e mais alto que a folha menos o cabeçalho. Encolher o gráfico até caber encavalaria os rótulos (seção 7), então em Designações o cartão **desce** para o fim do documento — `data-impressao-ao-fim`, mecanismo declarado no markup como `data-nao-imprimir`, e não `if` por tela dentro do helper. A matriz sobe e preenche a folha 1, com o primeiro bloco remedido de 18 para **12**. Painel e Estatísticas têm a mesma geometria e ficaram **deliberadamente de fora** desta rodada. A validação é executável e ficou mais honesta: `imprimir.py` passou a imprimir com compositing quando a fixtura pede, e `conferir.py` reprova folha com preto chapado — sem isso nenhuma asserção via a faixa preta, porque o PDF continua com todas as palavras no lugar. |
 | 25 | Situação do processo (o catálogo `status_processo`, com 7 estados) | **Continua derivada das datas.** Era catálogo órfão: nenhuma coluna do legado o referenciava, e a situação nunca foi gravada em processo nenhum. O modelo novo a deriva do fato registrado — `data_conclusao`, `data_julgamento`, `data_remessa_*`, `prazo_vencimento` —, e assim não existe estado que alguém marque e esqueça de atualizar. |
 
 ---
@@ -835,6 +836,10 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Distinguir duas telas só pelo filtro | "Relatório Anual" nasceu como a tela de Estatísticas com o ano fixo, e o resultado foram duas entradas de menu abrindo a mesma coisa — o defeito que a rodada 29 existia para corrigir | Se duas telas mostram os mesmos fatos, ou uma sai, ou elas diferem no **gênero**: uma se opera, a outra se imprime. E o **dado** continua vindo de uma função só — decisão 59 |
 | Repetir o SQL de uma regra em cada `FILTER` | Os quatro baldes apareciam em cinco lugares da mesma consulta, e cinco cópias divergem no primeiro ajuste — além de nada garantir que sejam exclusivos | Um `CASE` de saída única (`BALDE`), interpolado por `format!`. Consulta com `format!` **precisa** entrar na `COBERTURA` de `tests/sql_prepare.rs`, senão o `PREPARE` automático não a alcança |
 | Trocar `serde(flatten)` por struct aninhada numa resposta | Os campos achatados sobem para o topo do JSON, e é isso que mantém `linha.total` onde a tela sempre o leu. Aninhar quebra o frontend **sem** erro de compilação no Rust — o `tsc` só reclama se `types.ts` for atualizado junto | `SituacaoDesignacao` é achatada de propósito, na linha e na célula. Se mudar, mudar `types.ts` na mesma alteração — é o que o teste `resposta_traz_os_campos_que_o_frontend_espera` vigia |
+| Imprimir um `<canvas>` pelo WebKitGTK | Com o compositing **ligado** — que é como o aplicativo roda — o desenho é textura de GPU, e o caminho de impressão a pinta de **preto puro**: o gráfico sai como uma faixa preta, sem erro no console nem no `failed` da operação. Medido em `tools/impressao/medicao-grafico-canvas`: 31,2% da folha em preto contra 0,0% do mesmo desenho como `<img>`. Pior: o arnês **escondia** o defeito, porque `imprimir.py` desligava o compositing para conseguir o contexto GL na janela offscreen | O canvas é congelado num `<img>` com `toBase64Image()` enquanto o diálogo está aberto — `graficos/index.ts::congelarGraficosParaImpressao`. Isso custa `data:` no `img-src` da CSP (decisão 62), e obriga `decode()` antes de imprimir. A fixtura que precisa da resposta honesta declara `compositing: true`, e `conferir.py` reprova folha com mais de 3% de preto chapado |
+| Esconder com `hidden` um canvas que o Chart.js montou | **Não esconde nada.** O Chart.js escreve `style.display = 'block'` no elemento ao montar (`initCanvas`), e estilo inline vence a regra `[hidden]` do navegador — que é a **única** que existe, porque o projeto não declara nenhuma `[hidden]` global (só `.analytics-view[hidden]`, `.campo-erro[hidden]` e outras seis, todas com classe). O canvas segue ocupando caixa e sendo pintado de preto **ao lado** do PNG certo: no PDF de Estatísticas, cada gráfico saía como **duas** imagens do mesmo tamanho, a boa com `smask` e a chapada sem, e o par ainda atravessava a quebra de página | O canvas sai do **DOM** (`canvas.remove()`), e volta no `finally` pelo vizinho lido antes da remoção — a caixa também hospeda o `.analytics-tooltip`. Medido: `medicao-grafico-oculto` dá 31,2% de preto e duas imagens de 1920×600; `calibrado-grafico-removido`, 0,0% e uma |
+| Fixtura de gráfico com o canvas nascendo oculto | Um canvas que nunca foi visível **nunca ganha camada de composição**, e a fixtura aprova o que o PDF real reprova — foi assim que a primeira volta da rodada 31 deu por resolvida uma faixa preta que continuava saindo. Não basta reproduzir o resultado: é preciso reproduzir a **sequência** | A fixtura pinta o canvas **visível**, deixa o motor compor alguns quadros (`setTimeout` de 120ms, dentro dos 300ms que o arnês espera), põe nele o `display:block` inline que o Chart.js põe, e só então troca — `trocaPeloPng` em `gerar-fixturas.ts` |
+| Pôr um bloco indivisível alto logo abaixo de uma faixa de KPIs | `.analytics-card` é `break-inside: avoid` e o cartão de ranking mede 532px (11 militares) a 700px de altura — mais que os 180mm úteis da A4 paisagem menos o cabeçalho. O motor não tem onde o pôr: desmancha o cartão por cima da folha seguinte e ainda empurra o que vem depois. Medido em Designações, `medicao-designacoes-folha1`: **duas** folhas gastas antes da primeira linha da matriz — a primeira com título, KPIs e a faixa preta do gráfico, a segunda só com o `h2` da matriz | Ou o bloco desce, ou ele encolhe — e encolher um ranking encavala os rótulos de três linhas. Designações desce: `data-impressao-ao-fim` na `.analytics-grid`, e `dom.ts::adiarBlocosParaOFimDaImpressao` a move para o fim do `.panel` só enquanto o diálogo está aberto. O primeiro bloco da matriz é **remedido** depois disso — 18 valia para uma folha 1 que a matriz não alcançava |
 
 ---
 
@@ -1853,6 +1858,24 @@ Imprimir para arquivo nas **quatro telas analíticas**, e abrir o PDF:
 - [ ] A matriz geral de Designações vira a tabela vertical
       `Militar | Apuratório | Quantidade`, com total por militar e total geral
 
+### p-ter) O gráfico no papel e a folha 1 de Designações (seção 12, rodada 31)
+
+O binário de produção — o arnês imprime com `print_()`, e a armadilha da folha
+girada só aparece pelo `run_dialog`.
+
+- [ ] **Designações por Militar**, cartão em **Gráfico** → Imprimir/PDF: a folha 1
+      leva título, os quatro KPIs **e** as primeiras linhas da matriz; o gráfico
+      sai desenhado (não uma faixa preta) e não esticado; o cartão está na
+      **última** folha
+- [ ] A mesma tela em **Tabela**: o cartão imprime a tabela, e não o gráfico
+- [ ] **Painel** e **Estatísticas**: todos os gráficos aparecem desenhados no
+      papel. A folha órfã dessas duas continua lá, por decisão da rodada
+- [ ] Console **sem violação de CSP** nas três telas — o `data:` do `img-src` é a
+      única concessão, e ela vale só para imagem
+- [ ] **Cancelar** o diálogo devolve a tela ao normal: gráfico no lugar do `<img>`,
+      cartão de volta à posição de tela, fragmentos removidos
+- [ ] **Mapa Mensal** inalterado
+
 ### p-bis) O arnês de impressão (seção 12, rodada 30)
 
 A conferência acima é de olho, e olho não pega registro que sumiu. O que dá para
@@ -1875,9 +1898,16 @@ sem a fragmentação, e é delas que sai cada `linhasPorFragmentoImpressao`.
 `tools/impressao/README.md` tem o resto.
 
 **O que o arnês não alcança**, e por isso continua no roteiro de olho acima:
-gráfico com dado real, cancelamento do diálogo, o teto de 5.000 registros, e a
-armadilha da folha girada — que só aparece pelo `run_dialog`, não pelo
-`print_()` do arnês.
+gráfico com **dado real** (o desenho das fixturas é sintético; o que elas provam
+é que um `<canvas>` sai preto e um `<img>` não), cancelamento do diálogo, o teto
+de 5.000 registros, e a armadilha da folha girada — que só aparece pelo
+`run_dialog`, não pelo `print_()` do arnês.
+
+Desde a rodada 31 o arnês **imprime com o compositing ligado** nas fixturas que
+pedem (`compositing: true` no manifesto, num processo à parte, porque a variável
+de ambiente tem de valer antes de o GTK inicializar), e `conferir.py` reprova
+folha com mais de 3% de preto chapado. Sem as duas coisas o gráfico não pintado
+passava: o PDF continua com todas as palavras no lugar.
 
 ### q) Painéis sem repetição e carga por militar (seção 12, rodada 29)
 
@@ -1992,6 +2022,94 @@ A narrativa completa de cada uma está no histórico do git.
 | 29 | **Painéis sem repetição, e a carga por militar** | Seis telas de relatório viraram quatro: os mesmos quatro KPIs, a mesma evolução por ano e a mesma unidade de origem eram desenhados em três endereços, e nas telas antigas sempre **sem escopo**. "Visão Geral dos Apuratórios" saiu e o gráfico de criticidade ficou só no Painel. Do outro lado, Designações por Militar passou a responder por **carga de trabalho**: concluído, em andamento no prazo, em andamento vencido e sem prazo definido, por militar e por espécie, com cinco filtros combináveis. Numa segunda volta, o Relatório Anual virou **documento** — capa e seções numeradas, só tabelas — em vez de um "modo" da tela de Estatísticas, e as Designações ganharam filtro por balde, cinco ordenações e as datas de último recebimento e última conclusão por militar. Duas consultas novas (`by_unit`, `by_year`), `dashboard_summary` enxugado aos quatro números, nenhuma migration. Decisões **55–60**. Detalhe abaixo |
 | 28 | **Painéis analíticos** | As seis telas de relatório deixaram de ser só tabela: KPIs, barras, barras empilhadas, linha/área e rosca, com alternador Gráfico/Tabela por cartão. Uma dependência nova (`chart.js`), nenhum comando e nenhuma migration — todo dado já vinha dos relatórios existentes. O Vitest entrou junto, sobre a camada pura de `src/graficos/dados.ts`. Detalhe abaixo |
 | 30 | **PDFs dos relatórios comuns** | Impressão A4 escopada por sessão, perfis tabular/analítico/documento, cabeçalhos repetidos, linhas indivisíveis, textos sem elipse e orientação por conteúdo. Retrato ganhou `GtkPageSetup` próprio; listagens completas substituem somente seu wrapper; Designações normaliza a matriz só no papel e Mapa Salvo usa paisagem densa. O documento especial do Mapa Mensal ficou congelado e fora de todos os seletores novos. Numa segunda volta veio o **arnês** (`tools/impressao`), que imprime pelo WebKitGTK sem abrir a aplicação: ele mostrou que a linha partida pela quebra de página **some do PDF**, calibrou os nove tamanhos de bloco por medição, tirou a fragmentação de dentro dos cartões — onde o motor ignora o `break-inside` — e passou a provar o congelamento do Mapa Mensal pixel a pixel. Sem migration e sem biblioteca de PDF. Decisão **61**. |
+| 31 | **O gráfico no papel, e a folha órfã** | O gráfico saía como faixa preta e Designações gastava duas folhas antes da primeira linha da matriz. Eram dois defeitos com uma causa em comum: o arnês não alcançava nenhum dos dois. Nenhuma fixtura tinha `<canvas>`, e `imprimir.py` desligava o compositing — que é justamente o que faz o canvas ir para a GPU e sair chapado de preto. Com o compositing ligado o defeito se reproduziu na hora: 31,2% da folha em preto, contra 0,0% do mesmo desenho como `<img>`. A correção congela cada gráfico num PNG enquanto o diálogo está aberto, ao preço de `data:` no `img-src` — e o canvas tem de **sair do DOM**, porque `hidden` não o esconde (o Chart.js põe `display:block` inline): a primeira versão imprimiu o gráfico em duplicata, o PNG certo e a faixa preta ao lado. A folha órfã é geometria: cartão indivisível de 532px logo abaixo de uma faixa de KPIs, numa folha de 180mm úteis. O cartão desce para o fim do documento por `data-impressao-ao-fim`, a matriz sobe e o primeiro bloco foi remedido de 18 para 12. O arnês ficou mais honesto do que estava: imprime com compositing quando a fixtura pede, e reprova folha com preto chapado. Sem migration, sem CSS novo, sem dependência nova. Decisão **62**. |
+
+### A rodada 31, em detalhe
+
+Pedido: dois acertos no PDF dos relatórios. Em Designações, a primeira folha saía com o
+título e os quatro KPIs e o resto em branco. E, com o cartão em modo "Gráfico", o
+desenho virava uma faixa preta no documento.
+
+**Os dois defeitos tinham a mesma causa de fundo: o arnês não os alcançava.** A rodada 30
+montou um arnês que imprime pelo WebKitGTK e afere o PDF, e ele existe justamente para
+que escolha de impressão seja medida em vez de argumentada. Só que ele declarava, nos
+próprios limites, que não cobria "gráfico com dado real" — e a razão era mais funda do
+que parecia: `grep -c canvas fixturas/*.html` dava **zero** em todas as 32 fixturas.
+
+**A faixa preta reproduziu-se em uma medição, e a medição apontou para o próprio arnês.**
+A primeira fixtura com `<canvas>` saiu **pintada**, o que refutaria o diagnóstico — não
+fosse o `WEBKIT_DISABLE_COMPOSITING_MODE=1` que `imprimir.py` põe para conseguir o
+contexto GL numa janela offscreen. Com o compositing ligado, como o aplicativo roda, a
+mesma fixtura saiu com **31,2% da folha em preto puro**; o `<img>` gerado por
+`toDataURL()` do mesmo canvas saiu com 0,0% nas duas condições. O defeito não era do
+CSS nem do Chart.js: é o caminho de impressão do WebKitGTK não sabendo ler uma textura
+de GPU, e pintando o retângulo de preto sem erro nenhum.
+
+Daí saíram três coisas, e não uma. A correção — `congelarGraficosParaImpressao` troca
+cada gráfico visível pelo PNG dele mesmo enquanto o diálogo está aberto. O preço —
+`img-src 'self' data:`, a única concessão de CSP da rodada. E a correção **do arnês**:
+`imprimir.py` passou a imprimir num processo à parte as fixturas que declaram
+`compositing: true` (a variável tem de valer antes de o GTK inicializar), e `conferir.py`
+ganhou uma asserção que nenhuma asserção de texto poderia substituir — folha com mais de
+3% de preto chapado reprova. O PDF com a faixa preta continua com **todas as palavras no
+lugar**; era invisível para tudo o que o arnês media.
+
+#### A segunda volta, e o que ela ensinou sobre fixtura
+
+A conferência do responsável no PDF real mostrou o gráfico **em duplicata**: o PNG
+certo e, ao lado, a faixa preta. E o arnês continuava verde — o que era o defeito mais
+caro dos dois.
+
+A causa do papel: `canvas.hidden = true` não esconde canvas nenhum aqui. O Chart.js
+escreve `style.display = 'block'` no elemento ao montar (`initCanvas`), estilo inline
+vence a regra `[hidden]` do navegador, e o projeto não declara nenhuma `[hidden]`
+global — só oito com classe. O canvas seguia ocupando caixa, sendo composto e sendo
+pintado de preto logo acima do PNG. A assinatura no PDF é inconfundível, e foi ela que
+resolveu o caso antes de qualquer palpite: `pdfimages -list` mostrava, por gráfico,
+**duas** imagens de dimensão idêntica — a boa de 12 a 114 KB com `smask`, a chapada de
+3 a 5 KB sem —, e o par atravessando a quebra de página, prova de que as duas ocupavam
+layout.
+
+A causa da fixtura verde é mais instrutiva. A primeira tinha o canvas nascendo `hidden`
+no HTML, e um canvas que nunca foi visível **nunca ganha camada de composição**: ela
+media outra coisa e aprovava. Reproduzir o *resultado* não basta — é preciso reproduzir
+a **sequência**. `trocaPeloPng` pinta o canvas visível, deixa o motor compor 120ms de
+quadros, põe nele o mesmo `display:block` inline que o Chart.js põe, e só então troca.
+Com isso a fixtura passou a sair com 31,2% de preto e duas imagens de 1920×600 — a
+assinatura exata do PDF do responsável —, e `calibrado-grafico-removido` com uma imagem
+e 0,0%.
+
+A correção é `canvas.remove()`, com o vizinho lido **antes** da remoção para devolvê-lo
+ao lugar exato: a caixa também hospeda o `.analytics-tooltip`.
+
+**A folha órfã não era `break-after` nenhum — era aritmética.** A A4 paisagem do
+`folha_a4_relatorio` dá 180mm úteis. O `page-head` come ~14mm, a faixa de KPIs ~26mm, e o
+cartão de carga mede `min(700, n × 42 + 70)` px de gráfico — 532px ≈ 141mm com os 11
+militares do caso relatado, mais a moldura. Como `.analytics-card` é `break-inside:
+avoid`, o motor não tem onde o pôr: desmancha o cartão por cima da folha seguinte e
+empurra o resto. A medição mostrou o defeito **maior** do que o relato: duas folhas
+gastas, não uma — a segunda ficava só com o `h2` da matriz, porque o gráfico transbordava
+da primeira e o bloco de 18 linhas já não cabia no que sobrava dela.
+
+Havia dois caminhos, e um deles estava barrado pela seção 7: encolher o gráfico até caber
+encavala os rótulos de três linhas, defeito que a rodada 28 já tinha pago. Então o cartão
+**desce**. `data-impressao-ao-fim` é atributo no markup, como `data-nao-imprimir` — não
+um `if` por tela dentro do helper —, e `adiarBlocosParaOFimDaImpressao` move o nó para o
+fim do `.panel` só enquanto o diálogo está aberto, deixando um comentário como âncora
+para o desfazer. Move o nó de verdade, e não `order` de flex, porque dentro de um
+container flex ou grid o WebKitGTK ignora o `break-inside` das caixas de dentro — o que
+essa mesma pasta já tinha medido na rodada 30.
+
+**E o primeiro bloco da matriz teve de ser remedido.** Os 18 anteriores foram calibrados
+para uma folha 1 que a matriz nem alcançava. Com ela subindo, a folha 1 passa a dividir
+espaço com o título, os KPIs e o `h2`: sobram ~128mm. A varredura de 10 a 17 deu 12 como
+o maior valor que ainda cabe — com 13 a tabela transborda a margem inferior e a última
+folha sai vazia. Oito folhas viraram sete, e a primeira deixou de ser desperdício.
+
+**O que ficou de fora, e de propósito.** Painel e Estatísticas têm a mesma geometria e
+podem orfanar folha pelo mesmo motivo; a decisão desta rodada foi não mexer neles. O
+mecanismo já serve quando entrarem, e o próximo número a corrigir está anotado: o teto de
+`alturaImpressao` é 700px ≈ 185mm, maior que os 180mm úteis da folha.
 
 ### A rodada 29, em detalhe
 

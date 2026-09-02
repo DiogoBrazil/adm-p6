@@ -8,6 +8,7 @@
 
 import { call } from "./api";
 import {
+  congelarGraficosParaImpressao,
   prepararGraficosParaImpressao,
   restaurarGraficosDepoisDaImpressao,
 } from "./graficos";
@@ -648,6 +649,43 @@ export function blocosDeImpressao(
 }
 
 /**
+ * Manda para o fim do documento, só no papel, os blocos com
+ * `data-impressao-ao-fim`.
+ *
+ * Um cartão analítico é indivisível (`report-print.css`) e mais alto do que a
+ * folha menos o cabeçalho: com a faixa de KPIs em cima, o motor não tem onde o
+ * pôr e o desmancha por cima da folha seguinte. Medido em
+ * `tools/impressao/medicao-designacoes-folha1`, Designações gastava **duas**
+ * folhas antes da primeira linha da matriz — a primeira com título, KPIs e o
+ * gráfico, a segunda com o `h2` da matriz sozinho, porque o gráfico transbordava
+ * para dentro dela e o primeiro bloco de 18 linhas já não cabia no que sobrava.
+ *
+ * Descer o cartão deixa a matriz fragmentada preencher a folha 1, e o gráfico
+ * não precisa encolher — encolher é o que faz os rótulos de três linhas se
+ * encavalarem (seção 7).
+ *
+ * Move o nó de verdade, não `order` de flex: dentro de um container flex ou grid
+ * o WebKitGTK ignora o `break-inside` das caixas de dentro, medido em
+ * `analitico-cartoes-fragmentados`. No fluxo de blocos ele respeita.
+ */
+function adiarBlocosParaOFimDaImpressao(): () => void {
+  const desfazer: (() => void)[] = [];
+
+  document.querySelectorAll<HTMLElement>("[data-impressao-ao-fim]").forEach((bloco) => {
+    const destino = bloco.closest<HTMLElement>(".panel") ?? bloco.parentElement;
+    if (!destino || destino.lastElementChild === bloco) return;
+    // A âncora é um comentário porque ela precisa sobreviver no fluxo sem
+    // desenhar nada nem casar com seletor nenhum enquanto o diálogo está aberto.
+    const ancora = document.createComment("impressao-ao-fim");
+    bloco.before(ancora);
+    destino.append(bloco);
+    desfazer.push(() => ancora.replaceWith(bloco));
+  });
+
+  return () => desfazer.forEach((restaurar) => restaurar());
+}
+
+/**
  * O WebKitGTK 2.52 ainda fragmenta `<tr>` apesar de `break-inside: avoid`.
  * Tabelas longas optam por cópias em blocos pequenos, montadas só enquanto o
  * diálogo está aberto. Cada bloco é indivisível e repete o cabeçalho; a tabela
@@ -1149,18 +1187,25 @@ async function abrirImpressao(
   perfil: PerfilImpressao,
 ): Promise<void> {
   let folhaFallback: HTMLStyleElement | undefined;
+  let limparOrdem = () => {};
   let limparFragmentos = () => {};
+  let limparImagens = () => {};
   // A classe existe só pelo quadro em que a caixa do gráfico fica maior que o
   // painel; sem ela, uma janela estreita mostra a barra de rolagem aparecer e
   // sumir antes de o diálogo abrir.
   const classePerfil = `impressao-perfil--${perfil}`;
   document.body.classList.add("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   try {
+    // Antes de fragmentar, para que o clone em blocos já nasça na posição final.
+    limparOrdem = adiarBlocosParaOFimDaImpressao();
     limparFragmentos = fragmentarTabelasParaImpressao();
     prepararGraficosParaImpressao();
     // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
     // antes de o documento virar papel. O canvas já foi redesenhado pelo
     // `resize()`, que é síncrono; o layout ao redor dele não.
+    await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
+    // Só agora: o PNG tem de sair do canvas já com a geometria da folha.
+    limparImagens = await congelarGraficosParaImpressao();
     await new Promise<void>((resolver) => requestAnimationFrame(() => resolver()));
     const comando = orientacao === "paisagem" ? "print_report_landscape" : "print_portrait";
     const resposta = await call(comando);
@@ -1182,7 +1227,9 @@ async function abrirImpressao(
     notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
   } finally {
     folhaFallback?.remove();
+    limparImagens();
     limparFragmentos();
+    limparOrdem();
     restaurarGraficosDepoisDaImpressao();
     document.body.classList.remove("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   }

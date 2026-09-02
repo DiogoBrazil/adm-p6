@@ -682,6 +682,77 @@ export function prepararGraficosParaImpressao(): void {
   }
 }
 
+/**
+ * Troca cada gráfico visível pelo PNG dele mesmo, e devolve o desfazer.
+ *
+ * O caminho de impressão do WebKitGTK **não pinta** o conteúdo de um `<canvas>`
+ * quando o compositing está ligado — que é como o aplicativo roda: o desenho
+ * vira textura de GPU e o que sai no papel é um retângulo preto chapado, sem
+ * erro no console nem no `failed` da operação. Medido em
+ * `tools/impressao/medicao-grafico-canvas`: 31,2% da folha em preto puro com o
+ * compositing ligado, contra as barras coloridas do mesmo desenho com ele
+ * desligado. Um `<img>` o motor pinta nas duas condições.
+ *
+ * Nenhuma fixtura do arnês tinha `<canvas>`, e é por isso que a rodada 30
+ * calibrou nove tamanhos de bloco sem nunca imprimir um gráfico.
+ *
+ * A ordem importa em três pontos:
+ *
+ * - vem **depois** de `prepararGraficosParaImpressao`, senão o PNG sai com a
+ *   geometria da tela em vez da geometria da folha;
+ * - `draw()` antes de `toBase64Image()`, porque o `resize()` daquela pode ter
+ *   deixado o desenho para o quadro seguinte e o PNG sairia do bitmap velho;
+ * - `decode()` no fim, porque o diálogo de impressão não espera imagem
+ *   carregar — sem isso o papel sai com o espaço vazio no lugar do gráfico.
+ *
+ * O canvas sai do **DOM**, e não basta escondê-lo. `hidden` não o esconde: o
+ * Chart.js escreve `style.display = 'block'` no elemento ao montar
+ * (`chart.js`, `initCanvas`), e estilo inline vence a regra `[hidden]` do
+ * navegador — que é a única que existe, porque o projeto não declara nenhuma
+ * `[hidden]` global. O canvas seguia ocupando caixa e sendo pintado de preto
+ * **ao lado** do PNG certo: no PDF de Estatísticas, cada gráfico saía como duas
+ * imagens do mesmo tamanho, a boa com `smask` e a chapada sem, e o par ainda
+ * atravessava a quebra de página. Reproduzido em
+ * `tools/impressao/medicao-grafico-oculto` — 31,2% de preto e duas imagens de
+ * 1920×600 — contra `calibrado-grafico-removido`, com uma imagem e 0,0%.
+ *
+ * O cartão em modo "Tabela" é pulado pelo mesmo motivo de
+ * `prepararGraficosParaImpressao`: quem está sob `[hidden]` não vai ao papel.
+ */
+export async function congelarGraficosParaImpressao(): Promise<() => void> {
+  const imagens: HTMLImageElement[] = [];
+  const desfazer: (() => void)[] = [];
+
+  for (const { instancia } of graficos.values()) {
+    if (instancia.canvas.closest<HTMLElement>("[data-analytics-view]")?.hidden) continue;
+    const canvas = instancia.canvas;
+    const caixa = canvas.parentElement;
+    if (!caixa) continue;
+    instancia.draw();
+    const imagem = document.createElement("img");
+    imagem.src = instancia.toBase64Image();
+    imagem.alt = canvas.getAttribute("aria-label") ?? "";
+    // Pela CSSOM, não por `style=""` no HTML: a CSP recusa estilo interpolado.
+    // A caixa já está dimensionada em px, então 100% é a medida da folha.
+    imagem.style.width = "100%";
+    imagem.style.height = "100%";
+    // O vizinho é lido antes da remoção para devolver o canvas ao lugar exato:
+    // a caixa também hospeda o `.analytics-tooltip`, que é irmão dele.
+    const vizinho = canvas.nextSibling;
+    canvas.remove();
+    caixa.insertBefore(imagem, vizinho);
+    imagens.push(imagem);
+    desfazer.push(() => {
+      imagem.remove();
+      caixa.insertBefore(canvas, vizinho);
+    });
+  }
+
+  await Promise.all(imagens.map((imagem) => imagem.decode().catch(() => undefined)));
+
+  return () => desfazer.forEach((restaurar) => restaurar());
+}
+
 export function restaurarGraficosDepoisDaImpressao(): void {
   for (const { instancia, spec } of graficos.values()) {
     const caixa = instancia.canvas.parentElement;

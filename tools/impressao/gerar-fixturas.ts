@@ -71,6 +71,18 @@ type Fixtura = {
   semSobreposicao?: boolean;
   /** Limite para detectar folhas vazias acrescentadas pelo shell. */
   paginasMaximas?: number;
+  /**
+   * Imprime com o compositing do WebKit **ligado**, como o aplicativo roda.
+   *
+   * O arnês desliga o compositing por padrão, porque a janela offscreen não
+   * consegue o contexto GL na sessão Wayland. Só que desligá-lo esconde o
+   * defeito: com ele ligado o `<canvas>` vira textura de GPU e sai preto
+   * chapado no papel. Quem precisa da resposta honesta pede isto, e
+   * `imprimir.py` a imprime num processo à parte.
+   */
+  compositing?: boolean;
+  /** Reprova a folha com preto chapado — gráfico que não foi pintado. */
+  semFaixaPreta?: boolean;
 };
 
 const RAIZ = resolve(import.meta.dirname ?? ".", "../..");
@@ -144,6 +156,13 @@ type Conjunto = {
   larga?: boolean;
   /** O valor que a tela declara hoje. Só existe para a fixtura calibrada. */
   fragmentoAtual: number;
+  /**
+   * O primeiro bloco, quando ele é menor que os demais.
+   *
+   * A tela declara os dois quando a folha 1 divide espaço com o que vem antes
+   * da tabela — em Designações, o título, os KPIs e o `h2` da matriz.
+   */
+  fragmentoPrimeiro?: number;
   /** O mesmo, quando o perfil documento imprime a mesma tabela em 10pt. */
   fragmentoAtualDocumento?: number;
   /** Onde o valor mora, para que calibrar não vire caça ao arquivo. */
@@ -338,6 +357,7 @@ const CONJUNTOS: Record<string, Conjunto> = {
   matriz: {
     orientacao: "paisagem",
     fragmentoAtual: 22,
+    fragmentoPrimeiro: 12,
     origem: "src/telas/encarregados.ts (tabelaMatrizImpressao)",
     colunas: [
       { rotulo: "Militar", largura: 44 },
@@ -408,8 +428,9 @@ function tabelaFragmentada(
   limite: number,
   deslocamento = 0,
   cabecalhoPrimeiro = "",
+  limitePrimeiro = limite,
 ): string {
-  const blocos = blocosDeImpressao(total, limite);
+  const blocos = blocosDeImpressao(total, limite, limitePrimeiro);
   return `<div class="tabela-impressao-fragmentada">${blocos
     .map(([inicio, fim]) => {
       const linhas = Array.from({ length: fim - inicio }, (_, k) =>
@@ -557,6 +578,131 @@ function rotuloDaPrimeiraColuna(conjunto: Conjunto): string {
   const primeira = conjunto.colunas[0]!;
   return (typeof primeira === "string" ? primeira : primeira.rotulo).toUpperCase();
 }
+
+/**
+ * O cartão analítico como `cartaoAnalitico` o emite, com a caixa do gráfico já
+ * dimensionada em px.
+ *
+ * Dimensionar em px é o que `prepararGraficosParaImpressao` faz no app antes de
+ * abrir o diálogo — `px` é unidade absoluta na impressão, e é assim que a
+ * medida feita na tela vale para a folha. Aqui interessa porque é essa altura,
+ * somada à moldura do cartão, que decide se ele cabe na folha 1.
+ */
+function cartaoDeGrafico(
+  titulo: string,
+  descricao: string,
+  altura: number,
+  caixa: string,
+): string {
+  const texto = descricao
+    ? `<p class="analytics-card__description">${escapeHtml(descricao)}</p>`
+    : "";
+  return `<section class="analytics-card analytics-card--wide">
+    <header class="analytics-card__header">
+      <div><h2>${escapeHtml(titulo)}</h2>${texto}</div>
+      <div class="analytics-card__tools">
+        <div class="analytics-toggle" role="group" aria-label="Visualização">
+          <button type="button" class="analytics-toggle__button" aria-pressed="true">Gráfico</button>
+          <button type="button" class="analytics-toggle__button" aria-pressed="false">Tabela</button>
+        </div>
+      </div>
+    </header>
+    <div class="analytics-view analytics-view--chart" data-analytics-view="grafico">
+      <div class="analytics-chart" style="width:960px;height:${altura}px">${caixa}</div>
+    </div>
+  </section>`;
+}
+
+/**
+ * Pinta um `<canvas>` **visível**, deixa o motor compor alguns quadros e só
+ * então o troca pelo PNG — que é a sequência exata do aplicativo.
+ *
+ * A fidelidade está no "visível primeiro". Um canvas que nasce oculto nunca
+ * ganha camada de composição, e a fixtura passa sem provar nada: foi assim que
+ * a primeira volta desta rodada deu por resolvida uma faixa preta que continuava
+ * saindo no PDF real. Aqui o canvas é composto antes de ser escondido, como na
+ * tela.
+ *
+ * `estrategia` é o que se está medindo: `"oculto"` põe `hidden` no canvas,
+ * `"removido"` o tira do DOM.
+ */
+const trocaPeloPng = (estrategia: "oculto" | "removido") => `<script>
+  (function () {
+    document.querySelectorAll("canvas[data-desenho]").forEach(function (canvas) {
+      var ctx = canvas.getContext("2d");
+      var l = canvas.width;
+      var a = canvas.height;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, l, a);
+      var cores = ["#1f6feb", "#2da44e", "#bf8700", "#cf222e", "#8250df"];
+      for (var i = 0; i < 5; i++) {
+        var h = ((i + 2) / 8) * (a - 96);
+        ctx.fillStyle = cores[i];
+        ctx.fillRect(48 + (i * (l - 96)) / 5, a - 48 - h, (l - 96) / 5 - 28, h);
+      }
+      ctx.fillStyle = "#15202b";
+      ctx.font = "30px sans-serif";
+      ctx.fillText("BARRAS DE CONTROLE", 48, 44);
+      // O Chart.js escreve isto ao montar (chart.js, style.display =
+      // style.display || 'block'), e é o detalhe que decide a fixtura: estilo
+      // inline vence a regra [hidden] display:none do navegador, que é a única
+      // que existe — o projeto não declara nenhuma. Sem esta linha o canvas do
+      // arnês some com hidden, e a fixtura aprova o que o PDF real reprova.
+      canvas.style.display = "block";
+    });
+    // 120ms de quadros compostos antes da troca: é o que faz a camada de GPU
+    // existir de verdade. O arnês imprime 300ms depois do load.
+    setTimeout(function () {
+      document.querySelectorAll("canvas[data-desenho]").forEach(function (canvas) {
+        var caixa = canvas.parentElement;
+        var imagem = document.createElement("img");
+        imagem.src = canvas.toDataURL("image/png");
+        imagem.alt = "Barras de controle";
+        imagem.style.width = "100%";
+        imagem.style.height = "100%";
+        ${
+          estrategia === "removido"
+            ? "canvas.remove();"
+            : "canvas.hidden = true;"
+        }
+        caixa.appendChild(imagem);
+      });
+    }, 120);
+  })();
+<\/script>`;
+
+/**
+ * Pinta os `<canvas>` da fixtura e espelha cada um num `<img>`.
+ *
+ * O arnês roda em Node, onde não há canvas nem Chart.js — e o desenho não é o
+ * ponto. O que se mede é se o WebKitGTK **pinta** um `<canvas>` no caminho de
+ * impressão, e se pinta o PNG que `toDataURL()` tira dele. É a mesma chamada
+ * que `congelarGraficosParaImpressao` faz no app.
+ */
+const DESENHO_DE_TESTE = `<script>
+  (function () {
+    document.querySelectorAll("canvas[data-desenho]").forEach(function (canvas) {
+      var ctx = canvas.getContext("2d");
+      var l = canvas.width;
+      var a = canvas.height;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, l, a);
+      var cores = ["#1f6feb", "#2da44e", "#bf8700", "#cf222e", "#8250df"];
+      for (var i = 0; i < 5; i++) {
+        var h = ((i + 2) / 8) * (a - 96);
+        ctx.fillStyle = cores[i];
+        ctx.fillRect(48 + (i * (l - 96)) / 5, a - 48 - h, (l - 96) / 5 - 28, h);
+      }
+      ctx.fillStyle = "#15202b";
+      ctx.font = "30px sans-serif";
+      ctx.fillText("BARRAS DE CONTROLE", 48, 44);
+      var espelho = document.querySelector(
+        'img[data-espelho="' + canvas.dataset.desenho + '"]',
+      );
+      if (espelho) espelho.src = canvas.toDataURL("image/png");
+    });
+  })();
+<\/script>`;
 
 function catalogo(): Fixtura[] {
   const lista: Fixtura[] = [];
@@ -854,6 +1000,159 @@ function catalogo(): Fixtura[] {
     })(),
   });
 
+  // ── O gráfico no papel ───────────────────────────────────────────────
+  //
+  // Nenhuma fixtura tinha `<canvas>` — `grep -c canvas fixturas/*.html` dava
+  // zero em todas —, e foi por isso que a rodada 30 calibrou nove tamanhos de
+  // bloco sem nunca imprimir um gráfico. Esta põe as duas formas na mesma
+  // folha: o canvas pintado por script e o PNG que `toDataURL()` tira dele. A
+  // pergunta é qual das duas o WebKitGTK pinta, e quem responde é a
+  // rasterização (`conferir.py --imagens`), não asserção de texto.
+  lista.push({
+    nome: "medicao-grafico-canvas",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    medicao: true,
+    proposito: "o WebKitGTK pinta <canvas> no papel? e o PNG que sai dele?",
+    corpo: painel(
+      cabecalho("Gráfico no papel", "Canvas e PNG do mesmo desenho, lado a lado.") +
+        `<div class="analytics-grid">${cartaoDeGrafico(
+          "Canvas — o que o aplicativo imprime hoje",
+          "",
+          300,
+          `<canvas data-desenho="a" width="1920" height="600" role="img" aria-label="Barras de controle"></canvas>`,
+        )}${cartaoDeGrafico(
+          "PNG do mesmo canvas — a correção proposta",
+          "",
+          300,
+          `<img data-espelho="a" alt="Barras de controle" style="width:100%;height:100%" />`,
+        )}</div>${DESENHO_DE_TESTE}`,
+    ),
+    compositing: true,
+  });
+
+  // As duas estratégias de troca, com o canvas composto **antes** de sair de
+  // cena — a sequência do aplicativo. Esconder por `hidden` não basta: a camada
+  // já existe, e o motor a imprime assim mesmo, de preto, ao lado do PNG certo.
+  // Medido no PDF real de Estatísticas: cada gráfico saía como duas imagens do
+  // mesmo tamanho, a boa com `smask` e a chapada sem.
+  for (const [estrategia, nome, assere] of [
+    ["oculto", "medicao-grafico-oculto", false],
+    ["removido", "calibrado-grafico-removido", true],
+  ] as const) {
+    lista.push({
+      nome,
+      orientacao: "paisagem",
+      perfil: "analitico",
+      medicao: !assere,
+      compositing: true,
+      semFaixaPreta: assere,
+      proposito:
+        estrategia === "removido"
+          ? "tirar o canvas do DOM antes de imprimir apaga a camada — graficos/index.ts"
+          : "esconder o canvas com `hidden` NÃO apaga a camada composta",
+      corpo: painel(
+        cabecalho("Gráfico no papel", `O canvas é composto e depois ${estrategia}.`) +
+          `<div class="analytics-grid">${cartaoDeGrafico(
+            "Carga de trabalho por militar",
+            "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
+            300,
+            `<canvas data-desenho="c" width="1920" height="600" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+          )}</div>${trocaPeloPng(estrategia)}`,
+      ),
+      ...(assere ? { paginasMaximas: 1 } : {}),
+    });
+  }
+
+  // Designações por Militar **como sai hoje**: título, faixa de KPIs, o cartão
+  // indivisível de 532px (11 militares × 42px + 70) e só então a matriz. Mede
+  // em que folha cada coisa cai — a folha 1 fica com título e KPIs sobre o
+  // resto em branco, e é isso que a `calibrado-*` do mesmo par vem corrigir.
+  const matriz = CONJUNTOS.matriz!;
+  const kpisDeDesignacoes = `<div class="analytics-kpis">${[
+    kpiAnalitico(11, "Militares designados"),
+    kpiAnalitico(20, "Apuratórios no escopo"),
+    kpiAnalitico(5, "Concluídos", { tom: "sucesso" }),
+    kpiAnalitico(1, "Em andamento vencidos", {
+      tom: "alerta",
+      detalhe: "Requer atenção imediata",
+    }),
+  ].join("")}</div>`;
+  // A altura real do cartão de carga: `min(700, max(250, n * 42 + 70))` de
+  // `graficos/index.ts::graficoCarga`, com os 11 militares do caso relatado.
+  const cartaoDeCarga = (caixa: string) =>
+    `<div class="analytics-grid">${cartaoDeGrafico(
+      "Carga de trabalho por militar",
+      "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
+      532,
+      caixa,
+    )}</div>`;
+  const matrizDoPapel = (primeiro: number) =>
+    `<div class="somente-impressao matriz-designacoes--impressao">
+      <h2>Designações por militar e espécie</h2>
+      <p class="hint">Combinações com quantidade zero foram omitidas; os totais preservam o escopo do filtro.</p>
+      ${tabelaFragmentada(matriz, 120, matriz.fragmentoAtual, 0, "", primeiro)}
+    </div>`;
+  const cabecalhoDeDesignacoes = cabecalho(
+    "Designações por Militar",
+    "Carga de trabalho por militar e por espécie, na situação de hoje.",
+  );
+  // Post-correção o canvas é composto, desenhado e **removido** do DOM antes de
+  // imprimir, exatamente como `congelarGraficosParaImpressao` faz. Reproduzir a
+  // sequência, e não só o resultado, é o que faz a fixtura valer: um canvas que
+  // nasce oculto nunca ganha camada de composição e aprova o que o PDF reprova.
+  const graficoDaCarga = () =>
+    cartaoDeCarga(
+      `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+    );
+  // Antes: o cartão entre os KPIs e a matriz. Duas folhas se vão antes da
+  // primeira linha — a segunda fica só com o `h2`, porque o gráfico transborda
+  // da primeira e o bloco de 18 linhas já não cabe no que sobra dela.
+  lista.push({
+    nome: "medicao-designacoes-folha1",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    medicao: true,
+    compositing: true,
+    proposito: "onde cai cada bloco de Designações com o cartão entre os KPIs e a matriz",
+    // "MILITAR", da primeira coluna, também está dentro de "MILITARES
+    // DESIGNADOS" — o rótulo do primeiro KPI. O contador de cabeçalhos por
+    // folha casa substring, e mediria dois onde há um.
+    rotuloCabecalho: "QUANTIDADE",
+    corpo: painel(
+      cabecalhoDeDesignacoes +
+        kpisDeDesignacoes +
+        cartaoDeCarga(
+          `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+        ) +
+        matrizDoPapel(matriz.fragmentoPrimeiro ?? matriz.fragmentoAtual) +
+        DESENHO_DE_TESTE,
+    ),
+    marcadores: 120,
+  });
+
+  // Depois: a matriz logo abaixo dos KPIs e o cartão no fim, que é o que
+  // `data-impressao-ao-fim` produz. A asserção é o par título × primeira linha:
+  // se a folha 1 voltar a ficar só com título e KPIs, ele quebra.
+  lista.push({
+    nome: "calibrado-designacoes-folha1",
+    orientacao: "paisagem",
+    perfil: "analitico",
+    compositing: true,
+    semFaixaPreta: true,
+    proposito: `matriz na folha 1 e cartão no fim, primeiro bloco de ${matriz.fragmentoPrimeiro} — src/telas/encarregados.ts`,
+    rotuloCabecalho: "QUANTIDADE",
+    corpo: painel(
+      cabecalhoDeDesignacoes +
+        kpisDeDesignacoes +
+        matrizDoPapel(matriz.fragmentoPrimeiro ?? matriz.fragmentoAtual) +
+        graficoDaCarga() +
+        trocaPeloPng("removido"),
+    ),
+    marcadores: 120,
+    textosNaMesmaPagina: [["Designações por Militar", "L0001"]],
+  });
+
   // O `.stat-panel` também é indivisível no papel, e é onde moram os painéis de
   // contagem do detalhe de usuário e a tabela de vencidos do Painel. Mesma
   // pergunta dos cartões: fragmentar dentro dele ajuda ou atrapalha?
@@ -924,10 +1223,14 @@ const argumentos = new Map(
 // Calibrar é varrer valores: `--fragmento=auditoria:8,prazos:16` sobrescreve o
 // que os conjuntos declaram, sem editar arquivo a cada tentativa.
 for (const par of (argumentos.get("fragmento") || "").split(",").filter(Boolean)) {
-  const [nome, valor] = par.split(":");
+  const [nome, valor, primeiro] = par.split(":");
   const conjunto = CONJUNTOS[nome ?? ""];
   if (!conjunto) throw new Error(`conjunto desconhecido em --fragmento: ${nome}`);
   conjunto.fragmentoAtual = Number(valor);
+  // A terceira parte é o primeiro bloco: `--fragmento=matriz:22:14`. Só a
+  // matriz de Designações divide a folha 1 com título, KPIs e `h2`, e é o
+  // único valor que não se deduz do tamanho dos demais blocos.
+  if (primeiro) conjunto.fragmentoPrimeiro = Number(primeiro);
 }
 
 const css = cssCompilado(argumentos.get("css"));
@@ -959,6 +1262,8 @@ writeFileSync(
         textosNaMesmaPagina: f.textosNaMesmaPagina ?? [],
         semSobreposicao: f.semSobreposicao ?? false,
         paginasMaximas: f.paginasMaximas ?? null,
+        compositing: f.compositing ?? false,
+        semFaixaPreta: f.semFaixaPreta ?? false,
       })),
     },
     null,

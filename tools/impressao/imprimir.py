@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import pathlib
+import subprocess
 import sys
 
 # Tem de valer ANTES de o GTK inicializar.
@@ -35,6 +36,15 @@ import sys
 # `set_printer` falha do mesmo jeito silencioso. `WEBKIT_DISABLE_COMPOSITING_MODE`
 # porque o WebKit 2.52 pede um contexto GL que a sessão Wayland não concede a
 # uma janela offscreen, e aí o processo morre antes de renderizar.
+#
+# ATENÇÃO: desligar o compositing **esconde** um defeito real. Com ele ligado —
+# que é como o aplicativo roda — o `<canvas>` vira textura de GPU e o caminho de
+# impressão do WebKitGTK a pinta de **preto puro**: medido, 31,2% da folha em
+# `medicao-grafico-canvas`, contra as barras coloridas do mesmo desenho com o
+# compositing desligado. Por isso a fixtura que precisa da resposta honesta
+# declara `compositing: true` no manifesto, e é impressa num processo à parte —
+# a variável tem de valer antes de o GTK inicializar, e não há como trocá-la
+# depois.
 os.environ.setdefault("GTK_PRINT_BACKENDS", "file")
 os.environ.setdefault("LC_ALL", "C")
 os.environ.setdefault("WEBKIT_DISABLE_COMPOSITING_MODE", "1")
@@ -142,6 +152,11 @@ def main() -> int:
     parser.add_argument("--saida", default=str(RAIZ / "tools/impressao/saida"))
     parser.add_argument("--todas", action="store_true")
     parser.add_argument("--fixtura", action="append", default=[])
+    parser.add_argument(
+        "--compositing",
+        action="store_true",
+        help="uso interno: este processo já nasceu com o compositing ligado",
+    )
     args = parser.parse_args()
 
     pasta = pathlib.Path(args.fixturas)
@@ -154,6 +169,26 @@ def main() -> int:
         print("nada a imprimir: use --todas ou --fixtura=nome", file=sys.stderr)
         return 2
 
+    # As que pedem compositing saem num processo à parte: a variável de ambiente
+    # tem de valer antes de o GTK inicializar. Sem isto elas seriam impressas com
+    # o compositing desligado, e o defeito que existem para pegar sumiria.
+    if not args.compositing:
+        com_gpu = [f for f in escolhidas if f.get("compositing")]
+        if com_gpu:
+            subprocess.run(
+                [
+                    sys.executable,
+                    __file__,
+                    f"--fixturas={args.fixturas}",
+                    f"--saida={args.saida}",
+                    "--compositing",
+                    *[f"--fixtura={f['nome']}" for f in com_gpu],
+                ],
+                env={**os.environ, "WEBKIT_DISABLE_COMPOSITING_MODE": "0"},
+                check=True,
+            )
+            escolhidas = [f for f in escolhidas if not f.get("compositing")]
+
     for fixtura in escolhidas:
         destino = saida / f"{fixtura['nome']}.pdf"
         imprimir(
@@ -162,7 +197,8 @@ def main() -> int:
             fixtura["orientacao"],
             fixtura.get("documentoProprio", False),
         )
-        print(f"{fixtura['nome']:24} {fixtura['orientacao']:9} -> {destino.name}")
+        marca = " (compositing)" if args.compositing else ""
+        print(f"{fixtura['nome']:26} {fixtura['orientacao']:9} -> {destino.name}{marca}")
 
     (saida / "manifesto.json").write_text(json.dumps(manifesto, indent=2), "utf8")
     return 0
