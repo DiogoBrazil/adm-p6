@@ -5,6 +5,7 @@ node_modules
 # Dump do banco em producao: 44 MB com dados pessoais de 236 militares.
 # Fonte somente-leitura para gerar seeds e para a importacao; nunca versionar.
 adm-p6.sql
+adm_p6_normalized.sql
 
 # Backups gerados pela secao 6.1 do GUIA (`adm_p6_db_AAAA-MM-DD.dump`). Carregam
 # os mesmos dados pessoais que o `adm-p6.sql`, e nascem na raiz do repositorio:
