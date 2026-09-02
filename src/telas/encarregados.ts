@@ -151,10 +151,23 @@ let somenteVigentes = false;
 let situacaoSelecionada = "";
 let ordenacao = "total";
 
-/** Os recortes por balde, na mesma ordem em que a tabela os mostra. */
+/**
+ * Os recortes de situação, na ordem em que a tabela mostra os baldes.
+ *
+ * Quatro são os baldes exclusivos da decisão 57. `em_andamento` é o quinto
+ * item, mas **não** um quinto balde: é a união de `no_prazo` e `vencidos`,
+ * resolvida no filtro do backend (`repository::baldes_do_filtro`), e por isso
+ * vem logo antes dos dois que ela soma.
+ *
+ * Ela deixa "Sem prazo definido" de fora por decisão: o apuratório sem
+ * recebimento informado está em andamento, mas não tem prazo a acompanhar, e é
+ * prazo o que este recorte serve para acompanhar. Daí que somar os dois
+ * primeiros não fecha com `total - concluídos` quando existe algum sem prazo.
+ */
 const SITUACOES: { valor: string; rotulo: string }[] = [
   { valor: "", rotulo: "Todas as situações" },
   { valor: "concluidos", rotulo: "Concluídos" },
+  { valor: "em_andamento", rotulo: "Em andamento (todos)" },
   { valor: "no_prazo", rotulo: "Em andamento no prazo" },
   { valor: "vencidos", rotulo: "Em andamento vencido" },
   { valor: "sem_prazo", rotulo: "Sem prazo definido" },

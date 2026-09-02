@@ -204,8 +204,13 @@ pub struct DesignacaoMatrizFiltro {
     pub ano: Option<i32>,
     /// Recorta num militar só, para a ficha individual da tela.
     pub policial_militar_id: Option<String>,
-    /// Recorta num dos quatro baldes: `concluidos`, `no_prazo`, `vencidos` ou
-    /// `sem_prazo`.
+    /// Recorta num dos quatro baldes — `concluidos`, `no_prazo`, `vencidos` ou
+    /// `sem_prazo` — ou em `em_andamento`, que é a **união** de `no_prazo` e
+    /// `vencidos`.
+    ///
+    /// `em_andamento` não é um quinto balde: os quatro continuam exclusivos e
+    /// somando o total, e a união mora só no filtro. Ela deixa `sem_prazo` de
+    /// fora de propósito — ver `repository::baldes_do_filtro`.
     ///
     /// O recorte vale para os **apuratórios contados**, não para os militares
     /// listados: filtrando "vencidos", cada linha traz quantos vencidos aquele

@@ -98,6 +98,8 @@ entender X → olhe em Y".
 | Mandar um `<canvas>` para a impressão | com o compositing ligado — como o app roda — o WebKitGTK o pinta de **preto chapado**, sem erro nenhum. Congele em `<img>` antes: `graficos/index.ts::congelarGraficosParaImpressao`, que custa `data:` no `img-src` da CSP |
 | Esconder com `hidden` um canvas do Chart.js | não esconde: ele põe `display:block` inline ao montar, e não há `[hidden]` global no projeto. O canvas continua ocupando caixa e sai preto **ao lado** do PNG — o gráfico imprime em duplicata. Tire do **DOM**, e leia o vizinho antes para devolvê-lo ao lugar |
 | Fixtura de gráfico com o canvas nascendo oculto | canvas que nunca foi visível não ganha camada de composição: a fixtura aprova o que o PDF reprova. Pinte visível, deixe compor, ponha o `display:block` inline, e só então troque — `trocaPeloPng` |
+| Recorte que é **união** de baldes virando ramo novo do `CASE` | o `BALDE` é `CASE` de saída única, e é isso que torna os quatro exclusivos e somando o total. Um quinto `WHEN 'em_andamento'` roubaria linhas dos `FILTER`, que passariam a contar errado. União mora no **filtro** (`baldes_do_filtro` + `= ANY($n::text[])`), onde é pergunta e não classificação |
+| Rotular um recorte de "todos" sem conferir o que ele deixa de fora | "Em andamento (todos)" **não** inclui `sem_prazo`, então não fecha com `total - concluídos` (decisão 63). Escolha assim se registra em teste que diz o porquê, não só no código |
 | Medir impressão de gráfico com o compositing desligado | é o padrão de `tools/impressao/imprimir.py`, e ele **esconde** a faixa preta: o mesmo canvas sai pintado. Fixtura de gráfico declara `compositing: true`, e `semFaixaPreta` reprova folha com preto chapado |
 | Bloco indivisível alto logo abaixo da faixa de KPIs | `.analytics-card` não cabe nos 180mm úteis menos o cabeçalho, e o motor o desmancha por cima da folha seguinte. Ou ele desce (`data-impressao-ao-fim`), ou encolhe — e encolher ranking encavala rótulo |
 | Mudar o que vem antes de uma tabela fragmentada | o `linhasNoPrimeiroFragmentoImpressao` foi medido **com** o que estava lá. Mover um bloco na impressão obriga a remedir o primeiro bloco — em Designações, 18 → 12 |
@@ -107,7 +109,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 176 testes
+cd src-tauri && cargo fmt --check && cargo test   # 177 testes
 cd .. && npm test && npm run typecheck            # 19 testes frontend
 ```
 

@@ -747,6 +747,85 @@ async fn recorte_por_situacao_leva_as_datas_junto() {
     .await;
 }
 
+/// O recorte "em andamento", que é união de dois baldes — e não um quinto.
+///
+/// A Seção precisa perguntar "quanto este militar tem em mão", sem escolher
+/// entre no prazo e vencido. A união mora no filtro, não no `BALDE`: os quatro
+/// continuam exclusivos e somando o total, e é isso que este teste trava junto.
+///
+/// E ela deixa `sem_prazo` **de fora**, por decisão. O apuratório sem
+/// recebimento informado está em andamento, mas não tem prazo para estar no
+/// prazo ou vencido, e o recorte existe para acompanhar prazo. A consequência é
+/// que "em andamento" devolve **menos** que `total - concluídos` quando há algum
+/// deles — o que este teste afirma de propósito, para que a diferença seja uma
+/// escolha registrada e não uma surpresa no dia em que ela aparecer.
+#[tokio::test]
+async fn em_andamento_soma_no_prazo_e_vencido_e_deixa_sem_prazo_de_fora() {
+    util::com_banco_descartavel("rel_em_andamento", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let concluido = processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "001",
+            data(2026, 1, 5),
+            Some(data(2026, 2, 5)),
+        )
+        .await;
+        let no_prazo = processo(&pool, &m, &m.apuratorio, "002", data(2026, 1, 6), None).await;
+        let vencido = processo(&pool, &m, &m.apuratorio, "003", data(2026, 1, 7), None).await;
+        // Sem `prazo_vencendo_em`: é o balde que a união não alcança.
+        let sem_prazo = processo(&pool, &m, &m.apuratorio, "004", data(2026, 1, 8), None).await;
+
+        prazo_vencendo_em(&pool, &concluido, 30).await;
+        prazo_vencendo_em(&pool, &no_prazo, 30).await;
+        prazo_vencendo_em(&pool, &vencido, -1).await;
+
+        for p in [&concluido, &no_prazo, &vencido, &sem_prazo] {
+            designar(&pool, p, &m.pm_um, &m.papel_encarregado).await;
+        }
+
+        let andamento = repository::designations_matrix(
+            &pool,
+            &DesignacaoMatrizFiltro {
+                situacao: Some("em_andamento".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(andamento.len(), 1);
+        let s = andamento[0].situacao;
+        assert_eq!(s.no_prazo, 1);
+        assert_eq!(s.vencidos, 1);
+        assert_eq!(s.total, 2, "a união conta os dois baldes com prazo");
+        assert_eq!(s.concluidos, 0, "o recorte vale para o que é contado");
+        assert_eq!(
+            s.sem_prazo, 0,
+            "recebimento nunca informado não entra: não há prazo a acompanhar"
+        );
+
+        // O total sem recorte é 4, então a união devolve **menos** que
+        // `total - concluídos`. É a consequência aceita da decisão, e está aqui
+        // para que mudá-la exija mudar um teste que diz o porquê.
+        let tudo = repository::designations_matrix(&pool, &DesignacaoMatrizFiltro::default())
+            .await
+            .unwrap();
+        assert_eq!(tudo[0].situacao.total, 4);
+        assert_eq!(
+            tudo[0].situacao.total - tudo[0].situacao.concluidos,
+            3,
+            "três não concluídos, contra os dois que a união recorta"
+        );
+
+        // A célula do apuratório carrega a mesma união.
+        assert_eq!(andamento[0].celulas.len(), 1);
+        assert_eq!(andamento[0].celulas[0].situacao.total, 2);
+    })
+    .await;
+}
+
 /// A ordenação por data, e quem não tem data.
 ///
 /// Militar que nunca concluiu nada não é "o que concluiu há mais tempo": é o que

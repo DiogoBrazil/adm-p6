@@ -613,7 +613,12 @@ export interface DesignacaoMatrizFiltro {
   /** Recorta num militar só, para a ficha individual da tela. */
   policial_militar_id?: string | null;
   /**
-   * Um dos quatro baldes: `concluidos`, `no_prazo`, `vencidos`, `sem_prazo`.
+   * Um dos quatro baldes — `concluidos`, `no_prazo`, `vencidos`, `sem_prazo` —
+   * ou `em_andamento`, que é a **união** de `no_prazo` e `vencidos`.
+   *
+   * `em_andamento` não é um quinto balde: os quatro seguem exclusivos e somando
+   * o total, e a união se resolve no filtro do backend. Ela deixa `sem_prazo`
+   * de fora de propósito — ver `repository::baldes_do_filtro`.
    *
    * O recorte vale para os **apuratórios contados**, e as datas saem do
    * conjunto filtrado — é o que faz "quem concluiu por último" responder.

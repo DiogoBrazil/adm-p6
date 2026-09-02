@@ -705,6 +705,33 @@ const BALDE: &str = "CASE
         WHEN prazo.data_vencimento >= CURRENT_DATE THEN 'no_prazo'
         ELSE 'vencidos' END";
 
+/// Os baldes que cada valor do filtro de situação recorta.
+///
+/// "em_andamento" **não é um balde novo**: é a união de dois. Acrescentá-lo como
+/// quinto ramo do `BALDE` quebraria a exclusividade que faz os quatro somarem o
+/// total, e os quatro `FILTER` da consulta passariam a contar errado — um
+/// apuratório no prazo cairia em "no_prazo" ou em "em_andamento", conforme a
+/// ordem dos `WHEN`, e nunca nos dois. A união mora aqui, no filtro, que é o
+/// único lugar onde ela é uma pergunta e não uma classificação.
+///
+/// **"Sem prazo definido" fica de fora**, por decisão: o apuratório cujo
+/// recebimento nunca foi informado está em andamento, mas não tem prazo para
+/// estar no prazo ou vencido, e este recorte existe para acompanhar prazo. Daí
+/// que o filtro devolve menos que `total - concluídos` quando há algum deles.
+///
+/// Valor desconhecido devolve ele mesmo, e não `None`: hoje `BALDE = 'lixo'` não
+/// casa com linha nenhuma, e transformá-lo em "todas as situações" trocaria uma
+/// lista vazia por uma lista cheia sem ninguém pedir. Devolver `Some(vec![])`
+/// também não serve — `= ANY('{}')` é falso para toda linha, mas por acidente:
+/// a intenção fica ilegível na consulta.
+fn baldes_do_filtro(situacao: Option<&str>) -> Option<Vec<String>> {
+    match situacao {
+        None => None,
+        Some("em_andamento") => Some(vec!["no_prazo".to_string(), "vencidos".to_string()]),
+        Some(balde) => Some(vec![balde.to_string()]),
+    }
+}
+
 /// Ordena as linhas por uma data, com quem não tem data **sempre no fim**.
 ///
 /// Nas duas direções: militar que nunca concluiu nada não é "o que concluiu há
@@ -804,7 +831,7 @@ pub async fn designations_matrix(
             AND ($3::int    IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::int = $3)
             AND ($4::uuid   IS NULL OR d.policial_militar_id = $4::uuid)
             AND (NOT $5 OR d.data_fim IS NULL)
-            AND ($6::text   IS NULL OR {BALDE} = $6)
+            AND ($6::text[] IS NULL OR {BALDE} = ANY($6::text[]))
           GROUP BY pm.id, pm.nome, pm.matricula, pg.sigla, a.id, a.sigla
           ORDER BY pm.nome, a.sigla"
     ))
@@ -813,7 +840,7 @@ pub async fn designations_matrix(
     .bind(filter.ano)
     .bind(filter.policial_militar_id.as_deref())
     .bind(filter.somente_vigentes.unwrap_or(false))
-    .bind(filter.situacao.as_deref())
+    .bind(baldes_do_filtro(filter.situacao.as_deref()))
     .fetch_all(pool)
     .await?;
 
