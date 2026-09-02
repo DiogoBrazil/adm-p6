@@ -464,12 +464,32 @@ export interface SavedMapListResult {
   per_page: number;
 }
 
+/**
+ * `maps_reports` — o conteúdo do `dados_mapa`.
+ *
+ * O mapa salvo guarda as duas saídas que a tela do período produz: o `resumo`,
+ * que é a tabela, e o `completo`, que são as capas e fichas do documento A4.
+ * As duas moram no mesmo JSONB porque o schema admite exatamente duas colunas
+ * desse tipo, e `tests/migrations.rs` reprova uma terceira — a decisão está
+ * registrada, e o envelope é o jeito de respeitá-la.
+ *
+ * O período **não** entra aqui: `periodo_inicio` e `periodo_fim` já são colunas
+ * de `mapas_salvos`, e repeti-los criaria uma segunda fonte de verdade para o
+ * mesmo fato.
+ */
+export interface SavedMapSnapshot {
+  versao: number;
+  resumo: MapRow[];
+  /** `null` em mapa salvo antes de a rodada 35 passar a guardar o documento. */
+  completo: MapPrintItem[] | null;
+}
+
 /** `maps_reports` */
 export interface SavedMapFull extends SavedMapListItem {
   /** Snapshot imutável do mapa como foi emitido. É o único JSONB de domínio do */
   /** schema, e é justificado: recalcular hoje daria outro resultado — preservar */
   /** exatamente o que foi publicado é a razão de o mapa ser salvo. */
-  dados_mapa: unknown;
+  dados_mapa: SavedMapSnapshot;
 }
 
 /** `maps_reports` */
@@ -496,7 +516,7 @@ export interface SaveMapRequest {
   total_processos: number;
   total_concluidos: number;
   total_andamento: number;
-  dados_mapa: unknown;
+  dados_mapa: SavedMapSnapshot;
 }
 
 /** `maps_reports` */

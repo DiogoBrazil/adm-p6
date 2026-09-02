@@ -112,13 +112,19 @@ entender X → olhe em Y".
 | Fixtura de impressão com o tamanho do bloco escrito à mão | `matriz-normalizada` guardava `22, 18` enquanto a tela já estava em 12: ela certificava uma folha que o app não imprime mais, e só reprovou quando o cabeçalho institucional entrou. Tamanho de bloco sai de `CONJUNTOS`, que é onde o valor da tela mora |
 | Imagem criada no clique de imprimir | o WebKitGTK imprime **espaço em branco** por uma `<img>` ainda não decodificada, sem erro. `await img.decode()` antes de chamar o comando de impressão — `mapa-pdf.ts::aguardarImagens` e `dom.ts::inserirCabecalhoInstitucional` |
 
+| `#[sqlx(flatten)]` sem `#[serde(flatten)]` | são atributos de coisas diferentes: `sqlx` monta o struct a partir da linha, `serde` achata a resposta. Só o primeiro deixa o JSON aninhado sob o campo, e a tela lê `undefined` em **todos** os campos do cabeçalho — sem erro no Rust nem no TypeScript, porque `types.ts` declara os campos no topo e o compilador acredita na declaração |
+| Testar `resposta.cabecalho.titulo` num struct achatado | é o campo do struct, que o serde não altera: o teste passa com e sem o flatten. Quem afere contrato de JSON serializa e olha o JSON — `tests/commands_ipc.rs`, e as duas metades (campo no topo **e** ausência do aninhado) |
+
+| Passar um botão de **ícone** como gatilho de `comCarregamento` | ele escreve a mensagem no botão e restaura o rótulo no fim; num `.botao-icone` o conteúdo é um `<svg>` e `textContent` é vazio, então escrever **apaga o desenho** e restaurar devolve nada — o botão fica um quadrado em branco até a tela redesenhar. O helper pula os `.botao-icone`: quem informa ali é o véu |
+| Coluna `nowrap` mais estreita que o conteúdo em tabela `--fixa` | `table-layout: fixed` não encolhe nem corta: a célula **transborda por cima da vizinha**. Só `truncar` corta com reticências (e dá o `title`). Largura de coluna com dado de tamanho conhecido se mede no motor, não se estima — data `dd/mm/aaaa` pede ~96px |
+
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 178 testes
-cd .. && npm test && npm run typecheck            # 19 testes frontend
+cd src-tauri && cargo fmt --check && cargo test   # 180 testes
+cd .. && npm test && npm run typecheck            # 20 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

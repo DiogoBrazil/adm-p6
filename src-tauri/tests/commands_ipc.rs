@@ -1111,6 +1111,79 @@ fn listagens_paginadas_falam_a_mesma_lingua_pelo_ipc() {
     });
 }
 
+/// O detalhe do mapa salvo chega à tela com o cabeçalho **no topo** do JSON.
+///
+/// `SavedMapFull` carrega o cabeçalho num campo aninhado e depende de dois
+/// atributos que fazem coisas diferentes: `sqlx(flatten)` para montar o struct
+/// a partir da linha, `serde(flatten)` para achatar a resposta. Faltava o
+/// segundo, e o efeito foi um PDF oficial cujo cabeçalho dizia "undefined a
+/// undefined · undefined no período · undefined em andamento".
+///
+/// Nenhum teste pegou porque todos aferiam `completo.cabecalho.titulo` — o
+/// campo do struct, que o serde não altera. Este afere o **JSON**, que é o que
+/// a tela recebe, e as duas metades importam: `titulo` no topo prova que
+/// achatou, e a ausência de `cabecalho` prova que não achatou *além* de
+/// aninhar. Sem a segunda, voltar a aninhar passaria de novo.
+#[test]
+fn o_mapa_salvo_chega_achatado_ao_frontend() {
+    com_app_e_banco("ipc_mapa_achatado", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        let id = ok(&invocar(
+            &webview,
+            "reports_save_map",
+            json!({ "request": {
+                "titulo": "Mapa de Marco/2026",
+                "apuratorio_id": null,
+                "periodo_inicio": "2026-03-01",
+                "periodo_fim": "2026-03-31",
+                "total_processos": 3,
+                "total_concluidos": 1,
+                "total_andamento": 2,
+                "dados_mapa": { "versao": 2, "resumo": [], "completo": [] },
+            }}),
+        ))
+        .as_str()
+        .expect("id do mapa salvo")
+        .to_string();
+
+        let mapa = ok(&invocar(
+            &webview,
+            "reports_get_saved_map",
+            json!({ "id": id }),
+        ))
+        .clone();
+
+        assert!(
+            mapa.get("cabecalho").is_none(),
+            "o cabecalho nao pode chegar aninhado: a tela le os campos no topo, e \
+             um objeto a mais faz cada um deles virar undefined sem erro nenhum"
+        );
+        for campo in [
+            "id",
+            "titulo",
+            "periodo_inicio",
+            "periodo_fim",
+            "total_processos",
+            "total_concluidos",
+            "total_andamento",
+            "gerado_por",
+            "created_at",
+        ] {
+            assert!(
+                mapa.get(campo).is_some(),
+                "SavedMapFull sem '{campo}' no topo — o cabecalho do PDF o imprime"
+            );
+        }
+        assert_eq!(mapa["titulo"], json!("Mapa de Marco/2026"));
+        assert_eq!(mapa["total_processos"], json!(3));
+
+        // E o snapshot continua sendo campo de primeiro nível, ao lado deles.
+        assert_eq!(mapa["dados_mapa"]["versao"], json!(2));
+        assert!(mapa["dados_mapa"]["resumo"].is_array());
+    });
+}
+
 /// Desativar e excluir militar são comandos diferentes, e os dois passam pelo
 /// IPC — não só pelo repositório.
 ///

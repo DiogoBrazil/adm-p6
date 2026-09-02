@@ -117,7 +117,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 169 testes, bancos descartáveis
+cargo test                           # 180 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -848,6 +848,9 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Combinar dois modificadores de tabela que discordam | `--larga` pede `min-width: 1060px` e `--fixa` pede `0`. Mesma especificidade: quem vence é a **ordem no arquivo**, e a ordem dá `0` — dez colunas espremidas na largura do painel, sem ninguém ter escolhido isso | Seletor composto, de especificidade maior, decidindo de propósito: `.tabela-dados--larga.tabela-dados--fixa { min-width: 1060px }` |
 | Pôr um bloco indivisível alto logo abaixo de uma faixa de KPIs | `.analytics-card` é `break-inside: avoid` e o cartão de ranking mede 532px (11 militares) a 700px de altura — mais que os 180mm úteis da A4 paisagem menos o cabeçalho. O motor não tem onde o pôr: desmancha o cartão por cima da folha seguinte e ainda empurra o que vem depois. Medido em Designações, `medicao-designacoes-folha1`: **duas** folhas gastas antes da primeira linha da matriz — a primeira com título, KPIs e a faixa preta do gráfico, a segunda só com o `h2` da matriz | Ou o bloco desce, ou ele encolhe — e encolher um ranking encavala os rótulos de três linhas. Designações desce: `data-impressao-ao-fim` na `.analytics-grid`, e `dom.ts::adiarBlocosParaOFimDaImpressao` a move para o fim do `.panel` só enquanto o diálogo está aberto. O primeiro bloco da matriz é **remedido** depois disso — 18 valia para uma folha 1 que a matriz não alcançava |
 | Guardar o brasão dos documentos na pasta de ícones do Tauri | `src-tauri/icons/icon.png` era, ao mesmo tempo, o brasão da PMRO que quatro telas carregam (sidebar, login, capa do Anual e o Mapa Mensal inteiro) e a vaga que `npx tauri icon` sobrescreve ao gerar o ícone do app. Gerar o ícone **trocava o brasão de todos os documentos** pelo distintivo do batalhão, sem erro e sem aviso — e o Mapa Mensal, que ninguém pediu para mexer, sairia com o emblema errado | O brasão é `src/assets/brasao-pmro.png` e sai de `src/brasao.ts`, numa fonte só (estava triplicado em `main.ts`, `anual.ts` e `mapa-pdf.ts`). `src-tauri/icons/` passa a ser exclusivamente do empacotador. Quem prova que a separação funcionou é `controle-mapa.sh`: mesmos bytes em caminho novo têm de dar PDF idêntico ao de `HEAD`, texto **e** pixel |
+| Achatar a resposta com `sqlx(flatten)` achando que serve para o JSON | Os dois atributos governam sentidos opostos: `#[sqlx(flatten)]` monta o struct **a partir** da linha do banco; `#[serde(flatten)]` achata o struct **para** o JSON. `SavedMapFull` tinha só o primeiro, e a resposta saía `{ "cabecalho": {…}, "dados_mapa": [...] }` enquanto `types.ts` declarava os 11 campos no topo. O detalhe do mapa salvo imprimiu meses de PDF com o cabeçalho `undefined a undefined · undefined no período · undefined em andamento · undefined concluídos · gerado por —`, e a tabela abaixo saía perfeita — porque `dados_mapa` era o único campo realmente de primeiro nível | Os dois atributos juntos. E o teste tem de olhar o **JSON**, não o struct: `assert_eq!(completo.cabecalho.titulo, …)` passa exatamente igual com e sem o flatten, que foi por que nenhum dos 178 testes viu. `commands_ipc.rs::o_mapa_salvo_chega_achatado_ao_frontend` afere as duas metades — `titulo` no topo e `cabecalho` ausente |
+| Dar um botão de ícone a `comCarregamento` como gatilho | O helper escreve a mensagem de progresso no botão que disparou a ação e restaura o rótulo no `finally`. Isso vale para botão de texto; num `.botao-icone` o conteúdo é um `<svg>` e `textContent` é a string vazia, então a escrita **remove o ícone do DOM** e a restauração devolve vazio. O botão vira um quadrado em branco, e só volta quando a tela é redesenhada — foi o que aconteceu com "Ver PDF completo" na listagem de mapas salvos | `comCarregamento` pula os `.botao-icone`: neles só o `disabled` muda, e quem informa é o véu, que já está na frente de tudo. `dom.test.ts` trava as duas propriedades de que a decisão depende: o botão traz a classe e não tem texto nenhum fora das tags |
+| Estimar largura de coluna em tabela de largura declarada | `Coluna.largura` liga `table-layout: fixed`, e ali uma célula `nowrap` menor que o conteúdo **não** encolhe nem corta: transborda por cima da coluna vizinha, sem aviso. A coluna "Em" dos mapas salvos tinha 5% (46px) para uma data que pede 96px | Medir no motor do app, com o CSS compilado — `<col>` só ganha largura por `aplicarLarguras`, então a página de medição precisa assar o `data-largura` em `style`, como `gerar-fixturas.ts::comLarguras` faz. E escolher a defesa certa: `truncar` corta com reticências e dá o `title` (serve a texto livre); tirar o `nowrap` deixa quebrar em duas linhas (serve a um intervalo de datas, que cortado esconderia metade); percentual nenhum salva ícone, que não encolhe |
 | Escrever à mão, na fixtura, o tamanho do bloco que a tela declara | `matriz-normalizada` chamava `blocosDeImpressao(linhas.length, 22, 18)` com os números digitados, e o `18` ficou para trás quando `encarregados.ts` baixou o primeiro bloco para 12. A fixtura passou a certificar uma folha que o app não imprime mais — e passou verde por várias rodadas, porque a folha maior acomodava o bloco maior. Só reprovou quando o cabeçalho institucional tirou 24mm do topo: a última linha do bloco de 18 cruzou a margem inferior por **0,8pt** | Tamanho de bloco sai de `CONJUNTOS`, que é onde o valor da tela mora — `fragmentoAtual` e `fragmentoPrimeiro`, como `calibrado-designacoes-folha1` já fazia. Fixtura que copia o número em vez de o ler mede a si mesma |
 | Criar a imagem no clique de imprimir e não esperar por ela | Uma `<img>` inserida no DOM durante a preparação da impressão ainda não está decodificada quando o comando nativo abre o diálogo, e o WebKitGTK imprime **o espaço em branco** no lugar dela — sem erro, sem console, sem nada. Um PDF oficial sem brasão parece um PDF que simplesmente não tem brasão | `await img.decode()` antes de chamar `print_portrait`/`print_report_landscape`, e falhar alto se não decodificar: `mapa-pdf.ts::aguardarImagens` foi o primeiro, `dom.ts::inserirCabecalhoInstitucional` é o segundo. Quem confere no arnês é `pdfimages -list`, que mostra a imagem e a `smask` na folha 1 — `pdftotext` não vê imagem nenhuma |
 
@@ -1035,6 +1038,8 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que a série por ano ignora o filtro de ano | `maps_reports/repository.rs::by_year` (cabeçalho) — o ano é o eixo dela |
 | onde mora o brasão, e por que não na pasta de ícones | `src/brasao.ts` (cabeçalho) e a armadilha do `tauri icon` na seção 7 |
 | quem põe o brasão no topo de todo relatório | `dom.ts::inserirCabecalhoInstitucional`, chamada por `abrirImpressao` — e a guarda do perfil `documento`, que evita o segundo brasão no Relatório Anual |
+| por que o mapa salvo guarda resumo e documento no mesmo JSONB | `migrations/0020_snapshot_mapa_completo.sql` (cabeçalho) e o `SavedMapSnapshot` de `types.ts` — o schema admite dois JSONB, e `tests/migrations.rs` reprova o terceiro |
+| como o PDF completo de um mapa salvo é reemitido sem recalcular | `mapas.ts::gerarPdfCompleto` — o snapshot alimenta o mesmo `renderDocumentoMapa` da tela ao vivo, e o período sai das colunas da linha |
 | o diagnóstico do estado anterior | `a seção 13` |
 
 ---
@@ -1888,6 +1893,35 @@ girada só aparece pelo `run_dialog`.
       cartão de volta à posição de tela, fragmentos removidos
 - [ ] **Mapa Mensal** inalterado
 
+### p-septies) Mapas salvos (seção 12, rodada 35)
+
+O binário de produção, com o console aberto.
+
+- [ ] **Mapa do Período** → gerar → **Salvar**: o véu passa por "Reunindo o
+      documento completo…" e "Salvando…", e o toast diz que salvou os dois
+- [ ] As datas da tabela do mapa saem `dd/mm/aaaa` — nesta tela **e** no mapa
+      salvo, que dividem a mesma `linhaMapa`. Sem conclusão a coluna continua
+      dizendo "em andamento", não travessão
+- [ ] **Mapas Salvos**: a coluna **AÇÕES** com três ícones, e cada um fazendo a
+      **sua** coisa. Se dois deles abrirem a mesma tela, é `data-` repetido
+- [ ] **Ver resumo**: cabeçalho com título, período em `dd/mm/aaaa`, os três
+      totais e quem gerou. **Nenhum `undefined`** — era o defeito da rodada
+- [ ] "Imprimir / PDF" dali leva esse cabeçalho ao papel
+- [ ] **Ver PDF completo**: capas e fichas iguais às que a tela do período
+      produz para o mesmo escopo. Comparar os dois PDFs lado a lado é a
+      conferência que importa
+- [ ] **Excluir** tira da listagem e o contador do título acompanha — e o
+      resumo **não** tem mais esse botão: lá ficam só Voltar e Imprimir / PDF
+- [ ] Clicar em "Ver PDF completo" e fechar o diálogo: **o ícone continua lá**.
+      Quadrado em branco no lugar dele é o defeito do `comCarregamento`
+- [ ] Nenhuma coluna da listagem invade a vizinha — em especial "Em", e com a
+      janela estreitada até o mínimo (1024). O período usa duas linhas de
+      propósito; título e "gerado por" cortam com reticências e mostram o valor
+      inteiro no `title`
+- [ ] O que o banco gravou:
+      `SELECT jsonb_object_keys(dados_mapa) FROM mapas_salvos;` → `versao`,
+      `resumo`, `completo`
+
 ### p-sexies) O brasão nos documentos e o ícone do app (seção 12, rodada 34)
 
 O binário de produção — é ele que carrega a CSP restritiva, e o brasão é uma
@@ -2053,7 +2087,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
 
 ---
 
-## 12. Changelog — as 34 rodadas
+## 12. Changelog — as 35 rodadas
 
 O que cada rodada resolveu, em ordem. O **porquê** de cada decisão está na seção 3, e
 o que cada uma ensinou está na seção 7 — aqui fica só o registro de que aconteceu.
@@ -2095,6 +2129,7 @@ A narrativa completa de cada uma está no histórico do git.
 | 32 | **O recorte "em andamento"** | A tela de Designações passou a oferecer "Em andamento (todos)" no filtro de situação, somando no prazo e vencido. A união ficou **no filtro**, não no `BALDE`: os quatro baldes continuam exclusivos e somando o total, e o predicado virou `= ANY($6::text[])`. "Sem prazo definido" fica de fora por decisão, com a consequência — o filtro devolve menos que `total - concluídos` — travada em teste. Sem migration, sem comando novo. Decisão **63**. |
 | 33 | **Loaders, boas-vindas e a tabela do mapa** | O app não dizia que estava trabalhando: o login não desabilitava nem o botão, seis telas imprimiam sem retorno nenhum e a troca de rota deixava a tela anterior inteira e clicável enquanto onze consultas corriam. Entrou um helper único, `comCarregamento`, com véu fora de `#app` — `shell()` reescreve o `innerHTML` a cada tela — e a regra que o faz funcionar: **ceder um quadro antes do trabalho**, porque quase tudo aqui é síncrono e sem isso o véu só pintaria depois. No Mapa Mensal, onde a paginação bloqueia a thread e congela a própria animação, quem informa é a mensagem em três fases. O login parou de redesenhar a tela no erro, que apagava e-mail e senha digitados, e passou a dar as boas-vindas por toast. A tabela do conteúdo do mapa — a única listagem declarada como `string[]` — ganhou o padrão das demais, e as dez larguras saíram do `report-print.css` para `Coluna.largura`: o papel já as tinha, a tela não. E a ordem das seções do PDF virou coluna administrável (0019), com SR, IPM e PADS à frente. Decisão **64**. |
 | 34 | **O brasão em todo documento, e o ícone do app** | Só o Mapa Mensal e o Relatório Anual saíam identificados; os outros oito caminhos imprimíveis levavam ao papel o `<h1>` da tela e mais nada — documento oficial da Seção sem dizer de que Seção é. O cabeçalho institucional (brasão de 16mm, "Polícia Militar de Rondônia" e "7º BPM · Seção de Justiça e Disciplina") entra num lugar só, `dom.ts::abrirImpressao`, que é o gargalo por onde todo o caminho comum passa: tela nova nasce com cabeçalho sem ninguém lembrar. O perfil `documento` é pulado por guarda em JS, porque o Anual já tem capa e dois brasões na mesma folha é defeito. A parte que exigiu cuidado foi a colisão de arquivo: `src-tauri/icons/icon.png` era **ao mesmo tempo** o brasão que quatro telas carregam e a vaga que `tauri icon` sobrescreve — gerar o ícone teria trocado o brasão do Mapa Mensal pelo distintivo do batalhão, sem erro nenhum. O brasão saiu para `src/assets/brasao-pmro.png` com fonte única em `src/brasao.ts` (estava triplicado), e `controle-mapa.sh` provou o congelamento: idêntico a `HEAD`, texto e pixel. O distintivo do 7º BPM virou o ícone, e com isso `bundle.icon` deixou de estar vazio — o build volta a empacotar deb, rpm e AppImage, e o `--no-bundle` saiu de cinco pontos da documentação. O arnês passou a emitir o cabeçalho nas fixturas, ganhou o par de regressão que exige o texto no comum e o proíbe no `documento`, e no caminho **reprovou** `matriz-normalizada`: ela guardava `22, 18` escritos à mão enquanto a tela já estava em 12. Os nove blocos calibrados sobreviveram aos 24mm a mais — medido, não suposto: 38/38. Sem migration. |
+| 35 | **Mapas salvos: o cabeçalho `undefined` e o documento completo** | Abrir um mapa salvo e imprimir dava um PDF cujo cabeçalho dizia `undefined a undefined · undefined no período · undefined em andamento · undefined concluídos`, com o título vazio e a tabela perfeita logo abaixo. O dado no banco estava íntegro: `SavedMapFull` tinha `#[sqlx(flatten)]` e **não** `#[serde(flatten)]`, então a resposta saía aninhada sob `cabecalho` enquanto `types.ts` declarava os campos no topo — nenhum erro em lugar nenhum, e os 178 testes cegos porque todos aferiam o campo do struct, que o serde não altera. Uma linha corrige; o guarda novo mora em `commands_ipc.rs` e olha o JSON, exigindo `titulo` no topo **e** a ausência de `cabecalho`. Junto: as datas dos mapas deixaram o ISO e passaram por `formatarData`, o que também corrigiu a tela do Mapa do Período, que dividia a mesma `linhaMapa`. E o mapa salvo passou a guardar o **documento completo**, não só o resumo — os dois num envelope dentro do mesmo `dados_mapa`, porque o schema admite exatamente dois JSONB e a `migrations.rs` reprova o terceiro; o período fica de fora do envelope, já que `periodo_inicio`/`periodo_fim` são colunas. A listagem ganhou a coluna **AÇÕES** com ver resumo, ver PDF completo e excluir — cada botão com o seu `data-` —, e o PDF completo é reemitido do snapshot pelo mesmo `renderDocumentoMapa` da tela ao vivo, sem recalcular. Numa segunda volta saíram três arestas da própria rodada: o ícone de PDF completo **sumia** depois do clique, porque `comCarregamento` escreve a mensagem no gatilho e num botão de ícone isso apaga o `<svg>`; a coluna "Em" transbordava por cima da vizinha, e as nove larguras foram **medidas** no WebKitGTK com o CSS compilado em vez de estimadas; e o Excluir saiu do resumo, que agora tem só Voltar e Imprimir / PDF. Migration **0020**. |
 
 ### A rodada 31, em detalhe
 

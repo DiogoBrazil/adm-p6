@@ -1293,7 +1293,15 @@ async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
     util::com_banco_descartavel("mapa_salvo", |pool| async move {
         let m = fixtures::mundo_configurado(&pool).await;
         let autor = fixtures::conta_militar(&pool, &m.pm_um, "mapa@teste.com").await;
-        let snapshot = json!([{ "rotulo": "TST-A nº 001", "responsavel_nome": "PM UM" }]);
+        // O envelope que a tela grava desde a 0020: o resumo é a tabela, o
+        // completo alimenta `renderDocumentoMapa`. Os dois no mesmo JSONB
+        // porque o schema admite exatamente dois, e `migrations.rs` reprova um
+        // terceiro.
+        let snapshot = json!({
+            "versao": 2,
+            "resumo": [{ "rotulo": "TST-A nº 001", "responsavel_nome": "PM UM" }],
+            "completo": [{ "processo": { "rotulo": "TST-A nº 001" }, "prazos": [] }],
+        });
 
         let mut tx = pool.begin().await.unwrap();
         let id = repository::save_map(
@@ -1335,6 +1343,11 @@ async fn mapa_salvo_preserva_o_snapshot_e_o_autor() {
             .unwrap();
         assert_eq!(completo.dados_mapa, snapshot, "o snapshot volta intacto");
         assert_eq!(completo.cabecalho.titulo, "Mapa de Março/2026");
+        assert!(
+            completo.dados_mapa["completo"].is_array(),
+            "o documento completo tem de voltar junto: e ele que o icone de PDF \
+             completo da listagem reemite, sem recalcular nada"
+        );
 
         // Mudar o mundo depois NÃO reescreve o mapa emitido.
         sqlx::query("UPDATE apuratorios SET sigla = 'TST-Z' WHERE id = $1::uuid")

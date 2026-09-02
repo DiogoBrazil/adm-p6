@@ -100,6 +100,7 @@ import type {
   SavedMapFull,
   SavedMapListItem,
   SavedMapListResult,
+  SavedMapSnapshot,
   SelecaoInfracaoEstatuto,
   SelecaoInfracaoPenal,
   SessionUser,

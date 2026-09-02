@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blocosDeImpressao, tabela } from "./dom";
+import { blocosDeImpressao, botaoIcone, tabela } from "./dom";
 
 describe("tabela para impressão", () => {
   it("marca somente as tabelas que optam pela fragmentação no WebKitGTK", () => {
@@ -48,5 +48,23 @@ describe("blocosDeImpressao", () => {
       [18, 40],
       [40, 50],
     ]);
+  });
+});
+
+describe("botão de ícone", () => {
+  // `comCarregamento` escreve a mensagem de progresso no botão que a disparou,
+  // e restaura o rótulo no fim. Num botão de ícone isso **apagava o desenho**:
+  // o conteúdo é um `<svg>`, `textContent` ali é vazio, e restaurar o vazio
+  // deixava um quadrado em branco até a tela ser redesenhada. Por isso o helper
+  // pula os `.botao-icone`, e por isso este teste trava as duas propriedades de
+  // que aquela decisão depende.
+  it("não tem texto para emprestar, e se identifica pela classe", () => {
+    const html = botaoIcone("documento", "Ver PDF completo", { classe: "outline" });
+
+    expect(html).toContain("botao-icone");
+    expect(html).toContain("<svg");
+    // Nada fora das tags: o nome acessível vem de `aria-label`/`title`, não de
+    // texto no corpo do botão.
+    expect(html.replace(/<[^>]*>/g, "").trim()).toBe("");
   });
 });

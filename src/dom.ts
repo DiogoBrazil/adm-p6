@@ -78,6 +78,7 @@ export type IconeAcao =
   | "padrao"
   | "excluir"
   | "baixar"
+  | "documento"
   | "substituir"
   | "adicionar";
 
@@ -91,6 +92,11 @@ function iconeAcao(nome: IconeAcao): string {
     padrao: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z"/>',
     excluir: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m7 7 1 13h8l1-13"/><path d="M10 11v5M14 11v5"/>',
     baixar: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+    // Folha com linhas: o documento completo, por oposição ao resumo que o
+    // olho de `abrir` mostra. `baixar` diria download, e aqui o clique abre o
+    // diálogo de impressão.
+    documento:
+      '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
     // Duas setas em sentidos opostos: quem sai e quem entra na mesma função.
     substituir: '<path d="M4 8h13"/><path d="m13 4 4 4-4 4"/><path d="M20 16H7"/><path d="m11 12-4 4 4 4"/>',
     adicionar: '<path d="M12 5v14M5 12h14"/>',
@@ -1126,11 +1132,17 @@ export async function comCarregamento<T>(
 ): Promise<T> {
   const veu = document.querySelector<HTMLElement>("#carregando");
   const alvo = veu?.querySelector<HTMLElement>(".carregando__mensagem");
-  const rotulo = gatilho?.textContent ?? "";
+  // Botão de ícone não empresta o rótulo: o conteúdo dele é um `<svg>`, e
+  // `textContent` ali é a string vazia. Escrever a mensagem **apaga o ícone**,
+  // e restaurar o "rótulo" no fim devolve vazio — o botão fica um quadrado sem
+  // desenho até a tela ser redesenhada. Quem informa nesses casos é o véu, que
+  // já está na frente de tudo; aqui basta desabilitar.
+  const rotulavel = !!gatilho && !gatilho.classList.contains("botao-icone");
+  const rotulo = rotulavel ? (gatilho.textContent ?? "") : "";
 
   const escrever = (texto: string) => {
     if (alvo) alvo.textContent = texto;
-    if (gatilho) gatilho.textContent = texto;
+    if (rotulavel) gatilho.textContent = texto;
   };
 
   if (gatilho) gatilho.disabled = true;
@@ -1149,7 +1161,7 @@ export async function comCarregamento<T>(
     if (veu && veusAbertos === 0) veu.hidden = true;
     if (gatilho) {
       gatilho.disabled = false;
-      gatilho.textContent = rotulo;
+      if (rotulavel) gatilho.textContent = rotulo;
     }
   }
 }

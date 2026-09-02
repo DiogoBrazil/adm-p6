@@ -20,6 +20,7 @@ import {
   baixarCsvBase64,
   comCarregamento,
   escapeHtml,
+  formatarData,
   formatarOrigem,
   formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
@@ -100,15 +101,17 @@ const linhaMapa = (l: MapRow) => [
   l.rotulo,
   formatarOrigem(l.unidade_origem, l.subunidade_secao_origem),
   l.natureza_fato ?? "—",
-  l.data_instauracao,
-  l.data_conclusao ?? "em andamento",
+  formatarData(l.data_instauracao),
+  // Sem conclusão o apuratório não é "sem data": está em andamento, e é isso
+  // que a coluna diz. `formatarData` devolveria o travessão das outras.
+  l.data_conclusao ? formatarData(l.data_conclusao) : "em andamento",
   formatarQualificacaoMilitar(
     l.responsavel_posto_graduacao,
     l.responsavel_matricula,
     l.responsavel_nome,
   ),
   l.envolvidos ?? "—",
-  l.prazo_vencimento ?? "—",
+  formatarData(l.prazo_vencimento),
   l.ultimo_andamento ?? "—",
 ];
 
@@ -289,28 +292,58 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
     void renderMapaMensal(ctx);
   });
 
-  document.querySelector<HTMLButtonElement>("#btn-salvar-mapa")?.addEventListener("click", async () => {
+  document.querySelector<HTMLButtonElement>("#btn-salvar-mapa")?.addEventListener("click", async (evento) => {
     if (!linhasGeradas) return;
+    const linhas = linhasGeradas;
+    const botao = evento.currentTarget as HTMLButtonElement;
     const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
-    // O mapa salvo é snapshot do que foi emitido: recalcular depois daria outro
-    // resultado, e é por isso que ele é salvo. `apuratorio_id` só é preenchido
-    // quando o mapa é de uma espécie só.
-    const resposta = await call("reports_save_map", {
-      request: {
-        titulo: tituloDoMapa(apuratorios),
-        apuratorio_id: apuratoriosSelecionados.length === 1 ? apuratoriosSelecionados[0] : null,
-        periodo_inicio: inicio,
-        periodo_fim: fim,
-        total_processos: linhasGeradas.length,
-        total_concluidos: concluidos,
-        total_andamento: andamento,
-        dados_mapa: linhasGeradas,
-      },
-    });
-    notificar(
-      resposta.ok ? "Mapa salvo." : (resposta.error ?? "Falha ao salvar."),
-      resposta.ok ? "sucesso" : "erro",
-    );
+
+    try {
+      // O véu tem fases porque a busca do documento completo é a parte longa:
+      // ela lê designações, prazos, andamentos e enquadramentos de cada
+      // processo do mapa, e é a mesma consulta que o "Gerar PDF" ao lado faz.
+      await comCarregamento(
+        "Reunindo o documento completo…",
+        async (passo) => {
+          const completo = await call("reports_map_print_data", {
+            request: {
+              periodo_inicio: inicio,
+              periodo_fim: fim,
+              apuratorio_ids: apuratoriosSelecionados,
+              processo_id: null,
+            },
+          });
+          // Falhar aqui aborta o salvamento inteiro. Gravar só o resumo daria
+          // um mapa que exibe o ícone do PDF completo e não o entrega.
+          if (!completo.ok) {
+            throw new Error(completo.error ?? "Falha ao reunir o documento completo.");
+          }
+
+          await passo("Salvando…");
+          // O mapa salvo é snapshot do que foi emitido: recalcular depois daria
+          // outro resultado, e é por isso que ele é salvo. `apuratorio_id` só é
+          // preenchido quando o mapa é de uma espécie só.
+          const resposta = await call("reports_save_map", {
+            request: {
+              titulo: tituloDoMapa(apuratorios),
+              apuratorio_id:
+                apuratoriosSelecionados.length === 1 ? apuratoriosSelecionados[0] : null,
+              periodo_inicio: inicio,
+              periodo_fim: fim,
+              total_processos: linhas.length,
+              total_concluidos: concluidos,
+              total_andamento: andamento,
+              dados_mapa: { versao: 2, resumo: linhas, completo: completo.data ?? [] },
+            },
+          });
+          if (!resposta.ok) throw new Error(resposta.error ?? "Falha ao salvar.");
+        },
+        botao,
+      );
+      notificar("Mapa salvo, com o resumo e o documento completo.", "sucesso");
+    } catch (erro) {
+      notificar(erro instanceof Error ? erro.message : "Falha ao salvar.", "erro");
+    }
   });
 
   document.querySelector<HTMLButtonElement>("#btn-gerar-pdf")?.addEventListener("click", async (evento) => {
@@ -384,16 +417,36 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
 let mapaAberto: string | null = null;
 let paginaSalvos = 1;
 
-/** As oito colunas dividem 100% da largura. As contagens não quebram linha. */
+/**
+ * As nove colunas dividem 100% da largura, e as larguras foram **medidas**, não
+ * estimadas: a tabela é `table-layout: fixed`, e ali uma célula `nowrap` mais
+ * estreita que o conteúdo não encolhe nem corta — ela transborda por cima da
+ * coluna vizinha. Foi o que aconteceu com "Em" a 5%: a data pede 96px e a
+ * coluna dava 46px.
+ *
+ * Duas defesas, e são diferentes:
+ *
+ * - as três colunas de texto livre (`truncar`) cortam com reticências e ganham
+ *   o `title` com o valor inteiro — degradam em vez de invadir a vizinha, e é o
+ *   que segura a janela estreita, onde percentual nenhum resolveria;
+ * - "Período" fica **sem** `nowrap`: `01/08/2026 a 31/08/2026` quebra nos
+ *   espaços e ocupa duas linhas. Cortá-la com reticências esconderia metade do
+ *   intervalo, e alargá-la para caber numa linha custava 8% que o título — a
+ *   coluna que identifica a linha — usa muito melhor.
+ *
+ * Medido em WebKitGTK, o motor do app, com o CSS compilado: numa janela de
+ * 1280 a tabela tem 926px e nenhuma célula transborda.
+ */
 const COLUNAS_SALVOS: Coluna[] = [
-  { rotulo: "Título", largura: 26, truncar: true },
-  { rotulo: "Apuratório", largura: 11, alinhamento: "centro", nowrap: true },
-  { rotulo: "Período", largura: 19, alinhamento: "centro", nowrap: true },
-  { rotulo: "Total", largura: 7, alinhamento: "centro", nowrap: true },
-  { rotulo: "Em andamento", largura: 10, alinhamento: "centro", nowrap: true },
-  { rotulo: "Concluídos", largura: 9, alinhamento: "centro", nowrap: true },
-  { rotulo: "Gerado por", largura: 12, truncar: true },
-  { rotulo: "Em", largura: 6, alinhamento: "centro", nowrap: true },
+  { rotulo: "Título", largura: 21, truncar: true },
+  { rotulo: "Apuratório", largura: 10, alinhamento: "centro", nowrap: true },
+  { rotulo: "Período", largura: 12, alinhamento: "centro" },
+  { rotulo: "Total", largura: 6, alinhamento: "centro", nowrap: true },
+  { rotulo: "Em andamento", largura: 11, alinhamento: "centro", nowrap: true },
+  { rotulo: "Concluídos", largura: 10, alinhamento: "centro", nowrap: true },
+  { rotulo: "Gerado por", largura: 7, truncar: true },
+  { rotulo: "Em", largura: 11, alinhamento: "centro", truncar: true },
+  { rotulo: "Ações", largura: 12, alinhamento: "centro", nowrap: true },
 ];
 
 export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
@@ -413,6 +466,8 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
     return renderMapasSalvos(ctx);
   }
 
+  const podeEscrever = ctx.podeEscrever();
+
   // O `id` na linha é o que o clique casa. Por posição, paginar abriria o mapa
   // errado — e um mapa salvo parece com o outro na tabela.
   const linhas = mapas.map((m: SavedMapListItem) => ({
@@ -421,12 +476,39 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
     celulas: [
       m.titulo,
       m.apuratorio_sigla ?? "todos",
-      `${m.periodo_inicio} a ${m.periodo_fim}`,
+      `${formatarData(m.periodo_inicio)} a ${formatarData(m.periodo_fim)}`,
       { texto: String(m.total_processos), numerica: true },
       { texto: String(m.total_andamento), numerica: true },
       { texto: String(m.total_concluidos), numerica: true },
       m.gerado_por ?? "—",
-      m.created_at.slice(0, 10),
+      formatarData(m.created_at),
+      {
+        texto: "",
+        // Cada botão com o SEU `data-`: repetido, os três cliques cairiam no
+        // mesmo listener. Excluir exige administrador no backend
+        // (`require_admin`), e `podeEscrever()` é exatamente `is_admin`.
+        acoes: [
+          { rotulo: "Ver resumo", id: m.id, icone: "abrir" as const, classe: "outline" },
+          {
+            rotulo: "Ver PDF completo",
+            id: m.id,
+            icone: "documento" as const,
+            classe: "outline",
+            dado: "pdf-completo",
+          },
+          ...(podeEscrever
+            ? [
+                {
+                  rotulo: "Excluir",
+                  id: m.id,
+                  icone: "excluir" as const,
+                  classe: "danger",
+                  dado: "excluir-mapa",
+                },
+              ]
+            : []),
+        ],
+      },
     ],
   }));
 
@@ -446,14 +528,96 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
     void renderMapasSalvos(ctx);
   });
 
+  // O clique na linha continua abrindo o resumo — é o gesto que já estava no
+  // dedo de quem usa. O `closest("button")` impede que ele dispare junto com o
+  // clique num dos ícones, que borbulharia até a `<tr>`.
   document.querySelectorAll<HTMLTableRowElement>("tr[data-linha]").forEach((linha) => {
-    linha.addEventListener("click", () => {
+    linha.addEventListener("click", (evento) => {
+      if ((evento.target as HTMLElement).closest("button")) return;
       mapaAberto = linha.dataset.linha ?? null;
+      void renderMapasSalvos(ctx);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-tabela-acao]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      mapaAberto = botao.dataset.tabelaAcao ?? null;
+      void renderMapasSalvos(ctx);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-pdf-completo]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      void gerarPdfCompleto(botao.dataset.pdfCompleto!, botao);
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-excluir-mapa]").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      if (!confirm("Excluir este mapa salvo?")) return;
+      const resposta = await call("reports_delete_saved_map", {
+        id: botao.dataset.excluirMapa!,
+      });
+      if (!resposta.ok) {
+        notificar(resposta.error ?? "Falha ao excluir.", "erro");
+        return;
+      }
       void renderMapasSalvos(ctx);
     });
   });
 }
 
+/**
+ * Reemite o documento A4 de um mapa salvo, a partir do snapshot.
+ *
+ * Não recalcula nada: as fichas saem exatamente como foram publicadas, que é a
+ * razão de o mapa ser salvo. O mês, o ano e as duas pontas do período vêm das
+ * colunas da própria linha — por isso não estão dentro do snapshot.
+ *
+ * A listagem não carrega `dados_mapa` (seria o documento inteiro em cada linha
+ * da página), então o clique busca o mapa antes.
+ */
+async function gerarPdfCompleto(id: string, gatilho: HTMLButtonElement): Promise<void> {
+  try {
+    await comCarregamento(
+      "Carregando o documento salvo…",
+      async (passo) => {
+        const resposta = await call("reports_get_saved_map", { id });
+        if (!resposta.ok || !resposta.data) {
+          throw new Error(resposta.error ?? "Mapa não encontrado.");
+        }
+        const mapa = resposta.data;
+        const completo = mapa.dados_mapa?.completo;
+        if (!completo?.length) {
+          throw new Error(
+            "Este mapa foi salvo antes de o documento completo passar a ser guardado. " +
+              "Só o resumo está disponível.",
+          );
+        }
+
+        await passo("Montando o documento…");
+        const documento = renderDocumentoMapa(completo, {
+          mes: MESES[Number(mapa.periodo_inicio.slice(5, 7)) - 1]!,
+          ano: Number(mapa.periodo_inicio.slice(0, 4)),
+          periodoInicio: mapa.periodo_inicio,
+          periodoFim: mapa.periodo_fim,
+        });
+        await imprimirDocumentoMapa(documento, () => passo("Abrindo a impressão…"));
+      },
+      gatilho,
+    );
+  } catch (erro) {
+    notificar(erro instanceof Error ? erro.message : "Falha ao gerar o PDF.", "erro");
+  }
+}
+
+/**
+ * O resumo de um mapa salvo, com o botão de impressão.
+ *
+ * Sem Excluir: a listagem tem o ícone, e é de lá que se administra a coleção.
+ * Ter os dois obrigaria a manter duas confirmações e dois caminhos de volta
+ * para o mesmo efeito.
+ */
 async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
   const mapa = (await call("reports_get_saved_map", { id })).data;
   if (!mapa) {
@@ -462,10 +626,16 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
     return;
   }
 
-  // O snapshot foi gravado como a lista de linhas do mapa. Mapas gravados por
-  // versões anteriores podem trazer outra forma — nesse caso mostramos o
+  // O resumo mora no envelope (`{ versao, resumo, completo }`), que a 0020
+  // instalou. A forma antiga era o array cru; um banco restaurado de backup
+  // anterior à migration não chega aqui, mas se chegasse mostraríamos o
   // conteúdo cru em vez de fingir que sabemos lê-lo.
-  const linhas = Array.isArray(mapa.dados_mapa) ? (mapa.dados_mapa as MapRow[]) : null;
+  const snapshot = mapa.dados_mapa;
+  const linhas = Array.isArray(snapshot?.resumo)
+    ? snapshot.resumo
+    : Array.isArray(snapshot)
+      ? (snapshot as MapRow[])
+      : null;
 
   ctx.shell(`
     <section class="panel">
@@ -473,14 +643,13 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
         <div>
           <h1>${escapeHtml(mapa.titulo)}</h1>
           <p>
-            ${escapeHtml(`${mapa.periodo_inicio} a ${mapa.periodo_fim}`)} ·
+            ${escapeHtml(`${formatarData(mapa.periodo_inicio)} a ${formatarData(mapa.periodo_fim)}`)} ·
             ${mapa.total_processos} no período · ${mapa.total_andamento} em andamento ·
             ${mapa.total_concluidos} concluídos · gerado por ${escapeHtml(mapa.gerado_por ?? "—")}
           </p>
         </div>
         <div class="page-head-right">
           <button id="btn-voltar" class="secondary small">Voltar</button>
-          ${ctx.podeEscrever() ? `<button id="btn-excluir" class="danger small">Excluir</button>` : ""}
           ${barraDeExportacao({ imprimir: true })}
         </div>
       </div>
@@ -502,17 +671,6 @@ async function renderMapaSalvo(ctx: ContextoTela, id: string): Promise<void> {
   `);
 
   document.querySelector<HTMLButtonElement>("#btn-voltar")?.addEventListener("click", () => {
-    mapaAberto = null;
-    void renderMapasSalvos(ctx);
-  });
-
-  document.querySelector<HTMLButtonElement>("#btn-excluir")?.addEventListener("click", async () => {
-    if (!confirm("Excluir este mapa salvo?")) return;
-    const resposta = await call("reports_delete_saved_map", { id });
-    if (!resposta.ok) {
-      notificar(resposta.error ?? "Falha ao excluir.", "erro");
-      return;
-    }
     mapaAberto = null;
     void renderMapasSalvos(ctx);
   });

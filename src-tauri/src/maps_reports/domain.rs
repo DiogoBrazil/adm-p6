@@ -34,7 +34,14 @@ pub struct SavedMapListResult {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct SavedMapFull {
+    // Os dois flatten são obrigatórios e governam coisas diferentes: `sqlx`
+    // monta o struct a partir da linha do banco, `serde` achata os campos no
+    // JSON que a tela lê. Sem o segundo a resposta sai aninhada sob
+    // `cabecalho`, e o detalhe do mapa salvo imprime "undefined a undefined ·
+    // undefined no período" — sem erro nenhum, porque `types.ts` declara os
+    // campos no topo e o TypeScript acredita na declaração.
     #[sqlx(flatten)]
+    #[serde(flatten)]
     pub cabecalho: SavedMapListItem,
     /// Snapshot imutável do mapa como foi emitido. É o único JSONB de domínio do
     /// schema, e é justificado: recalcular hoje daria outro resultado — preservar

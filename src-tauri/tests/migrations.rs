@@ -846,3 +846,93 @@ async fn converter_a_apurar(url: &str) -> Result<(), Box<dyn std::error::Error>>
 
     Ok(())
 }
+
+/// A `0020` embrulha o snapshot antigo sem perder o que foi publicado.
+///
+/// A migration roda em banco vazio nos testes, então o `UPDATE` dela é um
+/// no-op: a conversão em si nunca seria exercida. Aqui uma linha na forma
+/// antiga — o array cru de `MapRow` — é inserida à mão e a **mesma** instrução
+/// da migration é aplicada sobre ela. O SQL é lido do arquivo em vez de
+/// copiado: copiado, ele envelheceria sozinho no dia em que a migration
+/// mudasse, e o teste passaria a aprovar outra coisa.
+#[tokio::test]
+async fn a_0020_embrulha_o_snapshot_antigo_sem_perder_o_resumo() {
+    let Some((manutencao, teste, nome)) = urls() else {
+        eprintln!("DATABASE_URL ausente: teste ignorado");
+        return;
+    };
+    let nome = format!("{nome}_0020");
+    let teste = teste.replace(teste.rsplit_once('/').unwrap().1, &nome);
+
+    let mut admin = PgConnection::connect(&manutencao).await.unwrap();
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute(&*format!(r#"CREATE DATABASE "{nome}""#))
+        .await
+        .unwrap();
+
+    let mut conn = PgConnection::connect(&teste).await.unwrap();
+    sqlx::migrate!("./migrations").run(&mut conn).await.unwrap();
+
+    // A forma antiga: `dados_mapa` era o array de linhas, sem envelope.
+    let resumo = serde_json::json!([
+        { "rotulo": "SR nº 1/2026/7ºBPM", "data_instauracao": "2026-07-25" },
+        { "rotulo": "IPM nº 5/2026/7ºBPM", "data_instauracao": "2026-08-19" }
+    ]);
+    sqlx::query(
+        "INSERT INTO mapas_salvos
+             (id, titulo, periodo_inicio, periodo_fim, total_processos, dados_mapa)
+         VALUES ('40000000-0000-0000-0000-000000000001'::uuid, 'Mapa legado',
+                 DATE '2026-08-01', DATE '2026-08-31', 2, $1)",
+    )
+    .bind(&resumo)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+
+    let sql = std::fs::read_to_string("migrations/0020_snapshot_mapa_completo.sql").unwrap();
+    conn.execute(&*sql).await.unwrap();
+
+    let convertido: serde_json::Value = sqlx::query_scalar(
+        "SELECT dados_mapa FROM mapas_salvos
+          WHERE id = '40000000-0000-0000-0000-000000000001'::uuid",
+    )
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+
+    assert_eq!(convertido["versao"], serde_json::json!(2));
+    assert_eq!(
+        convertido["resumo"], resumo,
+        "o resumo publicado tem de sobreviver byte a byte: a migration embrulha, nao reescreve"
+    );
+    assert_eq!(
+        convertido["completo"],
+        serde_json::Value::Null,
+        "o documento completo daquele mapa nunca foi tirado, e inventa-lo hoje publicaria \
+         outra coisa com a data de ontem"
+    );
+
+    // Idempotente: rodar de novo não embrulha o envelope dentro de outro.
+    conn.execute(&*sql).await.unwrap();
+    let de_novo: serde_json::Value = sqlx::query_scalar(
+        "SELECT dados_mapa FROM mapas_salvos
+          WHERE id = '40000000-0000-0000-0000-000000000001'::uuid",
+    )
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(de_novo, convertido, "a conversao e idempotente");
+
+    drop(conn);
+    let _ = admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await;
+}
