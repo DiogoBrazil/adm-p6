@@ -136,7 +136,8 @@ pub async fn save(
         .await?
         .ok_or_else(|| {
             AppError::Domain(
-                "Este militar não existe mais no cadastro. Recarregue a página.".to_string(),
+                "Este policial militar não existe mais no cadastro. Recarregue a página."
+                    .to_string(),
             )
         })?,
         None => sqlx::query_scalar(

@@ -112,7 +112,7 @@ export function normalizarDesignacoesParaImpressao(
   if (linhas.length) {
     resultado.push({
       militar: "Total geral",
-      apuratorio: "Todos os militares e espécies",
+      apuratorio: "Todos os policiais militares e espécies",
       quantidade: linhas.reduce((total, linha) => total + linha.total, 0),
       tipo: "total-geral",
     });
@@ -265,7 +265,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   if (militarSelecionado && !opcoesMilitar.some((o) => o.id === militarSelecionado)) {
     const rotulo = linhaDoMilitar
       ? qualificacao(linhaDoMilitar)
-      : (rotuloMilitarSelecionado ?? "Militar selecionado");
+      : (rotuloMilitarSelecionado ?? "Policial militar selecionado");
     opcoesMilitar.unshift({ id: militarSelecionado, rotulo: `${rotulo} (inativo)` });
   }
 
@@ -314,7 +314,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
     ? graficoCarga("designacoes-carga", cargaPorEspecie, { rotuloPercentual: "da espécie" })
     : graficoCarga("designacoes-carga", cargaPorMilitar, {
         limitar: true,
-        rotuloPercentual: "da carga do militar",
+        rotuloPercentual: "da carga do policial militar",
       });
 
   /**
@@ -360,7 +360,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
 
   const tabelaCarga = modoMilitar
     ? tabelaDeCarga(cargaPorEspecie, "Apuratório", 26)
-    : tabelaDeCarga(cargaPorMilitar, "Militar", 32);
+    : tabelaDeCarga(cargaPorMilitar, "Policial Militar", 32);
 
   // ── Matriz militar × apuratório, ou a ficha de um militar só ─────────────
   const celulasDe = (linha: DesignacaoMatrizLinha) =>
@@ -394,7 +394,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   // matriz pede.
   const tabelaMatriz = tabela(
     [
-      { rotulo: "Militar", truncar: true },
+      { rotulo: "Policial Militar", truncar: true },
       ...colunasComDado.map((a) => ({
         rotulo: a.rotulo,
         alinhamento: "centro" as const,
@@ -410,7 +410,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   const matrizNormalizada = normalizarDesignacoesParaImpressao(linhas, colunasComDado);
   const tabelaMatrizImpressao = tabela(
     [
-      { rotulo: "Militar", largura: 44 },
+      { rotulo: "Policial Militar", largura: 44 },
       { rotulo: "Apuratório", largura: 44 },
       { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
     ],
@@ -444,12 +444,12 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   const concluidosNoEscopo = linhas.reduce((acc, linha) => acc + linha.concluidos, 0);
   const nomeDoMilitar = linhaDoMilitar
     ? qualificacao(linhaDoMilitar)
-    : (rotuloMilitarSelecionado ?? "Militar selecionado");
+    : (rotuloMilitarSelecionado ?? "Policial militar selecionado");
   const semPrazo = situacaoDoMilitar.sem_prazo;
 
   const kpis = modoMilitar
     ? `
-      ${kpiAnalitico(situacaoDoMilitar.total, "Apuratórios do militar", {
+      ${kpiAnalitico(situacaoDoMilitar.total, "Apuratórios do policial militar", {
         detalhe: nomeDoMilitar,
       })}
       ${kpiAnalitico(situacaoDoMilitar.concluidos, "Concluídos", { tom: "sucesso" })}
@@ -493,9 +493,9 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
             ${anos.map((a) => option(String(a), String(a), a === anoSelecionado)).join("")}
           </select>
         </label>
-        <label class="filtro-campo--largo">Militar
-          <select name="militar" data-select-pesquisavel data-placeholder="Todos os militares">
-            <option value=""${militarSelecionado === null ? " selected" : ""}>Todos os militares</option>
+        <label class="filtro-campo--largo">Policial Militar
+          <select name="militar" data-select-pesquisavel data-placeholder="Todos os policiais militares">
+            <option value=""${militarSelecionado === null ? " selected" : ""}>Todos os policiais militares</option>
             ${opcoesMilitar.map((m) => option(m.id, m.rotulo, m.id === militarSelecionado)).join("")}
           </select>
         </label>
@@ -555,14 +555,14 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
       <div class="analytics-grid" data-impressao-ao-fim>
         ${cartaoAnalitico({
           id: "designacoes-carga",
-          titulo: modoMilitar ? "Situação por espécie de apuratório" : "Carga de trabalho por militar",
+          titulo: modoMilitar ? "Situação por espécie de apuratório" : "Carga de trabalho por policial militar",
           descricao: modoMilitar
-            ? "Os apuratórios deste militar, por espécie e situação."
+            ? "Os apuratórios deste policial militar, por espécie e situação."
             : "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
           grafico: specCarga,
           tabela: tabelaCarga,
           vazio: modoMilitar
-            ? "Nenhuma designação deste militar neste escopo"
+            ? "Nenhuma designação deste policial militar neste escopo"
             : "Nada registrado neste escopo",
           limitado: !modoMilitar && linhas.length > 12,
           classe: "analytics-card--wide",
@@ -620,9 +620,9 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
   ligarExportacao(
     () =>
       baixarCsv(
-        `designacoes-por-militar-${new Date().toISOString().slice(0, 10)}.csv`,
+        `designacoes-por-policial-militar-${new Date().toISOString().slice(0, 10)}.csv`,
         [
-          "Militar",
+          "Policial Militar",
           "Matricula",
           "Concluidos",
           "Em andamento no prazo",

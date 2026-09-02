@@ -1156,7 +1156,7 @@ fn desativar_e_excluir_militar_sao_comandos_diferentes() {
             .iter()
             .find(|l| l["registro_id"] == json!(mundo.pm_um))
             .expect("a desativação foi auditada");
-        assert_eq!(linha["acao"], json!("Desativou o militar"));
+        assert_eq!(linha["acao"], json!("Desativou o policial militar"));
         assert_eq!(
             linha["operacao"],
             json!("UPDATE"),

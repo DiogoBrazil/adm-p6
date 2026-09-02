@@ -1325,7 +1325,7 @@ async fn gravar_designacoes(
                     && g.policial_militar_id == designacao.policial_militar_id
             }) {
                 return Err(AppError::Domain(format!(
-                    "Este militar já está designado como {} neste apuratório.",
+                    "Este policial militar já está designado como {} neste apuratório.",
                     repetida.papel
                 )));
             }
@@ -1480,10 +1480,11 @@ async fn exigir_militar_ativo(
     match ativo {
         Some(true) => Ok(()),
         Some(false) => Err(AppError::Domain(
-            "O militar escolhido está desativado e não pode receber designação.".to_string(),
+            "O policial militar escolhido está desativado e não pode receber designação."
+                .to_string(),
         )),
         None => Err(AppError::Domain(
-            "O militar escolhido não existe mais no cadastro.".to_string(),
+            "O policial militar escolhido não existe mais no cadastro.".to_string(),
         )),
     }
 }
@@ -1636,7 +1637,7 @@ async fn validar_troca(
     }
     if antecessora.policial_militar_id == sucessor_id {
         return Err(AppError::Domain(format!(
-            "{} já ocupa a função de {}. Escolha outro militar como sucessor.",
+            "{} já ocupa a função de {}. Escolha outro policial militar como sucessor.",
             antecessora.ocupante, antecessora.papel
         )));
     }

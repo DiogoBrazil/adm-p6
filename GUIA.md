@@ -1811,7 +1811,7 @@ o responsável**: a exclusão é física e não se desfaz.
 - [ ] Excluir o único item da última página recua a página em vez de mostrar tabela vazia
 - [ ] No **detalhe** do militar existe agora **Desativar** (e Reativar quando inativo) —
       excluir não fica aqui, de propósito
-- [ ] Na **Auditoria**: a desativação aparece como "Desativou o militar" com tipo de ação
+- [ ] Na **Auditoria**: a desativação aparece como "Desativou o policial militar" com tipo de ação
       **Alterou**, e a exclusão como "Excluiu o militar" nomeando quem foi — mesmo depois
       de a linha ter sumido do banco
 

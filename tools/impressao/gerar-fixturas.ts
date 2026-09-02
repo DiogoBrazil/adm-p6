@@ -368,7 +368,7 @@ const CONJUNTOS: Record<string, Conjunto> = {
     fragmentoPrimeiro: 12,
     origem: "src/telas/encarregados.ts (tabelaMatrizImpressao)",
     colunas: [
-      { rotulo: "Militar", largura: 44 },
+      { rotulo: "Policial Militar", largura: 44 },
       { rotulo: "Apuratório", largura: 44 },
       { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
     ],
@@ -831,7 +831,7 @@ function catalogo(): Fixtura[] {
   // Reproduções mínimas dos dois recortes encontrados nos PDFs enviados.
   // Não são aproximações: larguras, rótulos e `nowrap` são os das telas.
   const colunasDesignacoes: Coluna[] = [
-    { rotulo: "Militar", largura: 32, truncar: true },
+    { rotulo: "Policial Militar", largura: 32, truncar: true },
     { rotulo: "Concluídos", largura: 11, alinhamento: "centro", nowrap: true },
     { rotulo: "Em andamento no prazo", largura: 11, alinhamento: "centro", nowrap: true },
     { rotulo: "Em andamento vencido", largura: 11, alinhamento: "centro", nowrap: true },
@@ -1044,7 +1044,7 @@ function catalogo(): Fixtura[] {
     proposito: "a matriz que só existe no papel, com totais por militar e geral",
     corpo: (() => {
       const colunas: Coluna[] = [
-        { rotulo: "Militar", largura: 44 },
+        { rotulo: "Policial Militar", largura: 44 },
         { rotulo: "Apuratório", largura: 44 },
         { rotulo: "Quantidade", largura: 12, alinhamento: "direita", nowrap: true },
       ];
@@ -1137,10 +1137,10 @@ function catalogo(): Fixtura[] {
       corpo: painel(
         cabecalho("Gráfico no papel", `O canvas é composto e depois ${estrategia}.`) +
           `<div class="analytics-grid">${cartaoDeGrafico(
-            "Carga de trabalho por militar",
+            "Carga de trabalho por policial militar",
             "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
             300,
-            `<canvas data-desenho="c" width="1920" height="600" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+            `<canvas data-desenho="c" width="1920" height="600" role="img" aria-label="Carga de trabalho por policial militar"></canvas>`,
           )}</div>${trocaPeloPng(estrategia)}`,
       ),
       ...(assere ? { paginasMaximas: 1 } : {}),
@@ -1165,7 +1165,7 @@ function catalogo(): Fixtura[] {
   // `graficos/index.ts::graficoCarga`, com os 11 militares do caso relatado.
   const cartaoDeCarga = (caixa: string) =>
     `<div class="analytics-grid">${cartaoDeGrafico(
-      "Carga de trabalho por militar",
+      "Carga de trabalho por policial militar",
       "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
       532,
       caixa,
@@ -1186,7 +1186,7 @@ function catalogo(): Fixtura[] {
   // nasce oculto nunca ganha camada de composição e aprova o que o PDF reprova.
   const graficoDaCarga = () =>
     cartaoDeCarga(
-      `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+      `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por policial militar"></canvas>`,
     );
   // Antes: o cartão entre os KPIs e a matriz. Duas folhas se vão antes da
   // primeira linha — a segunda fica só com o `h2`, porque o gráfico transborda
@@ -1206,7 +1206,7 @@ function catalogo(): Fixtura[] {
       cabecalhoDeDesignacoes +
         kpisDeDesignacoes +
         cartaoDeCarga(
-          `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por militar"></canvas>`,
+          `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por policial militar"></canvas>`,
         ) +
         matrizDoPapel(matriz.fragmentoPrimeiro ?? matriz.fragmentoAtual) +
         DESENHO_DE_TESTE,
@@ -1260,7 +1260,7 @@ function catalogo(): Fixtura[] {
           ? "por que `painelContagem` não fragmenta: uma folha a mais, a mesma linha partida"
           : "como o detalhe de usuário imprime: painel indivisível, tabela inteira",
       corpo: painel(
-        cabecalho("Detalhe do militar", "Painéis de contagem.") +
+        cabecalho("Detalhe do policial militar", "Painéis de contagem.") +
           `<div class="stat-grid">${[0, 1, 2]
             .map((n) => `<section class="stat-panel"><h2>Painel ${n + 1}</h2>${conteudo}</section>`)
             .join("")}</div>`,

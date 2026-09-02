@@ -64,7 +64,7 @@ pub struct SaveUserRequest {
 impl SaveUserRequest {
     pub fn validate(&self) -> Result<(), String> {
         if self.nome.trim().is_empty() {
-            return Err("Informe o nome do militar.".to_string());
+            return Err("Informe o nome do policial militar.".to_string());
         }
         // Formato administrativo da matrícula na PMRO. Fica na camada de domínio,
         // e não como CHECK, para não impedir a importação de registros históricos
@@ -77,7 +77,7 @@ impl SaveUserRequest {
             return Err("A matrícula precisa começar com 1000 ou 3000.".to_string());
         }
         if self.posto_graduacao_id.trim().is_empty() {
-            return Err("Escolha o posto ou graduação do militar.".to_string());
+            return Err("Escolha o posto ou graduação do policial militar.".to_string());
         }
         if let Some(conta) = &self.conta {
             if !is_valid_email(conta.email.trim()) {

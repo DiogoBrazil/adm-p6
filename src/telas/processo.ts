@@ -317,7 +317,7 @@ function selectMilitares(nome: string, militares: UserListItem[], atual: string)
   const ausente = atual !== "" && !militares.some((m) => m.id === atual);
   return `<select name="${nome}" required data-select-pesquisavel data-tipo-cadastro="militar">
     <option value=""></option>
-    ${ausente ? option(atual, "— militar desativado (vínculo preservado) —", true) : ""}
+    ${ausente ? option(atual, "— policial militar desativado (vínculo preservado) —", true) : ""}
     ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === atual)).join("")}
   </select>`;
 }
@@ -333,7 +333,7 @@ function selectMilitarEnvolvido(
   return `<select name="${nome}" required data-select-pesquisavel data-tipo-cadastro="militar">
     <option value=""></option>
     <option value="${A_APURAR}"${valorAtual === A_APURAR ? " selected" : ""}${permitirApenasApurar ? "" : " disabled"}>À apurar — PM ainda não identificado</option>
-    ${ausente ? option(valorAtual, "— militar desativado (vínculo preservado) —", true) : ""}
+    ${ausente ? option(valorAtual, "— policial militar desativado (vínculo preservado) —", true) : ""}
     ${militares.map((m) => option(m.id, nomeMilitar(m), m.id === valorAtual)).join("")}
   </select>`;
 }
@@ -448,7 +448,7 @@ function linhaDesignacao(
       ${opcoesPapel.join("")}
     </select></label>
     ${campoComCadastroRapido(
-      "Militar",
+      "Policial Militar",
       `des_${i}_pm`,
       selectMilitares(`des_${i}_pm`, militares, d.policial_militar_id),
       "militar",
@@ -830,7 +830,7 @@ export async function renderFormularioProcesso(
                 <button type="button" class="danger small" data-remover-env="${i}">Remover</button>
               </div>
               ${campoComCadastroRapido(
-                "Militar",
+                "Policial Militar",
                 `env_${i}_pm`,
                 selectMilitarEnvolvido(
                   `env_${i}_pm`,
@@ -2297,7 +2297,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ${
         d.envolvidos.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--envolvidos">
-              <thead><tr><th>#</th><th>Militar</th><th>Situação</th><th>Condutor</th>
+              <thead><tr><th>#</th><th>Policial Militar</th><th>Situação</th><th>Condutor</th>
                 ${permiteAcusacao ? "<th>Acusações</th>" : ""}
                 ${permiteSolucaoSugerida ? "<th>Sugerida</th>" : ""}<th>Decidida</th><th>Penalidade</th>${mostraAcoesEnvolvido ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${d.envolvidos
@@ -2417,7 +2417,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ${
         d.designacoes.length
           ? `<div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo tabela-detalhe-processo--designacoes">
-              <thead><tr><th>Função</th><th>Militar</th><th>Início</th><th>Fim</th><th>Documento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
+              <thead><tr><th>Função</th><th>Policial Militar</th><th>Início</th><th>Fim</th><th>Documento</th><th>Motivo</th>${podeEscrever ? "<th>Ações</th>" : ""}</tr></thead>
               <tbody>${d.designacoes
                 .map(
                   (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>
@@ -3031,7 +3031,7 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     if (sucessor === antecessora.policial_militar_id) {
       return marcarErro(
         "sucessor_id",
-        `${qualificacaoDesignado(antecessora)} já ocupa a função. Escolha outro militar.`,
+        `${qualificacaoDesignado(antecessora)} já ocupa a função. Escolha outro policial militar.`,
       );
     }
     if (!dataTroca) return marcarErro("data_troca", "Informe a data da substituição.");

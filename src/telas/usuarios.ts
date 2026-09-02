@@ -194,7 +194,7 @@ function htmlResultadosUsuarios(
     ${tabela(
       COLUNAS,
       itens.map((u) => linhaDaTabela(u, podeEscrever)),
-      busca ? "Nenhum militar encontrado." : "Nenhum militar cadastrado.",
+      busca ? "Nenhum policial militar encontrado." : "Nenhum policial militar cadastrado.",
       { viewport: true, listagem: true },
     )}
     ${paginacao("usuarios", pagina, POR_PAGINA, total)}`;
@@ -366,7 +366,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
 
       <div class="search-bar">
         <input id="busca" type="search" autocomplete="off"
-               aria-label="Pesquisar militares" aria-controls="resultados-usuarios"
+               aria-label="Pesquisar policiais militares" aria-controls="resultados-usuarios"
                placeholder="Buscar por nome ou matrícula..."
                value="${escapeHtml(busca)}" />
         <button type="button" class="secondary small" id="limpar-busca"${busca ? "" : " hidden"}>Limpar</button>
@@ -441,7 +441,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
           const linha = linhaDaTabela(u);
           return { ...linha, celulas: linha.celulas.slice(0, -1) };
         }),
-        "Nenhum militar cadastrado.",
+        "Nenhum policial militar cadastrado.",
         // Vinte cabem na folha em paisagem no pior caso (`medicao-usuarios`).
         { listagem: true, linhasPorFragmentoImpressao: 16 },
       );
@@ -477,7 +477,7 @@ export async function abrirCadastroRapidoMilitar(
        </div>
        <div class="feedback feedback--error formulario-feedback" data-erro-militar hidden role="alert"></div>
        <form class="crud-form" data-form-militar-rapido>
-         <fieldset><legend>Dados do militar</legend>
+         <fieldset><legend>Dados do policial militar</legend>
            <label>Posto / Graduação
              <select name="posto_graduacao_id" required data-select-pesquisavel>
                <option value=""></option>
@@ -527,7 +527,7 @@ export async function abrirCadastroRapidoMilitar(
       if (!resposta.ok || !resposta.data) {
         if (erro) {
           erro.hidden = false;
-          erro.textContent = resposta.error ?? "Não foi possível cadastrar o militar.";
+          erro.textContent = resposta.error ?? "Não foi possível cadastrar o policial militar.";
           erro.focus();
         }
         salvar.disabled = false;
@@ -539,13 +539,13 @@ export async function abrirCadastroRapidoMilitar(
       if (!militar) {
         if (erro) {
           erro.hidden = false;
-          erro.textContent = "O militar foi salvo, mas não pôde ser recarregado.";
+          erro.textContent = "O policial militar foi salvo, mas não pôde ser recarregado.";
         }
         salvar.disabled = false;
         salvar.textContent = "Salvar e selecionar";
         return;
       }
-      notificar("Militar cadastrado e selecionado.", "sucesso");
+      notificar("Policial militar cadastrado e selecionado.", "sucesso");
       concluir(militar);
     });
   });
@@ -571,13 +571,13 @@ export async function renderFormularioUsuario(
   ctx.shell(`
     <section class="panel">
       <div class="page-head">
-        <div><h1>${usuario ? "Editar" : "Novo"} militar</h1></div>
+        <div><h1>${usuario ? "Editar" : "Novo"} policial militar</h1></div>
       </div>
       ${erro ? `<p class="error">${escapeHtml(erro)}</p>` : ""}
 
       <form id="form-usuario" class="crud-form">
         <fieldset>
-          <legend>Dados do militar</legend>
+          <legend>Dados do policial militar</legend>
           <label>Posto / Graduação
             <select name="posto_graduacao_id" required data-select-pesquisavel>
               <option value="">Selecione…</option>
@@ -619,7 +619,7 @@ export async function renderFormularioUsuario(
             </label>
           </div>
           <p class="hint">
-            Desmarcar retira o acesso e desativa a conta — o militar continua
+            Desmarcar retira o acesso e desativa a conta — o policial militar continua
             cadastrado, com todo o histórico.
           </p>
         </fieldset>
@@ -683,7 +683,7 @@ export async function renderFormularioUsuario(
     limparFormularioPendente();
     detalheAberto = null;
     await renderListaUsuarios(ctx);
-    notificar("Militar salvo com sucesso.", "sucesso");
+    notificar("Policial militar salvo com sucesso.", "sucesso");
   });
 }
 
@@ -722,7 +722,7 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
 
   if (!usuario) {
     detalheAberto = null;
-    ctx.shell(`<section class="panel"><p class="error">Militar não encontrado.</p></section>`);
+    ctx.shell(`<section class="panel"><p class="error">Policial militar não encontrado.</p></section>`);
     return;
   }
 
@@ -791,7 +791,7 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
   });
 
   document.querySelector<HTMLButtonElement>("#btn-reativar")?.addEventListener("click", async () => {
-    if (!confirm("Reativar este militar?")) return;
+    if (!confirm("Reativar este policial militar?")) return;
     const resposta = await call("users_reactivate", { id });
     if (!resposta.ok) {
       notificar(resposta.error ?? "Falha ao reativar.", "erro");

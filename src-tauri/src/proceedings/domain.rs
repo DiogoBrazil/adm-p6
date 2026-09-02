@@ -464,7 +464,7 @@ impl SaveProceedingRequest {
             });
             if repetida {
                 return Err(
-                    "O mesmo militar aparece duas vezes na mesma função. Remova a linha repetida."
+                    "O mesmo policial militar aparece duas vezes na mesma função. Remova a linha repetida."
                         .to_string(),
                 );
             }

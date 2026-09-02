@@ -393,7 +393,7 @@ export async function renderEstatisticas(ctx: ContextoTela): Promise<void> {
           titulo: "Condutores em sinistro",
           descricao: "Ocorrências cuja natureza geral do fato exige condutor.",
           grafico: specs[8]!,
-          tabela: tabelaContagem(d.condutores, "Militar", "Nenhum condutor registrado neste escopo."),
+          tabela: tabelaContagem(d.condutores, "Policial Militar", "Nenhum condutor registrado neste escopo."),
           limitado: d.condutores.length > 12,
           classe: "analytics-card--wide",
         })}

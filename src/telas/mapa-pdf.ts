@@ -262,7 +262,7 @@ function renderEnvolvidos(item: MapPrintItem): string {
     return `<p class="mapa-pdf-vazio">Nenhum envolvido registrado.</p>`;
   }
   return `<table class="mapa-pdf-tabela mapa-pdf-tabela--envolvidos">
-    <thead><tr><th>Militar</th><th>Situação</th><th>Enquadramentos e indícios</th><th>Resultado</th></tr></thead>
+    <thead><tr><th>Policial Militar</th><th>Situação</th><th>Enquadramentos e indícios</th><th>Resultado</th></tr></thead>
     <tbody>${item.processo.envolvidos
       .map(
         (envolvido) => `<tr>
@@ -280,7 +280,7 @@ function renderEnvolvidos(item: MapPrintItem): string {
 
 function renderDesignacoes(processo: ProceedingDetail): string {
   return tabela(
-    ["Função", "Militar", "Início", "Fim", "Documento", "Motivo"],
+    ["Função", "Policial Militar", "Início", "Fim", "Documento", "Motivo"],
     processo.designacoes.map((item) => [
       `${item.papel}${item.e_responsavel ? " — responsável" : ""}`,
       qualificacao(item.posto_graduacao, item.matricula, item.nome),

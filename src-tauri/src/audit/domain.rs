@@ -55,7 +55,7 @@ pub fn rotulo_da_entidade(entidade: &str) -> String {
         "processo_prazos" => "Prazo",
         "processo_andamentos" => "Andamento",
         "processo_anexos" => "Anexo",
-        "policiais_militares" => "Militar",
+        "policiais_militares" => "Policial Militar",
         "mapas_salvos" => "Mapa salvo",
         "apuratorio_papeis" => "Função do apuratório",
         "apuratorio_documentos_iniciadores" => "Documento iniciador do apuratório",

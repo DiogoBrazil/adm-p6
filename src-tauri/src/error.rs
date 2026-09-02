@@ -142,10 +142,10 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
             "Já existe um apuratório ativo com este número de controle para a \
              mesma unidade/subunidade, ano e apuratório."
         }
-        "uq_pm_matricula" => "Já existe um militar cadastrado com esta matrícula.",
+        "uq_pm_matricula" => "Já existe um policial militar cadastrado com esta matrícula.",
         "uq_usuarios_email" => "Já existe uma conta de acesso com este e-mail.",
-        "uq_usuario_pm" => "Este militar já tem conta de acesso. Edite a conta existente.",
-        "uq_envolvido_pm" => "Este militar já está lançado como envolvido neste apuratório.",
+        "uq_usuario_pm" => "Este policial militar já tem conta de acesso. Edite a conta existente.",
+        "uq_envolvido_pm" => "Este policial militar já está lançado como envolvido neste apuratório.",
         "uq_envolvido_ordem" => "Já existe um envolvido com esta ordem neste apuratório.",
         "uq_envolvido_condutor" => "Só pode haver um condutor por apuratório.",
         "uq_pessoa_ordem" => "Já existe uma pessoa com esta ordem neste apuratório.",
@@ -163,7 +163,7 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
 
         // ── Período inválido ─────────────────────────────────────────────────
         "ex_designacao_sobreposicao" => {
-            "Este militar já exerceu esta função em um período que se sobrepõe ao informado."
+            "Este policial militar já exerceu esta função em um período que se sobrepõe ao informado."
         }
         "ex_prazo_sobreposicao" => "Os prazos deste apuratório não podem se sobrepor.",
         "ck_designacao_periodo" => "O fim da designação precisa ser posterior ao início.",
@@ -208,7 +208,7 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         "ck_prazo_motivo" => "Informe o motivo da prorrogação.",
         "ck_anexo_nome" => "O arquivo precisa de um nome.",
         "ck_usuario_tem_nome" => {
-            "A conta precisa de um nome: vincule um militar ou informe o nome de exibição."
+            "A conta precisa de um nome: vincule um policial militar ou informe o nome de exibição."
         }
 
         // ── Limite configurado ───────────────────────────────────────────────
