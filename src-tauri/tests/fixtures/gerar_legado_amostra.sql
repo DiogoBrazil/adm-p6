@@ -15,8 +15,17 @@ INSERT INTO escolhidos VALUES
   ('6b1f19a8-4ab8-4ecc-b596-27480bf9e017'),  -- CP 1     : carta precatória
   ('06d1dd69-ad23-490a-9492-80670ba3bae8'),  -- IPM 9    : 4 transgressões RDPM + 4 crimes
   ('5e060c66-74be-407e-b176-7a8376e23653'),  -- SR 1     : RDPM + crimes das duas esferas
-  ('cb22e21b-72d3-43db-a379-24fb1261bc01');  -- PADS 7   : 8 vínculos em transgressoes_ids,
+  ('cb22e21b-72d3-43db-a379-24fb1261bc01'),  -- PADS 7   : 8 vínculos em transgressoes_ids,
                                              --            RDPM e Estatuto com analogia
+  -- Casos que só existem no dump de 03/09/2026:
+  ('020ce7e8-0765-4eb0-887b-fb6f48e2b68a'),  -- SR 020   : envolvido "À apurar"
+  ('8d36ece4-cdff-4e22-9b3d-bdcb1ce8efa9'),  -- IPM 012  : 7 art. 29 sem analogia + CPM 303 §2º
+                                             --            e CPM 319 (artigos que a 01 complementa)
+  ('274566e9-f953-422a-9559-97020cd6ed6b'),  -- IPM 6    : CPM 209, complementado pela 01
+  ('5b2ebe3c-2ae9-4dd8-b768-f98e723b72ce'),  -- IPM 6/24 : CPM 216, complementado pela 01
+  ('731dc323-1c1a-4032-987a-11e68d53f72d');  -- SR 53    : CP 163, complementado pela 01
+                                             -- (SR 2, acima, não tem prazo nenhum: é o
+                                             --  caminho do prazo inicial reconstruído)
 
 -- As espécies raras entram INTEIRAS (CD 2, CJ 1, PAD 1, PADE 1, SV 3, FP 7):
 -- são poucas linhas e sem elas a etapa 02 não derivaria Presidente,

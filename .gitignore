@@ -25,3 +25,10 @@ dist
 # arnês, não o que ele produz.
 tools/impressao/fixturas/
 tools/impressao/saida/
+
+# Saida de `scripts/migrar_dados_legados.sh`: log, relatorio de conferencia e
+# `pendencias.csv`, que traz NOME de militar, numero de processo e enquadramento.
+# Nasce na raiz do repositorio, como os backups da secao 6.1: sem estas linhas
+# um `git add -A` distraido versiona os dados pessoais de 235 militares.
+migracao_*/
+backups/

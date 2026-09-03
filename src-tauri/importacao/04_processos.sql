@@ -1,5 +1,5 @@
 -- =============================================================================
--- ETAPA 04 — OS 128 PROCESSOS E PROCEDIMENTOS
+-- ETAPA 04 — OS 163 PROCESSOS E PROCEDIMENTOS
 --
 -- Uma tabela só, no lugar das 10 tabelas por espécie mais o hub que as costurava
 -- por código Rust sem FK nenhuma. Os ids do legado são PRESERVADOS.
@@ -11,11 +11,13 @@
 -- fica na coluna própria.
 --
 -- A coluna `concluido` é descartada: concluído <=> data_conclusao IS NOT NULL,
--- equivalência verificada em 128/128.
+-- equivalência verificada em 163/163.
 --
--- Roda em transação única.
+-- NÃO abre transação: quem a abre é scripts/migrar_dados_legados.sh, que roda
+-- as oito etapas numa transação só. Um `BEGIN;`/`COMMIT;` aqui dentro encerraria
+-- a transação externa no meio, e o resto da carga correria em autocommit — sem
+-- erro nenhum, e sem o tudo-ou-nada que a migração exige.
 -- =============================================================================
-BEGIN;
 
 INSERT INTO processos_procedimentos (
     id, apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
@@ -51,10 +53,10 @@ SELECT l.id::uuid,
   JOIN tipos_documento td ON lower(td.nome)  = lower(l.documento_iniciador)
   JOIN unidades_pm     un ON lower(un.nome)  = lower(l.local_origem)
   -- `local_fatos` guarda o NOME do lugar, não o id — os UUIDs preservados na
-  -- migration 0003 não ajudam aqui. 117 dos 128 casam direto; os outros 11
+  -- migration 0003 não ajudam aqui. 151 dos 163 casam direto; os outros 12
   -- vêm no formato "Distrito (Município)" (Bom Futuro ×8, Jaci-Paraná,
   -- Joelândia, Tarilândia). Removido o sufixo entre parênteses, resolvem
-  -- 128/128 — e nenhum nome do catálogo contém '(', então a regra é segura.
+  -- 163/163 — e nenhum nome do catálogo contém '(', então a regra é segura.
   JOIN municipios_distritos mu
        ON lower(mu.nome) = lower(regexp_replace(l.local_fatos, '\s*\([^)]*\)\s*$', ''))
   LEFT JOIN naturezas_fato nf ON lower(nf.nome) = lower(l.natureza_procedimento)
@@ -76,4 +78,3 @@ SELECT l.id::uuid, l.deprecante, un.id
  WHERE l.deprecante IS NOT NULL
 ON CONFLICT DO NOTHING;
 
-COMMIT;

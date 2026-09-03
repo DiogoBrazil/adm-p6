@@ -11,9 +11,11 @@
 -- siglas: "escrivão só em IPM" e "PAD/CD/CJ não têm encarregado" deixam de ser
 -- literais no código e passam a ser linhas de configuração, como manda o §3.
 --
--- Roda em transação única.
+-- NÃO abre transação: quem a abre é scripts/migrar_dados_legados.sh, que roda
+-- as oito etapas numa transação só. Um `BEGIN;`/`COMMIT;` aqui dentro encerraria
+-- a transação externa no meio, e o resto da carga correria em autocommit — sem
+-- erro nenhum, e sem o tudo-ou-nada que a migração exige.
 -- =============================================================================
-BEGIN;
 
 -- ------------------------------------ apuratorio_documentos_iniciadores ------
 -- Um par por (espécie, documento) observado. Cada espécie do legado usou um
@@ -76,4 +78,3 @@ SELECT a.id,
   JOIN papeis_processo pp ON lower(pp.nome) = lower(uso.papel)
 ON CONFLICT DO NOTHING;
 
-COMMIT;

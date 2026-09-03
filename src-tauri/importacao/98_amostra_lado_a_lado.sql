@@ -30,13 +30,15 @@
 --                   como "Distrito (Município)". A comparação tira o sufixo,
 --                   que é exatamente a tradução que a etapa 04 faz. O valor
 --                   bruto aparece no rótulo da linha, para você conferir.
---   designações     o legado registrava 25 entradas de substituição, 5 delas
+--   designações     o legado registra 31 eventos de substituição, 6 deles
 --                   correções de digitação no mesmo dia (decisão 19). O que se
 --                   compara é o número de DIAS distintos, que é o número de
 --                   substituições que de fato houve.
---   art. 29         os 3 vínculos sem analogia RDPM ficam de fora por decisão
---                   22. A linha confere que continuam fora: entrar sem analogia
---                   violaria a decisão 5.
+--   art. 29         `analogia_transgressao_id` é NOT NULL (decisão 5), e a
+--                   fonte `pm_envolvido_art29` nunca guardou analogia. Os 10
+--                   vínculos entram com uma analogia PROVISÓRIA, fixa e sem
+--                   validade jurídica; as linhas conferem que ela aparece
+--                   exatamente neles, e em nenhum dos que tinham a real.
 --   solução         era do processo no legado e é do envolvido aqui, replicada
 --                   a todos (decisão 20) — daí a comparação ser por envolvido
 --                   contra a coluna do processo.
@@ -45,18 +47,23 @@
 -- (§8.5) ele deixa de rodar, e é esperado.
 -- =============================================================================
 WITH amostra(ord, id, apelido) AS (VALUES
-    -- Os 6 da tabela em §8.5. Cada um está aqui por um motivo diferente;
-    -- trocar um por outro processo qualquer perde a cobertura.
+    -- Cada um está aqui por um motivo diferente; trocar um por outro processo
+    -- qualquer perde a cobertura.
     (1, '10b39de3-fad8-4e93-9cea-7b2027118253', 'IPM 8/2024'),      -- 9 envolvidos (o máximo) + troca colapsada
     (2, 'ec07f120-e4c5-4337-b628-592c5859339c', 'IPM 1/2024'),      -- 8 prorrogações: a cadeia mais longa
     (3, 'b0294d82-4d35-46d4-a10f-2bd2b555d462', 'IPM 1/P6/2024'),   -- o anexo de 20 MB
     (4, '22ce21be-aa00-42b5-98cd-65e1d328ba4e', 'PADS 1/2025'),     -- penalidade + envolvido criado + jsonb
     (5, '6b1f19a8-4ab8-4ecc-b596-27480bf9e017', 'CP 1/2025'),       -- extensão de carta precatória
-    (6, '980f1a82-3771-4193-b43b-37a09eadf0c5', 'SR 20/2025')       -- três trocas no mesmo dia, colapsadas
+    (6, '980f1a82-3771-4193-b43b-37a09eadf0c5', 'SR 20/2025'),      -- três trocas no mesmo dia, colapsadas
+    -- O sétimo entrou na rodada de 03/09/2026: sem um processo com art. 29, as
+    -- duas linhas de infração estatutária do §7 nunca eram exercitadas, e a que
+    -- afirmava "não entrou" passava por ser código morto — com 10 vínculos
+    -- reais do lado de fora.
+    (7, '8d36ece4-cdff-4e22-9b3d-bdcb1ce8efa9', 'IPM 012/P-6/2019') -- 7 art. 29 sem analogia + CPM 303 §2º e 319
 ),
 
 -- Os envolvidos do legado vêm das duas fontes que a etapa 05 uniu: as linhas
--- de `procedimento_pms_envolvidos` e os 37 processos que guardavam o acusado
+-- de `procedimento_pms_envolvidos` e os 44 processos que guardavam o acusado
 -- em coluna própria (decisão 14). A união repete a da etapa 05 de propósito —
 -- se ela mudar sem esta mudar, a divergência aparece aqui.
 leg_envolvidos AS (
@@ -147,10 +154,31 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
 
 -- ── 3. Cadeia de prazos ─────────────────────────────────────────────────────
     UNION ALL
-    SELECT a.ord, a.apelido, '3 prazos', 'quantidade',
+    -- Só os prazos que VIERAM do legado. A etapa 07 acrescenta um prazo
+    -- inicial para o processo que não tinha nenhum, e comparar o total contra
+    -- o legado acusaria divergência onde houve reconstrução deliberada — o
+    -- bloco seguinte é quem confere essa.
+    SELECT a.ord, a.apelido, '3 prazos', 'quantidade (vindos do legado)',
            (SELECT count(*) FROM legado.prazos_processo x WHERE x.processo_id = a.id)::text,
-           (SELECT count(*) FROM processo_prazos z WHERE z.processo_id = a.id::uuid)::text
+           (SELECT count(*) FROM processo_prazos z
+             WHERE z.processo_id = a.id::uuid
+               AND EXISTS (SELECT 1 FROM legado.prazos_processo x WHERE x.id = z.id::text))::text
       FROM amostra a
+
+    UNION ALL
+    -- Prazo inicial RECONSTRUÍDO: o legado não tinha nenhum, e o novo tem
+    -- exatamente um, começando na data de recebimento. É o que se afirma.
+    SELECT a.ord, a.apelido, '3 prazos', 'prazo inicial reconstruido',
+           CASE WHEN NOT EXISTS (SELECT 1 FROM legado.prazos_processo x WHERE x.processo_id = a.id)
+                     AND l.data_recebimento IS NOT NULL
+                THEN 'um, comecando em ' || l.data_recebimento::text ELSE 'nenhum' END,
+           coalesce((SELECT 'um, comecando em ' || z.data_inicio::text
+                       FROM processo_prazos z
+                      WHERE z.processo_id = a.id::uuid AND z.ordem = 0
+                        AND NOT EXISTS (SELECT 1 FROM legado.prazos_processo x WHERE x.id = z.id::text)),
+                    'nenhum')
+      FROM amostra a
+      JOIN legado.processos_procedimentos l ON l.id = a.id
 
     UNION ALL
     -- `inicio +dias = vencimento` numa string só: é a aritmética inteira do
@@ -161,17 +189,17 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
            (z.data_inicio::text || ' +' || z.dias             || ' = ' || z.data_vencimento::text)
       FROM amostra a
       JOIN processo_prazos z ON z.processo_id = a.id::uuid
-      LEFT JOIN legado.prazos_processo l ON l.id = z.id::text
+      JOIN legado.prazos_processo l ON l.id = z.id::text
 
     UNION ALL
-    -- Decisão 18: as 58 prorrogações sem motivo receberam texto reconhecível.
+    -- Decisão 18: as 77 prorrogações sem motivo receberam texto reconhecível.
     SELECT a.ord, a.apelido, '3 prazos',
            'ordem ' || lpad(z.ordem::text, 2, '0') || ' motivo suprido (decisao 18)',
            CASE WHEN btrim(coalesce(l.motivo, '')) = '' THEN 'sim' ELSE 'nao' END,
            CASE WHEN z.motivo = 'Motivo não registrado no sistema anterior' THEN 'sim' ELSE 'nao' END
       FROM amostra a
       JOIN processo_prazos z ON z.processo_id = a.id::uuid
-      LEFT JOIN legado.prazos_processo l ON l.id = z.id::text
+      JOIN legado.prazos_processo l ON l.id = z.id::text
      WHERE z.ordem >= 1
 
 -- ── 4. Envolvidos ───────────────────────────────────────────────────────────
@@ -266,16 +294,20 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
       JOIN legado.processos_procedimentos l ON l.id = a.id
 
     UNION ALL
-    -- O par (processo, momento) é a chave: a etapa 07 NÃO preserva o id do
-    -- jsonb, então casar por id não acharia nada. O autor era nome em TEXTO e
-    -- virou FK — e a FK aponta para a conta, não direto para o militar.
+    -- Casa por ID: os 73 andamentos do legado TÊM id no jsonb, todos UUID
+    -- distintos, e a etapa 07 passou a preservá-los. Antes esta junção era pelo
+    -- par (processo, momento) — e isso comparava `ocorrido_em` com um
+    -- `(item->>'data')::timestamptz`, cast que depende do fuso da SESSÃO. Como
+    -- a etapa 07 grava o horário explicitamente em America/Porto_Velho, a
+    -- junção por momento passou a não casar nada quando a sessão da conferência
+    -- estava noutro fuso: o relatório acusava "andamento sumiu" com todos os 73
+    -- no lugar. O autor era nome em TEXTO e virou FK — e a FK aponta para a
+    -- conta, não direto para o militar.
     SELECT a.ord, a.apelido, '6 andamentos', c.campo, c.leg, c.nov
       FROM amostra a
       JOIN legado.processos_procedimentos l ON l.id = a.id
       CROSS JOIN LATERAL jsonb_array_elements(coalesce(l.andamentos,'[]'::jsonb)) item
-      LEFT JOIN processo_andamentos m
-             ON m.processo_id = a.id::uuid
-            AND m.ocorrido_em = (item->>'data')::timestamptz
+      LEFT JOIN processo_andamentos m ON m.id = (item->>'id')::uuid
       LEFT JOIN usuarios co ON co.id = m.registrado_por_id
       LEFT JOIN policiais_militares pm ON pm.id = co.policial_militar_id
       CROSS JOIN LATERAL (VALUES
@@ -300,23 +332,34 @@ comparacoes(ord, apelido, aspecto, chave, leg, nov) AS (
              (SELECT count(*) FROM legado.pm_envolvido_crimes q WHERE q.pm_indicios_id = i.id)::text,
              (SELECT count(*) FROM envolvido_infracoes_penais q WHERE q.envolvido_id = x.id)::text),
           -- As DUAS fontes do legado somadas: `pm_envolvido_rdpm` (procedimentos)
-          -- e o jsonb `transgressoes_ids` (os 32 PADS), que quase ficou de fora.
+          -- e o jsonb `transgressoes_ids` (os 39 PADS), que quase ficou de fora.
           ('transgressoes RDPM (as 2 fontes) — ' || pm.nome,
              ((SELECT count(*) FROM legado.pm_envolvido_rdpm q WHERE q.pm_indicios_id = i.id)
             + (SELECT count(*) FROM jsonb_array_elements(lj.itens) t
                 WHERE t.value->>'tipo' = 'rdpm'))::text,
              (SELECT count(*) FROM envolvido_transgressoes q WHERE q.envolvido_id = x.id)::text),
-          -- Só o jsonb traz analogia; o art. 29 da outra fonte nunca teve.
-          ('infracoes do estatuto (com analogia) — ' || pm.nome,
-             (SELECT count(*) FROM jsonb_array_elements(lj.itens) t
-               WHERE t.value->>'tipo' = 'estatuto')::text,
+          -- Infração estatutária: DUAS fontes que não se cruzam. O jsonb dos
+          -- PADS traz a analogia; `pm_envolvido_art29` (IPM/SR) nunca a teve.
+          -- As duas entram, e o total tem de bater com a soma.
+          ('infracoes do estatuto (as 2 fontes) — ' || pm.nome,
+             ((SELECT count(*) FROM jsonb_array_elements(lj.itens) t
+                WHERE t.value->>'tipo' = 'estatuto')
+            + (SELECT count(*) FROM legado.pm_envolvido_art29 z WHERE z.pm_indicios_id = i.id))::text,
              (SELECT count(*) FROM envolvido_infracoes_estatuto q WHERE q.envolvido_id = x.id)::text),
-          -- Decisão 22: entrar sem analogia violaria o NOT NULL da decisão 5.
-          ('art. 29 sem analogia que entrou indevidamente (decisao 22)', '0',
-             (SELECT count(*) FROM legado.pm_envolvido_art29 z
-                JOIN envolvido_infracoes_estatuto q
-                  ON q.envolvido_id = x.id AND q.infracao_estatuto_id = z.art29_id::uuid
-               WHERE z.pm_indicios_id = i.id)::text)
+          -- Os que vieram de `pm_envolvido_art29` carregam a analogia PROVISÓRIA,
+          -- que não tem validade jurídica e existe para ser encontrada depois.
+          ('art. 29 com analogia provisoria — ' || pm.nome,
+             (SELECT count(*) FROM legado.pm_envolvido_art29 z WHERE z.pm_indicios_id = i.id)::text,
+             (SELECT count(*) FROM envolvido_infracoes_estatuto q
+               WHERE q.envolvido_id = x.id
+                 AND q.analogia_transgressao_id = 'c8000000-0000-4000-8000-000000000001')::text),
+          -- …e nenhum vínculo que TINHA analogia real pode tê-la perdido.
+          ('estatuto com analogia real — ' || pm.nome,
+             (SELECT count(*) FROM jsonb_array_elements(lj.itens) t
+               WHERE t.value->>'tipo' = 'estatuto' AND t.value ? 'rdmp_analogia')::text,
+             (SELECT count(*) FROM envolvido_infracoes_estatuto q
+               WHERE q.envolvido_id = x.id
+                 AND q.analogia_transgressao_id <> 'c8000000-0000-4000-8000-000000000001')::text)
       ) AS c(campo, leg, nov)
 
 -- ── 8. Anexo ────────────────────────────────────────────────────────────────

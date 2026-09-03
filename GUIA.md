@@ -702,58 +702,38 @@ idêntico.
 
 ### 6.2 O roteiro da importação, do zero
 
-Testado de ponta a ponta. **Não edita uma linha do `adm-p6.sql`.**
+**Um comando.** O roteiro manual que ficava aqui virou
+`scripts/migrar_dados_legados.sh`, porque cada passo dele tinha uma forma
+silenciosa de dar errado — e três deram, na rodada de 03/09/2026.
 
 ```bash
-# ── 1. Banco da aplicação, limpo, com as 12 migrations ────────────────────────
-docker compose down -v && docker compose up -d
-cd src-tauri && sqlx migrate run --source migrations && cd ..
-
-# ── 2. O dump legado entra num banco PRÓPRIO, exatamente como está ───────────
-# O role `app_user` aparece nos ALTER ... OWNER TO do dump; criá-lo vazio basta.
-docker compose exec -T postgres psql -U adm_p6_user -d postgres -q \
-  -c "CREATE DATABASE adm_p6_legado;" \
-  -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='app_user')
-        THEN CREATE ROLE app_user; END IF; END \$\$;"
-
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_legado -q < adm-p6.sql
-
-# ── 3. Lá dentro, `public` vira `legado`; então o schema é exportado ─────────
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_legado -q \
-  -c "ALTER SCHEMA public RENAME TO legado;"
-
-docker compose exec -T postgres pg_dump -U adm_p6_user -d adm_p6_legado \
-  -n legado --no-owner --no-acl > /tmp/legado.sql        # ~43 MB
-
-# ── 4. E entra ao lado do schema novo, sem tocar em `public` ────────────────
-# NÃO crie o schema antes: o pg_dump -n já traz o CREATE SCHEMA.
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
-  -q -v ON_ERROR_STOP=1 < /tmp/legado.sql
-
-# ── 5. Conferir que o legado chegou inteiro ANTES de mapear ─────────────────
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db -t \
-  -c "SELECT 'processos: '||count(*) FROM legado.processos_procedimentos;" \
-  -c "SELECT 'militares: '||count(*) FROM legado.usuarios;" \
-  -c "SELECT 'prazos:    '||count(*) FROM legado.prazos_processo;"
-# espera: 128 · 236 · 141
-
-# ── 6. A importação, etapa por etapa ───────────────────────────────────────
-for etapa in src-tauri/importacao/0*.sql; do
-  printf "── %-40s" "$(basename $etapa)"
-  docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
-      -v ON_ERROR_STOP=1 -q < "$etapa" && echo ok || { echo FALHOU; break; }
-done
-
-# ── 7. Conferência: 24 contagens e 17 invariantes ──────────────────────────
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db -q \
-    < src-tauri/importacao/99_conferencia.sql
-
-# ── 8. Só depois da amostra manual na tela, o legado sai ───────────────────
-docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db \
-    -c "DROP SCHEMA legado CASCADE;"
-docker compose exec -T postgres psql -U adm_p6_user -d postgres \
-    -c "DROP DATABASE adm_p6_legado;"
+./scripts/migrar_dados_legados.sh                        # ensaio, o padrão
+./scripts/migrar_dados_legados.sh --execute --destino adm_p6_db
 ```
+
+O ensaio restaura uma cópia descartável do destino, roda a migração inteira nela
+e emite o mesmo relatório. O banco real não é tocado. Documentação completa,
+incluindo rollback e leitura dos relatórios: `src-tauri/importacao/README.md`.
+
+#### O que o script faz que o roteiro manual não fazia
+
+| | |
+|---|---|
+| Backup validado antes de mutar | `pg_dump -Fc` conferido com `pg_restore -l`. Backup que não abre não é backup |
+| Uma transação para a carga inteira | as etapas deixaram de abrir `BEGIN`/`COMMIT` próprios — ver a armadilha na seção 7 |
+| `SET LOCAL TimeZone` | o legado guarda timestamp sem fuso, digitado em Ariquemes; o container é UTC |
+| Preflight | recusa dump antigo, analogia desativada, destino desconhecido e processo inesperado |
+| Marcador de idempotência | linha de `auditoria` com o SHA-256 do dump; reexecutar não recarrega |
+| Conferência com invariantes | 38 contagens e 51 comparações semânticas contra o próprio `legado` |
+| Relatório de pendências | CSV nominal do que uma pessoa precisa resolver na tela |
+
+#### O schema `legado` não sai mais no fim
+
+O passo 8 do roteiro antigo (`DROP SCHEMA legado CASCADE`) foi **abandonado**.
+Metade das invariantes da conferência compara o destino contra o `legado`, e
+duas listas de pendência — o prazo reconstruído e o elo de substituição perdido —
+só são deriváveis enquanto ele existir. Um dump anterior já carregado é
+renomeado para `legado_anterior_<carimbo>`, nunca descartado.
 
 #### Como se soube que deu certo
 
@@ -785,6 +765,14 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | `<a download>` para entregar arquivo | No WebView não define destino nem abre "salvar como", e muda por plataforma. Sobreviveu no download de anexo até a seção 12, rodada 6, porque nenhum teste chega lá e a tela não acusa | `dom.ts::baixarArquivoBase64` → `files_save_download`, que abre o diálogo nativo no Rust. Vale para **todo** arquivo, não só o CSV |
 | **`docker compose down -v` com dado de produção dentro** | Apaga 8 anos de registro. A regra "editou migration, recria o banco" **acabou** | Migration incremental (`0008`…). Se realmente precisar recomeçar, o roteiro completo está na 8.5 |
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
+| `BEGIN;`/`COMMIT;` dentro de arquivo servido por `psql --single-transaction` | O `BEGIN` vira aviso e o `COMMIT` **encerra a transação externa**: tudo depois dele corre em autocommit, e a migração deixa de ser tudo-ou-nada — sem erro nenhum | As etapas de `importacao/` não abrem transação. Quem a abre é `scripts/migrar_dados_legados.sh` |
+| Converter `timestamp` do legado sem dizer o fuso | O legado guarda hora INGÊNUA, digitada em Ariquemes. O cast para `timestamptz` usa o fuso da **sessão** — que no container é `Etc/UTC` — e todo o histórico entra 4h adiantado; o que passou das 20h muda de dia | `SET LOCAL TimeZone = 'America/Porto_Velho'` na transação, e a etapa 00 recusa a carga se a sessão estiver errada |
+| `ON COMMIT DROP` numa tabela temporária fora de transação explícita | A tabela é criada e destruída no mesmo instante, e a instrução seguinte falha com "relation does not exist" | É sintoma de estar rodando a etapa sem `--single-transaction`. Rode pelo script |
+| `pg_restore -l` lendo de um pipe | Falha com `did not find magic string in file header` mesmo com o arquivo perfeito: ele precisa **posicionar** no arquivo | `docker cp` o backup para dentro do container e valide o caminho, nunca por `stdin` |
+| Carregar o dump legado sob outro nome de schema | Os 10 arquivos de `importacao/` dizem `legado.` literalmente. Um `legado` preexistente com o dump ANTERIOR faz a carga ler 128 processos em vez de 163, **sem erro nenhum** | O preflight conta os processos da origem e recusa. Um dump antigo é renomeado para `legado_anterior_<carimbo>`, não descartado |
+| Casar registro importado por timestamp entre duas conexões | O cast `::timestamptz` de cada lado usa o fuso da sua própria sessão. O comparativo 98 passou a não achar nenhum dos 73 andamentos, e relatou "sumiu" com todos no lugar | Casar por **id**. O andamento tem id no jsonb do legado, e a etapa 07 o preserva |
+| `psql -At -F','` para gerar CSV | Não escapa nada: um valor como `Art. 29, IV` vira duas colunas e desalinha o arquivo inteiro | `psql --csv`, que cita o que precisa e escreve o cabeçalho |
+| Migration corretiva para consertar dado importado depois | A 0007 (Escrivão de Processo), a 0008 (cadeia de substituição) e a 0016 ("À apurar") corrigiam a carga — e **já foram aplicadas**. Elas não rodam de novo | O dado tem de nascer certo na etapa de importação. Se a correção estava numa migration, ela agora é regra da etapa |
 | Executar dump de `pg_dump` pelo protocolo do Postgres | `COPY ... FROM stdin`, `\restrict` e `\.` são sintaxe do **cliente psql**, não SQL: `sqlx::raw_sql` estoura com "syntax error at or near \" | Gerar a fixture com `--inserts` e filtrar as linhas `\restrict`/`\unrestrict` — é o que `gerar_legado_amostra.sh` faz |
 | Supor que tirar a coluna do registro apaga o dado | Não apaga, e é o que torna seguro esconder o `codigo_extensao`: o `UPDATE` genérico monta o `SET` **só** com as colunas declaradas, então editar um apuratório pela tela não toca a extensão de carta precatória. O reverso também vale — uma coluna `NOT NULL` fora do registro faz o **INSERT** falhar, porque ninguém a preenche | Coluna obrigatória que não cabe na tela vira `ReferenciaFixa`, que o `save` resolve sozinho (a seção 4) |
 | CSP sem `ipc:` em `connect-src` | Não quebra uma tela: quebra os **84 comandos** de uma vez, porque é por aí que o IPC do Tauri v2 passa. E some no console como `Refused to connect` | `connect-src 'self' ipc: http://ipc.localhost`. Se o app abrir mudo logo na primeira tela, é isto |
@@ -1604,9 +1592,15 @@ docker compose exec -T postgres psql -U adm_p6_user -d adm_p6_db -x -c \
 
 Então a limpeza final (é a Fase 4 do plano):
 
-1. Apagar o IPM de teste `250d8ee1-c167-4604-8cdf-2bd5a62d8422`
-2. Rodar `99_conferencia.sql` e conferir 24 contagens e 17 invariantes em zero
-3. Remover o schema `legado` (passo 8 do roteiro da seção 6.2)
+1. Rodar `99_conferencia.sql` e conferir as 38 contagens e as 51 invariantes
+2. Resolver o `pendencias.csv` na tela — as 10 analogias provisórias primeiro
+3. **Não** remover o schema `legado`: metade das invariantes o compara, e as
+   pendências do prazo reconstruído e do elo perdido só são deriváveis com ele
+   (ver o fim da seção 6.2)
+
+Os processos de teste não estão mais nessa lista: quem os apaga é a etapa
+`00_limpeza_testes.sql`, dentro da transação da migração, conferindo os 13 UUIDs
+um a um antes.
 
 **Achou divergência na amostra?** Ela é de mapeamento, não de dado: corrija a
 etapa correspondente em `src-tauri/importacao/` e rode o roteiro do zero.

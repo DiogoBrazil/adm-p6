@@ -19,9 +19,11 @@
 --      desde a 0012 ela é `processo_vitimas`, relação própria do procedimento,
 --      sem papel de catálogo.
 --
--- Roda em transação única.
+-- NÃO abre transação: quem a abre é scripts/migrar_dados_legados.sh, que roda
+-- as oito etapas numa transação só. Um `BEGIN;`/`COMMIT;` aqui dentro encerraria
+-- a transação externa no meio, e o resto da carga correria em autocommit — sem
+-- erro nenhum, e sem o tudo-ou-nada que a migração exige.
 -- =============================================================================
-BEGIN;
 
 -- --------------------------------------------------------------- exceção 2 ---
 -- A tradução "coluna de papel do legado" -> "papel do processo".
@@ -40,11 +42,16 @@ CREATE TABLE legado.map_papeis (
     prioridade_responsavel int  NULL
 );
 INSERT INTO legado.map_papeis VALUES
-    ('responsavel_id',       'Encarregado',  1),
-    ('presidente_id',        'Presidente',   2),
-    ('escrivao_id',          'Escrivão',     NULL),
-    ('escrivao_processo_id', 'Escrivão',     NULL),
-    ('interrogante_id',      'Interrogante', NULL);
+    ('responsavel_id',       'Encarregado',          1),
+    ('presidente_id',        'Presidente',           2),
+    ('escrivao_id',          'Escrivão',             NULL),
+    -- Papel PRÓPRIO, não o mesmo 'Escrivão' da linha acima. São funções
+    -- diferentes (decisão do plano): o Escrivão acompanha o IPM, o Escrivão
+    -- de Processo serve os ritos colegiados CD/CJ/PAD. A migration 0007 é
+    -- quem separava os dois DEPOIS da carga — e ela já foi aplicada, então
+    -- não corrigirá mais nada: a designação precisa nascer certa aqui.
+    ('escrivao_processo_id', 'Escrivão de Processo', NULL),
+    ('interrogante_id',      'Interrogante',         NULL);
 
 -- Uma linha por (processo, papel ocupado). Base das etapas 02 e 06.
 CREATE VIEW legado.v_ocupacoes AS
@@ -78,7 +85,7 @@ ON CONFLICT DO NOTHING;
 -- saem do dado:
 --
 --   prazo_base_dias     : o prazo inicial MAIS PRATICADO daquela espécie nos
---                         44 prazos registrados (IPM 40, SR 30, PADS 30,
+--                         53 prazos iniciais registrados (IPM 40, SR 30, PADS 30,
 --                         SV 15 — cada um unânime). As 6 espécies sem prazo
 --                         registrado ficam com 30, e o administrador ajusta.
 --   max_envolvidos      : vem do TIPO (decisão 13) — procedimento apura um
@@ -147,7 +154,7 @@ SELECT u.nome, mu.id
        WHERE unidade_deprecada IS NOT NULL
       UNION
       -- O catálogo `locais_origem` do legado nunca foi usado por processo
-      -- nenhum (0 de 128, em 8 anos): é seed de demonstração do app antigo.
+      -- nenhum (0 de 163, em 8 anos): é seed de demonstração do app antigo.
       -- Mas são unidades reais da PMRO, e entram como OPÇÃO disponível para
       -- que o usuário não precise digitá-las quando aparecerem.
       -- CORREGEDORIA fica de fora: é a mesma unidade que CORREGEPOM, que já
@@ -178,7 +185,7 @@ SELECT DISTINCT natureza_procedimento,
 ON CONFLICT DO NOTHING;
 
 -- --------------------------------------------------------- status_envolvido --
--- Das duas fontes: a tabela de envolvidos e a coluna do processo (os 37 que o
+-- Das duas fontes: a tabela de envolvidos e a coluna do processo (os 44 que o
 -- legado guardava assim — decisão 14).
 INSERT INTO status_envolvido (nome)
 SELECT DISTINCT status_pm FROM legado.procedimento_pms_envolvidos WHERE status_pm IS NOT NULL
@@ -210,6 +217,40 @@ SELECT replace(penalidade_tipo, '_', ' '),
   FROM legado.processos_procedimentos
  WHERE penalidade_tipo IS NOT NULL
  GROUP BY penalidade_tipo
+ON CONFLICT DO NOTHING;
+
+-- ----------------------------------------------------- infracoes_penais ------
+-- COMPLEMENTO, não recarga. O catálogo penal veio da migration 0003, que
+-- preservou o UUID de origem de cada artigo — é por isso que a etapa 08 casa
+-- `infracoes_penais.id = crimes_contravencoes.id` direto, sem tabela de-para.
+--
+-- Mas o 0003 foi semeado a partir do dump ANTERIOR, e o dump novo acusa 5
+-- artigos que o legado passou a usar depois e que aqui não existem: CP art. 163
+-- (dano), CPM art. 209 (lesão corporal), CPM art. 216 (injúria), CPM art. 303
+-- §2º (peculato) e CPM art. 319 (retardar ato de ofício). São 5 dos 18 vínculos
+-- penais. Sem eles a FK `fk_eip_infracao` derruba a carga — e, pior, se alguém
+-- pusesse um `ON CONFLICT DO NOTHING` no lugar, as 5 acusações penais REAIS
+-- sumiriam sem erro nenhum.
+--
+-- Entram só os artigos EFETIVAMENTE USADOS por um vínculo. O resto do catálogo
+-- legado fica de fora: complemento é o mínimo necessário para não perder
+-- processo, não uma segunda carga de catálogo por cima da que o administrador
+-- já mantém.
+--
+-- O id é o do legado, para preservar a regra de casamento da 0003. Os campos
+-- vazios do dump viram NULL porque `uq_infracoes_penais` é NULLS NOT DISTINCT:
+-- '' e NULL contariam como artigos diferentes.
+INSERT INTO infracoes_penais
+    (id, dispositivo_legal_id, especie_id, artigo, descricao, paragrafo, inciso, alinea)
+SELECT cc.id::uuid, dl.id, ei.id, cc.artigo, cc.descricao_artigo,
+       NULLIF(btrim(cc.paragrafo), ''),
+       NULLIF(btrim(cc.inciso),    ''),
+       NULLIF(btrim(cc.alinea),    '')
+  FROM legado.crimes_contravencoes cc
+  JOIN dispositivos_legais dl      ON lower(dl.nome) = lower(cc.dispositivo_legal)
+  JOIN especies_infracao_penal ei  ON lower(ei.nome) = lower(cc.tipo)
+ WHERE EXISTS (SELECT 1 FROM legado.pm_envolvido_crimes x WHERE x.crime_id = cc.id)
+   AND NOT EXISTS (SELECT 1 FROM infracoes_penais ip WHERE ip.id = cc.id::uuid)
 ON CONFLICT DO NOTHING;
 
 -- ---------------------------------------------------------- papeis_processo --
@@ -258,4 +299,3 @@ ON CONFLICT DO NOTHING;
 -- afirmar o que o dado não diz. `tipo_andamento_id` é anulável exatamente
 -- para isso.
 
-COMMIT;

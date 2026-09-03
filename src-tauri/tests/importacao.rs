@@ -1,10 +1,10 @@
 //! A importação dos dados de produção, exercitada num recorte do banco legado.
 //!
-//! Os oito scripts de `importacao/` são de uso único, mas o schema não é: a
-//! próxima migration que renomeie uma coluna quebra a importação em silêncio, e
-//! só se descobre no dia da virada. Este teste roda as oito etapas de verdade,
-//! na ordem, sobre `tests/fixtures/legado_amostra.sql` — 26 dos 128 processos,
-//! escolhidos para cobrir cada caminho (ver o cabeçalho da fixture).
+//! Os scripts de `importacao/` são de uso único, mas o schema não é: a próxima
+//! migration que renomeie uma coluna quebra a importação em silêncio, e só se
+//! descobre no dia da virada. Este teste roda as etapas de verdade, na ordem,
+//! sobre `tests/fixtures/legado_amostra.sql` — 34 dos 163 processos, escolhidos
+//! para cobrir cada caminho (ver o cabeçalho da fixture).
 //!
 //! As contagens NÃO são números mágicos: são comparadas contra o próprio
 //! recorte. O que está fixado aqui são as DECISÕES — o colapso das trocas do
@@ -16,7 +16,12 @@ use sqlx::{PgPool, Row};
 mod util;
 
 /// Os arquivos da importação, na ordem que as FKs impõem.
-const ETAPAS: [&str; 8] = [
+///
+/// A 09 fica de fora: ela grava a linha de auditoria da migração e recebe o
+/// sha256 do dump por variável de psql (`:'hash_dump'`), que o `sqlx::raw_sql`
+/// não substitui. Quem a exercita é o ensaio de scripts/migrar_dados_legados.sh.
+const ETAPAS: [&str; 9] = [
+    "00_limpeza_testes.sql",
     "01_catalogos.sql",
     "02_config_apuratorio.sql",
     "03_policiais.sql",
@@ -49,6 +54,11 @@ async fn importar(pool: &PgPool) {
         // O pg_dump zera o `search_path` da conexão; sem restaurá-lo as etapas
         // não enxergariam as tabelas do schema novo.
         "SET search_path = public;",
+        // O legado guarda timestamp SEM fuso, digitado em Ariquemes. O cast
+        // implícito para timestamptz usa o fuso da SESSÃO, então sem isto o
+        // histórico entraria deslocado — e a etapa 00 recusa a carga, que é
+        // exatamente o que se quer que ela faça.
+        "SET TimeZone = 'America/Porto_Velho';",
     ] {
         sqlx::raw_sql(comando)
             .execute(&mut *conn)
@@ -80,13 +90,23 @@ async fn as_oito_etapas_reproduzem_o_legado_sem_perder_nada() {
                 "processos",
             ),
             (
-                "SELECT count(*) FROM processo_prazos",
+                // Os prazos do legado entram TODOS; o que a contagem crua não
+                // pega mais é que a etapa 07 acrescenta um prazo inicial para
+                // cada processo que não tinha nenhum. Aqui se compara o que veio
+                // do legado; os reconstruídos têm asserção própria adiante.
+                "SELECT count(*) FROM processo_prazos z
+                  WHERE EXISTS (SELECT 1 FROM legado.prazos_processo l WHERE l.id::uuid = z.id)",
                 "SELECT count(*) FROM legado.prazos_processo",
-                "prazos",
+                "prazos vindos do legado",
             ),
             (
                 "SELECT count(*) FROM policiais_militares",
-                "SELECT count(*) FROM legado.usuarios WHERE matricula <> 'ADMIN001'",
+                // Fora ADMIN001 (conta técnica) e "À APURAR" (marcador de
+                // envolvido não identificado, que desde a 0016 é
+                // `policial_militar_id IS NULL` e não um militar).
+                "SELECT count(*) FROM legado.usuarios
+                  WHERE matricula <> 'ADMIN001'
+                    AND NOT (upper(btrim(nome)) = 'À APURAR' AND matricula = '100000000')",
                 "policiais militares",
             ),
             (
@@ -106,12 +126,17 @@ async fn as_oito_etapas_reproduzem_o_legado_sem_perder_nada() {
                 "transgressoes do RDPM",
             ),
             (
+                // Duas fontes, como as transgressões: o jsonb dos PADS, que
+                // TRAZ a analogia, e `pm_envolvido_art29`, que nunca a teve e
+                // por isso entra com a analogia provisória. Antes desta rodada
+                // a segunda ficava de fora, e 10 acusações se perdiam.
                 "SELECT count(*) FROM envolvido_infracoes_estatuto",
-                "SELECT count(*) FROM legado.processos_procedimentos l
-                   CROSS JOIN LATERAL jsonb_array_elements(l.transgressoes_ids::jsonb) e
-                  WHERE btrim(coalesce(l.transgressoes_ids,'')) NOT IN ('','[]')
-                    AND e->>'tipo' = 'estatuto' AND e ? 'rdmp_analogia'",
-                "infracoes estatutarias (as que trazem analogia)",
+                "SELECT (SELECT count(*) FROM legado.processos_procedimentos l
+                          CROSS JOIN LATERAL jsonb_array_elements(l.transgressoes_ids::jsonb) e
+                         WHERE btrim(coalesce(l.transgressoes_ids,'')) NOT IN ('','[]')
+                           AND e->>'tipo' = 'estatuto' AND e ? 'rdmp_analogia')
+                      + (SELECT count(*) FROM legado.pm_envolvido_art29)",
+                "infracoes estatutarias (as duas fontes)",
             ),
             (
                 "SELECT count(*) FROM processo_andamentos",
@@ -256,6 +281,7 @@ async fn as_oito_etapas_reproduzem_o_legado_sem_perder_nada() {
             (
                 "SELECT count(*) FROM legado.usuarios u
                   WHERE u.matricula <> 'ADMIN001'
+                    AND NOT (upper(btrim(u.nome)) = 'À APURAR' AND u.matricula = '100000000')
                     AND NOT EXISTS (SELECT 1 FROM policiais_militares p WHERE p.id = u.id::uuid)",
                 "militar do legado que nao entrou",
             ),
@@ -404,11 +430,15 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
         );
 
         // B5 — a analogia com o RDPM é obrigatória (decisão 5), e o legado a
-        // registrava em UMA das duas fontes só. O vínculo entra quando ela
-        // existe (o jsonb dos PADS a traz) e fica de fora quando não existe
-        // (`pm_envolvido_art29` nunca a teve). O recorte contém as duas
-        // situações, então nenhum dos dois números abaixo é acidente da
-        // amostra.
+        // registrava em UMA das duas fontes só: o jsonb dos PADS a TRAZ,
+        // `pm_envolvido_art29` NUNCA a teve. As duas fontes não se cruzam (uma
+        // só aparece em PADS, a outra só em IPM/SR), e o recorte contém ambas.
+        //
+        // Antes desta rodada a segunda ficava DE FORA, e com isso 10 acusações
+        // estatutárias reais se perdiam. Agora entram com uma analogia
+        // provisória fixa — sem validade jurídica, escolhida assim justamente
+        // para ser identificável: uma consulta por esse id devolve exatamente
+        // os casos que a Seção precisa reenquadrar.
         assert!(
             conta(&pool, "SELECT count(*) FROM legado.pm_envolvido_art29").await > 0,
             "o recorte precisa conter art. 29 SEM analogia para a asserção significar algo"
@@ -423,8 +453,160 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
                      ON eie.envolvido_id = e.id AND eie.infracao_estatuto_id = x.art29_id::uuid"
             )
             .await,
+            conta(&pool, "SELECT count(*) FROM legado.pm_envolvido_art29").await,
+            "todo art. 29 de pm_envolvido_art29 tem de entrar, com a analogia provisoria"
+        );
+        // E todos eles, exatamente eles, carregam a analogia provisória: nem um
+        // vínculo do jsonb (que tem analogia real) pode tê-la recebido.
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM envolvido_infracoes_estatuto
+                  WHERE analogia_transgressao_id = 'c8000000-0000-4000-8000-000000000001'"
+            )
+            .await,
+            conta(&pool, "SELECT count(*) FROM legado.pm_envolvido_art29").await,
+            "a analogia provisoria so pode aparecer nos vinculos que nao tinham analogia"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM envolvido_infracoes_estatuto WHERE analogia_transgressao_id IS NULL"
+            )
+            .await,
             0,
-            "art. 29 vindo de pm_envolvido_art29 nao tem analogia e nao pode entrar"
+            "analogia e NOT NULL: nenhum vinculo pode ter ficado sem"
+        );
+
+        // B5.1 — o "À apurar" do legado era um usuário artificial na coluna do
+        // PM. Desde a 0016 ele é `policial_militar_id IS NULL`, e a 0016 já
+        // rodou: se a etapa 03 o inserisse como militar, ninguém o converteria
+        // depois e o efetivo ganharia uma pessoa que não existe.
+        assert!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM legado.usuarios
+                  WHERE upper(btrim(nome)) = 'À APURAR' AND matricula = '100000000'"
+            )
+            .await
+                > 0,
+            "o recorte precisa conter o marcador 'À APURAR' para a asserção significar algo"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM policiais_militares
+                  WHERE upper(btrim(nome)) = 'À APURAR' AND matricula = '100000000'"
+            )
+            .await,
+            0,
+            "'A apurar' nao e militar e nao pode entrar no efetivo"
+        );
+        assert!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processo_envolvidos WHERE policial_militar_id IS NULL"
+            )
+            .await
+                > 0,
+            "o 'A apurar' do recorte tem de virar envolvido com FK nula, nao sumir"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processo_envolvidos WHERE policial_militar_id IS NULL AND e_condutor"
+            )
+            .await,
+            0,
+            "'A apurar' nao pode ser condutor (ck_envolvido_condutor_identificado)"
+        );
+
+        // B5.2 — o prazo inicial reconstruído. O legado não registrou prazo
+        // nenhum para 110 dos 163 processos, embora todos tenham recebimento.
+        // Ele começa no recebimento e usa o prazo-base VIGENTE da espécie — é
+        // preenchimento técnico, e a conferência o lista como pendência.
+        assert!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM legado.processos_procedimentos l
+                  WHERE NOT EXISTS (SELECT 1 FROM legado.prazos_processo z WHERE z.processo_id = l.id)"
+            )
+            .await
+                > 0,
+            "o recorte precisa conter processo SEM prazo para a asserção significar algo"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processos_procedimentos p
+                  WHERE NOT EXISTS (SELECT 1 FROM processo_prazos z WHERE z.processo_id = p.id AND z.ordem = 0)"
+            )
+            .await,
+            0,
+            "todo processo tem de sair da importacao com prazo inicial"
+        );
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processo_prazos z
+                   JOIN legado.processos_procedimentos l ON l.id = z.processo_id::text
+                  WHERE z.ordem = 0
+                    AND NOT EXISTS (SELECT 1 FROM legado.prazos_processo x WHERE x.id = z.id::text)
+                    AND z.data_inicio IS DISTINCT FROM l.data_recebimento"
+            )
+            .await,
+            0,
+            "prazo reconstruido tem de comecar na data de recebimento"
+        );
+
+        // B5.3 — o horário do andamento é ingênuo no legado e foi digitado em
+        // Ariquemes. Se o cast usar o fuso da sessão, todo o histórico desloca.
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM legado.processos_procedimentos l
+                   CROSS JOIN LATERAL jsonb_array_elements(l.andamentos) a
+                   JOIN processo_andamentos an ON an.id = (a->>'id')::uuid
+                  WHERE jsonb_typeof(l.andamentos) = 'array'
+                    AND an.ocorrido_em <> ((a->>'data')::timestamp AT TIME ZONE 'America/Porto_Velho')"
+            )
+            .await,
+            0,
+            "andamento importado com horario deslocado: o fuso do legado e America/Porto_Velho"
+        );
+
+        // B5.4 — Escrivão e Escrivão de Processo são papéis DIFERENTES. A 0007
+        // separava os dois depois da carga, mas já foi aplicada: a designação
+        // de CD/CJ/PAD precisa nascer no papel certo.
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processo_designacoes d
+                   JOIN papeis_processo pp ON pp.id = d.papel_id
+                   JOIN legado.processos_procedimentos l ON l.id = d.processo_id::text
+                  WHERE l.escrivao_processo_id = d.policial_militar_id::text
+                    AND pp.nome <> 'Escrivão de Processo'"
+            )
+            .await,
+            0,
+            "escrivao_processo_id do legado tem de virar o papel 'Escrivao de Processo'"
+        );
+
+        // B5.5 — a cadeia de substituição é gravada (0008), não deduzida de
+        // datas na leitura. A trigger `tg_cadeia_designacao` já confere a
+        // contiguidade no COMMIT; o que se afirma aqui é que o elo EXISTE.
+        assert_eq!(
+            conta(
+                &pool,
+                "SELECT count(*) FROM processo_designacoes d
+                  WHERE d.designacao_anterior_id IS NULL
+                    AND EXISTS (SELECT 1 FROM processo_designacoes a
+                                 WHERE a.processo_id = d.processo_id AND a.papel_id = d.papel_id
+                                   AND a.data_fim = d.data_inicio)"
+            )
+            .await,
+            0,
+            "designacao que sucede outra tem de gravar designacao_anterior_id"
         );
 
         // …e o que TEM analogia entra, com ela preenchida.
@@ -441,9 +623,14 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
             "o recorte precisa conter infração estatutária COM analogia"
         );
         assert_eq!(
-            conta(&pool, "SELECT count(*) FROM envolvido_infracoes_estatuto").await,
+            conta(
+                &pool,
+                "SELECT count(*) FROM envolvido_infracoes_estatuto
+                  WHERE analogia_transgressao_id <> 'c8000000-0000-4000-8000-000000000001'"
+            )
+            .await,
             com_analogia,
-            "toda infração estatutária com analogia no legado tem de entrar"
+            "toda infração estatutária com analogia REAL no legado tem de entrar com ela"
         );
 
         // O enquadramento dos PADS vinha da segunda fonte, a coluna jsonb — e
@@ -588,17 +775,20 @@ async fn a_amostra_lado_a_lado_nao_acusa_divergencia() {
             .await
             .expect("o relatorio da amostra precisa ser SQL valido contra o schema");
 
-        // Os 6 processos precisam estar no recorte. Se um sair da fixture, os
+        // Os 7 processos precisam estar no recorte. Se um sair da fixture, os
         // JOINs simplesmente não produzem linha para ele — e o relatório
         // passaria a dizer "tudo certo" sobre um processo que não conferiu.
+        // Foi o que aconteceu com o art. 29 até 03/09/2026: nenhum dos 6 tinha
+        // vínculo estatutário, então as linhas que o conferiam nunca eram
+        // produzidas, e a que afirmava "não entrou" passava por vacuidade.
         let processos: std::collections::BTreeSet<String> = linhas
             .iter()
             .map(|l| l.get::<String, _>("processo"))
             .collect();
         assert_eq!(
             processos.len(),
-            6,
-            "a amostra tem 6 processos e o recorte precisa conter todos; vieram {processos:?}"
+            7,
+            "a amostra tem 7 processos e o recorte precisa conter todos; vieram {processos:?}"
         );
 
         // Um relatório de duas linhas também não acusaria nada. O número não é

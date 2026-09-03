@@ -2,25 +2,35 @@
 -- ETAPA 05 — ENVOLVIDOS, SOLUÇÕES, PENALIDADES E PESSOAS CITADAS
 --
 -- Os envolvidos vêm de DUAS fontes que o legado mantinha separadas:
---   (a) as 156 linhas de `procedimento_pms_envolvidos` — só procedimentos;
---   (b) os 37 "processos" (PADS/PAD/CD/CJ/PADE), que guardavam o acusado em
+--   (a) as 221 linhas de `procedimento_pms_envolvidos` — só procedimentos;
+--   (b) os 44 "processos" (PADS/PAD/CD/CJ/PADE), que guardavam o acusado em
 --       COLUNA da própria tabela (`nome_pm_id` + `status_pm`).
 --
--- Criar os 37 é decisão 14, e não é inventar fato: os 37 têm `nome_pm_id` e
--- `status_pm` preenchidos, 13 têm solução e 7 têm penalidade — e como essas
+-- Criar os 44 é decisão 14, e não é inventar fato: os 44 têm `nome_pm_id` e
+-- `status_pm` preenchidos, e vários têm solução e penalidade — e como essas
 -- três informações só existem em `processo_envolvidos` no schema novo, não
 -- criá-los significaria PERDÊ-LAS.
 --
+-- "À APURAR" não é envolvido de mentira nem policial de verdade: o legado o
+-- representava com um usuário artificial (nome 'À APURAR', matrícula
+-- 100000000) posto na coluna do PM. Desde a 0016 o schema novo diz a mesma
+-- coisa com `policial_militar_id IS NULL` — a linha continua existindo, conta
+-- no limite de envolvidos e recebe enquadramento e resultado. São 2 casos, e
+-- o índice parcial `uq_envolvido_a_apurar` garante no máximo um por processo.
+--
 -- Solução e penalidade são do ENVOLVIDO (decisão 2). No legado eram do
--- processo, e 27 processos com solução têm 2+ envolvidos: nesses, a solução é
+-- processo, e 36 processos com solução têm 2+ envolvidos: nesses, a solução é
 -- REPLICADA a todos. É o que o fato legado afirma ("este procedimento foi
 -- Homologado" valia para todos os apurados); atribuí-la só ao primeiro
 -- afirmaria algo que o dump não diz.
 --
--- Roda em transação única. As duas constraint triggers são DEFERRABLE, então
--- `max_envolvidos` só é conferido no COMMIT.
+-- NÃO abre transação: quem a abre é scripts/migrar_dados_legados.sh, que roda
+-- as oito etapas numa transação só. Um `BEGIN;`/`COMMIT;` aqui dentro encerraria
+-- a transação externa no meio, e o resto da carga correria em autocommit — sem
+-- erro nenhum, e sem o tudo-ou-nada que a migração exige. E as duas constraint
+-- triggers são DEFERRABLE, então `max_envolvidos` só é conferido no COMMIT —
+-- que agora é o commit da migração inteira.
 -- =============================================================================
-BEGIN;
 
 INSERT INTO processo_envolvidos (
     id, processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor,
@@ -29,25 +39,29 @@ INSERT INTO processo_envolvidos (
 )
 SELECT fonte.id::uuid,
        fonte.processo_id::uuid,
-       fonte.pm_id::uuid,
+       CASE WHEN apurar.e_apurar THEN NULL ELSE fonte.pm_id::uuid END,
        se.id,
        fonte.ordem,
        -- `e_condutor` substitui o `motorista_id` do processo: no legado o
-       -- motorista era sempre um dos envolvidos (15/15), então é papel do
-       -- envolvido, não outra pessoa. Índice parcial garante no máximo um.
-       fonte.pm_id IS NOT DISTINCT FROM l.motorista_id,
+       -- motorista era sempre um dos envolvidos (17/17), então é papel do
+       -- envolvido, não outra pessoa. A EXCLUDE `uq_envolvido_condutor`
+       -- garante no máximo um. A comparação usa o pm_id de ORIGEM, não o
+       -- convertido: fosse o convertido, um "À apurar" num processo sem
+       -- motorista casaria NULL com NULL e viraria condutor — que é
+       -- justamente o que `ck_envolvido_condutor_identificado` proíbe.
+       NOT apurar.e_apurar AND fonte.pm_id IS NOT DISTINCT FROM l.motorista_id,
        ss.id,
        sd.id,
        tp.id,
        l.penalidade_dias::int,
        fonte.created_at::timestamptz
   FROM (
-      -- (a) os 156 já registrados como envolvidos
+      -- (a) os 221 já registrados como envolvidos
       SELECT e.id, e.procedimento_id AS processo_id, e.pm_id,
              e.status_pm, e.ordem, e.created_at
         FROM legado.procedimento_pms_envolvidos e
       UNION ALL
-      -- (b) os 37 que o legado guardava em coluna do processo
+      -- (b) os 44 que o legado guardava em coluna do processo
       SELECT p.id, p.id, p.nome_pm_id, p.status_pm, 1, p.created_at
         FROM legado.processos_procedimentos p
        WHERE p.nome_pm_id IS NOT NULL
@@ -56,6 +70,15 @@ SELECT fonte.id::uuid,
   ) fonte
   JOIN legado.processos_procedimentos l ON l.id = fonte.processo_id
   JOIN status_envolvido se ON lower(se.nome) = lower(fonte.status_pm)
+  -- Mesmo par nome/matrícula que a 0016 e a etapa 03 usam.
+  CROSS JOIN LATERAL (
+      SELECT EXISTS (
+          SELECT 1 FROM legado.usuarios au
+           WHERE au.id = fonte.pm_id
+             AND upper(btrim(au.nome)) = 'À APURAR'
+             AND au.matricula = '100000000'
+      ) AS e_apurar
+  ) apurar
   -- O prefixo `Sugerido_` decide para qual dos dois catálogos a solução vai
   -- (decisão 3): o encarregado sugere, a autoridade decide.
   LEFT JOIN tipos_solucao_sugerida ss
@@ -111,4 +134,3 @@ SELECT l.id::uuid, pp.id, btrim(q.elem), q.ord
    AND btrim(q.elem) <> ''
 ON CONFLICT DO NOTHING;
 
-COMMIT;
