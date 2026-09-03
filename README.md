@@ -51,9 +51,18 @@ Um comando. O padrão é **ensaio**: roda a migração inteira numa cópia
 descartável do banco e emite o relatório, sem tocar no real.
 
 ```bash
+# teste, no PostgreSQL desta máquina (lê o .env)
 ./scripts/migrar_dados_legados.sh                        # ensaio
 ./scripts/migrar_dados_legados.sh --execute --destino adm_p6_db
+
+# produção, no PostgreSQL de outra máquina (lê o .env.producao)
+./scripts/migrar_dados_legados.sh --env-file .env.producao
+./scripts/migrar_dados_legados.sh --env-file .env.producao --execute --destino admp6db
 ```
+
+Qual banco será migrado sai do arquivo de configuração, e só dele. O `.env`
+aponta para o banco local — é o único que a aplicação e os testes leem, e deixá-lo
+assim é o que impede `cargo test` ou `npm run tauri dev` de alcançarem produção.
 
 Ele faz backup validado antes de qualquer mutação, carrega o dump legado num
 schema isolado, roda a carga numa transação só e emite contagens, invariantes e

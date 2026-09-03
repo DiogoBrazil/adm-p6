@@ -44,10 +44,24 @@ DIR_SAIDA=""
 SERVICO_DB=postgres      # nome do serviço no docker-compose.yml
 ACESSO=auto              # auto | docker | host
 MANTER_ENSAIO=0
+ARQ_ENV="$RAIZ/.env"     # de onde saem DB_HOST/PORT/NAME/USER/PASSWORD
+
+# 1 quando o servidor É o Postgres do docker-compose desta máquina. Nesse caso a
+# conexão é pelo socket unix de dentro do container, que o postgres:16 aceita
+# como `trust` — não há senha em lugar nenhum. Quando o servidor é OUTRO, o
+# container vira apenas o CLIENTE e conecta por TCP.
+SERVIDOR_E_O_CONTAINER=0
+PGPASS_CONTAINER=/tmp/.pgpass_migracao
+DOCKER_ENV=()
 
 # Recursos a limpar no fim. O trap preserva o que serve de evidência.
 BANCO_TMP_LEGADO=""
 BANCO_ENSAIO=""
+# Vira 1 quando a transação da carga é confirmada. Sem isso a mensagem de saída
+# afirmaria "nada foi confirmado" também depois do commit — e a conferência roda
+# DEPOIS dele, então uma divergência lá deixaria o operador achando que o banco
+# está intacto quando os 163 processos já entraram.
+CARGA_CONFIRMADA=0
 
 uso() {
     cat <<'FIM'
@@ -59,7 +73,9 @@ Uso: scripts/migrar_dados_legados.sh [opções]
   --dump ARQUIVO            Dump do sistema antigo (padrão: admp6_db_atualizado.sql).
   --backup-dir DIR          Onde gravar o backup do destino (padrão: ./backups).
   --saida DIR               Onde gravar log e relatórios (padrão: ./migracao_<carimbo>).
-  --acesso auto|docker|host Como falar com o Postgres (padrão: auto).
+  --acesso auto|docker|host Onde estão os binários psql/pg_dump (padrão: auto).
+  --env-file ARQUIVO        De onde ler a configuração do banco (padrão: .env).
+                            Use .env.producao para apontar ao servidor de produção.
   --manter-ensaio           Não descarta o banco de ensaio ao fim.
   -h, --help                Esta ajuda.
 
@@ -78,6 +94,7 @@ while [[ $# -gt 0 ]]; do
         --backup-dir)     DIR_BACKUP="${2-}"; shift ;;
         --saida)          DIR_SAIDA="${2-}"; shift ;;
         --acesso)         ACESSO="${2-}"; shift ;;
+        --env-file)       ARQ_ENV="${2-}"; shift ;;
         --manter-ensaio)  MANTER_ENSAIO=1 ;;
         -h|--help)        uso; exit 0 ;;
         *) echo "opção desconhecida: $1" >&2; uso >&2; exit 2 ;;
@@ -95,10 +112,18 @@ LOG=""
 diga()  { printf '%s\n' "$*" | tee -a "${LOG:-/dev/null}"; }
 passo() { printf '\n=== %s\n' "$*" | tee -a "${LOG:-/dev/null}"; }
 erro()  { printf '\nERRO: %s\n' "$*" | tee -a "${LOG:-/dev/null}" >&2; }
+# Continuação de um `erro`: sem a linha em branco na frente, para que uma lista
+# de verificações saia como lista e não como quatro erros distintos.
+erro_mais() { printf '      %s\n' "$*" | tee -a "${LOG:-/dev/null}" >&2; }
 
 ao_sair() {
     local codigo=$?
     set +e
+    # A senha do servidor externo não pode sobreviver à execução.
+    if [[ ${#DOCKER_ENV[@]} -gt 0 ]]; then
+        docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" \
+            rm -f "$PGPASS_CONTAINER" >/dev/null 2>&1
+    fi
     if [[ -n "$BANCO_TMP_LEGADO" ]]; then
         # Banco auxiliar do dump legado: some sempre. O schema `legado` já foi
         # copiado para o destino, e é lá que ele precisa continuar existindo.
@@ -113,7 +138,14 @@ ao_sair() {
         fi
     fi
     if (( codigo != 0 )); then
-        erro "migração interrompida (código $codigo). Nada foi confirmado no destino."
+        if (( CARGA_CONFIRMADA )); then
+            erro "a carga JÁ FOI CONFIRMADA no destino, e a etapa seguinte falhou (código $codigo)."
+            erro_mais "O banco NÃO está como antes. Confira o relatório antes de decidir:"
+            erro_mais "  $DIR_SAIDA/conferencia.txt"
+            [[ -n "${ARQ_BACKUP-}" ]] && erro_mais "  backup de antes: $ARQ_BACKUP"
+        else
+            erro "migração interrompida (código $codigo). Nada foi confirmado no destino."
+        fi
         [[ -n "$LOG" ]] && echo "log: $LOG" >&2
     fi
     exit $codigo
@@ -122,14 +154,18 @@ trap ao_sair EXIT
 trap 'erro "interrompido pelo operador"; exit 130' INT TERM
 
 # ------------------------------------------------------------- configuração --
-if [[ -f "$RAIZ/.env" ]]; then
+if [[ -n "$ARQ_ENV" && ! -f "$ARQ_ENV" ]]; then
+    printf 'ERRO: arquivo de configuração não encontrado: %s\n' "$ARQ_ENV" >&2
+    exit 2
+fi
+if [[ -f "$ARQ_ENV" ]]; then
     # Lê só as chaves que interessam, sem executar o arquivo.
     while IFS='=' read -r chave valor; do
         case "$chave" in
             DB_HOST|DB_PORT|DB_NAME|DB_USER|DB_PASSWORD)
                 [[ -z "${!chave-}" ]] && printf -v "$chave" '%s' "$valor" ;;
         esac
-    done < <(grep -E '^\s*DB_(HOST|PORT|NAME|USER|PASSWORD)=' "$RAIZ/.env" | sed 's/^[[:space:]]*//')
+    done < <(grep -E '^\s*DB_(HOST|PORT|NAME|USER|PASSWORD)=' "$ARQ_ENV" | sed 's/^[[:space:]]*//')
 fi
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5438}"
@@ -159,13 +195,43 @@ detecta_acesso() {
 }
 
 no_container() {
-    docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" "$@"
+    docker compose -f "$RAIZ/docker-compose.yml" exec -T "${DOCKER_ENV[@]}" "$SERVICO_DB" "$@"
+}
+
+# O servidor é o container desta máquina? Só quando o host aponta para cá E a
+# porta é a que o compose publica. Qualquer outra combinação é servidor externo,
+# e aí o container empresta só os binários.
+decide_onde_esta_o_servidor() {
+    local porta_compose
+    porta_compose="$(grep -oP '^\s*-\s*"\K[0-9]+(?=:5432")' "$RAIZ/docker-compose.yml" | head -1)"
+    if [[ "$DB_HOST" =~ ^(localhost|127\.0\.0\.1|::1)$ && "$DB_PORT" == "${porta_compose:-5438}" ]]; then
+        SERVIDOR_E_O_CONTAINER=1
+    else
+        SERVIDOR_E_O_CONTAINER=0
+    fi
+}
+
+# A senha vai por ARQUIVO dentro do container, nunca por `-e PGPASSWORD=` nem por
+# argumento: os dois apareceriam no `ps` da máquina inteira. O que entra no
+# ambiente é só o CAMINHO do arquivo, que não é segredo.
+prepara_credencial_no_container() {
+    (( SERVIDOR_E_O_CONTAINER )) && return 0
+    [[ -n "${DB_PASSWORD-}" ]] || { erro "DB_PASSWORD não definida, e o servidor é externo ($DB_HOST)."; exit 3; }
+    printf '%s:%s:*:%s:%s\n' "$DB_HOST" "$DB_PORT" "$DB_USER" "$DB_PASSWORD" \
+      | docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" \
+            sh -c "umask 177; cat > $PGPASS_CONTAINER"
+    DOCKER_ENV=(-e "PGPASSFILE=$PGPASS_CONTAINER")
 }
 
 psql_em() {           # psql_em <banco> [args...]  — stdin é repassado
     local banco="$1"; shift
     if [[ $ACESSO == docker ]]; then
-        no_container psql -U "$DB_USER" -d "$banco" -v ON_ERROR_STOP=1 "$@"
+        if (( SERVIDOR_E_O_CONTAINER )); then
+            no_container psql -U "$DB_USER" -d "$banco" -v ON_ERROR_STOP=1 "$@"
+        else
+            no_container psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
+                -d "$banco" -v ON_ERROR_STOP=1 "$@"
+        fi
     else
         PGPASSWORD="${DB_PASSWORD-}" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
             -d "$banco" -v ON_ERROR_STOP=1 "$@"
@@ -175,7 +241,11 @@ psql_em() {           # psql_em <banco> [args...]  — stdin é repassado
 pgdump_de() {         # pgdump_de <banco> [args...]  — stdout é o dump
     local banco="$1"; shift
     if [[ $ACESSO == docker ]]; then
-        no_container pg_dump -U "$DB_USER" -d "$banco" "$@"
+        if (( SERVIDOR_E_O_CONTAINER )); then
+            no_container pg_dump -U "$DB_USER" -d "$banco" "$@"
+        else
+            no_container pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$banco" "$@"
+        fi
     else
         PGPASSWORD="${DB_PASSWORD-}" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
             -d "$banco" "$@"
@@ -197,7 +267,14 @@ LOG="$DIR_SAIDA/migracao.log"
 : > "$LOG"
 
 detecta_acesso
-diga "acesso ao banco: $ACESSO"
+decide_onde_esta_o_servidor
+diga "configuração:   $ARQ_ENV"
+diga "binários psql:  $ACESSO"
+if (( SERVIDOR_E_O_CONTAINER )); then
+    diga "servidor:       o PostgreSQL do docker-compose desta máquina"
+else
+    diga "servidor:       $DB_USER@$DB_HOST:$DB_PORT  (EXTERNO)"
+fi
 
 for prog in sha256sum; do
     command -v "$prog" >/dev/null 2>&1 || { erro "faltando: $prog"; exit 3; }
@@ -240,7 +317,18 @@ else
     DESTINO="$DB_NAME"
 fi
 
-sql_valor postgres "select 1" >/dev/null || { erro "não consegui conectar ao Postgres."; exit 3; }
+prepara_credencial_no_container
+if ! sql_valor postgres "select 1" >/dev/null 2>&1; then
+    erro "não consegui conectar em $DB_USER@$DB_HOST:$DB_PORT."
+    if (( ! SERVIDOR_E_O_CONTAINER )); then
+        erro_mais "servidor externo: confira, nessa ordem —"
+        erro_mais "  1. a máquina responde na porta $DB_PORT (ICMP costuma estar bloqueado; ping não serve de teste);"
+        erro_mais "  2. postgresql.conf tem listen_addresses = '*';"
+        erro_mais "  3. pg_hba.conf libera a sua rede (ex.: host all all 10.1.2.0/24 scram-sha-256);"
+        erro_mais "  4. o firewall da máquina do banco deixa a porta $DB_PORT entrar."
+    fi
+    exit 3
+fi
 if [[ "$(sql_valor postgres "select count(*) from pg_database where datname = '$DESTINO'")" != "1" ]]; then
     erro "banco de destino não existe: $DESTINO"
     exit 3
@@ -376,6 +464,7 @@ if (( COD_CARGA != 0 )); then
     erro "detalhes em $DIR_SAIDA/carga.log"
     exit 6
 fi
+CARGA_CONFIRMADA=1
 diga "carga confirmada."
 
 # ------------------------------------------------------------ conferência ---

@@ -1,15 +1,92 @@
 # Migração dos dados legados
 
 Traz os dados do ADM-P6 antigo (Python/Eel, PostgreSQL menos normalizado) para o
-banco deste projeto. **Um comando só:**
-
-```bash
-./scripts/migrar_dados_legados.sh                        # ensaio (padrão)
-./scripts/migrar_dados_legados.sh --execute --destino adm_p6_db
-```
+banco deste projeto. **Um comando só.**
 
 O padrão é **ensaio**: o script restaura uma cópia descartável do destino, roda a
 migração inteira nela e emite o mesmo relatório. O banco real não é tocado.
+
+## Os dois ambientes
+
+Qual banco será migrado sai do arquivo de configuração, e **só dele**. O `.env`
+aponta para o banco local do docker-compose; o `.env.producao` aponta para o
+servidor de verdade. Trocar de alvo é trocar de arquivo — nunca editar um.
+
+### Teste, no PostgreSQL desta máquina
+
+```bash
+./scripts/migrar_dados_legados.sh                        # ensaio
+./scripts/migrar_dados_legados.sh --execute --destino adm_p6_db
+```
+
+Lê o `.env`. Como o servidor é o próprio container, a conexão é pelo socket unix,
+que o `postgres:16` aceita como `trust`: **não há senha em lugar nenhum**.
+
+### Produção, no PostgreSQL de outra máquina
+
+```bash
+cp .env.producao.example .env.producao      # primeira vez: preencha host e senha
+./scripts/migrar_dados_legados.sh --env-file .env.producao                          # ensaio
+./scripts/migrar_dados_legados.sh --env-file .env.producao --execute --destino admp6db
+```
+
+Aqui o container empresta só os **binários** `psql`/`pg_dump`; quem responde é o
+servidor remoto. A senha entra por arquivo `.pgpass` criado dentro do container
+com `umask 177` e apagado no fim, inclusive se a execução falhar — nunca por
+`-e PGPASSWORD=` nem por argumento, que apareceriam no `ps` da máquina toda.
+
+O script diz com quem está falando logo na primeira linha, e vale conferir antes
+de usar `--execute`:
+
+```
+configuração:   .env.producao
+binários psql:  docker
+servidor:       admp6@10.1.2.173:5432  (EXTERNO)
+```
+
+`.env.producao` é **gitignorado** — tem senha. O que se versiona é o
+`.env.producao.example`.
+
+### Quem lê qual arquivo
+
+| Quem | Lê | Como aponta para outro banco |
+|---|---|---|
+| A aplicação (`lib.rs:133`, `dotenvy::dotenv()`) | `.env` | editando `DB_HOST/PORT/NAME/USER/PASSWORD` |
+| Os testes (`tests/util/mod.rs`) | `../.env` | idem — e por isso o `.env` deve ficar no banco local |
+| `sqlx migrate run` | `DATABASE_URL` do ambiente ou do `.env` | passando `DATABASE_URL=...` na linha de comando |
+| **O script de migração** | o que `--env-file` disser (padrão `.env`) | **`--env-file .env.producao`** |
+
+Dois detalhes que costumam confundir:
+
+- A **aplicação ignora o `DATABASE_URL`**. Ela monta a URL a partir das cinco
+  variáveis `DB_*` (`app_state.rs::from_env`). O `DATABASE_URL` existe só para as
+  ferramentas de linha de comando do `sqlx`.
+- **Trocar de banco no script não é editar o `.env`** — é passar outro arquivo.
+  É de propósito: o `.env` é o que a aplicação e os testes leem, e mantê-lo
+  apontando para o banco local é o que impede um `cargo test` ou um
+  `npm run tauri dev` de alcançarem produção por engano. Um teste roda
+  `DROP DATABASE` em banco descartável; apontado para o lugar errado, seria caro.
+
+Se você quiser que a **aplicação** também abra o banco de produção, aí sim edita
+o `.env` — mas então lembre que os testes passam a mirar lá, e eles criam e
+derrubam bancos.
+
+## Banco de produção novo, ainda sem schema
+
+O preflight exige as **20 migrations aplicadas** — ele recusa um banco vazio, e
+recusa também um schema que alguém tenha aplicado com `psql`, porque aí não
+existe `_sqlx_migrations` e o startup seguinte tentaria recriar tudo. Quem aplica
+é o `sqlx`:
+
+```bash
+cd src-tauri
+DATABASE_URL="postgres://USUARIO:SENHA@HOST:5432/BANCO" \
+    sqlx migrate run --source migrations
+cd ..
+```
+
+Ou, mais simples, abrir a aplicação uma vez apontada para lá: ela roda as
+migrations no startup. Depois disso, o script de migração.
 
 ---
 
@@ -17,19 +94,22 @@ migração inteira nela e emite o mesmo relatório. O banco real não é tocado.
 
 | | |
 |---|---|
-| Banco de destino | com as migrations **0001 a 0020** aplicadas (suba a aplicação uma vez) |
+| Banco de destino | com as migrations **0001 a 0020** aplicadas (veja a seção acima) |
 | Dump legado | `admp6_db_atualizado.sql` na raiz — SQL puro, 44 MB |
-| Postgres | o serviço `postgres` do `docker-compose.yml` **no ar** |
+| Postgres | o serviço `postgres` do `docker-compose.yml` **no ar** — mesmo migrando para outra máquina, é dele que saem os binários |
 | Ferramentas | `docker` e `sha256sum`. `psql`/`pg_dump` do host são opcionais |
 
-O script fala com o banco por `docker compose exec -T postgres` e cai para os
-clientes do host se eles existirem (`--acesso host` força). Dentro do container a
-conexão é por socket unix, que o `postgres:16` aceita como `trust`: **não há
-senha em lugar nenhum**. Pelo host, a senha vai por `PGPASSWORD` no ambiente do
-processo — nunca em `argv`, que qualquer `ps` mostraria.
+`--acesso` decide de onde vêm os binários (`auto`, `docker` ou `host`), e é
+independente de **qual servidor** será migrado — quem decide isso é o
+`DB_HOST`/`DB_PORT` do arquivo de configuração. Nenhuma credencial é aceita por
+argumento nem gravada em relatório.
 
-Credenciais saem de `.env` (`DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`)
-ou do ambiente. Nenhuma é aceita por argumento nem gravada em relatório.
+**Servidor remoto que recusa conexão?** Na ordem: a máquina responde na 5432
+(`ping` não serve, o ICMP costuma estar bloqueado); `listen_addresses = '*'` no
+`postgresql.conf`; a sua rede liberada no `pg_hba.conf`
+(`host all all 10.1.2.0/24 scram-sha-256`); e a 5432 aberta no firewall — no
+Windows, o Defender a bloqueia por padrão. O script lista exatamente isso quando
+falha.
 
 ---
 

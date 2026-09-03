@@ -1,4 +1,7 @@
 .env
+# Aponta o script de migracao para o servidor de producao, e tem senha.
+# O `.env.producao.example` e que e versionado.
+.env.producao
 src-tauri/target
 node_modules
 .claude/settings.json

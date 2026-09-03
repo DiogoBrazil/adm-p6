@@ -8,6 +8,15 @@
 --
 --   CONTAGENS   — números afirmados, conferidos contra o esperado. Pega perda
 --                 em massa, e é o que muda quando o dump muda.
+--
+--                 O número absoluto só vale para o que a ORIGEM determina
+--                 inteiramente — processo, envolvido, prazo, enquadramento.
+--                 Tudo que se MISTURA com o que já havia no destino (efetivo,
+--                 contas, auditoria, mapas, catálogo) é conferido em RELAÇÃO ao
+--                 legado, nunca por número fixo: senão a conferência só passa
+--                 no banco onde os números foram medidos, e reprova num banco
+--                 de produção novo dizendo que a migração falhou — quando o que
+--                 mudou foi o ponto de partida.
 --   INVARIANTES — comparações SEMÂNTICAS contra o próprio `legado`, sem número
 --                 mágico. Pegam o que a contagem não pega: a linha certa com o
 --                 conteúdo errado. Todas devem dar 0.
@@ -62,14 +71,43 @@ SELECT k AS item, v AS obtido, e AS esperado,
                                           WHERE analogia_transgressao_id <> 'c8000000-0000-4000-8000-000000000001'), 13),
     ('  ... com analogia PROVISORIA',    (SELECT count(*) FROM envolvido_infracoes_estatuto
                                           WHERE analogia_transgressao_id  = 'c8000000-0000-4000-8000-000000000001'), 10),
-    ('policiais militares',              (SELECT count(*) FROM policiais_militares), 246),
-    ('contas de acesso',                 (SELECT count(*) FROM usuarios), 7),
-    ('apuratorios',                      (SELECT count(*) FROM apuratorios), 10),
-    ('unidades',                         (SELECT count(*) FROM unidades_pm), 11),
-    ('naturezas do fato',                (SELECT count(*) FROM naturezas_fato), 17),
-    ('infracoes penais no catalogo',     (SELECT count(*) FROM infracoes_penais), 31),
-    ('auditoria (preservada, nao migrada)', (SELECT count(*) FROM auditoria WHERE entidade <> 'migracao_legado'), 79),
-    ('mapas salvos (preservados)',       (SELECT count(*) FROM mapas_salvos), 3)
+    -- Daqui para baixo o esperado é DERIVADO do legado, e não um número fixo:
+    -- são as tabelas em que o importado convive com o que já existia no destino.
+    -- O sentinela "À APURAR" é excluído dos DOIS lados: ele existe em
+    -- `legado.usuarios`, e num destino que já rodou a migration 0016 a linha
+    -- dele continua no efetivo (desativada). Contá-lo de um lado só faz a
+    -- conferência reprovar conforme o histórico do banco, não conforme a carga.
+    ('militares vindos do legado',
+     (SELECT count(*) FROM policiais_militares pm
+       WHERE EXISTS (SELECT 1 FROM legado.usuarios u WHERE u.id::uuid = pm.id)
+         AND NOT (upper(btrim(pm.nome)) = 'À APURAR' AND pm.matricula = '100000000')),
+     (SELECT count(*)::int FROM legado.usuarios u
+       WHERE u.matricula <> 'ADMIN001'
+         AND NOT (upper(btrim(u.nome)) = 'À APURAR' AND u.matricula = '100000000'))),
+    ('contas de acesso vindas do legado',
+     (SELECT count(*) FROM usuarios us
+       WHERE EXISTS (SELECT 1 FROM legado.usuarios u WHERE u.id::uuid = us.policial_militar_id)),
+     (SELECT count(*)::int FROM legado.usuarios u
+       WHERE u.matricula <> 'ADMIN001' AND u.email IS NOT NULL AND u.senha IS NOT NULL)),
+    ('especies no catalogo',
+     (SELECT count(*) FROM apuratorios),
+     (SELECT count(DISTINCT tipo_detalhe)::int FROM legado.processos_procedimentos)),
+    ('naturezas do fato no catalogo',
+     (SELECT count(*) FROM naturezas_fato),
+     (SELECT count(DISTINCT natureza_procedimento)::int FROM legado.processos_procedimentos
+       WHERE natureza_procedimento IS NOT NULL)),
+    ('artigos penais usados que faltam no catalogo',
+     (SELECT count(*) FROM legado.crimes_contravencoes cc
+       WHERE EXISTS (SELECT 1 FROM legado.pm_envolvido_crimes x WHERE x.crime_id = cc.id)
+         AND NOT EXISTS (SELECT 1 FROM infracoes_penais ip WHERE ip.id = cc.id::uuid)), 0),
+    ('linhas de auditoria do legado importadas',
+     (SELECT count(*) FROM auditoria a
+       WHERE EXISTS (SELECT 1 FROM legado.auditoria la WHERE la.id::text = a.id::text)), 0),
+    ('marcador da migracao na auditoria',
+     (SELECT count(*) FROM auditoria WHERE entidade = 'migracao_legado'), 1),
+    ('mapas mensais do legado importados',
+     (SELECT count(*) FROM mapas_salvos m
+       WHERE EXISTS (SELECT 1 FROM legado.mapas_salvos lm WHERE lm.id::text = m.id::text)), 0)
   ) AS t(k, v, e);
 
 \echo
@@ -402,8 +440,11 @@ SELECT k AS invariante, v AS violacoes,
                                           WHEN 'ST PM' THEN 'SUB TEN PM'
                                           ELSE u.posto_graduacao END))),
 
-    ('conta de acesso criada alem das que ja existiam',
-     (SELECT GREATEST(count(*) - 7, 0)::int FROM usuarios)),
+    ('conta de acesso criada sem militar do legado por tras',
+     (SELECT count(*) FROM usuarios us
+       WHERE us.policial_militar_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM legado.usuarios u WHERE u.id::uuid = us.policial_militar_id)
+         AND us.created_at >= (SELECT min(ocorrido_em) FROM auditoria WHERE entidade = 'migracao_legado'))),
 
     -- ------------------------------------------------- o que NAO se migra --
     ('mapa mensal do legado que vazou para o destino',
