@@ -14,9 +14,14 @@
 \set ON_ERROR_STOP on
 
 -- ------------------------------------------------- 1. identidade do destino --
--- Um banco sem `_sqlx_migrations` não é o destino; um com menos de 20
+-- Um banco sem `_sqlx_migrations` não é o destino; um com menos de 21
 -- migrations é um destino velho, e as etapas contam com colunas que só existem
--- a partir da 0020.
+-- a partir da 0021.
+--
+-- A igualdade é exata de propósito: um destino ADIANTE do código também é
+-- recusado, porque as etapas não sabem o que a migration seguinte mudou. O
+-- preço é que **toda migration nova obriga a mexer aqui** — e nenhum teste
+-- pega, porque `tests/importacao.rs` roda as 9 etapas e não o preflight.
 DO $$
 DECLARE n int; falhas text;
 BEGIN
@@ -24,8 +29,8 @@ BEGIN
         RAISE EXCEPTION 'destino não tem _sqlx_migrations: este banco não é o ADM-P6.';
     END IF;
     SELECT count(*) INTO n FROM _sqlx_migrations WHERE success;
-    IF n <> 20 THEN
-        RAISE EXCEPTION 'destino tem % migrations aplicadas com sucesso, e a migração espera 20 (0001..0020). Rode a aplicação uma vez para migrar antes.', n;
+    IF n <> 21 THEN
+        RAISE EXCEPTION 'destino tem % migrations aplicadas com sucesso, e a migração espera 21 (0001..0021). Rode a aplicação uma vez para migrar antes.', n;
     END IF;
     SELECT string_agg(t, ', ' ORDER BY t) INTO falhas
       FROM unnest(ARRAY['processos_procedimentos','processo_envolvidos','processo_designacoes',
