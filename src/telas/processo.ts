@@ -61,6 +61,7 @@ import {
 } from "../dom";
 import { abrirCadastroRapidoCatalogo, type ContextoTela } from "./catalogos";
 import { pedirAnalogia, renderIndicios } from "./indicios";
+import { badgeStatusPrazo } from "./status-prazo";
 import { abrirCadastroRapidoMilitar } from "./usuarios";
 
 export const ROTA_LISTA = "/procedimentos/lista";
@@ -1436,33 +1437,9 @@ let cancelarBusca: (() => void) | null = null;
 const POR_PAGINA = ITENS_POR_PAGINA;
 let pagina = 1;
 
-type StatusPrazo = {
-  classe: "badge--info" | "badge--neutro" | "badge--ok" | "badge--warn" | "badge--erro";
-  texto: string;
-};
-
 function qualificacaoMilitar(militar: MilitarQualificado): string {
   if (militar.a_apurar) return "À apurar";
   return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
-}
-
-function statusPrazo(concluido: boolean, diasRestantes: number | null): StatusPrazo {
-  if (concluido) return { classe: "badge--info", texto: "Concluído" };
-  if (diasRestantes === null) return { classe: "badge--neutro", texto: "Sem prazo" };
-  if (diasRestantes < 0) {
-    const dias = Math.abs(diasRestantes);
-    return { classe: "badge--erro", texto: `Vencido há ${dias} ${dias === 1 ? "dia" : "dias"}` };
-  }
-  if (diasRestantes === 0) return { classe: "badge--warn", texto: "Vence hoje" };
-  return {
-    classe: diasRestantes <= 5 ? "badge--warn" : "badge--ok",
-    texto: `Vence em ${diasRestantes} ${diasRestantes === 1 ? "dia" : "dias"}`,
-  };
-}
-
-function badgeStatusPrazo(concluido: boolean, diasRestantes: number | null): string {
-  const status = statusPrazo(concluido, diasRestantes);
-  return `<span class="badge status-prazo ${status.classe}" title="${escapeHtml(status.texto)}"><span class="status-prazo__ponto" aria-hidden="true"></span>${escapeHtml(status.texto)}</span>`;
 }
 
 function resumoEnvolvidos(processoId: string, envolvidos: MilitarQualificado[]): string {
@@ -1616,6 +1593,7 @@ function chipsDosFiltros(): ChipFiltro[] {
     const situacoes: Record<ProceedingSituation, string> = {
       em_andamento: "Em andamento",
       concluido: "Concluído",
+      entregue: "Entregue",
       no_prazo: "No prazo",
       vencido: "Vencido",
     };
@@ -1721,7 +1699,7 @@ function htmlResultadosLista(resultado: ProceedingListResult): string {
                 <td class="col-sei" title="${escapeHtml(p.processo_sei ?? "")}">${escapeHtml(p.processo_sei ?? "—")}</td>
                 <td class="col-pessoa" title="${escapeHtml(encarregado === "—" ? "" : encarregado)}"><span class="celula-reticencias">${escapeHtml(encarregado)}</span></td>
                 <td class="col-pessoa">${resumoEnvolvidos(p.id, p.envolvidos_resumo)}</td>
-                <td class="col-status-prazo">${badgeStatusPrazo(p.concluido, p.prazo_dias_restantes)}</td>
+                <td class="col-status-prazo">${badgeStatusPrazo(p)}</td>
                 <td class="col-acao"><div class="row-actions">${botaoIcone("abrir", "Abrir", { classe: "outline", dados: { processo: p.id } })}</div></td>
               </tr>`;
             }).join("")}
@@ -1842,6 +1820,7 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
              <option value="">Todas</option>
              ${option("em_andamento", "Em andamento", filtro.situacao === "em_andamento")}
              ${option("concluido", "Concluído", filtro.situacao === "concluido")}
+             ${option("entregue", "Entregue", filtro.situacao === "entregue")}
              ${option("no_prazo", "No prazo", filtro.situacao === "no_prazo")}
              ${option("vencido", "Vencido", filtro.situacao === "vencido")}
            </select>

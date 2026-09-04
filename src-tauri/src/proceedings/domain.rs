@@ -47,6 +47,12 @@ pub struct ProceedingListItem {
     pub natureza_fato: Option<String>,
     pub data_instauracao: NaiveDate,
     pub data_recebimento: Option<NaiveDate>,
+    /// Remessa efetiva: as duas colunas são alternativas da mesma etapa, e a
+    /// view já resolve qual delas vale. Ver a `0021`.
+    pub data_remessa: Option<NaiveDate>,
+    /// Derivado de `data_remessa IS NOT NULL`, como `concluido` de
+    /// `data_conclusao` — não existe coluna booleana no banco.
+    pub entregue: bool,
     pub data_conclusao: Option<NaiveDate>,
     /// Derivado de `data_conclusao IS NOT NULL` — não existe coluna booleana.
     pub concluido: bool,
@@ -606,11 +612,19 @@ impl UpdateInvolvedOutcomeRequest {
     }
 }
 
+/// As situações do filtro, na mesma precedência que a coluna "Status prazo"
+/// desenha: `Concluido` > `Entregue` > `NoPrazo`/`Vencido`. Quem já remeteu não
+/// aparece mais em `NoPrazo` nem em `Vencido` — a lista devolveria como
+/// "Vencido" a linha que a coluna ao lado mostra como "Entregue".
+///
+/// `EmAndamento` é a exceção deliberada: é `data_conclusao IS NULL` e continua
+/// contando o entregue, porque remeter não conclui o apuratório.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProceedingSituation {
     EmAndamento,
     Concluido,
+    Entregue,
     NoPrazo,
     Vencido,
 }
@@ -620,6 +634,7 @@ impl ProceedingSituation {
         match self {
             Self::EmAndamento => "em_andamento",
             Self::Concluido => "concluido",
+            Self::Entregue => "entregue",
             Self::NoPrazo => "no_prazo",
             Self::Vencido => "vencido",
         }

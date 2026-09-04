@@ -2396,6 +2396,102 @@ async fn vencer_hoje_ainda_e_no_prazo_e_vencido_comeca_ontem() {
     .await;
 }
 
+/// A remessa tira o apuratório de "vencido" — e é a mesma precedência do badge.
+///
+/// O prazo é do encarregado. Registrada a remessa, ele entregou: a coluna
+/// "Status prazo" passa a desenhar "Entregue", e o filtro tem de concordar com
+/// ela. Sem o `NOT v.entregue` em `no_prazo`/`vencido`, pedir "Vencido"
+/// devolveria justamente a linha que a tela mostra como entregue.
+///
+/// `em_andamento` é a exceção deliberada, e por isso está aqui: remeter não
+/// conclui o apuratório, então ele continua em andamento.
+#[tokio::test]
+async fn remessa_tira_o_apuratorio_de_vencido_sem_tira_lo_de_em_andamento() {
+    util::com_banco_descartavel("proc_lista_entregue", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let mut req = base(&m, "001");
+        req.data_instauracao = Local::now().date_naive();
+        req.data_recebimento = Some(Local::now().date_naive());
+        let id = salvar(&pool, &req).await.unwrap();
+
+        // Vencido ontem: `data_vencimento` é gerada, quem anda para trás é o
+        // início do prazo.
+        sqlx::query(
+            "UPDATE processo_prazos
+                SET data_inicio = CURRENT_DATE - 1 - dias
+              WHERE processo_id = $1::uuid",
+        )
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let situacao = |s: ProceedingSituation| {
+            let pool = pool.clone();
+            async move {
+                repository::list(
+                    &pool,
+                    &ProceedingFilter {
+                        situacao: Some(s),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+                .total
+            }
+        };
+
+        assert_eq!(situacao(ProceedingSituation::Vencido).await, 1);
+        assert_eq!(situacao(ProceedingSituation::Entregue).await, 0);
+
+        // Pelo caminho real de escrita: é ele que aplica as guardas de
+        // `permite_remessa_comissao`. O mundo configurado não tramita por
+        // comissão, então a remessa é a do encarregado.
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: Some(Local::now().date_naive()),
+                data_remessa_comissao: None,
+                data_julgamento: None,
+                data_conclusao: None,
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(situacao(ProceedingSituation::Entregue).await, 1);
+        assert_eq!(situacao(ProceedingSituation::Vencido).await, 0);
+        assert_eq!(situacao(ProceedingSituation::NoPrazo).await, 0);
+        assert_eq!(situacao(ProceedingSituation::EmAndamento).await, 1);
+
+        // Concluir vence a remessa, nos dois sentidos: sai de "entregue" e
+        // entra em "concluído".
+        let mut tx = pool.begin().await.unwrap();
+        repository::update_dates(
+            &mut tx,
+            &UpdateProceedingDatesRequest {
+                processo_id: id.clone(),
+                data_remessa_encarregado: Some(Local::now().date_naive()),
+                data_remessa_comissao: None,
+                data_julgamento: None,
+                data_conclusao: Some(Local::now().date_naive()),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(situacao(ProceedingSituation::Entregue).await, 0);
+        assert_eq!(situacao(ProceedingSituation::Concluido).await, 1);
+        assert_eq!(situacao(ProceedingSituation::EmAndamento).await, 0);
+    })
+    .await;
+}
+
 /// As opções do modal saem dos apuratórios, e `ativo` só decide o rótulo.
 ///
 /// Os dois eixos são independentes e o teste cruza os quatro cantos: um cadastro

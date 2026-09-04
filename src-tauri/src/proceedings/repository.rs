@@ -49,6 +49,8 @@ const COLUNAS_LISTA: &str = r#"
     v.natureza_fato,
     v.data_instauracao,
     v.data_recebimento,
+    v.data_remessa,
+    v.entregue,
     v.data_conclusao,
     v.concluido,
     v.resumo_fatos,
@@ -113,7 +115,9 @@ const BASE_CONTAGEM: &str = r#"
                pp.numero_rgf,
                pp.data_instauracao,
                pp.data_conclusao,
-               (pp.data_conclusao IS NOT NULL) AS concluido
+               (pp.data_conclusao IS NOT NULL) AS concluido,
+               (COALESCE(pp.data_remessa_comissao,
+                         pp.data_remessa_encarregado) IS NOT NULL) AS entregue
           FROM processos_procedimentos pp
           JOIN apuratorios aa ON aa.id = pp.apuratorio_id
     ) v
@@ -160,10 +164,11 @@ const FILTRO: &str = r#"
       AND ($9::text IS NULL
            OR ($9 = 'em_andamento' AND NOT v.concluido)
            OR ($9 = 'concluido' AND v.concluido)
-           OR ($9 = 'no_prazo' AND NOT v.concluido AND
+           OR ($9 = 'entregue' AND NOT v.concluido AND v.entregue)
+           OR ($9 = 'no_prazo' AND NOT v.concluido AND NOT v.entregue AND
                (SELECT pr.data_vencimento FROM processo_prazos pr
                  WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) >= CURRENT_DATE)
-           OR ($9 = 'vencido' AND NOT v.concluido AND
+           OR ($9 = 'vencido' AND NOT v.concluido AND NOT v.entregue AND
                (SELECT pr.data_vencimento FROM processo_prazos pr
                  WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) < CURRENT_DATE))
       AND ($10::date IS NULL OR v.data_instauracao >= $10)
@@ -2170,6 +2175,9 @@ pub async fn dashboard(pool: &PgPool) -> Result<DashboardSummary, sqlx::Error> {
     .fetch_one(pool)
     .await?;
 
+    // Quem já remeteu sai da conta, como sai das listagens de Prazos: o prazo
+    // é do encarregado, e ele já entregou. Sem isto, o KPI diria oito e a
+    // tabela logo abaixo — servida pelo `deadlines::report` — mostraria seis.
     let prazos_vencidos: i64 = sqlx::query_scalar(
         "SELECT count(*)
            FROM processos_procedimentos p
@@ -2178,6 +2186,8 @@ pub async fn dashboard(pool: &PgPool) -> Result<DashboardSummary, sqlx::Error> {
                 WHERE pr.processo_id = p.id ORDER BY pr.ordem DESC LIMIT 1
            ) prazo ON true
           WHERE p.ativo AND p.data_conclusao IS NULL
+            AND COALESCE(p.data_remessa_comissao,
+                         p.data_remessa_encarregado) IS NULL
             AND prazo.data_vencimento < CURRENT_DATE",
     )
     .fetch_one(pool)

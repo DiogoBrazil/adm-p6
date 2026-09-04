@@ -587,6 +587,85 @@ async fn report_pagina_e_ordena() {
     .await;
 }
 
+/// Quem já remeteu sai da cobrança de prazo — do relatório **e** dos cartões.
+///
+/// A tela de Prazos existe para cobrar prazo do encarregado; registrada a
+/// remessa, não há mais o que cobrar dele, e a coluna "Status prazo" da
+/// listagem passa a mostrar "Entregue" em vez de "Vencido há N dias".
+///
+/// O par `report`/`dashboard` está no mesmo teste de propósito: tirar o
+/// entregue só das listagens deixaria o KPI dizendo oito com uma tabela de seis
+/// linhas embaixo — o mesmo defeito que o piso da janela veio corrigir. E os
+/// **três** números do `dashboard` caem juntos: excluir o entregue apenas de
+/// `vencidos` o empurraria para "Regulares", que a tela deriva de
+/// `total - vencidos - proximos`.
+#[tokio::test]
+async fn remessa_tira_o_processo_do_relatorio_e_dos_cartoes() {
+    util::com_banco_descartavel("prazo_entregue", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        let entregue = processo_vencendo_em(&pool, &m, 1, -3).await;
+        let vencido = processo_vencendo_em(&pool, &m, 2, -1).await;
+        let proximo = processo_vencendo_em(&pool, &m, 3, 5).await;
+
+        let vencidos = || {
+            let pool = pool.clone();
+            async move {
+                repository::report(
+                    &pool,
+                    &DeadlineReportFilter {
+                        apenas_vencidos: Some(true),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+            }
+        };
+
+        let antes = vencidos().await;
+        assert_eq!(antes.total, 2);
+        assert!(ids(&antes).contains(&entregue));
+
+        let resumo = repository::dashboard(&pool, 14).await.unwrap();
+        assert_eq!((resumo.total, resumo.vencidos, resumo.proximos), (3, 2, 1));
+
+        sqlx::query(
+            "UPDATE processos_procedimentos
+                SET data_remessa_encarregado = CURRENT_DATE
+              WHERE id = $1::uuid",
+        )
+        .bind(&entregue)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let depois = vencidos().await;
+        assert_eq!(depois.total, 1, "o entregue saiu da cobranca");
+        assert_eq!(ids(&depois), vec![vencido.clone()]);
+
+        // O cartão tem de cair junto com a tabela, e "Com prazo vigente"
+        // também: o entregue não virou "Regular".
+        let resumo = repository::dashboard(&pool, 14).await.unwrap();
+        assert_eq!((resumo.total, resumo.vencidos, resumo.proximos), (2, 1, 1));
+
+        // A remessa à comissão é a mesma etapa pela outra coluna, e vale igual.
+        sqlx::query(
+            "UPDATE processos_procedimentos
+                SET data_remessa_comissao = CURRENT_DATE
+              WHERE id = $1::uuid",
+        )
+        .bind(&proximo)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let resumo = repository::dashboard(&pool, 14).await.unwrap();
+        assert_eq!((resumo.total, resumo.vencidos, resumo.proximos), (1, 1, 0));
+    })
+    .await;
+}
+
 #[tokio::test]
 async fn processo_concluido_recusa_prorrogacao_e_orienta_reabrir() {
     util::com_banco_descartavel("prazo_concluido", |pool| async move {

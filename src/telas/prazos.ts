@@ -191,8 +191,10 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
         ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
 
+        <!-- Laranja, e não o amarelo: este bloco é urgência de prazo, e o
+             amarelo passou a significar "entregue" na coluna de status. -->
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
-          <span class="badge badge--warn">${totalAVencer}</span></h2>
+          <span class="badge badge--urgente">${totalAVencer}</span></h2>
         ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", { listagem: true })}
         ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
       </div>

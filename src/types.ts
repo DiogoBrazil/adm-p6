@@ -770,6 +770,13 @@ export interface ProceedingListItem {
   natureza_fato: string | null;
   data_instauracao: string;
   data_recebimento: string | null;
+  /**
+   * Remessa efetiva: as duas colunas de remessa são alternativas da mesma
+   * etapa, e a view já resolve qual delas vale.
+   */
+  data_remessa: string | null;
+  /** Derivado de `data_remessa IS NOT NULL`, como `concluido` da conclusão. */
+  entregue: boolean;
   data_conclusao: string | null;
   /** Derivado de `data_conclusao IS NOT NULL` — não existe coluna booleana. */
   concluido: boolean;
@@ -996,7 +1003,12 @@ export interface SaveProceedingRequest {
 }
 
 /** `proceedings` */
-export type ProceedingSituation = "em_andamento" | "concluido" | "no_prazo" | "vencido";
+export type ProceedingSituation =
+  | "em_andamento"
+  | "concluido"
+  | "entregue"
+  | "no_prazo"
+  | "vencido";
 
 /** `proceedings` */
 export interface ProceedingFilter {

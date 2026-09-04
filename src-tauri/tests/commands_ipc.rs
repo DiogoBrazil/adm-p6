@@ -658,6 +658,15 @@ fn datas_pos_cadastro_e_resultado_passam_pelo_ipc_e_auditoria() {
             )),
             &json!(true)
         );
+        // A remessa efetiva sobe ao topo do item da listagem, junto de
+        // `entregue`. É o que a coluna "Status prazo" lê para desenhar
+        // "Entregue"; um campo aninhado ou renomeado a deixaria `undefined`
+        // sem erro nenhum, nem no Rust nem no TypeScript.
+        let envelope = invocar(&webview, "proceedings_list", json!({}));
+        let item = &ok(&envelope)["items"][0];
+        assert_eq!(item["data_remessa"], json!("2026-02-02"));
+        assert_eq!(item["entregue"], json!(true));
+
         assert_eq!(
             ok(&invocar(
                 &webview,

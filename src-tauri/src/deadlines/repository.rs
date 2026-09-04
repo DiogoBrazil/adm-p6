@@ -336,6 +336,12 @@ pub async fn delete_extension(
 }
 
 /// Panorama dos prazos vigentes dos processos em andamento.
+///
+/// O apuratório **já remetido** fica de fora dos três números de uma vez, e não
+/// só dos `FILTER`: o prazo é do encarregado, e ele já entregou. Excluí-lo
+/// apenas de `vencidos` o empurraria para "Regulares", que a tela calcula como
+/// `total - vencidos - proximos` (`graficos/dados.ts::faixasDePrazo`) — o
+/// número desapareceria de uma coluna para reaparecer em outra.
 pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummary, sqlx::Error> {
     sqlx::query_as::<_, DeadlineSummary>(&format!(
         "SELECT count(*)                                                        AS total,
@@ -344,7 +350,9 @@ pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummar
                                    AND p.data_vencimento <= CURRENT_DATE + $1)  AS proximos
            FROM processo_prazos p
            JOIN processos_procedimentos pr ON pr.id = p.processo_id
-          WHERE {VIGENTE} AND pr.ativo AND pr.data_conclusao IS NULL"
+          WHERE {VIGENTE} AND pr.ativo AND pr.data_conclusao IS NULL
+            AND COALESCE(pr.data_remessa_comissao,
+                         pr.data_remessa_encarregado) IS NULL"
     ))
     .bind(dias_janela)
     .fetch_one(pool)
@@ -363,8 +371,14 @@ pub async fn dashboard(pool: &PgPool, dias_janela: i32) -> Result<DeadlineSummar
 ///
 /// Com o piso, "vencido" é estritamente antes de hoje e "vencendo" vai de hoje
 /// até o fim da janela — sem interseção, e batendo com as contagens.
+///
+/// **E é aqui que o apuratório já remetido sai da cobrança.** Esta tela existe
+/// para cobrar prazo do encarregado; registrada a remessa, não há mais o que
+/// cobrar dele. O `dashboard()` acima aplica a mesma exclusão, pelo mesmo
+/// motivo de sempre: KPI e tabela da mesma tela têm de dizer o mesmo número.
 const FILTRO_REPORT: &str = "WHERE v.ativo
            AND v.data_conclusao IS NULL
+           AND NOT v.entregue
            AND v.prazo_vencimento IS NOT NULL
            AND ($1::uuid[] IS NULL OR v.apuratorio_id = ANY($1::uuid[]))
            AND ($2::uuid IS NULL OR EXISTS (
