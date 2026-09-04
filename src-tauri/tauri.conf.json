@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GESTÃO P6 - 7º BPM",
+  "productName": "Gestao P6",
   "mainBinaryName": "gestao-p6",
   "version": "0.1.0",
   "identifier": "br.gov.pmro.admp6",
@@ -27,6 +27,11 @@
   },
   "bundle": {
     "active": true,
+    "linux": {
+      "deb": {
+        "desktopTemplate": "gestao-p6.desktop"
+      }
+    },
     "shortDescription": "Sistema da Seção de Justiça e Disciplina do 7º BPM/PMRO",
     "targets": "all",
     "icon": [

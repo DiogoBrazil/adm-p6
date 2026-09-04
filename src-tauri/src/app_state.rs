@@ -9,24 +9,53 @@ pub struct AppState {
     session: RwLock<Option<SessionUser>>,
 }
 
+/// Uma definição do banco, nas três origens possíveis, nesta ordem.
+///
+/// 1. **Variável de ambiente**, que o `dotenvy` já pode ter carregado do `.env`.
+///    Vence sempre: é o que mantém o desenvolvimento e os 186 testes apontados
+///    para o docker-compose local, e é a única via de apontar um binário
+///    empacotado para outro banco sem recompilá-lo.
+/// 2. **Valor compilado** (`ADMP6_DB_*` no ambiente do `cargo`/`tauri build`).
+///    É o que faz o `.deb` conectar sem nenhuma configuração na estação: não há
+///    `.env` para achar quando o atalho abre o app com o `cwd` no `$HOME`.
+/// 3. **Padrão do docker-compose**, para quem clonou o repositório e só rodou
+///    `cargo run` sem preparar nada.
+///
+/// Vazio conta como ausente: `DB_HOST=` num `.env` é engano de edição, e cair
+/// no valor compilado é melhor que montar uma URL sem host.
+///
+/// O valor compilado NÃO é segredo guardado: `strings` no binário o mostra.
+/// Ele existe para dispensar configuração na estação, e a proteção real do
+/// banco é o papel que essas credenciais têm no PostgreSQL, não o binário.
+fn definicao(chave: &str, compilado: Option<&'static str>, padrao: &str) -> String {
+    std::env::var(chave)
+        .ok()
+        .filter(|valor| !valor.trim().is_empty())
+        .or_else(|| compilado.map(str::to_string))
+        .unwrap_or_else(|| padrao.to_string())
+}
+
 impl AppState {
     pub fn from_env() -> Self {
         let database_url = {
-            let host = std::env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
-            let port = std::env::var("DB_PORT").unwrap_or_else(|_| "5438".to_string());
-            let name = std::env::var("DB_NAME").unwrap_or_else(|_| "adm_p6_db".to_string());
-            let user = std::env::var("DB_USER").unwrap_or_else(|_| "adm_p6_user".to_string());
-            let password =
-                std::env::var("DB_PASSWORD").unwrap_or_else(|_| "adm_p6_password".to_string());
+            let host = definicao("DB_HOST", option_env!("ADMP6_DB_HOST"), "localhost");
+            let port = definicao("DB_PORT", option_env!("ADMP6_DB_PORT"), "5438");
+            let name = definicao("DB_NAME", option_env!("ADMP6_DB_NAME"), "adm_p6_db");
+            let user = definicao("DB_USER", option_env!("ADMP6_DB_USER"), "adm_p6_user");
+            let password = definicao(
+                "DB_PASSWORD",
+                option_env!("ADMP6_DB_PASSWORD"),
+                "adm_p6_password",
+            );
             // O modo de TLS é declarado, não herdado do padrão do driver.
             //
             // O `prefer` do sqlx tenta TLS e ACEITA texto claro se o servidor
             // dispensar — o que basta para produção parecer criptografada por
             // consequência do servidor, e não por exigência nossa. Com o banco
             // fora da rede da seção e dados pessoais de 244 militares no meio,
-            // quem decide é o `.env`: `require` lá, `prefer` no docker-compose
-            // local, que não fala TLS.
-            let sslmode = std::env::var("DB_SSLMODE").unwrap_or_else(|_| "prefer".to_string());
+            // quem decide é a configuração: `require` em produção, `prefer` no
+            // docker-compose local, que não fala TLS.
+            let sslmode = definicao("DB_SSLMODE", option_env!("ADMP6_DB_SSLMODE"), "prefer");
             format!("postgres://{user}:{password}@{host}:{port}/{name}?sslmode={sslmode}")
         };
 
