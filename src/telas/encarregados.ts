@@ -52,7 +52,7 @@ import {
 import {
   ativarSelectsPesquisaveis,
   barraDeExportacao,
-  baixarCsv,
+  baixarPlanilha,
   escapeHtml,
   formatarData,
   formatarQualificacaoMilitar,
@@ -483,7 +483,7 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
               : "Carga de trabalho por policial militar e por espécie, na situação de hoje.",
           )}</p>
         </div>
-        <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: !!linhas.length })}</div>
+        <div class="page-head-right">${barraDeExportacao({ imprimir: true, planilha: !!linhas.length })}</div>
       </div>
 
       <form id="filtro-encarregados" class="filtro-bar">
@@ -616,35 +616,104 @@ export async function renderEncarregados(ctx: ContextoTela): Promise<void> {
       void renderEncarregados(ctx);
     });
 
-  // O CSV leva a situação, não só o total: é para ela que a planilha é aberta.
+  // A planilha leva a situação, não só o total: é para ela que a exportação é aberta.
   ligarExportacao(
     () =>
-      baixarCsv(
-        `designacoes-por-policial-militar-${new Date().toISOString().slice(0, 10)}.csv`,
+      baixarPlanilha(
+        `designacoes-por-policial-militar-${new Date().toISOString().slice(0, 10)}.xlsx`,
         [
-          "Policial Militar",
-          "Matricula",
-          "Concluidos",
-          "Em andamento no prazo",
-          "Em andamento vencido",
-          "Sem prazo definido",
-          ...colunasComDado.map((a) => a.rotulo),
-          "Total",
-          "Ultimo recebimento",
-          "Ultima conclusao",
+          {
+            nome: "Designações",
+            titulo: "Designações por Policial Militar",
+            metadados: [
+              { rotulo: "Ano", valor: escopoAno },
+              {
+                rotulo: "Policial militar",
+                valor: modoMilitar ? nomeDoMilitar : "Todos os policiais militares",
+              },
+              {
+                rotulo: "Apuratórios",
+                valor: apuratoriosSelecionados.length
+                  ? apuratorios
+                      .filter((item) => apuratoriosSelecionados.includes(item.id))
+                      .map((item) => item.rotulo)
+                      .join(", ")
+                  : "Todos os apuratórios",
+              },
+              {
+                rotulo: "Funções",
+                valor: papeisSelecionados.length
+                  ? papeis
+                      .filter((item) => papeisSelecionados.includes(item.id))
+                      .map((item) => item.rotulo)
+                      .join(", ")
+                  : "Todas as funções",
+              },
+              { rotulo: "Situação", valor: escopoSituacao },
+              { rotulo: "Vínculo", valor: escopoVinculo },
+              { rotulo: "Ordenação", valor: escopoOrdem },
+              { rotulo: "Registros", valor: String(linhas.length) },
+            ],
+            colunas: [
+              { rotulo: "Policial Militar", largura: 38 },
+              { rotulo: "Matrícula", largura: 14 },
+              {
+                rotulo: "Concluídos",
+                tipo: "inteiro",
+                largura: 13,
+                alinhamento: "direita",
+                tom: "sucesso",
+              },
+              {
+                rotulo: "Em andamento no prazo",
+                tipo: "inteiro",
+                largura: 19,
+                alinhamento: "direita",
+                tom: "informacao",
+              },
+              {
+                rotulo: "Em andamento vencido",
+                tipo: "inteiro",
+                largura: 19,
+                alinhamento: "direita",
+                tom: "perigo",
+              },
+              {
+                rotulo: "Sem prazo definido",
+                tipo: "inteiro",
+                largura: 17,
+                alinhamento: "direita",
+                tom: "atencao",
+              },
+              ...colunasComDado.map((item) => ({
+                rotulo: item.rotulo,
+                tipo: "inteiro" as const,
+                largura: 12,
+                alinhamento: "direita" as const,
+              })),
+              { rotulo: "Total", tipo: "inteiro", largura: 11, alinhamento: "direita" },
+              { rotulo: "Último recebimento", tipo: "data", largura: 18, alinhamento: "centro" },
+              { rotulo: "Última conclusão", tipo: "data", largura: 18, alinhamento: "centro" },
+            ],
+            linhas: linhas.map((linha) => ({
+              celulas: [
+                `${linha.posto_graduacao} ${linha.nome}`,
+                linha.matricula,
+                linha.concluidos,
+                linha.no_prazo,
+                linha.vencidos,
+                linha.sem_prazo,
+                ...colunasComDado.map(
+                  (item) => linha.celulas.find((celula) => celula.id === item.id)?.total ?? 0,
+                ),
+                linha.total,
+                linha.ultimo_recebimento,
+                linha.ultima_conclusao,
+              ],
+            })),
+            congelar_colunas: 2,
+          },
         ],
-        linhas.map((l) => [
-          `${l.posto_graduacao} ${l.nome}`,
-          l.matricula,
-          l.concluidos,
-          l.no_prazo,
-          l.vencidos,
-          l.sem_prazo,
-          ...colunasComDado.map((a) => l.celulas.find((c) => c.id === a.id)?.total ?? 0),
-          l.total,
-          formatarData(l.ultimo_recebimento),
-          formatarData(l.ultima_conclusao),
-        ]),
       ),
     undefined,
     { orientacao: "paisagem", perfil: "analitico" },

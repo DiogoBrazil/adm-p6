@@ -20,8 +20,34 @@ use tauri_plugin_dialog::DialogExt;
 use crate::app_state::AppState;
 use crate::auth::guards::require_session;
 use crate::error::AppError;
-use crate::files::domain::SaveFileRequest;
+use crate::files::domain::{GeneratedFile, SaveFileRequest, SpreadsheetRequest};
+use crate::files::spreadsheet;
 use crate::response::{from_result, ApiResponse};
+
+/// Monta uma pasta de trabalho XLSX em memória.
+///
+/// A gravação continua separada em `files_save_download`: assim este comando
+/// é testável sem abrir diálogo e todos os arquivos mantêm uma única via de
+/// escolha do destino.
+#[tauri::command]
+pub async fn files_generate_spreadsheet(
+    state: State<'_, AppState>,
+    request: SpreadsheetRequest,
+) -> Result<ApiResponse<GeneratedFile>, String> {
+    Ok(from_result(
+        async {
+            require_session(&state).await?;
+            let nome_arquivo = spreadsheet::nome_xlsx(&request.nome_sugerido)?;
+            let bytes = spreadsheet::gerar(&request)?;
+            Ok(GeneratedFile {
+                nome_arquivo,
+                conteudo_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+            })
+        }
+        .await,
+    )
+    .await)
+}
 
 /// Grava um arquivo escolhido pelo usuário. Devolve o caminho gravado, ou
 /// `None` se o diálogo foi cancelado — cancelar não é erro.

@@ -155,13 +155,6 @@ pub struct ReportFilter {
     pub limit: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct CsvExport {
-    pub nome_arquivo: String,
-    /// CSV em base64, pronto para o frontend oferecer como download.
-    pub conteudo: String,
-}
-
 /// Situação dos processos de um apuratório no escopo do filtro.
 ///
 /// Substitui `proceedings_in_progress_stats`, que agrupava por `tipo_detalhe` —

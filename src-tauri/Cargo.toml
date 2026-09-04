@@ -45,6 +45,10 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 dotenvy = "0.15"
 regex = "1"
+# Planilhas XLSX dos relatórios. A geração fica no backend para manter o
+# frontend sem outra biblioteca pesada e para entregar bytes pelo mesmo fluxo
+# nativo já usado nos demais downloads.
+rust_xlsxwriter = { version = "0.99", features = ["chrono"] }
 
 # A orientação da folha impressa não existe no CSS: o WebKitGTK ignora
 # `@page { size: … }` e só o `GtkPageSetup` decide. Ver src/print/commands.rs.
@@ -57,6 +61,8 @@ gtk = "0.18"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 futures-util = "0.3"
+calamine = "0.36"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
 # `test` habilita tauri::test::mock_builder, que roda os comandos por IPC de
 # verdade — guards, desserialização e envelope inclusos. Só em teste.
 tauri = { version = "2", features = ["test"] }

@@ -2008,7 +2008,7 @@ export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
 //   - cada andamento tem autor e tipo, que o modelo antigo havia perdido.
 
 /**
- * O anexo sai pelo mesmo caminho do CSV: o diálogo nativo aberto no Rust.
+ * O anexo sai pelo mesmo caminho das planilhas: o diálogo nativo aberto no Rust.
  *
  * Já saiu por `<a download>` com `blob:`, e era o único ponto do sistema que
  * ainda fazia isso — no WebView do Tauri essa via não define destino, não abre

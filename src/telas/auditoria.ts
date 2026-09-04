@@ -22,7 +22,7 @@ import { call, type AuditDetailItem } from "../api";
 import {
   avisarSeCortado,
   barraDeExportacao,
-  baixarCsv,
+  baixarPlanilha,
   carregarTudo,
   escapeHtml,
   formatarDataHora,
@@ -140,7 +140,7 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
           <h1>Auditoria</h1>
           <p>${total} registro(s) no escopo. Clique numa linha para ver os detalhes.</p>
         </div>
-        <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: !!itens.length })}</div>
+        <div class="page-head-right">${barraDeExportacao({ imprimir: true, planilha: !!itens.length })}</div>
       </div>
 
       <form id="filtro-auditoria" class="filtro-bar">
@@ -226,7 +226,7 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
     });
   });
 
-  // O CSV e o papel levam o filtro inteiro, não os dez da tela. A trilha cresce
+  // A planilha e o papel levam o filtro inteiro, não os dez da tela. A trilha cresce
   // sem limite, então a carga tem teto — e `avisarSeCortado` o anuncia, porque
   // um recorte silencioso aqui seria indistinguível de "não havia mais nada".
   const todosDoFiltro = () =>
@@ -239,20 +239,49 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();
       avisarSeCortado(cortado);
-      // O CSV leva as quatro colunas da tela e mais o par entidade/registro:
+      // A planilha leva as quatro colunas da tela e mais o par entidade/registro:
       // quem exporta costuma ser quem vai rastrear até o banco.
-      return baixarCsv(
-        `auditoria-${new Date().toISOString().slice(0, 10)}.csv`,
-        ["Quando", "Quem fez", "O que foi feito", "Sobre o que", "Entidade", "Registro"],
-        todos.map((i) => [
-          formatarDataHora(i.ocorrido_em),
-          autor(i),
-          oQueFoiFeito(i),
-          sobreOQue(i),
-          i.entidade,
-          i.registro_id,
-        ]),
-      );
+      const autorSelecionado = comConta.find((u) => u.conta_id === filtros.usuarioId);
+      return baixarPlanilha(`auditoria-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+        {
+          nome: "Auditoria",
+          titulo: "Trilha de auditoria",
+          metadados: [
+            { rotulo: "Entidade", valor: filtros.entidade || "Todas" },
+            { rotulo: "Operação", valor: filtros.operacao || "Todas" },
+            {
+              rotulo: "Autor",
+              valor: autorSelecionado
+                  ? formatarQualificacaoMilitar(
+                    autorSelecionado.posto_graduacao_sigla,
+                    autorSelecionado.matricula,
+                    autorSelecionado.nome,
+                  )
+                : "Todos",
+            },
+            { rotulo: "Registros", valor: String(todos.length) },
+          ],
+          colunas: [
+            { rotulo: "Quando", tipo: "data_hora", largura: 20, alinhamento: "centro" },
+            { rotulo: "Quem fez", largura: 34 },
+            { rotulo: "O que foi feito", largura: 36 },
+            { rotulo: "Sobre o quê", largura: 42 },
+            { rotulo: "Entidade", largura: 24 },
+            { rotulo: "Registro", largura: 38 },
+          ],
+          linhas: todos.map((i) => ({
+            celulas: [
+              i.ocorrido_em,
+              autor(i),
+              oQueFoiFeito(i),
+              sobreOQue(i),
+              i.entidade,
+              i.registro_id,
+            ],
+          })),
+          congelar_colunas: 1,
+        },
+      ]);
     },
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();

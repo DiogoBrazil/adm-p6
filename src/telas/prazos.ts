@@ -8,8 +8,8 @@
 // ordem, e prorrogar cria a próxima linha.
 //
 // Esta tela absorveu a rota `/estatisticas/prazos`, que mostrava a mesma
-// listagem de vencidos e existia só pela exportação CSV. Duas telas para o
-// mesmo dado divergem; o CSV é um botão.
+// listagem de vencidos e existia só pela exportação tabular. Duas telas para o
+// mesmo dado divergem; a planilha é um botão.
 //
 // O cartão "Criticidade dos prazos" saiu daqui na rodada 29. Ele desenhava
 // exatamente os três números da linha de KPIs logo acima — era a terceira vez
@@ -23,7 +23,7 @@ import { faixasDePrazo } from "../graficos/dados";
 import {
   avisarSeCortado,
   barraDeExportacao,
-  baixarCsv,
+  baixarPlanilha,
   carregarTudo,
   escapeHtml,
   formatarOrigem,
@@ -73,9 +73,6 @@ const COLUNAS: Coluna[] = [
  * empurrar o bloco inteiro para a folha seguinte.
  */
 const LINHAS_POR_BLOCO = 14;
-
-/** Os rótulos do CSV, sem acento no cabeçalho. */
-const COLUNAS_CSV = ["Apuratorio", "Unidade", "Responsavel", "Vencimento"];
 
 /**
  * Os dois recortes da tela, e a razão de serem **exclusivos**.
@@ -172,7 +169,7 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
                 .join("")}
             </select>
           </label>
-          ${barraDeExportacao({ imprimir: true, csv: true })}
+          ${barraDeExportacao({ imprimir: true, planilha: true })}
         </div>
       </div>
 
@@ -219,7 +216,7 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
     void renderPrazos(ctx);
   });
 
-  // O CSV e o papel levam os **dois blocos inteiros**, não as dez linhas de
+  // A planilha e o papel levam os **dois blocos inteiros**, não as dez linhas de
   // cada um que estão na tela: um relatório de prazos pela metade não serve
   // para cobrar prazo nenhum.
   const blocoInteiro = (filtro: DeadlineReportFilter) =>
@@ -240,25 +237,50 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
   ligarExportacao(
     async () => {
       const todos = await carregarOsDois();
-      // Uma coluna a mais diz de qual bloco cada linha veio, para a planilha
-      // não perder a distinção que a tela faz com dois títulos.
-      const linha = (i: DeadlineReportItem, bloco: string) => [
-        bloco,
-        identificacao(i),
-        formatarOrigem(i.unidade_origem, i.subunidade_secao_origem),
-        responsavel(i),
-        i.data_vencimento,
-        i.dias_restantes,
-        vigencia(i),
+      const colunas = [
+        { rotulo: "Situação", largura: 22, alinhamento: "centro" as const },
+        { rotulo: "Apuratório", largura: 24 },
+        { rotulo: "Unidade", largura: 30 },
+        { rotulo: "Responsável", largura: 40 },
+        { rotulo: "Vencimento", tipo: "data" as const, largura: 16, alinhamento: "centro" as const },
+        { rotulo: "Dias restantes", tipo: "inteiro" as const, largura: 16, alinhamento: "direita" as const },
+        { rotulo: "Prazo", largura: 20, alinhamento: "centro" as const },
       ];
-      return baixarCsv(
-        `prazos-${new Date().toISOString().slice(0, 10)}.csv`,
-        ["Situacao", ...COLUNAS_CSV, "Dias restantes", "Prazo"],
-        [
-          ...todos.vencidos.map((i) => linha(i, "Vencido")),
-          ...todos.aVencer.map((i) => linha(i, `Vence em ate ${janelaDias} dias`)),
+      const linha = (i: DeadlineReportItem, bloco: string) => ({
+        celulas: [
+          bloco,
+          identificacao(i),
+          formatarOrigem(i.unidade_origem, i.subunidade_secao_origem),
+          responsavel(i),
+          i.data_vencimento,
+          i.dias_restantes,
+          vigencia(i),
         ],
-      );
+      });
+      return baixarPlanilha(`prazos-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+        {
+          nome: "Vencidos",
+          titulo: "Prazos vencidos",
+          metadados: [{ rotulo: "Registros", valor: String(todos.vencidos.length) }],
+          colunas,
+          linhas: todos.vencidos.map((i) => ({ ...linha(i, "Vencido"), tom: "perigo" })),
+          congelar_colunas: 2,
+        },
+        {
+          nome: "A vencer",
+          titulo: `Prazos vencendo em até ${janelaDias} dias`,
+          metadados: [
+            { rotulo: "Janela", valor: `${janelaDias} dias` },
+            { rotulo: "Registros", valor: String(todos.aVencer.length) },
+          ],
+          colunas,
+          linhas: todos.aVencer.map((i) => ({
+            ...linha(i, `Vence em até ${janelaDias} dias`),
+            tom: "atencao",
+          })),
+          congelar_colunas: 2,
+        },
+      ]);
     },
     async () => {
       const todos = await carregarOsDois();

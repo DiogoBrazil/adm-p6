@@ -17,7 +17,7 @@
 import { call, type MapRow, type SavedMapListItem } from "../api";
 import {
   barraDeExportacao,
-  baixarCsvBase64,
+  baixarPlanilha,
   comCarregamento,
   escapeHtml,
   formatarData,
@@ -179,7 +179,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
             anos anteriores — mais o concluído dentro dele.
           </p>
         </div>
-        <div class="page-head-right">${barraDeExportacao({ csv: !!linhasGeradas })}</div>
+        <div class="page-head-right">${barraDeExportacao({ planilha: !!linhasGeradas })}</div>
       </div>
 
       <form id="filtro-mapa" class="filtro-bar">
@@ -399,16 +399,63 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
     }
   });
 
-  ligarExportacao(async () => {
+  ligarExportacao(() => {
+    if (!linhasGeradas) return;
     const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
-    const resposta = await call("reports_export_csv", {
-      request: { periodo_inicio: inicio, periodo_fim: fim, apuratorio_ids: apuratoriosSelecionados },
-    });
-    if (!resposta.ok || !resposta.data) {
-      notificar(resposta.error ?? "Falha ao exportar.", "erro");
-      return;
-    }
-    return baixarCsvBase64(resposta.data.nome_arquivo, resposta.data.conteudo);
+    const escopoApuratorios = apuratoriosSelecionados.length
+      ? apuratorios
+          .filter((item) => apuratoriosSelecionados.includes(item.id))
+          .map((item) => item.sigla)
+          .join(", ")
+      : "Todos os apuratórios";
+    return baixarPlanilha(`mapa-${inicio}-a-${fim}.xlsx`, [
+      {
+        nome: "Mapa do período",
+        titulo: tituloDoMapa(apuratorios),
+        metadados: [
+          {
+            rotulo: "Período",
+            valor: `${formatarData(inicio)} a ${formatarData(fim)}`,
+          },
+          { rotulo: "Apuratórios", valor: escopoApuratorios },
+          { rotulo: "Registros", valor: String(linhasGeradas.length) },
+        ],
+        colunas: [
+          { rotulo: "Apuratório", largura: 14 },
+          { rotulo: "Número", largura: 20 },
+          { rotulo: "Unidade", largura: 24 },
+          { rotulo: "Natureza", largura: 28 },
+          { rotulo: "Instauração", tipo: "data", largura: 14, alinhamento: "centro" },
+          { rotulo: "Conclusão", tipo: "data", largura: 14, alinhamento: "centro" },
+          { rotulo: "Situação", largura: 14, alinhamento: "centro" },
+          { rotulo: "Responsável", largura: 34 },
+          { rotulo: "Envolvidos", largura: 36 },
+          { rotulo: "Vencimento", tipo: "data", largura: 14, alinhamento: "centro" },
+          { rotulo: "Último andamento", largura: 60 },
+        ],
+        linhas: linhasGeradas.map((linha) => ({
+          celulas: [
+            linha.apuratorio_sigla,
+            linha.rotulo,
+            formatarOrigem(linha.unidade_origem, linha.subunidade_secao_origem),
+            linha.natureza_fato,
+            linha.data_instauracao,
+            linha.data_conclusao,
+            linha.data_conclusao ? "Concluído" : "Em andamento",
+            formatarQualificacaoMilitar(
+              linha.responsavel_posto_graduacao,
+              linha.responsavel_matricula,
+              linha.responsavel_nome,
+            ),
+            linha.envolvidos,
+            linha.prazo_vencimento,
+            linha.ultimo_andamento,
+          ],
+          tom: linha.data_conclusao ? "sucesso" : "informacao",
+        })),
+        congelar_colunas: 2,
+      },
+    ]);
   });
 }
 

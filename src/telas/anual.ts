@@ -165,7 +165,7 @@ export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
     void renderRelatorioAnual(ctx);
   });
 
-  // Sem CSV: o documento é a saída. Quem quer a planilha usa Estatísticas, que
-  // exporta as mesmas quebras com o escopo que o operador escolher.
+  // Sem planilha nesta tela: o documento é a saída. Quem precisa dos dados usa
+  // Estatísticas, que exporta as mesmas quebras com o escopo escolhido.
   ligarExportacao(undefined, undefined, { orientacao: "paisagem", perfil: "documento" });
 }

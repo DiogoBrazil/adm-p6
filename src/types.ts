@@ -572,22 +572,59 @@ export interface ReportFilter {
 }
 
 /** `maps_reports` */
-export interface CsvExport {
+export interface GeneratedFile {
   nome_arquivo: string;
-  /** CSV em base64, pronto para o frontend oferecer como download. */
-  conteudo: string;
+  conteudo_base64: string;
 }
 
 /**
  * `files` — arquivo a entregar ao usuário.
  *
- * O conteúdo vai em base64 porque é o mesmo formato em que `CsvExport.conteudo`
- * já chega do backend, e porque nem todo relatório é texto.
+ * O conteúdo vai em base64 porque anexos e planilhas não são necessariamente
+ * texto e atravessam o IPC pela mesma convenção.
  */
 export interface SaveFileRequest {
   /** Nome oferecido no diálogo; a extensão daqui vira o filtro do seletor. */
   nome_sugerido: string;
   conteudo_base64: string;
+}
+
+/** `files` — modelo declarativo de uma pasta de trabalho XLSX. */
+export type SpreadsheetColumnType = "texto" | "inteiro" | "data" | "data_hora";
+export type SpreadsheetAlignment = "esquerda" | "centro" | "direita";
+export type SpreadsheetTone = "informacao" | "sucesso" | "atencao" | "perigo" | "inativo";
+export type SpreadsheetValue = string | number | boolean | null;
+
+export interface SpreadsheetMetadata {
+  rotulo: string;
+  valor: string;
+}
+
+export interface SpreadsheetColumn {
+  rotulo: string;
+  tipo?: SpreadsheetColumnType;
+  largura: number;
+  alinhamento?: SpreadsheetAlignment;
+  tom?: SpreadsheetTone | null;
+}
+
+export interface SpreadsheetRow {
+  celulas: SpreadsheetValue[];
+  tom?: SpreadsheetTone | null;
+}
+
+export interface SpreadsheetSheet {
+  nome: string;
+  titulo: string;
+  metadados?: SpreadsheetMetadata[];
+  colunas: SpreadsheetColumn[];
+  linhas: SpreadsheetRow[];
+  congelar_colunas?: number;
+}
+
+export interface SpreadsheetRequest {
+  nome_sugerido: string;
+  abas: SpreadsheetSheet[];
 }
 
 /** `maps_reports` — situação dos processos de um apuratório no escopo do filtro. */

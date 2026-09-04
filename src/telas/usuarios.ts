@@ -24,7 +24,7 @@ import {
   ativarSelectsPesquisaveis,
   avisarSeCortado,
   barraDeExportacao,
-  baixarCsv,
+  baixarPlanilha,
   carregarTudo,
   escapeHtml,
   ITENS_POR_PAGINA,
@@ -98,18 +98,7 @@ const COLUNAS: Coluna[] = [
  */
 const COLUNAS_IMPRESSAO = COLUNAS.slice(0, -1);
 
-/** As colunas do CSV — sem "Ações", que é botão, e sem acento no cabeçalho. */
-const COLUNAS_CSV = [
-  "Posto/Graduacao",
-  "Matricula",
-  "Nome",
-  "Encarregado",
-  "Usuario do sistema",
-  "Perfil",
-  "Situacao",
-];
-
-const linhaCsv = (u: UserListItem) => [
+const linhaPlanilha = (u: UserListItem) => [
   u.posto_graduacao,
   u.matricula,
   u.nome,
@@ -322,8 +311,8 @@ async function atualizarListaUsuarios(ctx: ContextoTela): Promise<void> {
 
   // O botão nasce sempre, e some quando o filtro não acha nada: com redesenho
   // parcial ele não pode entrar e sair do HTML, que fica fora desta área.
-  const csv = document.querySelector<HTMLButtonElement>("#btn-csv");
-  if (csv) csv.hidden = itens.length === 0;
+  const planilha = document.querySelector<HTMLButtonElement>("#btn-planilha");
+  if (planilha) planilha.hidden = itens.length === 0;
 
   const limpar = document.querySelector<HTMLButtonElement>("#limpar-busca");
   if (limpar) limpar.hidden = busca === "";
@@ -360,7 +349,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
           <p>Policiais militares. A conta de acesso é opcional.</p></div>
         <div class="page-head-right">
           ${ctx.podeEscrever() ? `<button id="btn-novo">Novo</button>` : ""}
-          ${barraDeExportacao({ imprimir: true, csv: true })}
+          ${barraDeExportacao({ imprimir: true, planilha: true })}
         </div>
       </div>
 
@@ -381,12 +370,12 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     </section>
   `);
 
-  const csv = document.querySelector<HTMLButtonElement>("#btn-csv");
-  if (csv) csv.hidden = itens.length === 0;
+  const planilha = document.querySelector<HTMLButtonElement>("#btn-planilha");
+  if (planilha) planilha.hidden = itens.length === 0;
 
   ligarResultadosUsuarios(ctx, itens);
 
-  // O termo entra em `busca` a cada tecla, e só o redesenho espera: o CSV e a
+  // O termo entra em `busca` a cada tecla, e só o redesenho espera: a planilha e a
   // impressão leem `busca` no clique, e clicar dentro dos 250 ms tem de levar
   // o que está no campo.
   cancelarBusca = ligarBuscaInstantanea(
@@ -413,7 +402,7 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     void renderFormularioUsuario(ctx, null);
   });
 
-  // CSV e impressão levam o que a **busca** alcança, não os dez da tela: com
+  // Planilha e impressão levam o que a **busca** alcança, não os dez da tela: com
   // 235 militares, exportar a página era exportar 4% do efetivo, e a planilha
   // não dizia que estava incompleta.
   const todosDoFiltro = () =>
@@ -426,11 +415,30 @@ export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();
       avisarSeCortado(cortado);
-      return baixarCsv(
-        `usuarios-${new Date().toISOString().slice(0, 10)}.csv`,
-        COLUNAS_CSV,
-        todos.map(linhaCsv),
-      );
+      return baixarPlanilha(`usuarios-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+        {
+          nome: "Policiais militares",
+          titulo: "Policiais militares",
+          metadados: [
+            { rotulo: "Busca", valor: busca || "Todos os policiais militares" },
+            { rotulo: "Registros", valor: String(todos.length) },
+          ],
+          colunas: [
+            { rotulo: "Posto/Graduação", largura: 18 },
+            { rotulo: "Matrícula", largura: 14 },
+            { rotulo: "Nome", largura: 34 },
+            { rotulo: "Encarregado", largura: 14, alinhamento: "centro" },
+            { rotulo: "Usuário do sistema", largura: 20, alinhamento: "centro" },
+            { rotulo: "Perfil", largura: 18 },
+            { rotulo: "Situação", largura: 14, alinhamento: "centro" },
+          ],
+          linhas: todos.map((u) => ({
+            celulas: linhaPlanilha(u),
+            tom: u.ativo ? "sucesso" : "inativo",
+          })),
+          congelar_colunas: 3,
+        },
+      ]);
     },
     async () => {
       const { itens: todos, cortado } = await todosDoFiltro();

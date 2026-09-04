@@ -30,6 +30,7 @@ import {
   call,
   type ContagemRotulada,
   type EnquadramentoContagem,
+  type SpreadsheetSheet,
   type StatusPorApuratorio,
 } from "../api";
 import {
@@ -43,7 +44,7 @@ import {
   montarCartoesAnaliticos,
   type GraficoSpec,
 } from "../graficos";
-import { barraDeExportacao, baixarCsv, escapeHtml, ligarExportacao, option, tabela } from "../dom";
+import { barraDeExportacao, baixarPlanilha, escapeHtml, ligarExportacao, option, tabela } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/stats/procedimentos";
@@ -321,7 +322,7 @@ export async function renderEstatisticas(ctx: ContextoTela): Promise<void> {
           <h1>Estatísticas dos Apuratórios</h1>
           <p>O escopo é escolhido no filtro; todos os painéis o respeitam.</p>
         </div>
-        <div class="page-head-right">${barraDeExportacao({ imprimir: true, csv: true })}</div>
+        <div class="page-head-right">${barraDeExportacao({ imprimir: true, planilha: true })}</div>
       </div>
 
       ${barraDeFiltro(anos, apuratorios)}
@@ -415,37 +416,159 @@ export async function renderEstatisticas(ctx: ContextoTela): Promise<void> {
     void renderEstatisticas(ctx);
   });
 
-  // O CSV leva as tabelas inteiras, não o Top 12 do gráfico, e diz de que
-  // escopo ele saiu — uma planilha sem o recorte que a gerou não se confere.
+  // A planilha leva as tabelas inteiras, não o Top 12 do gráfico, e registra
+  // o escopo em cada aba para que ela continue conferível quando for separada.
   ligarExportacao(
     () => {
-      const bloco = (nome: string, itens: { rotulo: string; total: number }[]) =>
-        itens.map((i) => [nome, i.rotulo, i.total]);
-      return baixarCsv(
-        `estatisticas-apuratorios-${new Date().toISOString().slice(0, 10)}.csv`,
-        ["Quebra", "Item", "Quantidade"],
+      const metadados = [
+        { rotulo: "Ano", valor: escopoAno },
+        {
+          rotulo: "Apuratórios",
+          valor: apuratoriosSelecionados.length
+            ? apuratorios
+                .filter((item) => apuratoriosSelecionados.includes(item.id))
+                .map((item) => item.sigla)
+                .join(", ")
+            : "Todos os apuratórios",
+        },
+      ];
+      const abaContagem = (
+        nome: string,
+        titulo: string,
+        rotulo: string,
+        itens: ContagemRotulada[],
+      ): SpreadsheetSheet => ({
+        nome,
+        titulo,
+        metadados,
+        colunas: [
+          { rotulo, largura: 48 },
+          {
+            rotulo: "Quantidade",
+            tipo: "inteiro",
+            largura: 14,
+            alinhamento: "direita",
+            tom: "informacao",
+          },
+        ],
+        linhas: itens.map((item) => ({ celulas: [item.rotulo, item.total] })),
+        congelar_colunas: 1,
+      });
+      const abaEnquadramento = (
+        nome: string,
+        titulo: string,
+        rotulo: string,
+        itens: EnquadramentoContagem[],
+      ): SpreadsheetSheet => ({
+        nome,
+        titulo,
+        metadados,
+        colunas: [
+          { rotulo, largura: 24 },
+          { rotulo: "Classificação", largura: 20 },
+          { rotulo: "Descrição", largura: 60 },
+          {
+            rotulo: "Quantidade",
+            tipo: "inteiro",
+            largura: 14,
+            alinhamento: "direita",
+            tom: "informacao",
+          },
+        ],
+        linhas: itens.map((item) => ({
+          celulas: [item.rotulo, item.classificacao, item.descricao, item.total],
+        })),
+        congelar_colunas: 1,
+      });
+
+      return baixarPlanilha(
+        `estatisticas-apuratorios-${new Date().toISOString().slice(0, 10)}.xlsx`,
         [
-          ["Escopo", "Ano", escopoAno],
-          ["Escopo", "Apuratórios", escopoApuratorios],
-          ["Totais", "No escopo", totais.total],
-          ["Totais", "Em andamento", totais.emAndamento],
-          ["Totais", "Concluídos", totais.concluidos],
-          ...d.situacao.map((s) => [
-            "Situação por apuratório",
-            `${s.sigla} — ${s.tipo_apuratorio_nome}`,
-            s.total,
-          ]),
-          ...bloco("Por ano de instauração", d.porAno),
-          ...bloco("Por unidade de origem", d.unidades),
-          ...bloco("Por natureza geral do fato", d.naturezas),
-          ...bloco("Por responsável vigente", d.responsaveis),
-          ...bloco("Solução sugerida", d.sugeridas),
-          ...bloco("Solução decidida", d.decididas),
-          ...bloco("Categoria de indício", d.categorias),
-          ...bloco("Condutor em sinistro", d.condutores),
-          ...bloco("Transgressão do RDPM", d.transgressoes),
-          ...bloco("Infração do Estatuto", d.estatuto),
-          ...bloco("Infração penal", d.penais),
+          {
+            nome: "Resumo",
+            titulo: "Resumo das estatísticas dos apuratórios",
+            metadados,
+            colunas: [
+              { rotulo: "Indicador", largura: 36 },
+              {
+                rotulo: "Quantidade",
+                tipo: "inteiro",
+                largura: 14,
+                alinhamento: "direita",
+              },
+            ],
+            linhas: [
+              { celulas: ["Total no escopo", totais.total], tom: "informacao" },
+              { celulas: ["Em andamento", totais.emAndamento], tom: "atencao" },
+              { celulas: ["Concluídos", totais.concluidos], tom: "sucesso" },
+              { celulas: ["Espécies com registros", totais.especies] },
+            ],
+          },
+          {
+            nome: "Situação",
+            titulo: "Situação por apuratório",
+            metadados,
+            colunas: [
+              { rotulo: "Apuratório", largura: 18 },
+              { rotulo: "Tipo", largura: 30 },
+              {
+                rotulo: "Em andamento",
+                tipo: "inteiro",
+                largura: 15,
+                alinhamento: "direita",
+                tom: "atencao",
+              },
+              {
+                rotulo: "Concluídos",
+                tipo: "inteiro",
+                largura: 14,
+                alinhamento: "direita",
+                tom: "sucesso",
+              },
+              { rotulo: "Total", tipo: "inteiro", largura: 12, alinhamento: "direita" },
+            ],
+            linhas: d.situacao.map((item) => ({
+              celulas: [
+                `${item.sigla} — ${item.nome}`,
+                item.tipo_apuratorio_nome,
+                item.em_andamento,
+                item.concluidos,
+                item.total,
+              ],
+            })),
+            congelar_colunas: 1,
+          },
+          abaContagem("Por ano", "Evolução das instaurações", "Ano", d.porAno),
+          abaContagem("Unidades", "Unidades de origem", "Unidade", d.unidades),
+          abaContagem("Naturezas", "Natureza geral do fato", "Natureza", d.naturezas),
+          abaContagem(
+            "Responsáveis",
+            "Responsabilidade vigente",
+            "Policial militar",
+            d.responsaveis,
+          ),
+          abaContagem("Sol. sugeridas", "Soluções sugeridas", "Solução", d.sugeridas),
+          abaContagem("Sol. decididas", "Soluções decididas", "Solução", d.decididas),
+          abaContagem("Categorias", "Categorias de indício", "Categoria", d.categorias),
+          abaContagem("Condutores", "Condutores em sinistro", "Policial militar", d.condutores),
+          abaEnquadramento(
+            "RDPM",
+            "Transgressões do RDPM",
+            "Artigo / inciso",
+            d.transgressoes,
+          ),
+          abaEnquadramento(
+            "Estatuto",
+            "Infrações do Estatuto",
+            "Artigo / inciso",
+            d.estatuto,
+          ),
+          abaEnquadramento(
+            "Infrações penais",
+            "Infrações penais",
+            "Dispositivo / artigo",
+            d.penais,
+          ),
         ],
       );
     },

@@ -20,6 +20,7 @@ use adm_p6_tauri_lib::app_state::AppState;
 use adm_p6_tauri_lib::auth::domain::SessionUser;
 use adm_p6_tauri_lib::deadlines::domain::AddExtensionRequest;
 use adm_p6_tauri_lib::deadlines::repository as deadlines_repository;
+use base64::Engine;
 use chrono::NaiveDate;
 use serde_json::{json, Value};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -334,6 +335,46 @@ fn impressao_em_retrato_responde_pelo_ipc() {
         autenticar(&app, &conta, false);
         let envelope = invocar(&webview, "print_portrait", json!({}));
         assert_eq!(ok(&envelope), &json!(false), "{envelope}");
+    });
+}
+
+/// A geração da planilha atravessa o registro de comandos e o serde usando o
+/// mesmo contrato declarativo enviado pelo frontend. O salvamento fica fora
+/// deste teste porque abre o seletor nativo; aqui se comprova que o conteúdo
+/// devolvido já é um arquivo XLSX válido, e não texto renomeado.
+#[test]
+fn planilha_xlsx_e_gerada_pelo_ipc() {
+    com_app_e_banco("ipc_planilha", |app, webview, conta| {
+        autenticar(&app, &conta, false);
+        let envelope = invocar(
+            &webview,
+            "files_generate_spreadsheet",
+            json!({
+                "request": {
+                    "nome_sugerido": "relatorio-teste",
+                    "abas": [{
+                        "nome": "Dados",
+                        "titulo": "Relatório de teste",
+                        "metadados": [{ "rotulo": "Escopo", "valor": "Teste IPC" }],
+                        "colunas": [
+                            { "rotulo": "Descrição", "largura": 30 },
+                            { "rotulo": "Quantidade", "tipo": "inteiro", "largura": 14,
+                              "alinhamento": "direita", "tom": "informacao" }
+                        ],
+                        "linhas": [{ "celulas": ["Registro", 42], "tom": "sucesso" }],
+                        "congelar_colunas": 1
+                    }]
+                }
+            }),
+        );
+        let dados = ok(&envelope);
+        assert_eq!(dados["nome_arquivo"], json!("relatorio-teste.xlsx"));
+
+        let conteudo = base64::engine::general_purpose::STANDARD
+            .decode(dados["conteudo_base64"].as_str().expect("conteudo base64"))
+            .expect("base64 valido");
+        assert!(conteudo.starts_with(b"PK"), "xlsx deve ser um pacote ZIP");
+        assert!(conteudo.len() > 1_000, "arquivo inesperadamente pequeno");
     });
 }
 

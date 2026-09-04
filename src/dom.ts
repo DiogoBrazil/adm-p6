@@ -6,7 +6,7 @@
 // fecha o resto — e é ela que recusa `style=""` interpolado no markup, por isso
 // largura calculada sai em `data-*` e é aplicada pela CSSOM.
 
-import { call } from "./api";
+import { call, type SpreadsheetSheet } from "./api";
 import { brasaoUrl } from "./brasao";
 import {
   congelarGraficosParaImpressao,
@@ -927,37 +927,32 @@ export async function baixarArquivoBase64(
   return resposta.data;
 }
 
-/** CSV que o backend já montou (`CsvExport.conteudo` vem em base64). */
-export function baixarCsvBase64(nomeArquivo: string, base64: string): Promise<string | null> {
-  return baixarArquivoBase64(nomeArquivo, base64);
-}
-
 /**
- * CSV montado no cliente, no mesmo formato do backend: separador `;`, aspas
- * dobradas e BOM — sem o BOM o Excel abre o arquivo em Latin-1 e estraga todo
- * acento.
+ * Monta a pasta de trabalho no backend e a entrega pelo diálogo nativo.
+ *
+ * A geração fica centralizada porque XLSX carrega tipos, larguras, abas e
+ * estilos que precisam ser idênticos nas seis telas. O segundo comando é o
+ * mesmo dos anexos: só ele pode escolher e gravar um caminho local.
  */
-export function baixarCsv(
+export async function baixarPlanilha(
   nomeArquivo: string,
-  colunas: string[],
-  linhas: unknown[][],
+  abas: SpreadsheetSheet[],
 ): Promise<string | null> {
-  const campo = (valor: unknown) => {
-    const texto = valor === null || valor === undefined ? "" : String(valor);
-    return /[;"\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
-  };
-  const csv = [colunas, ...linhas].map((l) => l.map(campo).join(";")).join("\n");
-  const bytes = new TextEncoder().encode(`\ufeff${csv}\n`);
-  let binario = "";
-  for (const b of bytes) binario += String.fromCharCode(b);
-  return baixarArquivoBase64(nomeArquivo, btoa(binario));
+  const resposta = await call("files_generate_spreadsheet", {
+    request: { nome_sugerido: nomeArquivo, abas },
+  });
+  if (!resposta.ok || !resposta.data) {
+    notificar(resposta.error ?? "Falha ao gerar a planilha.", "erro");
+    return null;
+  }
+  return baixarArquivoBase64(resposta.data.nome_arquivo, resposta.data.conteudo_base64);
 }
 
 /** Barra com os botões de saída da tela. Os ids são ligados por `ligarExportacao`. */
-export function barraDeExportacao(opcoes: { imprimir?: boolean; csv?: boolean }): string {
+export function barraDeExportacao(opcoes: { imprimir?: boolean; planilha?: boolean }): string {
   const botoes = [
     opcoes.imprimir ? `<button class="outline small" id="btn-imprimir">Imprimir / PDF</button>` : "",
-    opcoes.csv ? `<button class="outline small" id="btn-csv">Exportar CSV</button>` : "",
+    opcoes.planilha ? `<button class="outline small" id="btn-planilha">Exportar planilha</button>` : "",
   ].filter(Boolean);
   return botoes.length ? `<div class="export-bar">${botoes.join("")}</div>` : "";
 }
@@ -1048,7 +1043,7 @@ export const ESPERA_BUSCA_MS = 250;
  * para quem chegar depois:
  *
  *   - `aoDigitar` corre a **cada tecla**, e é onde o estado do módulo se
- *     atualiza. Quem exportar o CSV ou abrir o modal de filtros dentro dos
+ *     atualiza. Quem exportar a planilha ou abrir o modal de filtros dentro dos
  *     250 ms tem de levar o termo que está no campo, não o anterior — só o
  *     redesenho é que espera.
  *   - Enter dispara na hora, cancelando o timer pendente. Quem digita e aperta
@@ -1184,7 +1179,7 @@ export function marcarCarregando(area: HTMLElement | null, ligado: boolean): voi
 const LOTE = 200;
 
 /**
- * Teto do que sai num CSV ou numa impressão.
+ * Teto do que sai numa planilha ou numa impressão.
  *
  * A auditoria cresce sem limite, e "todos os registros do filtro" pode ser
  * dezenas de milhares — uma espera longa e um PDF que ninguém lê. O teto
@@ -1196,7 +1191,7 @@ export const TETO_EXPORTACAO = 5000;
 /**
  * Percorre um comando paginado até esgotar o filtro.
  *
- * O CSV e a impressão levam o que o filtro alcança, não os dez da tela — foi
+ * A planilha e a impressão levam o que o filtro alcança, não os dez da tela — foi
  * por isso que a exportação de usuários saía com uma página e o operador só
  * descobria abrindo a planilha.
  */
@@ -1310,7 +1305,7 @@ export function ligarExportacao(
     );
   }
 
-  const botao = document.querySelector<HTMLButtonElement>("#btn-csv");
+  const botao = document.querySelector<HTMLButtonElement>("#btn-planilha");
   if (!botao || !aoExportar) return;
   botao.addEventListener("click", async () => {
     botao.disabled = true;

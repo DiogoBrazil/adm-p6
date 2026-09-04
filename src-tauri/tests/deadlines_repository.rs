@@ -444,7 +444,7 @@ async fn blocos_de_prazo_sao_exclusivos() {
         let dentro = processo_vencendo_em(&pool, &m, 3, 5).await;
         let fora = processo_vencendo_em(&pool, &m, 4, 30).await;
 
-        // O responsável precisa sair qualificado para a tabela e para o CSV,
+        // O responsável precisa sair qualificado para a tabela e para a planilha,
         // não apenas com o nome que a view já expunha.
         sqlx::query(
             "INSERT INTO processo_designacoes

@@ -259,7 +259,7 @@ Todas foram decididas pelo responsável do projeto e estão implementadas.
 | 45 | Toda designação cita documento? | **Não.** A relação `apuratorio_papeis.usa_documento_designacao` decide. No IPM, o Escrivão tem a flag desligada: documento e número não são gravados nem pedidos, e a tabela mostra “-”. A retroalimentação por nomes acontece uma vez na migration; o código lê apenas o booleano. E, como todo conceito de negócio, é **cadastro administrável**: a flag é uma coluna da tabela de papéis em Catálogos → Apuratórios, com alternância própria — outra espécie que dispense a citação não precisa de migration nova. |
 | 46 | Quem registra Ofendido/Vítima, e onde ele mora | **Todo procedimento — CP, FP, IPM, SR e SV —, e em tabela própria.** Três escolhas numa. (a) **Vítima deixa de ser papel de pessoa.** Era uma linha de `papeis_pessoa` escolhida num `<select>`; virou `processo_vitimas`, relação do procedimento como `processo_envolvidos` (princípio 3). O motivo é concreto: `papeis_pessoa` é catálogo **operacional** e nasce vazio, então uma seção que dependesse dele sumiria numa instalação nova — a forma exata do defeito da carta precatória (a seção 12, rodada 10). Sem catálogo no caminho, não há o que cadastrar nem o que renomear. (b) **Quem decide é `apuratorios.permite_cadastro_vitima`**, ligado pela `0012` em todo apuratório cujo tipo é `procedimento`; os cinco processos disciplinares ficam de fora, porque são instaurados **contra** um militar, e não para apurar um fato. Carga única, como `permite_indicios` (decisão 31). (c) **O atributo NÃO entra no registro de Catálogos** — desvio deliberado da seção 5, por decisão do responsável: registrar ofendido é capacidade da espécie, não escolha de administrador. Fica no mesmo caso de `codigo_extensao`. É opcional (zero, um ou vários), e o bloco genérico do formulário virou **"Pessoas inquiridas"**. |
 | 47 | Qual é a ordem das datas do fluxo? | **Instauração ≤ Recebimento ≤ Remessa ≤ Julgamento ≤ Conclusão**, comparando somente as etapas preenchidas. Datas iguais são válidas; uma etapa ausente não torna as posteriores obrigatórias. `data_remessa_encarregado` e `data_remessa_comissao` são alternativas na mesma posição e não se comparam entre si. A aplicação devolve a incompatibilidade por nome e data, e a migration `0013` repete a regra no banco. |
-| 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e CSV, sem reescrever snapshots de mapas já salvos. |
+| 48 | Como identificar a origem abaixo da Unidade PM? | **Subunidade/Seção opcional, sempre vinculada a uma Unidade PM.** É catálogo operacional `subunidades_secoes`, nasce vazio e pode repetir o nome em unidades diferentes. Quando informada, precisa pertencer à unidade escolhida e entra no escopo das duas unicidades de numeração. Assim `SR nº 1/2026/7ºBPM` e `SR nº 1/2026/7ºBPM/1ªCIA` coexistem; dois registros sem subunidade ou dois com a mesma subunidade colidem. A origem composta aparece em listagens, mapas, prazos e planilhas, sem reescrever snapshots de mapas já salvos. |
 | 49 | Como é emitido o PDF detalhado do mapa mensal? | **A partir do mapa corrente, pela impressão do sistema, sem crate de PDF.** Pode emitir todas as fichas do filtro ou somente uma; nos dois casos o backend reaplica mês e apuratórios antes de aceitar o processo. Há uma capa institucional por espécie de apuratório, com mês/ano e unidade fixa 7ºBPM. Depois dela, as fichas seguem em A4 paisagem e aproveitam a mesma folha: cabeçalho e marcador de fim delimitam cada registro, e páginas atravessadas recebem “Continuação do …”. A ficha reúne o detalhe cadastral, envolvidos, enquadramentos agrupados por natureza/esfera, resultados, vítimas, inquiridos, designações, prazos/prorrogações, andamentos e metadados dos anexos; o conteúdo binário dos anexos não entra. “Remessa da comissão” mostra “Não se aplica” conforme o atributo semântico do apuratório, nunca pela sigla. Mapas salvos continuam snapshots e ficam fora desta primeira versão. A **paisagem não vem do CSS**: o WebKitGTK ignora `@page { size }`, e quem a define é o `GtkPageSetup` de `print_landscape`, comando que abre o diálogo já orientado e só retorna quando a impressão termina. Ver a armadilha do `@page` na seção 7. |
 | 50 | Como o PDF do mapa apresenta enquadramentos e indícios? | **Um bloco por natureza, citação com o artigo na frente, e a descrição uma única vez.** Os blocos penais saem por espécie+esfera ("Indícios de Crime Militar", "Indícios de Crime Comum"), e transgressão do RDPM e infração do Estatuto ocupam **um só** bloco disciplinar — é a mesma matéria —, com a transgressão análoga recuada em itálico sob a infração do Estatuto. A citação segue a ordem em que se cita uma norma: `Art. 312 do Código Penal Militar - …`, com o conector vindo de `dispositivos_legais.nome_feminino` (atributo semântico, nunca leitura do nome). O `rotulo` montado em `evidence/repository.rs` **já termina na descrição**; quem exibe não concatena de novo. As categorias de indício só entram quando acrescentam: as de `indica_ausencia` sempre, as demais apenas quando não há enquadramento nenhum — critério estrutural, sem olhar nome. O Resultado sai em linhas rótulo/valor empilhadas. |
 | 51 | Como se registra um envolvido cujo PM ainda não foi identificado? | **`processo_envolvidos.policial_militar_id IS NULL`, e nada mais.** Era um policial fictício de cadastro — "À APURAR", matrícula `100000000` — e isso o punha em lista de opção, em estatística pessoal e em ranking de condutor, como se fosse gente. Três escolhas numa. (a) **O estado mora no vínculo, não numa pessoa inventada nem num booleano ao lado.** `NULL` é a única fonte de verdade (princípio 4); um `a_apurar` gravado ao lado do `policial_militar_id` seriam duas, e elas divergiriam. Os resumos expõem `a_apurar` **derivado**, para a tela não ter de deduzir de campo vazio. (b) **É envolvido de verdade.** Conta no `max_envolvidos`, recebe situação, enquadramento, indício e resultado. O que não pode é ser **condutor** — `ck_envolvido_condutor_identificado` —, porque conduzir é ato de pessoa identificada; e é **no máximo um por processo** (`uq_envolvido_a_apurar`), porque "os PMs a apurar" é um marcador coletivo, não uma fila. (c) **A `0016` converte e desativa, não apaga.** Os vínculos do cadastro artificial viram `NULL` preservando o **id do envolvido**, e o registro fica inativo — catálogo em uso se desativa (princípio 6). |
@@ -615,7 +615,7 @@ próprio, sem `LIMIT`, e um teste que monte mais linhas que qualquer teto imagin
     como `data-linha`; a tela lê `linha.dataset.linha`. Por posição, qualquer recorte abre
     o registro errado — e uma linha de auditoria parece com a outra.
 
-11. **Se a tela exporta**, o CSV e a impressão levam o **filtro inteiro**, não a página:
+11. **Se a tela exporta**, a planilha e a impressão levam o **filtro inteiro**, não a página:
 
     ```ts
     const todosDoFiltro = () => carregarTudo<MeuItem>(async (page, perPage) =>
@@ -623,7 +623,7 @@ próprio, sem `LIMIT`, e um teste que monte mais linhas que qualquer teto imagin
 
     ligarExportacao(
       async () => { const { itens, cortado } = await todosDoFiltro();
-                    avisarSeCortado(cortado); return baixarCsv(nome, COLUNAS_CSV, itens.map(…)); },
+                    avisarSeCortado(cortado); return baixarPlanilha(nome, [{ … }]); },
       async () => { const { itens, cortado } = await todosDoFiltro();
                     avisarSeCortado(cortado); return tabela(COLUNAS_IMPRESSAO, itens.map(…)); },
       { orientacao: "paisagem", perfil: "tabular", seletorSubstituido: "#resultado-paginado" },
@@ -633,6 +633,15 @@ próprio, sem `LIMIT`, e um teste que monte mais linhas que qualquer teto imagin
     O `seletorSubstituido` aponta para um wrapper que inclui **tabela,
     paginação e títulos próprios do recorte**. O helper põe o bloco completo no
     mesmo lugar e esconde só esse wrapper; nunca procura toda `.table-wrap` da tela.
+
+    As exportações de Usuários, Auditoria, Prazos, Designações, Estatísticas e
+    Mapa do Período são pastas de trabalho **XLSX**, geradas por
+    `files::spreadsheet` com `rust_xlsxwriter`. A tela envia a descrição das
+    abas, colunas, tipos e tons a `files_generate_spreadsheet`; o backend aplica
+    a paleta institucional, faixas alternadas, autofiltro, congelamento,
+    larguras e formatos de data/número. Depois `baixarArquivoBase64` mantém o
+    diálogo nativo único. Texto vindo do banco é escrito como texto — inclusive
+    quando começa com `=`, `+`, `-` ou `@` — para não virar fórmula ao abrir.
 
     ⚠ **A coluna de ações sai do bloco de impressão.** A regra de impressão esconde
     `.row-actions`, e numa tabela de layout fixo isso colapsa a célula: o corpo fica com uma
@@ -765,7 +774,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | `replace` sem `assert` em script de edição | Um `s.replace(a, b)` que não casa é um **no-op silencioso**. Foi assim que a rota de configuração de apuratórios ficou sem botão de menu por três commits | Sempre `assert alvo in s` antes de substituir |
 | Filtrar `ativo` na leitura de registro | Um processo antigo perde o catálogo desativado que usava | Filtrar `ativo` só em lista de **opções** |
 | Lista de escopo vazia num filtro | `= ANY('{}')` é falso para toda linha: quem não filtra nada não vê nada | `maps_reports::repository::escopo()` normaliza vazio para `NULL`. Use-o em todo filtro novo |
-| `<a download>` para entregar arquivo | No WebView não define destino nem abre "salvar como", e muda por plataforma. Sobreviveu no download de anexo até a seção 12, rodada 6, porque nenhum teste chega lá e a tela não acusa | `dom.ts::baixarArquivoBase64` → `files_save_download`, que abre o diálogo nativo no Rust. Vale para **todo** arquivo, não só o CSV |
+| `<a download>` para entregar arquivo | No WebView não define destino nem abre "salvar como", e muda por plataforma. Sobreviveu no download de anexo até a seção 12, rodada 6, porque nenhum teste chega lá e a tela não acusa | `dom.ts::baixarArquivoBase64` → `files_save_download`, que abre o diálogo nativo no Rust. Vale para **todo** arquivo, inclusive planilhas XLSX |
 | **`docker compose down -v` com dado de produção dentro** | Apaga 8 anos de registro. A regra "editou migration, recria o banco" **acabou** | Migration incremental (`0008`…). Se realmente precisar recomeçar, o roteiro completo está na 8.5 |
 | Comparar coluna anulável com `=` num `INSERT ... SELECT` | `pm_id = motorista_id` devolve **NULL**, não `false`, quando o motorista é nulo — e a coluna NOT NULL recusa a linha inteira. Custou uma transação da etapa 05 | `IS NOT DISTINCT FROM`, ou `COALESCE(..., false)` |
 | `BEGIN;`/`COMMIT;` dentro de arquivo servido por `psql --single-transaction` | O `BEGIN` vira aviso e o `COMMIT` **encerra a transação externa**: tudo depois dele corre em autocommit, e a migração deixa de ser tudo-ou-nada — sem erro nenhum | As etapas de `importacao/` não abrem transação. Quem a abre é `scripts/migrar_dados_legados.sh` |
@@ -809,7 +818,7 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Empacotar biblioteca de frontend por CDN | A CSP é `default-src 'self'`: o script nem carrega, e a tela quebra só no build de produção | Dependência entra pelo `package.json` e é empacotada pelo Vite. E confira que ela não escreve `style=""` nem `setAttribute('style', …)` — `elemento.style.x = …` e `style.cssText` passam pela CSSOM e escapam da diretiva; markup com `style` não |
 | Carregar dump de `pg_dump` e continuar usando a conexão | Ele emite `SELECT pg_catalog.set_config('search_path', '', false)`, e daí em diante nem `public` é enxergado — o erro que aparece é "relation ... does not exist" | `SET search_path = public;` logo depois de carregar |
 | Redesenhar **parte** de uma listagem sem rechamar `aplicarLarguras` | As larguras declaradas em `Coluna.largura` saem em `data-largura` e são aplicadas pela CSSOM em `aplicarLarguras`, que só `main.ts::shell()` chama. A pesquisa instantânea troca o `innerHTML` da área de resultados sem passar pelo `shell()` — e a tabela volta a se dimensionar pelo conteúdo **sem erro nenhum**, num redesenho que acontece a cada tecla | `aplicarLarguras(area)` logo depois de escrever o `innerHTML`, como em `usuarios.ts::atualizarListaUsuarios` e `catalogos.ts::atualizarListaCatalogo`. A listagem de apuratórios não sofre disso porque o `<colgroup>` dela é de classes de CSS, não de `data-largura` |
-| Debounce sem atualizar o estado a cada tecla | Se o termo só entrar na variável do módulo **depois** dos 250 ms, quem exporta o CSV ou aplica o modal de filtros dentro dessa janela leva o termo **anterior** — os dois leem a variável no clique, não o campo | `dom.ts::ligarBuscaInstantanea` separa as duas coisas: `aoDigitar` corre a cada tecla e é onde o estado se atualiza; só o redesenho espera |
+| Debounce sem atualizar o estado a cada tecla | Se o termo só entrar na variável do módulo **depois** dos 250 ms, quem exporta a planilha ou aplica o modal de filtros dentro dessa janela leva o termo **anterior** — os dois leem a variável no clique, não o campo | `dom.ts::ligarBuscaInstantanea` separa as duas coisas: `aoDigitar` corre a cada tecla e é onde o estado se atualiza; só o redesenho espera |
 | **Redimensionar o gráfico em vez da caixa** | `chart.resize(largura, altura)` muda o **bitmap** do canvas. Como `.analytics-chart canvas` fixa `width`/`height` em `100% !important` — é isso que faz o canvas seguir a caixa —, a caixa renderizada não acompanha, e o desenho sai **esticado**: medido, 4,8% na horizontal e 17,6% na vertical em todo gráfico impresso. Não há erro em lugar nenhum; só o PDF fica torto | Dimensione a **caixa** (`.analytics-chart`) e chame `resize()` **sem medidas**: aí o Chart.js relê o container e bitmap e caixa voltam a coincidir. É o que `graficos/index.ts::prepararGraficosParaImpressao` faz |
 | **`Chart.resize()` com animação em curso** | Ele **adia** o pedido (`_resizeBeforeDraw`) e quem o aplica é o `draw()` seguinte — com as medidas **guardadas**, não com as atuais. Um pedido do `ResizeObserver` pendente desde a montagem fazia o gráfico ir para a medida certa e voltar para a antiga no mesmo quadro: quatro dos nove saíam impressos com o bitmap de meia coluna esticado até a largura da folha, e só eles | `stop()` encerra a animação (senão o `resize()` novo também é adiado), `draw()` consome a pendência enquanto as medidas guardadas ainda são as que valem, e **só então** a caixa muda. Ver `graficos/index.ts::pararEredimensionar` |
 | **Medir a folha depois que a impressão começou** | Canvas é bitmap: a largura útil do papel só existe quando já é tarde para redesenhar. E o `@media print` esconde a sidebar e põe o grid em uma coluna, então a caixa do papel **não é** a da tela | `px` é unidade absoluta na impressão (1/96 pol): fixar a caixa em px antes de imprimir faz a geometria medida na tela valer para a folha. `LARGURA_IMPRESSAO = 960` (≈254mm) cabe na área útil de um A4 paisagem com folga para o page setup que o GTK escolher |
@@ -973,7 +982,7 @@ inteira sem nenhum teste acusar, e apareceram quando alguém sentou para usar o 
 | por que lista de opções não pode paginar | **seção 12**, rodada 9 e `users/repository.rs::list_ativos` |
 | como paginar uma listagem de tela | `dom.ts::paginacao`/`ligarPaginacao`/`paginaValida` e `src-tauri/src/db/paginacao.rs::Recorte`; **seção 12**, rodada 14 |
 | como declarar largura, alinhamento e truncamento de coluna | `dom.ts::Coluna` e o bloco "Listagem de largura declarada" em `src/styles.css` |
-| por que CSV e impressão não saem com dez linhas | `dom.ts::carregarTudo` e `ligarExportacao`; **seção 12**, rodada 14 |
+| por que planilha e impressão não saem com dez linhas | `dom.ts::carregarTudo` e `ligarExportacao`; **seção 12**, rodada 14 |
 | por que os dois blocos de Prazos não se sobrepõem | `deadlines/repository.rs::FILTRO_REPORT` e o teste `blocos_de_prazo_sao_exclusivos` |
 | como acrescentar uma listagem paginada, do Rust à tela | **seção 5** — o passo a passo completo |
 | por que lista de opções **não** pode paginar | **seção 12**, rodada 9, `users/repository.rs::list_ativos` e o quadro do início da seção 5 |
@@ -1188,7 +1197,7 @@ Marque a tela quando ela **carregar dado** e o console seguir **sem `Refused to`
 
 Abrem diálogo nativo — nenhum teste os cobre.
 
-- [ ] **Exportar CSV** em Prazos → o diálogo "salvar como" abre, e o arquivo sai correto
+- [ ] **Exportar planilha** em Prazos → o diálogo "salvar como" abre, e o arquivo XLSX sai correto
 - [ ] **Baixar o anexo** de 20 MB do **IPM nº 1/P6/7ºBPM/2024** → salva e abre
       (é o único anexo do banco; passou a usar o diálogo nativo na rodada 6, e
       antes disso provavelmente não funcionava)
@@ -1348,12 +1357,12 @@ processos. Três defeitos foram corrigidos junto, e cada um só se confirma na t
       em "Vencendo"
 - [ ] Trocar a **janela** (7/14/30/60) reinicia os dois
 
-#### CSV e impressão levam o filtro, não a página
+#### Planilha e impressão levam o filtro, não a página
 
-- [ ] **Usuários** — buscar algo que dê mais de 10 resultados, exportar CSV, e
+- [ ] **Usuários** — buscar algo que dê mais de 10 resultados, exportar a planilha, e
       conferir que a planilha traz **todos** os do filtro, não os 10 da tela
 - [ ] **Auditoria** — idem, com filtro de entidade aplicado
-- [ ] **Prazos** — o CSV traz os dois blocos inteiros, com a coluna "Situacao"
+- [ ] **Prazos** — a planilha traz os dois blocos inteiros, em abas próprias,
       dizendo de qual bloco veio cada linha
 - [ ] **Imprimir / PDF** nas três: o papel sai com o conjunto completo, e a
       tabela de dez **não** sai impressa junto (duplicada)
@@ -1740,7 +1749,7 @@ restritiva também governa — os dois já foram exercitados, mas nunca juntos.
 - [ ] Reabrir um apuratório e conferir que a linha diz **"Reabriu o apuratório"**, e não
       "Alterou"; registrar conclusão diz "Registrou as datas do fluxo"
 - [ ] Excluir uma prorrogação e conferir que a trilha continua nomeando o apuratório
-- [ ] CSV e impressão saem com as quatro colunas (o CSV leva também entidade e registro)
+- [ ] Planilha e impressão saem com as quatro colunas (a planilha leva também entidade e registro)
 
 ---
 
@@ -1782,9 +1791,9 @@ redesenho parcial.
       ao campo e recarrega a lista
 - [ ] Digitar rápido e apagar em seguida não deixa resultado antigo na tela — é o
       descarte de resposta atrasada
-- [ ] **Exportar CSV** e **Imprimir** logo depois de digitar levam o termo **atual**, e
+- [ ] **Exportar planilha** e **Imprimir** logo depois de digitar levam o termo **atual**, e
       o conjunto inteiro do filtro, não os dez da tela
-- [ ] O botão de CSV some quando o filtro não acha nada, e volta quando acha
+- [ ] O botão de planilha some quando o filtro não acha nada, e volta quando acha
 - [ ] Abrir o detalhe de um militar e voltar preserva o termo e a página
 - [ ] A barra de pesquisa **não** sai no papel
 
@@ -1977,7 +1986,7 @@ O binário, com o console aberto.
 - [ ] Escolhendo-o, o total de cada militar é a soma do que "Em andamento no
       prazo" e "Em andamento vencido" devolvem separadamente
 - [ ] A linha "Escopo aplicado" nomeia o recorte escolhido
-- [ ] O CSV e o PDF saem com o mesmo recorte da tela
+- [ ] A planilha e o PDF saem com o mesmo recorte da tela
 
 ### p-bis) O arnês de impressão (seção 12, rodada 30)
 
@@ -2040,7 +2049,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
 - [ ] "Evolução das instaurações" continua mostrando **todos** os anos mesmo com um ano
       escolhido — é o comportamento declarado na descrição do cartão, não um filtro que
       não pegou. Marcar um apuratório, esse sim, muda a série
-- [ ] O CSV sai com todas as quebras e traz o escopo nas duas primeiras linhas
+- [ ] A planilha sai com uma aba por quebra e registra o escopo em todas elas
 
 **Designações por Policial Militar**
 
@@ -2072,7 +2081,7 @@ O binário de produção, e o console aberto. As quatro telas de relatório.
 - [ ] **Recebimento mais antigo** responde quem está com procedimento na mão há mais tempo
 - [ ] As colunas "Últ. recebimento" e "Últ. conclusão" aparecem em qualquer ordenação, e
       as datas saem em dd/mm/aaaa
-- [ ] O CSV traz as quatro colunas de situação, as espécies e as duas datas
+- [ ] A planilha traz as quatro colunas de situação, as espécies e as duas datas
 
 **No papel, e no teclado**
 
@@ -2422,7 +2431,7 @@ carimbo de sequência — são autocomplete, não listagem, e ficaram como estav
 **O helper existe porque o padrão tem duas partes, e uma delas não é óbvia.**
 `dom.ts::ligarBuscaInstantanea` espera 250 ms para redesenhar, mas corre `aoDigitar` a
 **cada tecla**. É `aoDigitar` que atualiza o estado do módulo, e sem ele quem exportasse
-o CSV de Usuários ou aplicasse o modal de filtros dos apuratórios dentro dos 250 ms
+a planilha de Usuários ou aplicasse o modal de filtros dos apuratórios dentro dos 250 ms
 levaria o termo anterior — os dois leem a variável do módulo no clique, não o campo.
 Enter dispara na hora; o `cancelar()` devolvido é o que impede um timer pendente de
 redesenhar uma área que já saiu do documento.
@@ -2446,7 +2455,7 @@ gravar, desativar e reativar continuam passando pelo `renderCatalogo` inteiro; e
 
 **Usuários perdeu o botão "Buscar" e o `<form>`.** Com a busca disparando sozinha o
 botão não tinha mais o que fazer, e Enter continua funcionando pelo helper. Duas coisas
-tiveram de deixar de ser condicionais no HTML: o "Limpar" e o "Exportar CSV" nasciam
+tiveram de deixar de ser condicionais no HTML: o "Limpar" e o "Exportar planilha" nasciam
 conforme o termo e a quantidade de itens, e ficam **fora** da área redesenhada — passaram
 a existir sempre, alternando `hidden`. A classe `search-bar` ficou: é ela que a regra de
 impressão esconde, e trocá-la por `.filtros` traria a barra para o papel.

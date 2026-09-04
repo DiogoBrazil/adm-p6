@@ -1,10 +1,9 @@
-use base64::Engine;
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::db::paginacao::Recorte;
 use crate::error::AppError;
 use crate::maps_reports::domain::{
-    ContagemRotulada, CsvExport, DesignacaoCelula, DesignacaoMatrizFiltro, DesignacaoMatrizLinha,
+    ContagemRotulada, DesignacaoCelula, DesignacaoMatrizFiltro, DesignacaoMatrizLinha,
     DriverRankingItem, EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest,
     MapRow, ReportFilter, SaveMapRequest, SavedMapFull, SavedMapListItem, SavedMapListResult,
     SituacaoDesignacao, SolucoesResumo, StatusPorApuratorio,
@@ -422,62 +421,6 @@ pub async fn available_years(pool: &PgPool) -> Result<Vec<i32>, sqlx::Error> {
     )
     .fetch_all(pool)
     .await
-}
-
-/// Exporta o mapa do período em CSV.
-pub async fn export_csv(
-    pool: &PgPool,
-    request: &MapPeriodRequest,
-) -> Result<CsvExport, sqlx::Error> {
-    let linhas = map_rows(pool, request).await?;
-
-    fn escapar(valor: &str) -> String {
-        if valor.contains([';', '"', '\n']) {
-            format!("\"{}\"", valor.replace('"', "\"\""))
-        } else {
-            valor.to_string()
-        }
-    }
-    fn opt(valor: &Option<String>) -> String {
-        escapar(valor.as_deref().unwrap_or(""))
-    }
-    fn origem(unidade: &str, subunidade: &Option<String>) -> String {
-        subunidade
-            .as_deref()
-            .map(|sub| format!("{unidade} / {sub}"))
-            .unwrap_or_else(|| unidade.to_string())
-    }
-
-    let mut csv = String::from(
-        "Apuratorio;Numero;Unidade;Natureza;Instauracao;Conclusao;Responsavel;Envolvidos;Vencimento;Ultimo andamento\n",
-    );
-    for l in &linhas {
-        csv.push_str(&format!(
-            "{};{};{};{};{};{};{};{};{};{}\n",
-            escapar(&l.apuratorio_sigla),
-            escapar(&l.rotulo),
-            escapar(&origem(&l.unidade_origem, &l.subunidade_secao_origem)),
-            opt(&l.natureza_fato),
-            l.data_instauracao,
-            l.data_conclusao.map(|d| d.to_string()).unwrap_or_default(),
-            opt(&l.responsavel_nome),
-            opt(&l.envolvidos),
-            l.prazo_vencimento
-                .map(|d| d.to_string())
-                .unwrap_or_default(),
-            opt(&l.ultimo_andamento),
-        ));
-    }
-
-    Ok(CsvExport {
-        nome_arquivo: format!(
-            "mapa-{}-a-{}.csv",
-            request.periodo_inicio, request.periodo_fim
-        ),
-        // BOM para o Excel reconhecer UTF-8.
-        conteudo: base64::engine::general_purpose::STANDARD
-            .encode(format!("\u{feff}{csv}").as_bytes()),
-    })
 }
 
 // =============================================================================

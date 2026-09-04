@@ -52,7 +52,7 @@ import type {
   ContagemRotulada,
   DesignacaoMatrizFiltro,
   DesignacaoMatrizLinha,
-  CsvExport,
+  GeneratedFile,
   DashboardSummary,
   DeadlineItem,
   DeadlineReportFilter,
@@ -93,6 +93,7 @@ import type {
   SaveEvidenceRequest,
   SaveMapRequest,
   SaveFileRequest,
+  SpreadsheetRequest,
   SavePapelRequest,
   SaveProceedingRequest,
   SaveUserRequest,
@@ -230,7 +231,6 @@ export interface Commands {
   reports_by_year: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
   reports_driver_ranking: { args: { filter?: ReportFilter | null }; result: DriverRankingItem[] };
   reports_available_years: { args: Record<string, never>; result: number[] };
-  reports_export_csv: { args: { request: MapPeriodRequest }; result: CsvExport };
   reports_status_by_apuratorio: { args: { filter?: ReportFilter | null }; result: StatusPorApuratorio[] };
   reports_by_solution: { args: { filter?: ReportFilter | null }; result: SolucoesResumo };
   reports_by_evidence_category: { args: { filter?: ReportFilter | null }; result: ContagemRotulada[] };
@@ -241,6 +241,7 @@ export interface Commands {
 
   // ── Arquivos ──────────────────────────────────────────────────────
   /** Abre o diálogo nativo de "salvar como". `null` = o usuário cancelou. */
+  files_generate_spreadsheet: { args: { request: SpreadsheetRequest }; result: GeneratedFile };
   files_save_download: { args: { request: SaveFileRequest }; result: string | null };
 
   // ── Impressão ─────────────────────────────────────────────────────

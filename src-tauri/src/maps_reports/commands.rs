@@ -6,7 +6,7 @@ use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::db::paginacao::Recorte;
 use crate::maps_reports::domain::{
-    ContagemRotulada, CsvExport, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
+    ContagemRotulada, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
     EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest, MapRow, ReportFilter,
     SaveMapRequest, SavedMapFull, SavedMapListResult, SolucoesResumo, StatusPorApuratorio,
 };
@@ -233,22 +233,6 @@ pub async fn reports_available_years(
             require_session(&state).await?;
             let pool = state.pool().await?;
             Ok(repository::available_years(&pool).await?)
-        }
-        .await,
-    )
-    .await)
-}
-
-#[tauri::command]
-pub async fn reports_export_csv(
-    state: State<'_, AppState>,
-    request: MapPeriodRequest,
-) -> Result<ApiResponse<CsvExport>, String> {
-    Ok(from_result(
-        async {
-            require_session(&state).await?;
-            let pool = state.pool().await?;
-            Ok(repository::export_csv(&pool, &request).await?)
         }
         .await,
     )
