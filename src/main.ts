@@ -232,7 +232,7 @@ function shell(content: string) {
     <aside class="sidebar" aria-label="Navegação principal">
       <div class="brand">
         <img src="${brasaoUrl}" alt="" />
-        <div><strong>ADM-P6</strong><span>Justiça e Disciplina</span></div>
+        <div><strong>GESTÃO P6/7ºBPM</strong><span>Justiça e Disciplina</span></div>
       </div>
       <button class="sidebar-toggle" id="sidebar-toggle" type="button"
               aria-label="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}"
@@ -311,13 +311,13 @@ function renderLogin(error = "") {
       <form id="login-form" class="login-panel">
         <div class="login-brand">
           <img src="${brasaoUrl}" alt="" />
-          <div><span>Sistema administrativo</span><h1>ADM-P6</h1><p>Seção de Justiça e Disciplina</p></div>
+          <div><span>Sistema administrativo</span><h1>GESTÃO P6/7ºBPM</h1><p>Seção de Justiça e Disciplina</p></div>
         </div>
         <div class="login-copy"><strong>Acesso ao sistema</strong><span>Use suas credenciais para continuar.</span></div>
         <label>E-mail<input name="email" type="email" autocomplete="username" placeholder="nome@dominio.com" required /></label>
         <label>Senha<input name="senha" type="password" autocomplete="current-password" placeholder="Digite sua senha" required /></label>
         <p id="login-erro" class="feedback feedback--error" role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
-        <button type="submit">Entrar no ADM-P6</button>
+        <button type="submit">Entrar no GESTÃO P6/7ºBPM</button>
       </form>
       <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     </main>

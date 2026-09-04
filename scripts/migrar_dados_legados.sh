@@ -57,6 +57,8 @@ DOCKER_ENV=()
 # Recursos a limpar no fim. O trap preserva o que serve de evidência.
 BANCO_TMP_LEGADO=""
 BANCO_ENSAIO=""
+# Papel que só existe porque o dump legado o nomeia. Ver a carga do dump.
+PAPEL_CRIADO=""
 # Vira 1 quando a transação da carga é confirmada. Sem isso a mensagem de saída
 # afirmaria "nada foi confirmado" também depois do commit — e a conferência roda
 # DEPOIS dele, então uma divergência lá deixaria o operador achando que o banco
@@ -119,11 +121,11 @@ erro_mais() { printf '      %s\n' "$*" | tee -a "${LOG:-/dev/null}" >&2; }
 ao_sair() {
     local codigo=$?
     set +e
-    # A senha do servidor externo não pode sobreviver à execução.
-    if [[ ${#DOCKER_ENV[@]} -gt 0 ]]; then
-        docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" \
-            rm -f "$PGPASS_CONTAINER" >/dev/null 2>&1
-    fi
+    # A limpeza vem ANTES de apagar a credencial: num servidor externo estes
+    # `DROP DATABASE` se autenticam justamente por ela, e apagá-la primeiro os
+    # fazia falhar em silêncio (`>/dev/null 2>&1`) — deixando o banco auxiliar e
+    # o de ensaio para trás. No servidor local nunca apareceu, porque ali a
+    # conexão é pelo socket `trust` e não há credencial nenhuma envolvida.
     if [[ -n "$BANCO_TMP_LEGADO" ]]; then
         # Banco auxiliar do dump legado: some sempre. O schema `legado` já foi
         # copiado para o destino, e é lá que ele precisa continuar existindo.
@@ -136,6 +138,16 @@ ao_sair() {
         else
             sql_admin "DROP DATABASE IF EXISTS \"$BANCO_ENSAIO\" WITH (FORCE);" >/dev/null 2>&1
         fi
+    fi
+    if [[ -n "$PAPEL_CRIADO" ]]; then
+        # Depois dos DROP DATABASE acima, e não antes: enquanto o banco auxiliar
+        # existe o papel é dono das tabelas dele e o DROP ROLE é recusado.
+        sql_admin "DROP ROLE IF EXISTS \"$PAPEL_CRIADO\";" >/dev/null 2>&1
+    fi
+    # Só agora a senha do servidor externo deixa de ser necessária.
+    if [[ ${#DOCKER_ENV[@]} -gt 0 ]]; then
+        docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" \
+            rm -f "$PGPASS_CONTAINER" >/dev/null 2>&1
     fi
     if (( codigo != 0 )); then
         if (( CARGA_CONFIRMADA )); then
@@ -162,11 +174,18 @@ if [[ -f "$ARQ_ENV" ]]; then
     # Lê só as chaves que interessam, sem executar o arquivo.
     while IFS='=' read -r chave valor; do
         case "$chave" in
-            DB_HOST|DB_PORT|DB_NAME|DB_USER|DB_PASSWORD)
+            DB_HOST|DB_PORT|DB_NAME|DB_USER|DB_PASSWORD|DB_SSLMODE)
                 [[ -z "${!chave-}" ]] && printf -v "$chave" '%s' "$valor" ;;
         esac
-    done < <(grep -E '^\s*DB_(HOST|PORT|NAME|USER|PASSWORD)=' "$ARQ_ENV" | sed 's/^[[:space:]]*//')
+    done < <(grep -E '^\s*DB_(HOST|PORT|NAME|USER|PASSWORD|SSLMODE)=' "$ARQ_ENV" | sed 's/^[[:space:]]*//')
 fi
+
+# O modo de TLS é declarado, não herdado do padrão do cliente. Servidor que
+# atravessa a internet (a Neon, por exemplo) recusa texto claro de qualquer
+# jeito, mas `prefer` aceitaria calado um que não recusasse. Exportado aqui vale
+# para o `psql`/`pg_dump` do host; para os do container vai no DOCKER_ENV.
+# Vazio é o padrão do libpq, que é o que serve para o Postgres da rede local.
+[[ -n "${DB_SSLMODE-}" ]] && export PGSSLMODE="$DB_SSLMODE"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5438}"
 DB_NAME="${DB_NAME:-adm_p6_db}"
@@ -221,6 +240,9 @@ prepara_credencial_no_container() {
       | docker compose -f "$RAIZ/docker-compose.yml" exec -T "$SERVICO_DB" \
             sh -c "umask 177; cat > $PGPASS_CONTAINER"
     DOCKER_ENV=(-e "PGPASSFILE=$PGPASS_CONTAINER")
+    # O container não herda o ambiente desta shell: o modo de TLS tem de ir
+    # explícito. Diferente da senha, não é segredo e pode viajar por `-e`.
+    [[ -n "${DB_SSLMODE-}" ]] && DOCKER_ENV+=(-e "PGSSLMODE=$DB_SSLMODE")
 }
 
 psql_em() {           # psql_em <banco> [args...]  — stdin é repassado
@@ -254,6 +276,24 @@ pgdump_de() {         # pgdump_de <banco> [args...]  — stdout é o dump
 
 sql_admin() {         # comando avulso no banco `postgres` (CREATE/DROP DATABASE)
     psql_em postgres -q -c "$1"
+}
+
+# Cláusula de `CREATE DATABASE` que reproduz a colação de um banco existente.
+#
+# O `CREATE DATABASE` pelado herda o `template1`, e a colação dele não é
+# necessariamente a do destino: na Neon o template é `C.UTF-8` e o banco real é
+# ICU `pt-BR`, que é o que põe ÉRIKA entre os "E" e não depois do Z. Um ensaio
+# que ordena diferente do destino deixa de ser ensaio, e a diferença não aparece
+# em contagem nenhuma — só na hora de ler a lista.
+opcoes_locale_de() {
+    psql_em postgres -At -c "
+        SELECT format(
+                 'TEMPLATE template0 ENCODING %L LC_COLLATE %L LC_CTYPE %L%s',
+                 pg_encoding_to_char(encoding), datcollate, datctype,
+                 CASE WHEN datlocprovider = 'i'
+                      THEN format(' LOCALE_PROVIDER icu ICU_LOCALE %L', daticulocale)
+                      ELSE '' END)
+          FROM pg_database WHERE datname = '$1';"
 }
 
 sql_valor() {         # uma célula, sem cabeçalho
@@ -385,7 +425,7 @@ else
     passo "ensaio: montando cópia descartável do destino"
     BANCO_ENSAIO="${DESTINO}_ensaio_$CARIMBO"
     sql_admin "DROP DATABASE IF EXISTS \"$BANCO_ENSAIO\" WITH (FORCE);"
-    sql_admin "CREATE DATABASE \"$BANCO_ENSAIO\";"
+    sql_admin "CREATE DATABASE \"$BANCO_ENSAIO\" $(opcoes_locale_de "$DESTINO");"
     pgdump_de "$DESTINO" --no-owner --no-acl | psql_em "$BANCO_ENSAIO" -q > /dev/null
     diga "cópia: $BANCO_ENSAIO (o banco real, $DESTINO, não será tocado)"
     ALVO="$BANCO_ENSAIO"
@@ -408,6 +448,45 @@ fi
 BANCO_TMP_LEGADO="adm_p6_legado_tmp_$CARIMBO"
 sql_admin "DROP DATABASE IF EXISTS \"$BANCO_TMP_LEGADO\" WITH (FORCE);"
 sql_admin "CREATE DATABASE \"$BANCO_TMP_LEGADO\";"
+
+# O dump legado traz 25 `ALTER TABLE ... OWNER TO app_user`, e quem o lê é o
+# próprio Postgres com ON_ERROR_STOP — num servidor onde esse papel não existe a
+# carga aborta na primeira delas. É o caso da Neon; no Postgres desta máquina o
+# papel existe de outros tempos, e por isso o problema só aparece migrando para
+# fora. Não se resolve filtrando o dump: não fazer parsing do SQL dele é decisão
+# do plano, e um `sed` sobre 44 MB é justamente o que ela evita.
+#
+# O papel entra NOLOGIN e sem privilégio nenhum: serve só para o dump encontrar o
+# dono que nomeia, e some no `ao_sair`. O que chega ao destino vem por
+# `pg_dump --no-owner`, então nada lá dentro passa a depender dele.
+PAPEL_DO_DUMP=app_user
+if [[ "$(sql_valor postgres "select count(*) from pg_roles where rolname = '$PAPEL_DO_DUMP'")" == "0" ]]; then
+    sql_admin "CREATE ROLE \"$PAPEL_DO_DUMP\" NOLOGIN;"
+    PAPEL_CRIADO="$PAPEL_DO_DUMP"
+    diga "papel '$PAPEL_DO_DUMP' não existe neste servidor; criado NOLOGIN para a carga e removido ao fim"
+fi
+
+# Criar o papel não basta. `ALTER TABLE ... OWNER TO` cobra DUAS coisas de quem
+# não é superusuário, e o Postgres as verifica dentro de um `if (!superuser())`
+# — por isso nada disso aparece migrando para o container local, onde o usuário
+# é superusuário e o bloco inteiro é pulado:
+#
+#   1. ser MEMBRO do papel que recebe a propriedade
+#      (senão: "must be able to SET ROLE app_user");
+#   2. que esse papel tenha CREATE no schema de destino. Desde o PG15 o `public`
+#      não dá mais CREATE a PUBLIC, então ninguém tem por herança
+#      (senão: "permission denied for schema public").
+#
+# O GRANT do schema é no banco AUXILIAR, que é descartável e só existe para o
+# dump nascer. Nada disso alcança o destino: o schema vai para lá por
+# `pg_dump --no-owner --no-acl`, que descarta dono e privilégio.
+if [[ "$(sql_valor postgres "select rolsuper from pg_roles where rolname = current_user")" != "t" ]]; then
+    if [[ "$(sql_valor postgres "select pg_has_role(current_user, '$PAPEL_DO_DUMP', 'USAGE')")" != "t" ]]; then
+        sql_admin "GRANT \"$PAPEL_DO_DUMP\" TO \"$DB_USER\";"
+    fi
+    psql_em "$BANCO_TMP_LEGADO" -q -c "GRANT CREATE ON SCHEMA public TO \"$PAPEL_DO_DUMP\";"
+fi
+
 psql_em "$BANCO_TMP_LEGADO" -q -f - < "$DUMP" > "$DIR_SAIDA/carga_legado.log" 2>&1 || {
     erro "o dump não carregou; veja $DIR_SAIDA/carga_legado.log"; exit 4; }
 N_ORIGEM="$(sql_valor "$BANCO_TMP_LEGADO" "select count(*) from public.processos_procedimentos")"
@@ -447,6 +526,10 @@ fi
 passo "carga (transação única sobre $ALVO)"
 {
     echo "SET LOCAL TimeZone = 'America/Porto_Velho';"
+    # A Neon corta transação ociosa em 5 min (o Postgres local vem com 0). Esta
+    # é uma transação só, atravessando a internet: uma pausa de rede entre duas
+    # etapas derrubaria a carga inteira já adiantada. Vale para a transação.
+    echo "SET LOCAL idle_in_transaction_session_timeout = 0;"
     for etapa in "${ETAPAS[@]}"; do
         echo "\\echo '-- etapa $etapa'"
         cat "$ETAPAS_DIR/$etapa"

@@ -412,7 +412,7 @@ function renderCapa(grupo: MapPrintItem[], contexto: ContextoPdfMapa): string {
       </dl>
     </main>
     <footer class="mapa-pdf-rodape">
-      <span>ADM-P6 · Seção de Justiça e Disciplina</span>
+      <span>GESTÃO P6/7ºBPM · Seção de Justiça e Disciplina</span>
       <span>Gerado em ${escapeHtml(geradoEm.toLocaleDateString("pt-BR"))}</span>
     </footer>
   </article>`;
@@ -431,7 +431,7 @@ export function renderDocumentoMapa(itens: MapPrintItem[], contexto: ContextoPdf
       .map((grupo) => {
         const processo = grupo[0]!.processo;
         return `<section class="mapa-pdf-grupo"
-          data-rodape-esquerdo="${escapeHtml(`ADM-P6 · Mapa Mensal — ${contexto.mes}/${contexto.ano}`)}"
+          data-rodape-esquerdo="${escapeHtml(`GESTÃO P6/7ºBPM · Mapa Mensal — ${contexto.mes}/${contexto.ano}`)}"
           data-rodape-direito="${escapeHtml(processo.apuratorio_sigla)}">
           ${renderCapa(grupo, contexto)}
           <div class="mapa-pdf-fluxo-fonte">${grupo.map((item) => renderFicha(item)).join("")}</div>
@@ -465,7 +465,7 @@ function criarPaginaConteudo(grupo: HTMLElement, rotuloContinuacao?: string): Es
   const rodape = document.createElement("footer");
   rodape.className = "mapa-pdf-rodape";
   const esquerdo = document.createElement("span");
-  esquerdo.textContent = grupo.dataset.rodapeEsquerdo ?? "ADM-P6 · Mapa Mensal";
+  esquerdo.textContent = grupo.dataset.rodapeEsquerdo ?? "GESTÃO P6/7ºBPM · Mapa Mensal";
   const direito = document.createElement("span");
   direito.textContent = grupo.dataset.rodapeDireito ?? "";
   rodape.append(esquerdo, direito);

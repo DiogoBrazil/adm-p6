@@ -299,7 +299,7 @@ export async function call<K extends CommandName>(
       ok: false,
       data: null,
       error:
-        "A comunicação com o ADM-P6 falhou e nada foi salvo. Feche e abra o programa; " +
+        "A comunicação com o GESTÃO P6/7ºBPM falhou e nada foi salvo. Feche e abra o programa; " +
         "se continuar, procure o suporte.",
     };
   }

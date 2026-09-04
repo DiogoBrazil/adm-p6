@@ -18,7 +18,16 @@ impl AppState {
             let user = std::env::var("DB_USER").unwrap_or_else(|_| "adm_p6_user".to_string());
             let password =
                 std::env::var("DB_PASSWORD").unwrap_or_else(|_| "adm_p6_password".to_string());
-            format!("postgres://{user}:{password}@{host}:{port}/{name}")
+            // O modo de TLS é declarado, não herdado do padrão do driver.
+            //
+            // O `prefer` do sqlx tenta TLS e ACEITA texto claro se o servidor
+            // dispensar — o que basta para produção parecer criptografada por
+            // consequência do servidor, e não por exigência nossa. Com o banco
+            // fora da rede da seção e dados pessoais de 244 militares no meio,
+            // quem decide é o `.env`: `require` lá, `prefer` no docker-compose
+            // local, que não fala TLS.
+            let sslmode = std::env::var("DB_SSLMODE").unwrap_or_else(|_| "prefer".to_string());
+            format!("postgres://{user}:{password}@{host}:{port}/{name}?sslmode={sslmode}")
         };
 
         Self::from_url(database_url)

@@ -438,7 +438,7 @@ function cabecalho(
 /** A tela vive dentro do `.app-shell` do `main.ts::shell`; o papel também. */
 function painel(conteudo: string): string {
   return `<div class="app-shell">
-    <aside class="sidebar"><div class="brand"><strong>ADM-P6</strong></div></aside>
+    <aside class="sidebar"><div class="brand"><strong>GESTÃO P6/7ºBPM</strong></div></aside>
     <main class="main">
       <header class="topbar"><div class="session-info"><strong>Sessão de teste</strong></div></header>
       <div class="content-area"><section class="panel">${conteudo}</section></div>

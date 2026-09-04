@@ -22,7 +22,10 @@ servidor de verdade. Trocar de alvo é trocar de arquivo — nunca editar um.
 Lê o `.env`. Como o servidor é o próprio container, a conexão é pelo socket unix,
 que o `postgres:16` aceita como `trust`: **não há senha em lugar nenhum**.
 
-### Produção, no PostgreSQL de outra máquina
+### Produção, no PostgreSQL da Neon
+
+Produção é um projeto **Neon** (PostgreSQL 16 serverless): projeto `adm-p6`,
+branch `production`, banco `admp6db`, região `us-east-2`.
 
 ```bash
 cp .env.producao.example .env.producao      # primeira vez: preencha host e senha
@@ -41,11 +44,23 @@ de usar `--execute`:
 ```
 configuração:   .env.producao
 binários psql:  docker
-servidor:       admp6@10.1.2.173:5432  (EXTERNO)
+servidor:       admp6db_owner@ep-blue-union-ae94habf.c-2.us-east-2.aws.neon.tech:5432  (EXTERNO)
 ```
 
 `.env.producao` é **gitignorado** — tem senha. O que se versiona é o
 `.env.producao.example`.
+
+#### O que a Neon muda, e o que não muda
+
+| | |
+|---|---|
+| Endpoint | o **direto**, sem o sufixo `-pooler` que o console oferece. O pooled é PgBouncer em modo transação: `sqlx migrate run` toma advisory lock de **sessão** e `CREATE DATABASE` não roda em transação pooled |
+| Porta | a URL do console não traz porta. É a **5432**, e o `DB_PORT` precisa dela |
+| TLS | `DB_SSLMODE=require`. A Neon recusa texto claro de qualquer jeito, mas o modo fica declarado em vez de herdado do padrão do cliente |
+| Colação | o banco foi criado com `LOCALE_PROVIDER icu ICU_LOCALE 'pt-BR'`. Com o `C.UTF-8` que a Neon dá por padrão, os 58 militares com acento no nome — ÉRIKA, ÉVERTON, ÉRICA, ÉRMERSON e o sentinela "À APURAR" — cairiam **depois do Z** em toda lista ordenada por nome |
+| `app_user` | o dump legado nomeia esse dono 25 vezes e ele não existe na Neon. O script o cria `NOLOGIN` antes de carregar o dump e o remove no fim; nada disso alcança o destino, que recebe o schema por `pg_dump --no-owner` |
+| Espaço | plano free: **512 MB** por branch. O destino migrado dá ~56 MB (31 `public` + 25 `legado`); o ensaio e o banco auxiliar do dump somam ~87 MB temporários |
+| O resto | igual. Mesmas 21 migrations, mesmas 10 etapas, mesma transação única, mesma conferência. **0 divergências**, e 197 pendências em vez de 201 — a diferença está explicada em "Lendo os relatórios" |
 
 ### Quem lê qual arquivo
 
@@ -80,9 +95,17 @@ existe `_sqlx_migrations` e o startup seguinte tentaria recriar tudo. Quem aplic
 
 ```bash
 cd src-tauri
-DATABASE_URL="postgres://USUARIO:SENHA@HOST:5432/BANCO" \
+DATABASE_URL="postgres://USUARIO:SENHA@HOST:5432/BANCO?sslmode=require" \
     sqlx migrate run --source migrations
 cd ..
+```
+
+O `sqlx-cli` precisa ter sido compilado **com TLS**, ou ele para em
+`SQLx was built without TLS support enabled` antes de tentar qualquer coisa —
+sintoma que não menciona o servidor e engana:
+
+```bash
+cargo install sqlx-cli --no-default-features --features rustls,postgres
 ```
 
 Ou, mais simples, abrir a aplicação uma vez apontada para lá: ela roda as
@@ -230,7 +253,24 @@ precisa resolver. São quatro tipos, e todos estão no CSV:
 | `analogia_provisoria` | 10 | Escolher o inciso do RDPM análogo, na tela de indícios |
 | `prazo_reconstruido` | 110 | Conferir os dias, se o processo ainda estiver aberto |
 | `prorrogacao_sem_motivo` | 77 | Preencher o motivo, se houver registro em papel |
-| `papel_obrigatorio_vago` | 4 | Informar o Escrivão dos CD/CJ/PAD |
+| `papel_obrigatorio_vago` | 0 | — (veja abaixo: eram 4 no banco de desenvolvimento) |
+
+Total **197** num destino limpo. O banco de desenvolvimento fecha em **201**, e a
+diferença não é perda: são 4 `papel_obrigatorio_vago` que só existem lá.
+
+`apuratorio_papeis` marca o Escrivão de duas formas naquele banco — o `Escrivão`
+e o `Escrivão de Processo` obrigatórios nos três ritos colegiados. A obrigação do
+`Escrivão` em CD/CJ/PAD é anterior à migration **0007**, que separou os dois
+papéis: a 0007 acrescentou o papel novo e não retirou a obrigação velha, porque
+retirá-la não era função dela. Num destino que nasce da importação isso não
+acontece — a 0007 roda e não encontra papel nenhum para corrigir (ela própria diz
+isso), e quem cria os dois é `01_catalogos.sql`, onde o `escrivao_processo_id` já
+é papel próprio. Resultado: CD/CJ/PAD exigem `{Presidente, Interrogante, Escrivão
+de Processo}`, os quatro processos têm os três preenchidos, e não há vaga.
+
+É o mesmo aviso da seção 7 do guia por outro ângulo: migration corretiva **não
+roda de novo**, então quem confere um destino novo confere contra o que a
+importação produz, não contra o que o banco de desenvolvimento acumulou.
 
 ### A analogia provisória
 
