@@ -23,9 +23,10 @@ import {
   aplicarLarguras,
   ativarSelectsPesquisaveis,
   avisarSeCortado,
-  barraDeExportacao,
   baixarPlanilha,
+  barraDeExportacao,
   carregarTudo,
+  comCarregamento,
   escapeHtml,
   ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
@@ -37,8 +38,8 @@ import {
   notificar,
   option,
   paginacao,
-  painelContagem,
   paginaValida,
+  painelContagem,
   podeDescartarFormulario,
   protegerFormulario,
   tabela,
@@ -62,7 +63,18 @@ const POR_PAGINA = ITENS_POR_PAGINA;
  * largura declarada o navegador dimensiona pelo conteúdo, e um nome longo
  * espremia "Encarregado" e "Perfil" até quebrarem.
  */
-const COLUNAS: Coluna[] = [
+/**
+ * Piso da tabela desta tela, em px. **Medido**, não estimado — ver
+ * `tools/tela/README.md`, que também diz como remedir depois de mexer em
+ * coluna. Abaixo dele o `.table-wrap` rola; sem ele a coluna `nowrap` pinta
+ * por cima da vizinha, e nada acusa.
+ */
+export const PISO_PX = 1040;
+// Medido: 1006. É onde a matrícula de 9 dígitos para de pintar por cima da
+// coluna "Nome" e o cabeçalho "Encarregado" deixa de encostar na vizinha. A
+// folga é para o WebKitGTK, já que a medição sai do Chromium.
+
+export const COLUNAS: Coluna[] = [
   {
     rotulo: "Posto/Graduação",
     largura: 16,
@@ -184,7 +196,7 @@ function htmlResultadosUsuarios(
       COLUNAS,
       itens.map((u) => linhaDaTabela(u, podeEscrever)),
       busca ? "Nenhum policial militar encontrado." : "Nenhum policial militar cadastrado.",
-      { viewport: true, listagem: true },
+      { viewport: true, listagem: true, pisoPx: PISO_PX },
     )}
     ${paginacao("usuarios", pagina, POR_PAGINA, total)}`;
 }
@@ -322,6 +334,15 @@ async function atualizarListaUsuarios(ctx: ContextoTela): Promise<void> {
 }
 
 export async function renderListaUsuarios(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota e o "Voltar" do detalhe e do formulário — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Carregando o efetivo…", () => desenharListaUsuarios(ctx));
+}
+
+async function desenharListaUsuarios(ctx: ContextoTela): Promise<void> {
   limparFormularioPendente();
   cancelarBusca?.();
   if (detalheAberto) return renderDetalheUsuario(ctx, detalheAberto);
@@ -564,6 +585,19 @@ export async function renderFormularioUsuario(
   usuario: UserListItem | null,
   erro = "",
 ): Promise<void> {
+  // Toda entrada nesta tela — o "Novo", o "Editar" e a volta de um erro de gravação — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Abrindo o formulário…", () => desenharFormularioUsuario(ctx, usuario, erro));
+}
+
+async function desenharFormularioUsuario(
+  ctx: ContextoTela,
+  usuario: UserListItem | null,
+  erro = "",
+): Promise<void> {
   if (!ctx.podeEscrever()) {
     ctx.shell(`<section class="panel"><h1>Usuários</h1>
       <p class="error">Seu perfil é somente leitura.</p></section>`);
@@ -721,6 +755,15 @@ function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel
 }
 
 async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void> {
+  // Toda entrada nesta tela — clique numa linha, o reativar e o desativar — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Abrindo a ficha…", () => desenharDetalheUsuario(ctx, id));
+}
+
+async function desenharDetalheUsuario(ctx: ContextoTela, id: string): Promise<void> {
   const [usuario, estatisticas, designados, envolvidos] = await Promise.all([
     call("users_get", { id }).then((r) => r.data),
     call("users_statistics", { id }).then((r) => r.data),
@@ -798,20 +841,31 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
     void renderFormularioUsuario(ctx, usuario);
   });
 
-  document.querySelector<HTMLButtonElement>("#btn-reativar")?.addEventListener("click", async () => {
+  // O `confirm` fica FORA do véu: é diálogo nativo, e abri-lo sobre a tela
+  // coberta faria o operador decidir olhando para um loader. O véu cobre o que
+  // vem depois do "sim" — a gravação e o redesenho do detalhe, que sozinho
+  // volta ao banco buscar o militar e os processos dele.
+  document.querySelector<HTMLButtonElement>("#btn-reativar")?.addEventListener("click", async (evento) => {
     if (!confirm("Reativar este policial militar?")) return;
-    const resposta = await call("users_reactivate", { id });
-    if (!resposta.ok) {
-      notificar(resposta.error ?? "Falha ao reativar.", "erro");
-      return;
-    }
-    void renderDetalheUsuario(ctx, id);
+    await comCarregamento(
+      "Reativando…",
+      async (passo) => {
+        const resposta = await call("users_reactivate", { id });
+        if (!resposta.ok) {
+          notificar(resposta.error ?? "Falha ao reativar.", "erro");
+          return;
+        }
+        await passo("Atualizando a ficha…");
+        await renderDetalheUsuario(ctx, id);
+      },
+      evento.currentTarget as HTMLButtonElement,
+    );
   });
 
   // O par do Reativar, que faltava: o detalhe sabia devolver alguém ao ativo,
   // mas não tirar. Excluir não vem para cá de propósito — é irreversível e o
   // lugar dela é a listagem, onde a linha inteira está à vista.
-  document.querySelector<HTMLButtonElement>("#btn-desativar")?.addEventListener("click", async () => {
+  document.querySelector<HTMLButtonElement>("#btn-desativar")?.addEventListener("click", async (evento) => {
     if (
       !confirm(
         `Desativar ${nomeCompleto(usuario)}?\n\nEle sai das listas de escolha e a conta de acesso, se houver, é desativada junto. O histórico continua inteiro.`,
@@ -819,13 +873,20 @@ async function renderDetalheUsuario(ctx: ContextoTela, id: string): Promise<void
     ) {
       return;
     }
-    const resposta = await call("users_deactivate", { id });
-    if (!resposta.ok) {
-      notificar(resposta.error ?? "Falha ao desativar.", "erro");
-      return;
-    }
-    notificar(`${nomeCompleto(usuario)} foi desativado.`, "sucesso");
-    void renderDetalheUsuario(ctx, id);
+    await comCarregamento(
+      "Desativando…",
+      async (passo) => {
+        const resposta = await call("users_deactivate", { id });
+        if (!resposta.ok) {
+          notificar(resposta.error ?? "Falha ao desativar.", "erro");
+          return;
+        }
+        notificar(`${nomeCompleto(usuario)} foi desativado.`, "sucesso");
+        await passo("Atualizando a ficha…");
+        await renderDetalheUsuario(ctx, id);
+      },
+      evento.currentTarget as HTMLButtonElement,
+    );
   });
 
   ligarExportacao(undefined, undefined, { orientacao: "retrato", perfil: "tabular" });

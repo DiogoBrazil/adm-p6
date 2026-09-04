@@ -11,7 +11,7 @@
 // composta, sem `id` e sem `nome`, e o CRUD genérico pressupõe os dois.
 
 import { call, type ApuratorioConfig } from "../api";
-import { botaoIcone, escapeHtml, notificar, option } from "../dom";
+import { botaoIcone, comCarregamento, escapeHtml, notificar, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/configuracao/apuratorios";
@@ -34,6 +34,15 @@ async function opcoes(catalogo: string, campos: string[]): Promise<Opcao[]> {
 let apuratorioSelecionado = "";
 
 export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota e as quatro ações — passa por aqui
+  // e volta ao banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Numa troca de rota o véu do
+  // roteador já está aberto: o helper conta profundidade, então este aqui
+  // apenas troca a mensagem por uma que diz o que está sendo carregado.
+  await comCarregamento("Carregando a configuração…", () => desenharConfiguracaoApuratorio(ctx));
+}
+
+async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> {
   const apuratorios = await opcoes("apuratorios", ["sigla", "nome"]);
 
   if (apuratorios.length === 0) {
@@ -259,7 +268,7 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
     </section>
   `);
 
-  const recarregar = () => void renderConfiguracaoApuratorio(ctx);
+  const recarregar = () => renderConfiguracaoApuratorio(ctx);
 
   document.querySelector<HTMLSelectElement>("#apuratorio")?.addEventListener("change", (e) => {
     apuratorioSelecionado = (e.currentTarget as HTMLSelectElement).value;
@@ -268,26 +277,36 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
 
   if (!podeEscrever) return;
 
-  const reportar = (ok: boolean, erro: string | null) => {
+  /**
+   * O fecho das quatro ações desta tela. Esperar o redesenho é o que lhes dá o
+   * véu de graça: quem o abre é o próprio `renderConfiguracaoApuratorio`, que
+   * volta ao banco buscar os documentos e os papéis do apuratório.
+   */
+  const reportar = async (ok: boolean, erro: string | null) => {
     if (!ok) notificar(erro ?? "Falha ao salvar.", "erro");
-    recarregar();
+    await recarregar();
   };
 
   const salvarDoc = async (
     tipoDocumentoId: string,
     campos: { prazoBaseDias?: number | null; padrao?: boolean; ativo?: boolean },
   ) => {
-    const atual = config.documentos.find((d) => d.tipo_documento_id === tipoDocumentoId);
-    const r = await call("apuratorio_config_save_documento", {
-      request: {
-        apuratorio_id: apuratorioSelecionado,
-        tipo_documento_id: tipoDocumentoId,
-        prazo_base_dias: campos.prazoBaseDias ?? atual?.prazo_base_dias ?? null,
-        padrao: campos.padrao ?? atual?.padrao ?? false,
-        ativo: campos.ativo ?? atual?.ativo ?? true,
-      },
+    // O véu está no helper e não nos três chamadores (o "padrão", o
+    // "reativar" e o submit do formulário): é uma ida ao banco seguida do
+    // redesenho da tela, e o motivo é o mesmo nos três.
+    await comCarregamento("Salvando o documento…", async () => {
+      const atual = config.documentos.find((d) => d.tipo_documento_id === tipoDocumentoId);
+      const r = await call("apuratorio_config_save_documento", {
+        request: {
+          apuratorio_id: apuratorioSelecionado,
+          tipo_documento_id: tipoDocumentoId,
+          prazo_base_dias: campos.prazoBaseDias ?? atual?.prazo_base_dias ?? null,
+          padrao: campos.padrao ?? atual?.padrao ?? false,
+          ativo: campos.ativo ?? atual?.ativo ?? true,
+        },
+      });
+      await reportar(r.ok, r.error);
     });
-    reportar(r.ok, r.error);
   };
 
   document.querySelector<HTMLFormElement>("#form-doc")?.addEventListener("submit", async (evento) => {
@@ -309,11 +328,17 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
   );
   document.querySelectorAll<HTMLButtonElement>("[data-desativar-doc]").forEach((b) =>
     b.addEventListener("click", async () => {
-      const r = await call("apuratorio_config_deactivate_documento", {
-        apuratorioId: apuratorioSelecionado,
-        tipoDocumentoId: b.dataset.desativarDoc!,
-      });
-      reportar(r.ok, r.error);
+      await comCarregamento(
+        "Desativando o documento…",
+        async () => {
+          const r = await call("apuratorio_config_deactivate_documento", {
+            apuratorioId: apuratorioSelecionado,
+            tipoDocumentoId: b.dataset.desativarDoc!,
+          });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
     }),
   );
 
@@ -327,22 +352,25 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
       ativo?: boolean;
     },
   ) => {
-    // O backend regrava a linha inteira. Mesclar com o item atual é o que
-    // permite mexer num atributo só sem zerar os outros por omissão.
-    const atual = config.papeis.find((p) => p.papel_id === papelId);
-    const r = await call("apuratorio_config_save_papel", {
-      request: {
-        apuratorio_id: apuratorioSelecionado,
-        papel_id: papelId,
-        obrigatorio: campos.obrigatorio ?? atual?.obrigatorio ?? false,
-        max_ocupantes: campos.maxOcupantes ?? atual?.max_ocupantes ?? 1,
-        e_responsavel: campos.eResponsavel ?? atual?.e_responsavel ?? false,
-        usa_documento_designacao:
-          campos.usaDocumento ?? atual?.usa_documento_designacao ?? true,
-        ativo: campos.ativo ?? atual?.ativo ?? true,
-      },
+    // Mesmo desenho do `salvarDoc`: um véu para os três chamadores.
+    await comCarregamento("Salvando o papel…", async () => {
+      // O backend regrava a linha inteira. Mesclar com o item atual é o que
+      // permite mexer num atributo só sem zerar os outros por omissão.
+      const atual = config.papeis.find((p) => p.papel_id === papelId);
+      const r = await call("apuratorio_config_save_papel", {
+        request: {
+          apuratorio_id: apuratorioSelecionado,
+          papel_id: papelId,
+          obrigatorio: campos.obrigatorio ?? atual?.obrigatorio ?? false,
+          max_ocupantes: campos.maxOcupantes ?? atual?.max_ocupantes ?? 1,
+          e_responsavel: campos.eResponsavel ?? atual?.e_responsavel ?? false,
+          usa_documento_designacao:
+            campos.usaDocumento ?? atual?.usa_documento_designacao ?? true,
+          ativo: campos.ativo ?? atual?.ativo ?? true,
+        },
+      });
+      await reportar(r.ok, r.error);
     });
-    reportar(r.ok, r.error);
   };
 
   document.querySelector<HTMLFormElement>("#form-papel")?.addEventListener("submit", async (evento) => {
@@ -382,11 +410,17 @@ export async function renderConfiguracaoApuratorio(ctx: ContextoTela): Promise<v
   );
   document.querySelectorAll<HTMLButtonElement>("[data-desativar-papel]").forEach((b) =>
     b.addEventListener("click", async () => {
-      const r = await call("apuratorio_config_deactivate_papel", {
-        apuratorioId: apuratorioSelecionado,
-        papelId: b.dataset.desativarPapel!,
-      });
-      reportar(r.ok, r.error);
+      await comCarregamento(
+        "Desativando o papel…",
+        async () => {
+          const r = await call("apuratorio_config_deactivate_papel", {
+            apuratorioId: apuratorioSelecionado,
+            papelId: b.dataset.desativarPapel!,
+          });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
     }),
   );
 }

@@ -24,7 +24,7 @@
 // recortar tem a tela de Estatísticas ao lado.
 
 import { call } from "../api";
-import { barraDeExportacao, escapeHtml, formatarData, ligarExportacao, option } from "../dom";
+import { barraDeExportacao, comCarregamento, escapeHtml, formatarData, ligarExportacao, option } from "../dom";
 import {
   carregarDadosDoEscopo,
   tabelaContagem,
@@ -61,6 +61,15 @@ function secao(numero: number, titulo: string, corpo: string, nota = ""): string
 }
 
 export async function renderRelatorioAnual(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota e a escolha do ano — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Numa troca de rota o véu do
+  // roteador já está aberto: o helper conta profundidade, então este aqui
+  // apenas troca a mensagem por uma que diz o que está sendo carregado.
+  await comCarregamento("Montando o relatório anual…", () => desenharRelatorioAnual(ctx));
+}
+
+async function desenharRelatorioAnual(ctx: ContextoTela): Promise<void> {
   const falhar = (mensagem: string) =>
     ctx.shell(`<section class="panel"><h1>Relatório Anual</h1>
       <p class="error">${escapeHtml(mensagem)}</p></section>`);

@@ -35,3 +35,4 @@ tools/impressao/saida/
 # um `git add -A` distraido versiona os dados pessoais de 235 militares.
 migracao_*/
 backups/
+tools/tela/paginas/

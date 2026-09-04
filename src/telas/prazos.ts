@@ -54,7 +54,16 @@ let janelaDias = 14;
 const paginas = { vencidos: 1, proximos: 1 };
 
 /** As seis colunas dividem 100% da largura. */
-const COLUNAS: Coluna[] = [
+/**
+ * Piso da tabela desta tela, em px. **Medido**, não estimado — ver
+ * `tools/tela/README.md`, que também diz como remedir depois de mexer em
+ * coluna. Abaixo dele o `.table-wrap` rola; sem ele a coluna `nowrap` pinta
+ * por cima da vizinha, e nada acusa.
+ */
+export const PISO_PX = 780;
+// Medido: 756, com folga para o WebKitGTK.
+
+export const COLUNAS: Coluna[] = [
   { rotulo: "Apuratório", largura: 16, alinhamento: "centro", truncar: true },
   { rotulo: "Unidade", largura: 18, alinhamento: "centro", truncar: true },
   { rotulo: "Responsável", largura: 32, truncar: true },
@@ -185,14 +194,20 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
 
       <div id="conteudo-paginado-prazos">
         <h2>Vencidos <span class="badge badge--erro">${totalVencidos}</span></h2>
-        ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", { listagem: true })}
+        ${tabela(COLUNAS, linhas(itensVencidos), "Nenhum prazo vencido.", {
+          listagem: true,
+          pisoPx: PISO_PX,
+        })}
         ${paginacao("vencidos", paginas.vencidos, ITENS_POR_PAGINA, totalVencidos)}
 
         <!-- Laranja, e não o amarelo: este bloco é urgência de prazo, e o
              amarelo passou a significar "entregue" na coluna de status. -->
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias
           <span class="badge badge--urgente">${totalAVencer}</span></h2>
-        ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", { listagem: true })}
+        ${tabela(COLUNAS, linhas(itensAVencer), "Nenhum prazo na janela.", {
+          listagem: true,
+          pisoPx: PISO_PX,
+        })}
         ${paginacao("proximos", paginas.proximos, ITENS_POR_PAGINA, totalAVencer)}
       </div>
     </section>

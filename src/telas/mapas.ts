@@ -83,7 +83,18 @@ function tituloDoMapa(apuratorios: Apuratorio[]): string {
  * de ser escolha entre duas perdas — as proporções valem, o texto longo trunca
  * com `title`, e a tabela ainda rola quando a janela é estreita.
  */
-const COLUNAS_MAPA: Coluna[] = [
+/**
+ * Piso da tabela desta tela, em px. **Medido**, não estimado — ver
+ * `tools/tela/README.md`, que também diz como remedir depois de mexer em
+ * coluna. Abaixo dele o `.table-wrap` rola; sem ele a coluna `nowrap` pinta
+ * por cima da vizinha, e nada acusa.
+ */
+export const PISO_MAPA_PX = 1250;
+// Medido: 1215. O `larga: true` desta tabela declara 1060, e faltavam 155px:
+// as três datas e o cabeçalho "Instauração" transbordavam por cima da vizinha.
+// O piso explícito vence a classe — e este é medido.
+
+export const COLUNAS_MAPA: Coluna[] = [
   { rotulo: "Apuratório", largura: 8, alinhamento: "centro", nowrap: true },
   { rotulo: "Identificação", largura: 12, truncar: true },
   { rotulo: "Unidade", largura: 11, truncar: true },
@@ -167,6 +178,7 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
       ${tabela(COLUNAS_MAPA, linhasGeradas.map(linhaMapa), "Nada em mãos neste período.", {
         larga: true,
         listagem: true,
+        pisoPx: PISO_MAPA_PX,
       })}`;
 
   ctx.shell(`
@@ -280,16 +292,37 @@ export async function renderMapaMensal(ctx: ContextoTela): Promise<void> {
     apuratoriosSelecionados =
       selecionados.length === idsApuratorios.length ? [] : selecionados;
 
-    const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
-    const resposta = await call("reports_map_rows", {
-      request: { periodo_inicio: inicio, periodo_fim: fim, apuratorio_ids: apuratoriosSelecionados },
-    });
-    if (!resposta.ok) {
-      notificar(resposta.error ?? "Falha ao gerar o mapa.", "erro");
-      return;
-    }
-    linhasGeradas = resposta.data ?? [];
-    void renderMapaMensal(ctx);
+    // O mesmo véu do "Gerar PDF" ao lado, e pela mesma razão: são duas idas ao
+    // banco, e a segunda é o redesenho inteiro da tela — que sozinho busca os
+    // anos disponíveis e o catálogo de apuratórios. Sem isto o operador clica e
+    // fica sem resposta até o mapa aparecer.
+    //
+    // O gatilho é o próprio botão do formulário: ele troca de rótulo e não
+    // aceita um segundo clique enquanto a consulta corre.
+    const gerar = (e.currentTarget as HTMLFormElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+    await comCarregamento(
+      "Consultando o período…",
+      async (passo) => {
+        const { inicio, fim } = periodo(mesSelecionado, anoSelecionado);
+        const resposta = await call("reports_map_rows", {
+          request: {
+            periodo_inicio: inicio,
+            periodo_fim: fim,
+            apuratorio_ids: apuratoriosSelecionados,
+          },
+        });
+        if (!resposta.ok) {
+          notificar(resposta.error ?? "Falha ao gerar o mapa.", "erro");
+          return;
+        }
+        linhasGeradas = resposta.data ?? [];
+        await passo("Montando o mapa…");
+        await renderMapaMensal(ctx);
+      },
+      gerar,
+    );
   });
 
   document.querySelector<HTMLButtonElement>("#btn-salvar-mapa")?.addEventListener("click", async (evento) => {
@@ -484,7 +517,16 @@ let paginaSalvos = 1;
  * Medido em WebKitGTK, o motor do app, com o CSS compilado: numa janela de
  * 1280 a tabela tem 926px e nenhuma célula transborda.
  */
-const COLUNAS_SALVOS: Coluna[] = [
+/**
+ * Piso da tabela desta tela, em px. **Medido**, não estimado — ver
+ * `tools/tela/README.md`, que também diz como remedir depois de mexer em
+ * coluna. Abaixo dele o `.table-wrap` rola; sem ele a coluna `nowrap` pinta
+ * por cima da vizinha, e nada acusa.
+ */
+export const PISO_SALVOS_PX = 1160;
+// Medido: 1123. Quem manda aqui é a coluna de ações, com três botões de ícone.
+
+export const COLUNAS_SALVOS: Coluna[] = [
   { rotulo: "Título", largura: 21, truncar: true },
   { rotulo: "Apuratório", largura: 10, alinhamento: "centro", nowrap: true },
   { rotulo: "Período", largura: 12, alinhamento: "centro" },
@@ -497,6 +539,15 @@ const COLUNAS_SALVOS: Coluna[] = [
 ];
 
 export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota, a paginação e a exclusão de um mapa — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Numa troca de rota o véu do
+  // roteador já está aberto: o helper conta profundidade, então este aqui
+  // apenas troca a mensagem por uma que diz o que está sendo carregado.
+  await comCarregamento("Carregando os mapas salvos…", () => desenharMapasSalvos(ctx));
+}
+
+async function desenharMapasSalvos(ctx: ContextoTela): Promise<void> {
   if (mapaAberto) return renderMapaSalvo(ctx, mapaAberto);
 
   const resposta = await call("reports_saved_maps", {
@@ -565,7 +616,10 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
         <div><h1>Mapas Salvos <span class="badge">${total}</span></h1>
           <p>Cada mapa é o registro do que foi emitido, não um recálculo.</p></div>
       </div>
-      ${tabela(COLUNAS_SALVOS, linhas, "Nenhum mapa salvo.", { listagem: true })}
+      ${tabela(COLUNAS_SALVOS, linhas, "Nenhum mapa salvo.", {
+        listagem: true,
+        pisoPx: PISO_SALVOS_PX,
+      })}
       ${paginacao("mapas-salvos", paginaSalvos, ITENS_POR_PAGINA, total)}
     </section>
   `);
@@ -602,14 +656,21 @@ export async function renderMapasSalvos(ctx: ContextoTela): Promise<void> {
   document.querySelectorAll<HTMLButtonElement>("[data-excluir-mapa]").forEach((botao) => {
     botao.addEventListener("click", async () => {
       if (!confirm("Excluir este mapa salvo?")) return;
-      const resposta = await call("reports_delete_saved_map", {
-        id: botao.dataset.excluirMapa!,
-      });
-      if (!resposta.ok) {
-        notificar(resposta.error ?? "Falha ao excluir.", "erro");
-        return;
-      }
-      void renderMapasSalvos(ctx);
+      await comCarregamento(
+        "Excluindo…",
+        async (passo) => {
+          const resposta = await call("reports_delete_saved_map", {
+            id: botao.dataset.excluirMapa!,
+          });
+          if (!resposta.ok) {
+            notificar(resposta.error ?? "Falha ao excluir.", "erro");
+            return;
+          }
+          await passo("Atualizando a lista…");
+          await renderMapasSalvos(ctx);
+        },
+        botao,
+      );
     });
   });
 }

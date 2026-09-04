@@ -13,8 +13,9 @@ import { call, type Catalogo, type Coluna } from "../api";
 import {
   aplicarLarguras,
   ativarSelectsPesquisaveis,
-  cellDisplay,
   botaoIcone,
+  cellDisplay,
+  comCarregamento,
   escapeHtml,
   ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
@@ -527,20 +528,36 @@ function ligarResultadosCatalogo(cat: Catalogo, ctx: ContextoTela): void {
     botao.addEventListener("click", async () => {
       const id = botao.dataset.desativar!;
       if (!confirm(`Desativar este item de "${cat.rotulo}"?`)) return;
-      const r = await call("legal_catalogs_deactivate", { catalogo: cat.chave, id });
-      if (!r.ok) notificar(r.error ?? "Falha ao desativar.", "erro");
-      void renderCatalogo(cat.chave, ctx);
+      // O redesenho do catálogo inteiro é a parte cara, não a gravação: ele
+      // refaz o cache e volta ao banco. É por ele que o véu existe aqui.
+      await comCarregamento(
+        "Desativando…",
+        async (passo) => {
+          const r = await call("legal_catalogs_deactivate", { catalogo: cat.chave, id });
+          if (!r.ok) notificar(r.error ?? "Falha ao desativar.", "erro");
+          await passo("Atualizando a lista…");
+          await renderCatalogo(cat.chave, ctx);
+        },
+        botao,
+      );
     });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-reativar]").forEach((botao) => {
     botao.addEventListener("click", async () => {
-      const r = await call("legal_catalogs_reactivate", {
-        catalogo: cat.chave,
-        id: botao.dataset.reativar!,
-      });
-      if (!r.ok) notificar(r.error ?? "Falha ao reativar.", "erro");
-      void renderCatalogo(cat.chave, ctx);
+      await comCarregamento(
+        "Reativando…",
+        async (passo) => {
+          const r = await call("legal_catalogs_reactivate", {
+            catalogo: cat.chave,
+            id: botao.dataset.reativar!,
+          });
+          if (!r.ok) notificar(r.error ?? "Falha ao reativar.", "erro");
+          await passo("Atualizando a lista…");
+          await renderCatalogo(cat.chave, ctx);
+        },
+        botao,
+      );
     });
   });
 }
@@ -578,6 +595,15 @@ function atualizarListaCatalogo(cat: Catalogo, ctx: ContextoTela): void {
 }
 
 export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota, gravação, desativação e reativação — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Carregando o catálogo…", () => desenharCatalogo(chave, ctx));
+}
+
+async function desenharCatalogo(chave: string, ctx: ContextoTela): Promise<void> {
   limparFormularioPendente();
   cancelarBusca?.();
   const definicoes = await carregarDefinicoes();
@@ -673,6 +699,18 @@ export async function renderCatalogo(chave: string, ctx: ContextoTela): Promise<
 }
 
 async function renderFormulario(
+  cat: Catalogo,
+  linha: Linha | null,
+  ctx: ContextoTela,
+  erro = "",
+): Promise<void> {
+  // O "Novo", o "Editar" e a volta de um erro de gravação passam por aqui,
+  // e as definições e as referências do catálogo vêm do banco antes do
+  // `shell`. O véu mora no render pelo mesmo motivo das demais telas.
+  await comCarregamento("Abrindo o formulário…", () => desenharFormulario(cat, linha, ctx, erro));
+}
+
+async function desenharFormulario(
   cat: Catalogo,
   linha: Linha | null,
   ctx: ContextoTela,

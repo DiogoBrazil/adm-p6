@@ -21,9 +21,10 @@
 import { call, type AuditDetailItem } from "../api";
 import {
   avisarSeCortado,
-  barraDeExportacao,
   baixarPlanilha,
+  barraDeExportacao,
   carregarTudo,
+  comCarregamento,
   escapeHtml,
   formatarDataHora,
   formatarQualificacaoMilitar,
@@ -52,7 +53,18 @@ const OPERACOES = ["CREATE", "UPDATE", "DELETE"];
  * imprimia "—" em todos os 74 registros do banco, porque diff só é gravado nas
  * mudanças de configuração. As duas continuam no detalhe.
  */
-const COLUNAS: Coluna[] = [
+/**
+ * Piso da tabela desta tela, em px. **Medido**, não estimado — ver
+ * `tools/tela/README.md`, que também diz como remedir depois de mexer em
+ * coluna. Abaixo dele o `.table-wrap` rola; sem ele a coluna `nowrap` pinta
+ * por cima da vizinha, e nada acusa.
+ */
+export const PISO_PX = 700;
+// Medido: 681, com folga para o WebKitGTK. É a única das cinco listagens que
+// já cabia na janela mínima — o piso a protege de uma coluna nova estreitar as
+// outras sem ninguém notar.
+
+export const COLUNAS: Coluna[] = [
   { rotulo: "Quando", largura: 18, alinhamento: "centro", nowrap: true },
   { rotulo: "Quem fez", largura: 26, truncar: true },
   { rotulo: "O que foi feito", largura: 28, truncar: true },
@@ -106,6 +118,15 @@ const linhaDaTabela = (i: AuditDetailItem) => ({
 });
 
 export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota, filtro, limpar filtro, paginação e clique numa linha — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Numa troca de rota o véu do
+  // roteador já está aberto: o helper conta profundidade, então este aqui
+  // apenas troca a mensagem por uma que diz o que está sendo carregado.
+  await comCarregamento("Carregando a trilha de auditoria…", () => desenharAuditoria(ctx));
+}
+
+async function desenharAuditoria(ctx: ContextoTela): Promise<void> {
   if (registroAberto) return renderDetalhe(ctx, registroAberto);
 
   const [resposta, estatisticas, usuarios] = await Promise.all([
@@ -184,6 +205,7 @@ export async function renderAuditoria(ctx: ContextoTela): Promise<void> {
             ? tabela(COLUNAS, itens.map(linhaDaTabela), "Nenhum registro neste escopo.", {
                 viewport: true,
                 listagem: true,
+                pisoPx: PISO_PX,
               })
             : `<p class="error">${escapeHtml(resposta.error ?? "Falha ao carregar a auditoria.")}</p>`
         }

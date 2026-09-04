@@ -20,7 +20,7 @@ import {
   type SelecaoInfracaoEstatuto,
   type SelecaoInfracaoPenal,
 } from "../api";
-import { escapeHtml, notificar, option } from "../dom";
+import { comCarregamento, escapeHtml, notificar, option } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 type Selecao = {
@@ -33,6 +33,19 @@ type Selecao = {
 type Rotulos = Record<string, string>;
 
 export async function renderIndicios(
+  ctx: ContextoTela,
+  envolvidoId: string,
+  voltar: () => void,
+): Promise<void> {
+  // Toda entrada nesta tela — o botão de indícios de cada envolvido — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Carregando o enquadramento…", () => desenharIndicios(ctx, envolvidoId, voltar));
+}
+
+async function desenharIndicios(
   ctx: ContextoTela,
   envolvidoId: string,
   voltar: () => void,
@@ -320,21 +333,29 @@ export async function renderIndicios(
       }),
     );
 
-    document.querySelector("#salvar")?.addEventListener("click", async () => {
-      const r = await call("evidence_save_for_pm", {
-        request: {
-          envolvido_id: envolvidoId,
-          categorias_ids: selecao.categorias,
-          infracoes_penais: selecao.penais,
-          transgressoes_ids: selecao.transgressoes,
-          infracoes_estatuto: selecao.estatuto,
+    // O `voltar()` redesenha o detalhe do processo inteiro, e é ele que pesa.
+    document.querySelector<HTMLButtonElement>("#salvar")?.addEventListener("click", async (evento) => {
+      await comCarregamento(
+        "Salvando o enquadramento…",
+        async (passo) => {
+          const r = await call("evidence_save_for_pm", {
+            request: {
+              envolvido_id: envolvidoId,
+              categorias_ids: selecao.categorias,
+              infracoes_penais: selecao.penais,
+              transgressoes_ids: selecao.transgressoes,
+              infracoes_estatuto: selecao.estatuto,
+            },
+          });
+          if (!r.ok) {
+            notificar(r.error ?? "Falha ao salvar.", "erro");
+            return;
+          }
+          await passo("Voltando ao processo…");
+          voltar();
         },
-      });
-      if (!r.ok) {
-        notificar(r.error ?? "Falha ao salvar.", "erro");
-        return;
-      }
-      voltar();
+        evento.currentTarget as HTMLButtonElement,
+      );
     });
   };
 

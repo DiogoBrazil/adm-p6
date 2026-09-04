@@ -546,6 +546,21 @@ export function tabela(
     listagem?: boolean;
     /** Quantas linhas formam cada bloco indivisível no PDF. */
     linhasPorFragmentoImpressao?: number;
+    /**
+     * Largura mínima da tabela, em px. Abaixo dela quem adapta é o scroll do
+     * `.table-wrap` — nunca a compressão das células.
+     *
+     * Existe porque `--fixa` reparte 100% da área e o `min-width: 0` a deixa
+     * encolher indefinidamente. Ao encolher, coluna `truncar` corta com
+     * reticências (certo), mas coluna `nowrap` tem `overflow: visible`: o texto
+     * **pinta por cima da vizinha**, e não há erro nem aviso. Medido, a
+     * listagem de usuários fazia isso com a matrícula a partir de 1006px.
+     *
+     * O valor é MEDIDO, não estimado — quase sempre quem o determina é o
+     * rótulo do cabeçalho, que sendo palavra única ("Encarregado", 91px) não
+     * quebra em coluna nenhuma. Mexeu em coluna, remeça: `tools/tela/README.md`.
+     */
+    pisoPx?: number;
     /** Primeiro bloco menor, quando um título ocupa o topo da mesma folha. */
     linhasNoPrimeiroFragmentoImpressao?: number;
   } = {},
@@ -621,7 +636,11 @@ export function tabela(
           : ""
       }`
     : "";
-  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"${fragmento}><table class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
+  // O piso sai em `data-piso` e é aplicado pela CSSOM, pelo mesmo motivo das
+  // larguras: a CSP recusa `style=""` interpolado. Na impressão ele não vale —
+  // `min-width: 0 !important` das folhas de papel vence estilo inline normal.
+  const piso = opcoes.pisoPx ? ` data-piso="${Math.round(opcoes.pisoPx)}"` : "";
+  return `<div class="table-wrap${opcoes.viewport ? " table-wrap--viewport" : ""}"${fragmento}><table${piso} class="tabela-dados${fixa ? " tabela-dados--fixa" : ""}${opcoes.larga ? " tabela-dados--larga" : ""}${opcoes.listagem ? " tabela-dados--listagem" : ""}">
       ${colgroup}
       <thead><tr>${definicoes
         .map((c) => {
@@ -887,16 +906,22 @@ export function painelContagem(
 }
 
 /**
- * Aplica as larguras declaradas em `Coluna.largura`.
+ * Aplica as larguras declaradas em `Coluna.largura` e o piso de `pisoPx`.
  *
  * A CSP recusa `style=""` no markup, e a CSSOM é a via usada para aplicar os
  * valores calculados. Chamada de
  * `main.ts::shell()` depois de cada render, para que nenhuma tela possa
  * esquecer — se ela não rodar, as colunas ficam sem largura e **nada acusa**.
+ *
+ * O piso anda junto porque erra do mesmo jeito: sem ele a tabela encolhe até a
+ * coluna `nowrap` pintar por cima da vizinha, e nada acusa também.
  */
 export function aplicarLarguras(raiz: ParentNode = document): void {
   raiz.querySelectorAll<HTMLElement>("col[data-largura]").forEach((col) => {
     col.style.width = `${col.dataset.largura}%`;
+  });
+  raiz.querySelectorAll<HTMLElement>("table[data-piso]").forEach((tabela) => {
+    tabela.style.minWidth = `${tabela.dataset.piso}px`;
   });
 }
 

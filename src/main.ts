@@ -295,12 +295,20 @@ function shell(content: string) {
     });
   });
 
-  document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", async () => {
+  document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", async (evento) => {
     if (!podeDescartarFormulario()) return;
-    await call("auth_logout");
-    session = null;
-    esquecerDefinicoes();
-    renderLogin();
+    // Encerrar a sessão é ida ao banco. Sem o véu, o clique em "Sair" fica sem
+    // resposta e convida a um segundo clique.
+    await comCarregamento(
+      "Encerrando a sessão…",
+      async () => {
+        await call("auth_logout");
+        session = null;
+        esquecerDefinicoes();
+        renderLogin();
+      },
+      evento.currentTarget as HTMLButtonElement,
+    );
   });
 }
 

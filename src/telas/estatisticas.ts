@@ -44,7 +44,7 @@ import {
   montarCartoesAnaliticos,
   type GraficoSpec,
 } from "../graficos";
-import { barraDeExportacao, baixarPlanilha, escapeHtml, ligarExportacao, option, tabela } from "../dom";
+import { baixarPlanilha, barraDeExportacao, comCarregamento, escapeHtml, ligarExportacao, option, tabela } from "../dom";
 import type { ContextoTela } from "./catalogos";
 
 export const ROTA = "/stats/procedimentos";
@@ -258,6 +258,15 @@ function barraDeFiltro(anos: number[], apuratorios: Apuratorio[]): string {
 }
 
 export async function renderEstatisticas(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota e o filtro — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Numa troca de rota o véu do
+  // roteador já está aberto: o helper conta profundidade, então este aqui
+  // apenas troca a mensagem por uma que diz o que está sendo carregado.
+  await comCarregamento("Calculando as estatísticas…", () => desenharEstatisticas(ctx));
+}
+
+async function desenharEstatisticas(ctx: ContextoTela): Promise<void> {
   const falhar = (mensagem: string) =>
     ctx.shell(`<section class="panel"><h1>Estatísticas dos Apuratórios</h1>
       <p class="error">${escapeHtml(mensagem)}</p></section>`);

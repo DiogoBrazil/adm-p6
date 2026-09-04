@@ -43,10 +43,12 @@ import {
   ativarSelectsPesquisaveis,
   baixarArquivoBase64,
   botaoIcone,
+  comCarregamento,
   destruirSelectsPesquisaveis,
   escapeHtml,
   formatarOrigem,
   formatarQualificacaoMilitar,
+  ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
   ligarPaginacao,
   limparFormularioPendente,
@@ -54,7 +56,6 @@ import {
   montarModal,
   notificar,
   option,
-  ITENS_POR_PAGINA,
   paginacao,
   podeDescartarFormulario,
   protegerFormulario,
@@ -546,6 +547,20 @@ function blocoAcusacoes(
 }
 
 export async function renderFormularioProcesso(
+  ctx: ContextoTela,
+  id: string | null,
+  erro = "",
+  rascunhoAtual?: Rascunho,
+): Promise<void> {
+  // Toda entrada nesta tela — o "Novo", o "Editar" e a volta de um erro de gravação — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Abrindo o formulário…", () => desenharFormularioProcesso(ctx, id, erro, rascunhoAtual));
+}
+
+async function desenharFormularioProcesso(
   ctx: ContextoTela,
   id: string | null,
   erro = "",
@@ -1936,6 +1951,15 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
 }
 
 export async function renderListaProcessos(ctx: ContextoTela): Promise<void> {
+  // Toda entrada nesta tela — troca de rota e o "Voltar" do detalhe — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Carregando os apuratórios…", () => desenharListaProcessos(ctx));
+}
+
+async function desenharListaProcessos(ctx: ContextoTela): Promise<void> {
   fecharTooltipPessoas();
   limparFormularioPendente();
   cancelarBusca?.();
@@ -2071,6 +2095,15 @@ function documentoDaDesignacao(d: DesignacaoItem): string {
 }
 
 export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
+  // Toda entrada nesta tela — clique numa linha da listagem, o "Voltar" do formulário e as doze ações do detalhe — passa por aqui e volta ao
+  // banco. O véu mora no render, e não em cada chamador, porque os
+  // chamadores são vários e o motivo é um só. Quando o chamador já
+  // abriu o véu (a troca de rota, ou uma ação), o helper conta
+  // profundidade e este aqui apenas troca a mensagem.
+  await comCarregamento("Abrindo o apuratório…", () => desenharDetalheProcesso(ctx, id));
+}
+
+async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
   // `users_list_ativos` e não um comando paginado: lista de OPÇÕES não pagina.
   // O teto de 200 de uma listagem cortaria o seletor em silêncio, que foi o
   // defeito da §8.9 — e são 235 militares no banco real.
@@ -2623,18 +2656,57 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     </section>
   `);
 
-  const recarregar = () => void renderDetalheProcesso(ctx, id);
-  const reportar = (ok: boolean, erro: string | null) => {
+  const recarregar = () => renderDetalheProcesso(ctx, id);
+  /**
+   * O fecho comum das doze ações do detalhe: avisa o erro, se houve, e
+   * redesenha.
+   *
+   * Esperar o redesenho é o que dá o véu de graça às doze: quem o abre é o
+   * próprio `renderDetalheProcesso`, que volta ao banco buscar o processo, os
+   * envolvidos, as designações, os prazos, os andamentos e os anexos.
+   *
+   * Recarregar TAMBÉM no erro é o comportamento que já existia, e é o certo: a
+   * tela pode estar exibindo um estado que o backend acabou de recusar.
+   */
+  /**
+   * O envelope das gravações dos formulários do detalhe.
+   *
+   * Eles são os únicos `submit` do projeto sem o "Salvando…" no botão — os de
+   * usuários, catálogos e do processo o têm. Aqui o efeito vem do helper: ele
+   * desabilita o gatilho, escreve a mensagem e **restaura no `finally`**, que é
+   * o que torna seguro haver `return` antecipado e validação acima.
+   *
+   * Fica ao lado do `reportar` porque os dois são o mesmo par: um grava, o
+   * outro redesenha, e as seis gravações usam os dois em sequência.
+   */
+  const gravar = (
+    mensagem: string,
+    formulario: HTMLFormElement | null | undefined,
+    acao: () => Promise<void>,
+  ) =>
+    comCarregamento(
+      mensagem,
+      acao,
+      formulario?.querySelector<HTMLButtonElement>('button[type="submit"]'),
+    );
+
+  const reportar = async (ok: boolean, erro: string | null) => {
     if (!ok) notificar(erro ?? "Falha na operação.", "erro");
-    recarregar();
+    await recarregar();
   };
 
   document.querySelector("#voltar")?.addEventListener("click", () => void renderListaProcessos(ctx));
   document.querySelector("#editar")?.addEventListener("click", () => void renderFormularioProcesso(ctx, id));
-  document.querySelector("#reabrir")?.addEventListener("click", async () => {
+  document.querySelector<HTMLButtonElement>("#reabrir")?.addEventListener("click", async (evento) => {
     if (!confirm("Reabrir este apuratório?")) return;
-    const r = await call("proceedings_reopen", { id });
-    reportar(r.ok, r.error);
+    await comCarregamento(
+      "Reabrindo o apuratório…",
+      async () => {
+        const r = await call("proceedings_reopen", { id });
+        await reportar(r.ok, r.error);
+      },
+      evento.currentTarget as HTMLButtonElement,
+    );
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-baixar]").forEach((b) =>
@@ -2721,21 +2793,23 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     evento.preventDefault();
     const dados = new FormData(formDatas);
     const data = (nome: string) => String(dados.get(nome) ?? "") || null;
-    const r = await call("proceedings_update_dates", {
-      request: {
-        processo_id: id,
-        data_remessa_encarregado: usaRemessaComissao
-          ? null
-          : data("data_remessa_encarregado"),
-        data_remessa_comissao: mostraRemessaComissao
-          ? data("data_remessa_comissao")
-          : d.data_remessa_comissao,
-        data_julgamento: mostraJulgamento ? data("data_julgamento") : d.data_julgamento,
-        data_conclusao: data("data_conclusao"),
-      },
+    await gravar("Salvando as datas…", formDatas, async () => {
+      const r = await call("proceedings_update_dates", {
+        request: {
+          processo_id: id,
+          data_remessa_encarregado: usaRemessaComissao
+            ? null
+            : data("data_remessa_encarregado"),
+          data_remessa_comissao: mostraRemessaComissao
+            ? data("data_remessa_comissao")
+            : d.data_remessa_comissao,
+          data_julgamento: mostraJulgamento ? data("data_julgamento") : d.data_julgamento,
+          data_conclusao: data("data_conclusao"),
+        },
+      });
+      if (r.ok) notificar("Datas atualizadas.", "sucesso");
+      await reportar(r.ok, r.error);
     });
-    if (r.ok) notificar("Datas atualizadas.", "sucesso");
-    reportar(r.ok, r.error);
   });
 
   // ── Resultado do envolvido ───────────────────────────────────────────────
@@ -2847,24 +2921,30 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   formResultado?.addEventListener("submit", async (evento) => {
     evento.preventDefault();
     if (!resultadoEmEdicao) return;
+    // Fixado numa const: `resultadoEmEdicao` é estado do módulo, e o estreitamento
+    // do `if` acima não atravessa a closure — nem o `await` dentro dela, depois
+    // do qual outro trecho já pode tê-lo trocado.
+    const emEdicao = resultadoEmEdicao;
     const penalidadeVisivel = campoPenalidade?.hidden === false;
     const diasVisiveis = campoDias?.hidden === false;
-    const r = await call("proceedings_update_involved_outcome", {
-      request: {
-        processo_id: id,
-        envolvido_id: resultadoEmEdicao.id,
-        solucao_sugerida_id: permiteSolucaoSugerida
-          ? selectResultado("solucao_sugerida_id")?.value || null
-          : null,
-        solucao_decidida_id: selectResultado("solucao_decidida_id")?.value || null,
-        penalidade_tipo_id: penalidadeVisivel
-          ? selectResultado("penalidade_tipo_id")?.value || null
-          : null,
-        penalidade_dias: diasVisiveis ? Number(inputDias()?.value) || null : null,
-      },
+    await gravar("Salvando o resultado…", formResultado, async () => {
+      const r = await call("proceedings_update_involved_outcome", {
+        request: {
+          processo_id: id,
+          envolvido_id: emEdicao.id,
+          solucao_sugerida_id: permiteSolucaoSugerida
+            ? selectResultado("solucao_sugerida_id")?.value || null
+            : null,
+          solucao_decidida_id: selectResultado("solucao_decidida_id")?.value || null,
+          penalidade_tipo_id: penalidadeVisivel
+            ? selectResultado("penalidade_tipo_id")?.value || null
+            : null,
+          penalidade_dias: diasVisiveis ? Number(inputDias()?.value) || null : null,
+        },
+      });
+      if (r.ok) notificar("Resultado do envolvido atualizado.", "sucesso");
+      await reportar(r.ok, r.error);
     });
-    if (r.ok) notificar("Resultado do envolvido atualizado.", "sucesso");
-    reportar(r.ok, r.error);
   });
 
   // ── Substituição de designação ────────────────────────────────────────────
@@ -2991,6 +3071,9 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   formSubstituicao?.addEventListener("submit", async (evento) => {
     evento.preventDefault();
     if (!alvo) return;
+    // Fixado numa const pelo mesmo motivo do resultado: `alvo` é estado do
+    // módulo, e o estreitamento do `if` não atravessa a closure da gravação.
+    const emFoco = alvo;
     limparErros();
 
     const sucessor = String(campo("sucessor_id")?.value ?? "");
@@ -3040,19 +3123,21 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       documento_autorizador_id: documento || null,
       numero_documento: numero || null,
     };
-    const r =
-      alvo.modo === "editar"
-        ? await call("proceedings_update_substitution", {
-            request: pedido satisfies AtualizarSubstituicaoRequest,
-          })
-        : await call("proceedings_substitute_designation", { request: pedido });
-    if (r.ok) {
-      notificar(
-        alvo.modo === "editar" ? "Substituição corrigida." : "Substituição registrada.",
-        "sucesso",
-      );
-    }
-    reportar(r.ok, r.error);
+    await gravar("Salvando a substituição…", formSubstituicao, async () => {
+      const r =
+        emFoco.modo === "editar"
+          ? await call("proceedings_update_substitution", {
+              request: pedido satisfies AtualizarSubstituicaoRequest,
+            })
+          : await call("proceedings_substitute_designation", { request: pedido });
+      if (r.ok) {
+        notificar(
+          emFoco.modo === "editar" ? "Substituição corrigida." : "Substituição registrada.",
+          "sucesso",
+        );
+      }
+      await reportar(r.ok, r.error);
+    });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-remover-substituicao]").forEach((b) =>
@@ -3074,12 +3159,18 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       ) {
         return;
       }
-      const r = await call("proceedings_delete_substitution", {
-        processoId: id,
-        designacaoId: designacao.id,
-      });
-      if (r.ok) notificar("Substituição desfeita.", "sucesso");
-      reportar(r.ok, r.error);
+      await comCarregamento(
+        "Desfazendo a substituição…",
+        async () => {
+          const r = await call("proceedings_delete_substitution", {
+            processoId: id,
+            designacaoId: designacao.id,
+          });
+          if (r.ok) notificar("Substituição desfeita.", "sucesso");
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
     }),
   );
 
@@ -3091,14 +3182,16 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   formProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
-    const r = await call("deadlines_add_extension", {
-      request: {
-        processo_id: id,
-        nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
-        motivo: String(form.get("motivo") ?? ""),
-      },
+    await gravar("Salvando a prorrogação…", formProrrogacao, async () => {
+      const r = await call("deadlines_add_extension", {
+        request: {
+          processo_id: id,
+          nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
+          motivo: String(form.get("motivo") ?? ""),
+        },
+      });
+      await reportar(r.ok, r.error);
     });
-    reportar(r.ok, r.error);
   });
 
   const formEditarProrrogacao = document.querySelector<HTMLFormElement>("#form-editar-prorrogacao");
@@ -3124,25 +3217,33 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
     e.preventDefault();
     if (!ultimaProrrogacao) return;
     const form = new FormData(e.currentTarget as HTMLFormElement);
-    const r = await call("deadlines_update_extension", {
-      request: {
-        processo_id: id,
-        prazo_id: ultimaProrrogacao.id,
-        nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
-      },
+    await gravar("Salvando a prorrogação…", formEditarProrrogacao, async () => {
+      const r = await call("deadlines_update_extension", {
+        request: {
+          processo_id: id,
+          prazo_id: ultimaProrrogacao.id,
+          nova_data_vencimento: String(form.get("nova_data_vencimento") ?? ""),
+        },
+      });
+      await reportar(r.ok, r.error);
     });
-    reportar(r.ok, r.error);
   });
 
-  document.querySelector<HTMLButtonElement>("[data-excluir-prorrogacao]")?.addEventListener("click", async () => {
+  document.querySelector<HTMLButtonElement>("[data-excluir-prorrogacao]")?.addEventListener("click", async (evento) => {
     if (!ultimaProrrogacao) return;
     const vencimento = dataParaExibicao(ultimaProrrogacao.data_vencimento);
     if (!confirm(`Excluir a ${ultimaProrrogacao.ordem}ª prorrogação, com vencimento em ${vencimento}? O prazo anterior voltará a ser o vigente.`)) return;
-    const r = await call("deadlines_delete_extension", {
-      processoId: id,
-      prazoId: ultimaProrrogacao.id,
-    });
-    reportar(r.ok, r.error);
+    await comCarregamento(
+      "Excluindo a prorrogação…",
+      async () => {
+        const r = await call("deadlines_delete_extension", {
+          processoId: id,
+          prazoId: ultimaProrrogacao.id,
+        });
+        await reportar(r.ok, r.error);
+      },
+      evento.currentTarget as HTMLButtonElement,
+    );
   });
 
   const formAndamento = document.querySelector<HTMLFormElement>("#form-andamento");
@@ -3209,36 +3310,50 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
       descricao: String(form.get("descricao") ?? ""),
       tipo_andamento_id: String(form.get("tipo_andamento_id") ?? "") || null,
     };
-    const r = andamentoEmEdicao
-      ? await call("movements_update", {
-          request: { ...dados, andamento_id: andamentoEmEdicao },
-        })
-      : await call("movements_add", { request: dados });
-    if (r.ok) {
-      notificar(
-        andamentoEmEdicao ? "Andamento atualizado." : "Andamento registrado.",
-        "sucesso",
-      );
-    }
-    reportar(r.ok, r.error);
+    await gravar("Salvando o andamento…", formAndamento, async () => {
+      const r = andamentoEmEdicao
+        ? await call("movements_update", {
+            request: { ...dados, andamento_id: andamentoEmEdicao },
+          })
+        : await call("movements_add", { request: dados });
+      if (r.ok) {
+        notificar(
+          andamentoEmEdicao ? "Andamento atualizado." : "Andamento registrado.",
+          "sucesso",
+        );
+      }
+      await reportar(r.ok, r.error);
+    });
   });
 
   document.querySelectorAll<HTMLButtonElement>("[data-remover-andamento]").forEach((b) =>
     b.addEventListener("click", async () => {
       if (!confirm("Remover este andamento?")) return;
-      const r = await call("movements_remove", {
-        processoId: id,
-        andamentoId: b.dataset.removerAndamento!,
-      });
-      reportar(r.ok, r.error);
+      await comCarregamento(
+        "Removendo o andamento…",
+        async () => {
+          const r = await call("movements_remove", {
+            processoId: id,
+            andamentoId: b.dataset.removerAndamento!,
+          });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
     }),
   );
 
   document.querySelectorAll<HTMLButtonElement>("[data-remover-anexo]").forEach((b) =>
     b.addEventListener("click", async () => {
       if (!confirm("Remover este anexo?")) return;
-      const r = await call("proceedings_remove_attachment", { anexoId: b.dataset.removerAnexo! });
-      reportar(r.ok, r.error);
+      await comCarregamento(
+        "Removendo o anexo…",
+        async () => {
+          const r = await call("proceedings_remove_attachment", { anexoId: b.dataset.removerAnexo! });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
     }),
   );
 
@@ -3257,6 +3372,6 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
         conteudo: btoa(binario),
       },
     });
-    reportar(r.ok, r.error);
+    await reportar(r.ok, r.error);
   });
 }
