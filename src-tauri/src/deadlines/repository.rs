@@ -1,6 +1,8 @@
 use chrono::NaiveDate;
 use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
+use crate::db::lote::agrupar;
 use crate::db::paginacao::Recorte;
 use crate::deadlines::domain::{
     AddExtensionRequest, DeadlineItem, DeadlineReportFilter, DeadlineReportItem,
@@ -135,8 +137,28 @@ pub async fn sync_initial(
     Ok(())
 }
 
-pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>, sqlx::Error> {
-    sqlx::query_as::<_, DeadlineItem>(&format!(
+pub async fn list<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<DeadlineItem>, sqlx::Error> {
+    Ok(list_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+/// Os prazos de vários processos, agrupados por processo.
+///
+/// Sem struct de linha intermediário: `DeadlineItem` já carrega `processo_id`,
+/// que é a própria chave de agrupamento.
+pub async fn list_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<DeadlineItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, DeadlineItem>(&format!(
         "SELECT p.id::text                      AS id,
                 p.processo_id::text             AS processo_id,
                 p.ordem                         AS ordem,
@@ -156,12 +178,17 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<DeadlineItem>,
            LEFT JOIN tipos_documento td     ON td.id = p.documento_autorizador_id
            LEFT JOIN policiais_militares pm ON pm.id = p.autoridade_id
            LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
-          WHERE p.processo_id = $1::uuid
-          ORDER BY p.ordem"
+          WHERE p.processo_id = ANY($1::uuid[])
+          ORDER BY p.processo_id, p.ordem"
     ))
-    .bind(processo_id)
-    .fetch_all(pool)
-    .await
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(
+        linhas
+            .into_iter()
+            .map(|linha| (linha.processo_id.clone(), linha)),
+    ))
 }
 
 /// Concede uma prorrogação: ela começa NO DIA do vencimento vigente e recebe a

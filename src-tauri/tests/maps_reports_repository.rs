@@ -8,10 +8,14 @@
 //! literal, estes testes deixam de passar.
 
 use adm_p6_tauri_lib::db::paginacao::Recorte;
+use adm_p6_tauri_lib::deadlines::repository as deadlines_repository;
+use adm_p6_tauri_lib::evidence::repository as evidence_repository;
 use adm_p6_tauri_lib::maps_reports::domain::{
     DesignacaoMatrizFiltro, MapPeriodRequest, MapPrintRequest, MapRow, ReportFilter,
 };
 use adm_p6_tauri_lib::maps_reports::repository;
+use adm_p6_tauri_lib::movements::repository as movements_repository;
+use adm_p6_tauri_lib::proceedings::repository as proceedings_repository;
 use chrono::NaiveDate;
 use sqlx::PgPool;
 
@@ -355,6 +359,200 @@ async fn impressao_do_mapa_reune_os_dados_detalhados() {
         .await
         .unwrap();
         assert_eq!(responsaveis[0].rotulo, "TST PM 100000001 PM UM");
+    })
+    .await;
+}
+
+/// Cada ficha recebe o que é dela, e nada do vizinho.
+///
+/// O mapa deixou de montar as fichas uma a uma: as coleções chegam em consultas
+/// `= ANY(...)` e são agrupadas em memória. Isso troca ~1.013 idas ao banco por
+/// 17 — mas passa a existir um modo de errar que antes não existia, o de
+/// entregar a um processo o envolvido, o prazo ou o andamento de outro.
+///
+/// Os testes vizinhos não pegariam isso: eles montam **um** processo com **um**
+/// envolvido, e com um só grupo qualquer agrupamento errado acerta. Este monta
+/// três processos deliberadamente desiguais — um sem envolvido nenhum, um com
+/// dois, um com prazo prorrogado — porque teste de agrupamento que não passa de
+/// um grupo não exercita agrupamento nenhum.
+#[tokio::test]
+async fn mapa_em_lote_nao_mistura_as_fichas() {
+    util::com_banco_descartavel("mapa_lote_fichas", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        let transgressao = alguma_transgressao(&pool).await;
+
+        // Três fichas com formatos propositalmente diferentes entre si.
+        // `apuratorio_livre` é o que tem `max_envolvidos = NULL`; o da fixture
+        // padrão aceita um só, e o trigger recusaria o segundo.
+        let dois_envolvidos = processo(
+            &pool,
+            &m,
+            &m.apuratorio_livre,
+            "LOTE-A",
+            data(2026, 3, 2),
+            None,
+        )
+        .await;
+        let sem_envolvido =
+            processo(&pool, &m, &m.apuratorio, "LOTE-B", data(2026, 3, 3), None).await;
+        let um_envolvido =
+            processo(&pool, &m, &m.apuratorio, "LOTE-C", data(2026, 3, 4), None).await;
+
+        let primeiro = envolvido(&pool, &m, &dois_envolvidos, &m.pm_um, 1).await;
+        envolvido(&pool, &m, &dois_envolvidos, &m.pm_dois, 2).await;
+        let sozinho = envolvido(&pool, &m, &um_envolvido, &m.pm_tres, 1).await;
+
+        // Só o primeiro envolvido do primeiro processo tem enquadramento: é o
+        // que prova que o indício não vaza para os outros dois.
+        sqlx::query(
+            "INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&primeiro)
+        .bind(&transgressao)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        designar(&pool, &dois_envolvidos, &m.pm_um, &m.papel_encarregado).await;
+        prazo_vencendo_em(&pool, &sem_envolvido, 10).await;
+        prazo_vencendo_em(&pool, &um_envolvido, 5).await;
+
+        for (processo_id, descricao) in [
+            (&dois_envolvidos, "Andamento do primeiro"),
+            (&dois_envolvidos, "Segundo andamento do primeiro"),
+            (&um_envolvido, "Andamento do terceiro"),
+        ] {
+            sqlx::query(
+                "INSERT INTO processo_andamentos
+                     (processo_id, tipo_andamento_id, descricao, ocorrido_em)
+                 VALUES ($1::uuid, $2::uuid, $3, '2026-03-12T14:30:00Z')",
+            )
+            .bind(processo_id)
+            .bind(&m.tipo_andamento)
+            .bind(descricao)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let itens = repository::map_print_data(
+            &pool,
+            &MapPrintRequest {
+                periodo_inicio: data(2026, 3, 1),
+                periodo_fim: data(2026, 3, 31),
+                apuratorio_ids: None,
+                processo_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(itens.len(), 3);
+
+        let ficha = |id: &str| {
+            itens
+                .iter()
+                .find(|item| item.processo.cabecalho.id == id)
+                .unwrap_or_else(|| panic!("ficha ausente do mapa: {id}"))
+        };
+
+        let a = ficha(&dois_envolvidos);
+        assert_eq!(a.processo.envolvidos.len(), 2);
+        assert_eq!(a.processo.designacoes.len(), 1);
+        assert_eq!(a.andamentos.len(), 2);
+        assert!(a.prazos.is_empty(), "este processo não recebeu prazo");
+        assert_eq!(a.enquadramentos.len(), 2);
+        assert_eq!(a.enquadramentos[0].envolvido_id, primeiro);
+        assert_eq!(a.enquadramentos[0].indicios.transgressoes.len(), 1);
+        assert!(
+            a.enquadramentos[1].indicios.transgressoes.is_empty(),
+            "o enquadramento do primeiro envolvido vazou para o segundo"
+        );
+
+        let b = ficha(&sem_envolvido);
+        assert!(b.processo.envolvidos.is_empty());
+        assert!(b.enquadramentos.is_empty());
+        assert!(b.processo.designacoes.is_empty());
+        assert!(b.andamentos.is_empty());
+        assert_eq!(b.prazos.len(), 1);
+
+        let c = ficha(&um_envolvido);
+        assert_eq!(c.processo.envolvidos.len(), 1);
+        assert_eq!(c.enquadramentos.len(), 1);
+        assert_eq!(c.enquadramentos[0].envolvido_id, sozinho);
+        assert!(c.enquadramentos[0].indicios.transgressoes.is_empty());
+        assert_eq!(c.andamentos.len(), 1);
+        assert_eq!(c.andamentos[0].descricao, "Andamento do terceiro");
+        assert_eq!(c.prazos.len(), 1);
+
+        // Paridade: a ficha em lote tem de ser indistinguível da que as leituras
+        // de um processo só devolvem. Comparar o JSON, e não campo a campo,
+        // porque é o JSON que a tela recebe — pega ordem, nome de campo e
+        // aninhamento de uma vez.
+        for item in &itens {
+            let id = &item.processo.cabecalho.id;
+            let avulso = proceedings_repository::get(&pool, id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(&item.processo).unwrap(),
+                serde_json::to_value(&avulso).unwrap(),
+                "ficha do processo {id} diverge da leitura avulsa"
+            );
+            assert_eq!(
+                serde_json::to_value(&item.prazos).unwrap(),
+                serde_json::to_value(deadlines_repository::list(&pool, id).await.unwrap()).unwrap()
+            );
+            assert_eq!(
+                serde_json::to_value(&item.andamentos).unwrap(),
+                serde_json::to_value(movements_repository::list(&pool, id).await.unwrap()).unwrap()
+            );
+            assert_eq!(
+                serde_json::to_value(&item.enquadramentos).unwrap(),
+                serde_json::to_value(
+                    evidence_repository::list_for_proceeding(&pool, id)
+                        .await
+                        .unwrap()
+                )
+                .unwrap()
+            );
+        }
+    })
+    .await;
+}
+
+/// Mês sem processo nenhum não compra as consultas em lote.
+///
+/// `= ANY('{}')` devolveria o conjunto vazio, que é a resposta certa — mas
+/// seriam dezesseis idas ao banco para receber nada, e com o banco na internet
+/// isso é tempo de tela. O curto-circuito é comportamento, então tem teste.
+#[tokio::test]
+async fn mapa_de_periodo_vazio_nao_vai_ao_banco() {
+    util::com_banco_descartavel("mapa_lote_vazio", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+        processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "FORA",
+            data(2026, 3, 5),
+            Some(data(2026, 3, 20)),
+        )
+        .await;
+
+        let itens = repository::map_print_data(
+            &pool,
+            &MapPrintRequest {
+                periodo_inicio: data(2020, 1, 1),
+                periodo_fim: data(2020, 1, 31),
+                apuratorio_ids: None,
+                processo_id: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(itens.is_empty());
     })
     .await;
 }

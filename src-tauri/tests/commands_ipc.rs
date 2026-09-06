@@ -1234,6 +1234,109 @@ fn o_mapa_salvo_chega_achatado_ao_frontend() {
     });
 }
 
+/// As fichas do mapa chegam à tela sem o andaime do agrupamento.
+///
+/// O mapa monta as coleções com consultas `= ANY(...)` e agrupa em memória, e
+/// para isso cada linha viaja num struct que carrega a chave ao lado do item
+/// (`db::lote::linha_agrupada`). Esse struct existe só dentro do repositório: se
+/// alguém lhe der um `Serialize`, o JSON passa a entregar `{chave, item:{…}}` no
+/// lugar do item, e a tela lê `undefined` em cada campo — sem erro no Rust, e
+/// sem erro no TypeScript, porque `types.ts` declara os campos e o compilador
+/// acredita na declaração.
+///
+/// Por isso este teste afere o **JSON**, e as duas metades importam: o campo no
+/// lugar certo prova que o item subiu, e a ausência de `chave`/`item` prova que
+/// o andaime não veio junto.
+#[test]
+fn as_fichas_do_mapa_chegam_sem_o_andaime_do_agrupamento() {
+    com_app_e_banco("ipc_mapa_fichas", |app, webview, conta| {
+        autenticar(&app, &conta, true);
+
+        tauri::async_runtime::block_on(async {
+            let estado: tauri::State<'_, AppState> = app.state();
+            let pool = estado.pool().await.unwrap();
+            let processo_id: String = sqlx::query_scalar(
+                "INSERT INTO processos_procedimentos
+                     (apuratorio_id, documento_iniciador_id, numero_documento,
+                      unidade_origem_id, municipio_fato_id, natureza_fato_id, data_instauracao)
+                 VALUES ((SELECT apuratorio_id FROM apuratorio_papeis ORDER BY apuratorio_id LIMIT 1),
+                         (SELECT tipo_documento_id FROM apuratorio_documentos_iniciadores ORDER BY tipo_documento_id LIMIT 1),
+                         'IPC-MAPA-001',
+                         (SELECT id FROM unidades_pm ORDER BY id LIMIT 1),
+                         (SELECT id FROM municipios_distritos ORDER BY id LIMIT 1),
+                         (SELECT id FROM naturezas_fato ORDER BY id LIMIT 1),
+                         $1)
+              RETURNING id::text",
+            )
+            .bind(NaiveDate::from_ymd_opt(2026, 3, 10).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+            sqlx::query(
+                "INSERT INTO processo_envolvidos
+                     (processo_id, policial_militar_id, status_envolvido_id, ordem)
+                 VALUES ($1::uuid,
+                         (SELECT id FROM policiais_militares ORDER BY matricula LIMIT 1),
+                         (SELECT id FROM status_envolvido ORDER BY nome LIMIT 1),
+                         1)",
+            )
+            .bind(&processo_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        });
+
+        let itens = ok(&invocar(
+            &webview,
+            "reports_map_print_data",
+            json!({ "request": {
+                "periodo_inicio": "2026-03-01",
+                "periodo_fim": "2026-03-31",
+                "apuratorio_ids": null,
+                "processo_id": null,
+            }}),
+        ))
+        .clone();
+
+        let ficha = &itens[0];
+        // `ProceedingDetail` achata o cabeçalho, e é assim que o documento lê
+        // `processo.rotulo` e `processo.concluido`. As duas metades importam: os
+        // campos no topo provam que achatou, e a ausência de `cabecalho` prova
+        // que não voltou a aninhar.
+        assert!(
+            ficha["processo"].get("cabecalho").is_none(),
+            "o cabeçalho da ficha não pode chegar aninhado: {ficha}"
+        );
+        for campo in ["id", "rotulo", "apuratorio_sigla", "concluido"] {
+            assert!(
+                ficha["processo"].get(campo).is_some(),
+                "o documento do mapa imprime processo.{campo}"
+            );
+        }
+
+        let envolvido = &ficha["processo"]["envolvidos"][0];
+        assert!(
+            envolvido["nome"].is_string(),
+            "o envolvido chega achatado, com os campos no topo: {envolvido}"
+        );
+        for andaime in ["chave", "item"] {
+            assert!(
+                envolvido.get(andaime).is_none(),
+                "'{andaime}' é o struct de agrupamento do repositório vazando \
+                 para o JSON — o item tem de subir sozinho"
+            );
+        }
+
+        let enquadramento = &ficha["enquadramentos"][0];
+        assert!(
+            enquadramento["envolvido_id"].is_string(),
+            "o painel de indícios também vem do agrupamento: {enquadramento}"
+        );
+        assert!(enquadramento["indicios"]["transgressoes"].is_array());
+    });
+}
+
 /// Desativar e excluir militar são comandos diferentes, e os dois passam pelo
 /// IPC — não só pelo repositório.
 ///

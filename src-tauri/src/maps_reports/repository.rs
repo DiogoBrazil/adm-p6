@@ -1,4 +1,5 @@
 use sqlx::{PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
 use crate::db::paginacao::Recorte;
 use crate::error::AppError;
@@ -122,12 +123,27 @@ pub async fn map_rows(
     .await
 }
 
+/// A permissão de remessa à comissão, por processo.
+///
+/// Existe como struct em vez de tupla porque o extrator de
+/// `tests/sql_prepare.rs` procura o primeiro `(` depois de `sqlx::query`: com o
+/// turbofish `::<_, (String, bool)>` ele acharia o parêntese da tupla, leria a
+/// consulta como montada em tempo de execução e a deixaria de fora do `PREPARE`
+/// automático que a valida.
+#[derive(sqlx::FromRow)]
+struct LinhaRemessa {
+    processo_id: String,
+    permite_remessa_comissao: bool,
+}
+
 /// Dados completos do mapa atual para o documento A4.
 ///
 /// A lista nasce obrigatoriamente de `map_rows`: além de manter uma única regra
 /// para o mês, isto impede que um `processo_id` enviado por IPC imprima uma
 /// ficha que não pertence ao filtro visível. As leituras detalhadas reutilizam
-/// os quatro repositórios da tela de processo em vez de duplicar seus JOINs.
+/// os quatro repositórios da tela de processo em vez de duplicar seus JOINs —
+/// agora nas versões em lote, que trazem as coleções de todos os processos do
+/// mapa numa consulta cada.
 pub async fn map_print_data(
     pool: &PgPool,
     request: &MapPrintRequest,
@@ -149,36 +165,65 @@ pub async fn map_print_data(
         linhas.retain(|linha| linha.processo_id == processo_id);
     }
 
-    let mut itens = Vec::with_capacity(linhas.len());
-    for linha in linhas {
-        let processo = proceedings::repository::get(pool, &linha.processo_id)
-            .await?
-            .ok_or_else(|| {
+    let ids: Vec<String> = linhas
+        .iter()
+        .map(|linha| linha.processo_id.clone())
+        .collect();
+    // Mapa vazio não compra as consultas em lote. `= ANY('{}')` devolveria o
+    // conjunto vazio, que é o certo — mas seriam dezesseis idas ao banco para
+    // receber nada, e com o banco na internet isso é tempo de tela.
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Uma conexão para todas as consultas. O custo do mapa deixa de crescer com
+    // o número de processos: são sempre as mesmas consultas, com a lista de ids
+    // por parâmetro. Antes eram `1 + 12×processos + 4×envolvidos` idas ao banco
+    // — 1.013 num mês típico, que em `localhost` somavam 0,2 s e no Neon
+    // passavam de três minutos.
+    let mut conn = pool.acquire().await?;
+
+    let mut fichas = proceedings::repository::get_muitos(&mut conn, &ids).await?;
+    let mut prazos = deadlines::repository::list_muitos(&mut *conn, &ids).await?;
+    let mut andamentos = movements::repository::list_muitos(&mut *conn, &ids).await?;
+    let mut enquadramentos =
+        evidence::repository::list_for_proceeding_muitos(&mut conn, &ids).await?;
+    let mut remessa: HashMap<String, bool> = sqlx::query_as::<_, LinhaRemessa>(
+        "SELECT p.id::text AS processo_id, a.permite_remessa_comissao
+           FROM processos_procedimentos p
+           JOIN apuratorios a ON a.id = p.apuratorio_id
+          WHERE p.id = ANY($1::uuid[])",
+    )
+    .bind(&ids)
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|linha| (linha.processo_id, linha.permite_remessa_comissao))
+    .collect();
+
+    // A ordem é a de `map_rows`, que é a que decide as seções do documento.
+    linhas
+        .into_iter()
+        .map(|linha| {
+            let processo = fichas.remove(&linha.processo_id).ok_or_else(|| {
                 AppError::Domain(
                     "Um apuratório do mapa não foi encontrado. Gere o mapa novamente antes de imprimir."
                         .to_string(),
-                    )
+                )
             })?;
-        let permite_remessa_comissao: bool = sqlx::query_scalar(
-            "SELECT a.permite_remessa_comissao
-               FROM processos_procedimentos p
-               JOIN apuratorios a ON a.id = p.apuratorio_id
-              WHERE p.id = $1::uuid",
-        )
-        .bind(&linha.processo_id)
-        .fetch_one(pool)
-        .await?;
-        itens.push(MapPrintItem {
-            permite_remessa_comissao,
-            prazos: deadlines::repository::list(pool, &linha.processo_id).await?,
-            andamentos: movements::repository::list(pool, &linha.processo_id).await?,
-            enquadramentos: evidence::repository::list_for_proceeding(pool, &linha.processo_id)
-                .await?,
-            processo,
-        });
-    }
-
-    Ok(itens)
+            Ok(MapPrintItem {
+                permite_remessa_comissao: remessa
+                    .remove(&linha.processo_id)
+                    .unwrap_or_default(),
+                prazos: prazos.remove(&linha.processo_id).unwrap_or_default(),
+                andamentos: andamentos.remove(&linha.processo_id).unwrap_or_default(),
+                enquadramentos: enquadramentos
+                    .remove(&linha.processo_id)
+                    .unwrap_or_default(),
+                processo,
+            })
+        })
+        .collect()
 }
 
 pub async fn save_map(

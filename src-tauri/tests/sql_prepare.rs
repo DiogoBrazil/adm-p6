@@ -221,7 +221,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
         (
             "deadlines_repository",
             &[
-                "deadlines::repository::list",
+                "deadlines::repository::list_muitos",
                 "deadlines::repository::dashboard",
                 "deadlines::repository::report",
             ],
@@ -232,7 +232,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
                 "evidence::repository::search_infracoes_penais",
                 "evidence::repository::search_transgressoes",
                 "evidence::repository::search_infracoes_estatuto",
-                "evidence::repository::load_for_envolvido",
+                "evidence::repository::load_for_envolvidos",
                 "evidence::repository::save_acusacoes",
                 "evidence::repository::remove_for_envolvido",
             ],
@@ -271,7 +271,7 @@ fn toda_consulta_dinamica_e_exercitada_por_algum_teste() {
             "proceedings_repository",
             &[
                 "proceedings::repository::list",
-                "proceedings::repository::get",
+                "proceedings::repository::get_muitos",
             ],
         ),
         (

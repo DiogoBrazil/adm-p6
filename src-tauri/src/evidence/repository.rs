@@ -1,5 +1,7 @@
 use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
+use crate::db::lote::{agrupar, linha_agrupada};
 use crate::error::AppError;
 use crate::evidence::domain::{
     AcusacoesRequest, CategoriaIndicioItem, EnvolvidoComIndicios, EvidenceData,
@@ -114,32 +116,67 @@ pub async fn search_infracoes_estatuto(
 
 // ── Leitura do enquadramento ─────────────────────────────────────────────────
 
-async fn categorias_do_envolvido<'e, E: PgExecutor<'e>>(
+linha_agrupada!(LinhaCategoria, CategoriaIndicioItem);
+linha_agrupada!(LinhaInfracaoPenal, InfracaoPenalVinculo);
+linha_agrupada!(LinhaTransgressao, TransgressaoItem);
+linha_agrupada!(LinhaInfracaoEstatuto, InfracaoEstatutoVinculo);
+
+async fn categorias_de_envolvidos<'e, E: PgExecutor<'e>>(
     executor: E,
-    envolvido_id: &str,
-) -> Result<Vec<CategoriaIndicioItem>, sqlx::Error> {
+    envolvido_ids: &[String],
+) -> Result<HashMap<String, Vec<CategoriaIndicioItem>>, sqlx::Error> {
     // Sem filtro de `ativo`: uma categoria desativada hoje precisa continuar
     // aparecendo no processo que a usou.
-    sqlx::query_as::<_, CategoriaIndicioItem>(
-        "SELECT ci.id::text AS id, ci.nome, ci.indica_ausencia
+    let linhas = sqlx::query_as::<_, LinhaCategoria>(
+        "SELECT eci.envolvido_id::text AS chave,
+                ci.id::text AS id, ci.nome, ci.indica_ausencia
            FROM envolvido_categorias_indicio eci
            JOIN categorias_indicio ci ON ci.id = eci.categoria_indicio_id
-          WHERE eci.envolvido_id = $1::uuid
-          ORDER BY ci.nome",
+          WHERE eci.envolvido_id = ANY($1::uuid[])
+          ORDER BY eci.envolvido_id, ci.nome",
     )
-    .bind(envolvido_id)
+    .bind(envolvido_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaCategoria::partir)))
 }
 
 pub async fn load_for_envolvido(
     pool: &PgPool,
     envolvido_id: &str,
 ) -> Result<EvidenceData, sqlx::Error> {
-    let categorias = categorias_do_envolvido(pool, envolvido_id).await?;
+    let mut conn = pool.acquire().await?;
+    Ok(load_for_envolvidos(&mut conn, &[envolvido_id.to_string()])
+        .await?
+        .remove(envolvido_id)
+        .unwrap_or_else(|| EvidenceData {
+            envolvido_id: envolvido_id.to_string(),
+            categorias: Vec::new(),
+            infracoes_penais: Vec::new(),
+            transgressoes: Vec::new(),
+            infracoes_estatuto: Vec::new(),
+        }))
+}
 
-    let infracoes_penais = sqlx::query_as::<_, InfracaoPenalVinculo>(&format!(
-        "SELECT ip.id::text AS infracao_penal_id, ep.id::text AS esfera_penal_id,
+/// O enquadramento de vários envolvidos, em quatro consultas — não em quatro
+/// por envolvido.
+///
+/// Devolve uma entrada para **cada** id pedido, mesmo sem nenhum indício
+/// lançado: é o que preserva o contrato de `load_for_envolvido`, que sempre
+/// devolveu o `EvidenceData` vazio em vez de "não encontrado".
+pub async fn load_for_envolvidos(
+    conn: &mut sqlx::PgConnection,
+    envolvido_ids: &[String],
+) -> Result<HashMap<String, EvidenceData>, sqlx::Error> {
+    if envolvido_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut categorias = categorias_de_envolvidos(&mut *conn, envolvido_ids).await?;
+
+    let linhas_penais = sqlx::query_as::<_, LinhaInfracaoPenal>(&format!(
+        "SELECT eip.envolvido_id::text AS chave,
+                ip.id::text AS infracao_penal_id, ep.id::text AS esfera_penal_id,
                 ep.nome AS esfera_penal, dl.nome AS dispositivo_legal, e.nome AS especie,
                 ip.artigo, ip.descricao, {ROTULO_PENAL} AS rotulo
            FROM envolvido_infracoes_penais eip
@@ -147,29 +184,37 @@ pub async fn load_for_envolvido(
            JOIN esferas_penais ep          ON ep.id = eip.esfera_penal_id
            JOIN dispositivos_legais dl     ON dl.id = ip.dispositivo_legal_id
            JOIN especies_infracao_penal e  ON e.id = ip.especie_id
-          WHERE eip.envolvido_id = $1::uuid
-          ORDER BY dl.nome, ip.artigo"
+          WHERE eip.envolvido_id = ANY($1::uuid[])
+          ORDER BY eip.envolvido_id, dl.nome, ip.artigo"
     ))
-    .bind(envolvido_id)
-    .fetch_all(pool)
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
     .await?;
+    let mut infracoes_penais = agrupar(linhas_penais.into_iter().map(LinhaInfracaoPenal::partir));
 
-    let transgressoes = sqlx::query_as::<_, TransgressaoItem>(&format!(
-        "SELECT t.id::text AS id, ar.artigo, nt.nome AS natureza, t.inciso, t.texto,
+    let linhas_transgressoes = sqlx::query_as::<_, LinhaTransgressao>(&format!(
+        "SELECT et.envolvido_id::text AS chave,
+                t.id::text AS id, ar.artigo, nt.nome AS natureza, t.inciso, t.texto,
                 {ROTULO_TRANSGRESSAO} AS rotulo
            FROM envolvido_transgressoes et
            JOIN transgressoes t           ON t.id = et.transgressao_id
            JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
            JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
-          WHERE et.envolvido_id = $1::uuid
-          ORDER BY ar.artigo, t.inciso"
+          WHERE et.envolvido_id = ANY($1::uuid[])
+          ORDER BY et.envolvido_id, ar.artigo, t.inciso"
     ))
-    .bind(envolvido_id)
-    .fetch_all(pool)
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
     .await?;
+    let mut transgressoes = agrupar(
+        linhas_transgressoes
+            .into_iter()
+            .map(LinhaTransgressao::partir),
+    );
 
-    let infracoes_estatuto = sqlx::query_as::<_, InfracaoEstatutoVinculo>(&format!(
-        "SELECT ie.id::text AS infracao_estatuto_id,
+    let linhas_estatuto = sqlx::query_as::<_, LinhaInfracaoEstatuto>(&format!(
+        "SELECT eie.envolvido_id::text AS chave,
+                ie.id::text AS infracao_estatuto_id,
                 {ROTULO_ESTATUTO} AS rotulo,
                 t.id::text AS analogia_transgressao_id,
                 {ROTULO_TRANSGRESSAO} AS analogia_rotulo
@@ -179,20 +224,45 @@ pub async fn load_for_envolvido(
            JOIN transgressoes t           ON t.id = eie.analogia_transgressao_id
            JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
            JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
-          WHERE eie.envolvido_id = $1::uuid
-          ORDER BY ie.artigo, ie.inciso"
+          WHERE eie.envolvido_id = ANY($1::uuid[])
+          ORDER BY eie.envolvido_id, ie.artigo, ie.inciso"
     ))
-    .bind(envolvido_id)
-    .fetch_all(pool)
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
     .await?;
+    let mut infracoes_estatuto = agrupar(
+        linhas_estatuto
+            .into_iter()
+            .map(LinhaInfracaoEstatuto::partir),
+    );
 
-    Ok(EvidenceData {
-        envolvido_id: envolvido_id.to_string(),
-        categorias,
-        infracoes_penais,
-        transgressoes,
-        infracoes_estatuto,
-    })
+    Ok(envolvido_ids
+        .iter()
+        .map(|envolvido_id| {
+            (
+                envolvido_id.clone(),
+                EvidenceData {
+                    envolvido_id: envolvido_id.clone(),
+                    categorias: categorias.remove(envolvido_id).unwrap_or_default(),
+                    infracoes_penais: infracoes_penais.remove(envolvido_id).unwrap_or_default(),
+                    transgressoes: transgressoes.remove(envolvido_id).unwrap_or_default(),
+                    infracoes_estatuto: infracoes_estatuto.remove(envolvido_id).unwrap_or_default(),
+                },
+            )
+        })
+        .collect())
+}
+
+#[derive(sqlx::FromRow)]
+struct LinhaEnvolvidoIndicios {
+    chave: String,
+    envolvido_id: String,
+    policial_militar_id: Option<String>,
+    nome: String,
+    matricula: String,
+    posto_graduacao: String,
+    status_envolvido: String,
+    ordem: i32,
 }
 
 /// Envolvidos do processo com o enquadramento de cada um.
@@ -200,19 +270,29 @@ pub async fn list_for_proceeding(
     pool: &PgPool,
     processo_id: &str,
 ) -> Result<Vec<EnvolvidoComIndicios>, AppError> {
-    #[derive(sqlx::FromRow)]
-    struct Linha {
-        envolvido_id: String,
-        policial_militar_id: Option<String>,
-        nome: String,
-        matricula: String,
-        posto_graduacao: String,
-        status_envolvido: String,
-        ordem: i32,
+    let mut conn = pool.acquire().await.map_err(AppError::from)?;
+    Ok(
+        list_for_proceeding_muitos(&mut conn, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id)
+            .unwrap_or_default(),
+    )
+}
+
+/// O painel de indícios de vários processos em cinco consultas, contra as
+/// `1 + 4×envolvidos` que a versão por processo custava — o N+1 de dentro do
+/// N+1 que fazia o Mapa do Período nunca terminar.
+pub async fn list_for_proceeding_muitos(
+    conn: &mut sqlx::PgConnection,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<EnvolvidoComIndicios>>, AppError> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
     }
 
-    let envolvidos = sqlx::query_as::<_, Linha>(
-        "SELECT e.id::text                  AS envolvido_id,
+    let envolvidos = sqlx::query_as::<_, LinhaEnvolvidoIndicios>(
+        "SELECT e.processo_id::text         AS chave,
+                e.id::text                  AS envolvido_id,
                 e.policial_militar_id::text AS policial_militar_id,
                 COALESCE(pm.nome, 'À apurar') AS nome,
                 COALESCE(pm.matricula, '')  AS matricula,
@@ -223,28 +303,45 @@ pub async fn list_for_proceeding(
            LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
            LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
            JOIN status_envolvido se    ON se.id = e.status_envolvido_id
-          WHERE e.processo_id = $1::uuid
-          ORDER BY e.ordem",
+          WHERE e.processo_id = ANY($1::uuid[])
+          ORDER BY e.processo_id, e.ordem",
     )
-    .bind(processo_id)
-    .fetch_all(pool)
+    .bind(processo_ids)
+    .fetch_all(&mut *conn)
     .await?;
 
-    let mut resultado = Vec::with_capacity(envolvidos.len());
-    for linha in envolvidos {
-        let indicios = load_for_envolvido(pool, &linha.envolvido_id).await?;
-        resultado.push(EnvolvidoComIndicios {
-            envolvido_id: linha.envolvido_id,
-            policial_militar_id: linha.policial_militar_id,
-            nome: linha.nome,
-            matricula: linha.matricula,
-            posto_graduacao: linha.posto_graduacao,
-            status_envolvido: linha.status_envolvido,
-            ordem: linha.ordem,
-            indicios,
-        });
-    }
-    Ok(resultado)
+    let envolvido_ids: Vec<String> = envolvidos
+        .iter()
+        .map(|linha| linha.envolvido_id.clone())
+        .collect();
+    // Sem envolvido não há o que enquadrar: as quatro consultas de indício
+    // seriam quatro idas ao banco para receber nada.
+    let mut indicios = load_for_envolvidos(&mut *conn, &envolvido_ids).await?;
+
+    Ok(agrupar(envolvidos.into_iter().map(|linha| {
+        let dados = indicios
+            .remove(&linha.envolvido_id)
+            .unwrap_or_else(|| EvidenceData {
+                envolvido_id: linha.envolvido_id.clone(),
+                categorias: Vec::new(),
+                infracoes_penais: Vec::new(),
+                transgressoes: Vec::new(),
+                infracoes_estatuto: Vec::new(),
+            });
+        (
+            linha.chave,
+            EnvolvidoComIndicios {
+                envolvido_id: linha.envolvido_id,
+                policial_militar_id: linha.policial_militar_id,
+                nome: linha.nome,
+                matricula: linha.matricula,
+                posto_graduacao: linha.posto_graduacao,
+                status_envolvido: linha.status_envolvido,
+                ordem: linha.ordem,
+                indicios: dados,
+            },
+        )
+    })))
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────

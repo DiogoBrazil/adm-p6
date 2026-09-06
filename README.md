@@ -23,6 +23,18 @@ npm run tauri dev             # aplica as migrations no startup e abre o app
 
 Login inicial: `admin@sistema.com` / `123456` — **troque numa instalação real.**
 
+## Rodar contra o Neon (produção)
+
+`npm run tauri dev` sempre lê o `.env` (banco local) — é o que impede alcançar
+produção por engano. Para conectar de propósito ao Neon, usando as credenciais
+de `.env.producao`:
+
+```bash
+./scripts/rodar_contra_neon.sh
+```
+
+Vale só para aquele processo do shell; um terminal novo volta ao banco local.
+
 ## Conferir
 
 ```bash

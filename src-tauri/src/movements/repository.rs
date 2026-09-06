@@ -1,14 +1,35 @@
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgExecutor, Postgres, Transaction};
+use std::collections::HashMap;
 
+use crate::db::lote::{agrupar, linha_agrupada};
 use crate::error::AppError;
 use crate::movements::domain::{AddMovementRequest, MovementItem, UpdateMovementRequest};
+
+linha_agrupada!(LinhaAndamento, MovementItem);
 
 /// Andamentos ativos de um processo, do mais recente para o mais antigo.
 /// Sem filtro de `ativo` nos catálogos: um tipo de andamento desativado hoje
 /// precisa continuar legível nos registros que o usaram.
-pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<MovementItem>, sqlx::Error> {
-    sqlx::query_as::<_, MovementItem>(
-        "SELECT a.id::text                         AS id,
+pub async fn list<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<MovementItem>, sqlx::Error> {
+    Ok(list_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<MovementItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaAndamento>(
+        "SELECT a.processo_id::text                AS chave,
+                a.id::text                         AS id,
                 a.descricao                        AS descricao,
                 a.ocorrido_em                      AS ocorrido_em,
                 a.tipo_andamento_id::text          AS tipo_andamento_id,
@@ -21,13 +42,14 @@ pub async fn list(pool: &PgPool, processo_id: &str) -> Result<Vec<MovementItem>,
            LEFT JOIN usuarios u              ON u.id = a.registrado_por_id
            LEFT JOIN policiais_militares pm  ON pm.id = u.policial_militar_id
            LEFT JOIN postos_graduacoes pg    ON pg.id = pm.posto_graduacao_id
-          WHERE a.processo_id = $1::uuid
+          WHERE a.processo_id = ANY($1::uuid[])
             AND a.cancelado_em IS NULL
-          ORDER BY a.ocorrido_em DESC",
+          ORDER BY a.processo_id, a.ocorrido_em DESC",
     )
-    .bind(processo_id)
-    .fetch_all(pool)
-    .await
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaAndamento::partir)))
 }
 
 pub async fn add(

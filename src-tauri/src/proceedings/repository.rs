@@ -1,6 +1,8 @@
 use base64::Engine;
 use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
+use crate::db::lote::{agrupar, linha_agrupada};
 use crate::db::paginacao::{PADRAO, TETO};
 use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
@@ -372,53 +374,119 @@ pub async fn filter_options(pool: &PgPool) -> Result<ProceedingFilterOptions, sq
 }
 
 pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sqlx::Error> {
-    let cabecalho = sqlx::query_as::<_, ProceedingListItem>(&format!(
-        "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA}
-          WHERE v.id = $1::uuid"
-    ))
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(cabecalho) = cabecalho else {
-        return Ok(None);
-    };
-
-    let extras: (
-        Option<String>,
-        Option<chrono::NaiveDate>,
-        Option<chrono::NaiveDate>,
-        Option<chrono::NaiveDate>,
-    ) = sqlx::query_as(
-        "SELECT numero_rgf, data_remessa_encarregado,
-                    data_remessa_comissao, data_julgamento
-               FROM processos_procedimentos WHERE id = $1::uuid",
-    )
-    .bind(id)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(Some(ProceedingDetail {
-        cabecalho,
-        numero_rgf: extras.0,
-        data_remessa_encarregado: extras.1,
-        data_remessa_comissao: extras.2,
-        data_julgamento: extras.3,
-        envolvidos: list_envolvidos(pool, id).await?,
-        designacoes: list_designacoes(pool, id).await?,
-        pessoas: list_pessoas(pool, id).await?,
-        vitimas: list_vitimas(pool, id).await?,
-        anexos: list_anexos(pool, id).await?,
-        carta_precatoria: carta_precatoria(pool, id).await?,
-    }))
+    // Uma conexão só para as oito consultas da ficha. Com `test_before_acquire`
+    // ligado — e ele fica ligado, é o que impede receber um socket que o
+    // servidor já matou — cada `acquire` custa um ping de ida e volta. Oito
+    // acquires custavam oito pings; um custa um.
+    let mut conn = pool.acquire().await?;
+    Ok(get_muitos(&mut conn, &[id.to_string()]).await?.remove(id))
 }
+
+/// As fichas de vários processos, com um número **fixo** de consultas.
+///
+/// Recebe conexão, e não pool, porque é assim que as oito consultas viajam num
+/// `acquire` só — ver o comentário em `get`.
+pub async fn get_muitos(
+    conn: &mut sqlx::PgConnection,
+    ids: &[String],
+) -> Result<HashMap<String, ProceedingDetail>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let cabecalhos = sqlx::query_as::<_, ProceedingListItem>(&format!(
+        "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA}
+          WHERE v.id = ANY($1::uuid[])"
+    ))
+    .bind(ids)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let mut extras: HashMap<String, LinhaExtras> = sqlx::query_as::<_, LinhaExtras>(
+        "SELECT id::text AS id, numero_rgf, data_remessa_encarregado,
+                    data_remessa_comissao, data_julgamento
+               FROM processos_procedimentos WHERE id = ANY($1::uuid[])",
+    )
+    .bind(ids)
+    .fetch_all(&mut *conn)
+    .await?
+    .into_iter()
+    .map(|linha| (linha.id.clone(), linha))
+    .collect();
+
+    let mut envolvidos = list_envolvidos_muitos(&mut *conn, ids).await?;
+    let mut designacoes = list_designacoes_muitos(&mut *conn, ids).await?;
+    let mut pessoas = list_pessoas_muitos(&mut *conn, ids).await?;
+    let mut vitimas = list_vitimas_muitos(&mut *conn, ids).await?;
+    let mut anexos = list_anexos_muitos(&mut *conn, ids).await?;
+    let mut cartas = carta_precatoria_muitos(&mut *conn, ids).await?;
+
+    let mut fichas = HashMap::with_capacity(cabecalhos.len());
+    for cabecalho in cabecalhos {
+        let id = cabecalho.id.clone();
+        // A linha de `processos_procedimentos` sempre existe quando a view
+        // devolveu o cabeçalho — a view nasce dela. Ausência aqui seria a linha
+        // sumindo no meio da leitura, e o `RowNotFound` diz isso melhor do que
+        // uma ficha montada com campos vazios.
+        let Some(extra) = extras.remove(&id) else {
+            return Err(sqlx::Error::RowNotFound);
+        };
+        fichas.insert(
+            id.clone(),
+            ProceedingDetail {
+                cabecalho,
+                numero_rgf: extra.numero_rgf,
+                data_remessa_encarregado: extra.data_remessa_encarregado,
+                data_remessa_comissao: extra.data_remessa_comissao,
+                data_julgamento: extra.data_julgamento,
+                envolvidos: envolvidos.remove(&id).unwrap_or_default(),
+                designacoes: designacoes.remove(&id).unwrap_or_default(),
+                pessoas: pessoas.remove(&id).unwrap_or_default(),
+                vitimas: vitimas.remove(&id).unwrap_or_default(),
+                anexos: anexos.remove(&id).unwrap_or_default(),
+                carta_precatoria: cartas.remove(&id),
+            },
+        );
+    }
+    Ok(fichas)
+}
+
+#[derive(sqlx::FromRow)]
+struct LinhaExtras {
+    id: String,
+    numero_rgf: Option<String>,
+    data_remessa_encarregado: Option<chrono::NaiveDate>,
+    data_remessa_comissao: Option<chrono::NaiveDate>,
+    data_julgamento: Option<chrono::NaiveDate>,
+}
+
+linha_agrupada!(LinhaEnvolvido, EnvolvidoItem);
+linha_agrupada!(LinhaDesignacao, DesignacaoItem);
+linha_agrupada!(LinhaPessoa, PessoaItem);
+linha_agrupada!(LinhaVitima, VitimaItem);
+linha_agrupada!(LinhaAnexo, AnexoItem);
+linha_agrupada!(LinhaCartaPrecatoria, CartaPrecatoriaDetalhes);
 
 pub async fn list_envolvidos<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Vec<EnvolvidoItem>, sqlx::Error> {
-    sqlx::query_as::<_, EnvolvidoItem>(
-        "SELECT e.id::text                    AS id,
+    Ok(list_envolvidos_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_envolvidos_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<EnvolvidoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaEnvolvido>(
+        "SELECT e.processo_id::text           AS chave,
+                e.id::text                    AS id,
                 e.policial_militar_id::text   AS policial_militar_id,
                 COALESCE(pm.nome, 'À apurar') AS nome,
                 COALESCE(pm.matricula, '')    AS matricula,
@@ -441,12 +509,13 @@ pub async fn list_envolvidos<'e, E: PgExecutor<'e>>(
            LEFT JOIN tipos_solucao_sugerida ss ON ss.id = e.solucao_sugerida_id
            LEFT JOIN tipos_solucao_decidida sd ON sd.id = e.solucao_decidida_id
            LEFT JOIN tipos_penalidade tp       ON tp.id = e.penalidade_tipo_id
-          WHERE e.processo_id = $1::uuid
-          ORDER BY e.ordem",
+          WHERE e.processo_id = ANY($1::uuid[])
+          ORDER BY e.processo_id, e.ordem",
     )
-    .bind(processo_id)
+    .bind(processo_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaEnvolvido::partir)))
 }
 
 /// Designações vigentes e encerradas. O histórico de substituição de encarregado
@@ -455,8 +524,24 @@ pub async fn list_designacoes<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Vec<DesignacaoItem>, sqlx::Error> {
-    sqlx::query_as::<_, DesignacaoItem>(
-        "SELECT d.id::text                     AS id,
+    Ok(
+        list_designacoes_muitos(executor, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id)
+            .unwrap_or_default(),
+    )
+}
+
+pub async fn list_designacoes_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<DesignacaoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaDesignacao>(
+        "SELECT d.processo_id::text            AS chave,
+                d.id::text                     AS id,
                 pap.id::text                   AS papel_id,
                 pap.nome                       AS papel,
                 ap.e_responsavel               AS e_responsavel,
@@ -479,32 +564,48 @@ pub async fn list_designacoes<'e, E: PgExecutor<'e>>(
            JOIN policiais_militares pm ON pm.id = d.policial_militar_id
            JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
            LEFT JOIN tipos_documento td ON td.id = d.documento_autorizador_id
-          WHERE d.processo_id = $1::uuid
-          ORDER BY pap.nome, d.data_inicio",
+          WHERE d.processo_id = ANY($1::uuid[])
+          ORDER BY d.processo_id, pap.nome, d.data_inicio",
     )
-    .bind(processo_id)
+    .bind(processo_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaDesignacao::partir)))
 }
 
 pub async fn list_pessoas<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Vec<PessoaItem>, sqlx::Error> {
-    sqlx::query_as::<_, PessoaItem>(
-        "SELECT pp.id::text        AS id,
+    Ok(list_pessoas_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_pessoas_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<PessoaItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaPessoa>(
+        "SELECT pp.processo_id::text AS chave,
+                pp.id::text        AS id,
                 pap.id::text       AS papel_pessoa_id,
                 pap.nome           AS papel_pessoa,
                 pp.nome            AS nome,
                 pp.ordem           AS ordem
            FROM processo_pessoas pp
            JOIN papeis_pessoa pap ON pap.id = pp.papel_pessoa_id
-          WHERE pp.processo_id = $1::uuid
-          ORDER BY pap.nome, pp.ordem",
+          WHERE pp.processo_id = ANY($1::uuid[])
+          ORDER BY pp.processo_id, pap.nome, pp.ordem",
     )
-    .bind(processo_id)
+    .bind(processo_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaPessoa::partir)))
 }
 
 /// Ofendidos/Vítimas, na ordem em que foram informados. Sem JOIN em catálogo:
@@ -514,15 +615,29 @@ pub async fn list_vitimas<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Vec<VitimaItem>, sqlx::Error> {
-    sqlx::query_as::<_, VitimaItem>(
-        "SELECT id::text AS id, nome, ordem
+    Ok(list_vitimas_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_vitimas_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<VitimaItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaVitima>(
+        "SELECT processo_id::text AS chave, id::text AS id, nome, ordem
            FROM processo_vitimas
-          WHERE processo_id = $1::uuid
-          ORDER BY ordem",
+          WHERE processo_id = ANY($1::uuid[])
+          ORDER BY processo_id, ordem",
     )
-    .bind(processo_id)
+    .bind(processo_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaVitima::partir)))
 }
 
 /// Metadados dos anexos. O conteúdo fica de fora: `octet_length` devolve o
@@ -531,8 +646,22 @@ pub async fn list_anexos<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Vec<AnexoItem>, sqlx::Error> {
-    sqlx::query_as::<_, AnexoItem>(
-        "SELECT an.id::text                        AS id,
+    Ok(list_anexos_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_anexos_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<AnexoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaAnexo>(
+        "SELECT an.processo_id::text               AS chave,
+                an.id::text                        AS id,
                 an.nome_arquivo                    AS nome_arquivo,
                 an.mime_type                       AS mime_type,
                 octet_length(an.conteudo)::bigint  AS tamanho_bytes,
@@ -543,27 +672,49 @@ pub async fn list_anexos<'e, E: PgExecutor<'e>>(
            LEFT JOIN usuarios u             ON u.id = an.enviado_por_id
            LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
            LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
-          WHERE an.processo_id = $1::uuid AND an.cancelado_em IS NULL
-          ORDER BY an.created_at DESC",
+          WHERE an.processo_id = ANY($1::uuid[]) AND an.cancelado_em IS NULL
+          ORDER BY an.processo_id, an.created_at DESC",
     )
-    .bind(processo_id)
+    .bind(processo_ids)
     .fetch_all(executor)
-    .await
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaAnexo::partir)))
 }
 
 pub async fn carta_precatoria<'e, E: PgExecutor<'e>>(
     executor: E,
     processo_id: &str,
 ) -> Result<Option<CartaPrecatoriaDetalhes>, sqlx::Error> {
-    sqlx::query_as::<_, CartaPrecatoriaDetalhes>(
-        "SELECT cp.deprecante, cp.unidade_deprecada_id::text, un.nome AS unidade_deprecada
+    Ok(
+        carta_precatoria_muitos(executor, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id),
+    )
+}
+
+/// Diferente das demais: a carta precatória é **uma por processo**, então o
+/// lote devolve o item direto, não uma coleção.
+pub async fn carta_precatoria_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, CartaPrecatoriaDetalhes>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaCartaPrecatoria>(
+        "SELECT cp.processo_id::text AS chave,
+                cp.deprecante, cp.unidade_deprecada_id::text, un.nome AS unidade_deprecada
            FROM carta_precatoria_detalhes cp
            JOIN unidades_pm un ON un.id = cp.unidade_deprecada_id
-          WHERE cp.processo_id = $1::uuid",
+          WHERE cp.processo_id = ANY($1::uuid[])",
     )
-    .bind(processo_id)
-    .fetch_optional(executor)
-    .await
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas
+        .into_iter()
+        .map(LinhaCartaPrecatoria::partir)
+        .collect())
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────

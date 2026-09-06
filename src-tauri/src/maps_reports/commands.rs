@@ -5,6 +5,7 @@ use crate::audit::assunto;
 use crate::audit::repository::{self as audit_repository, Acao};
 use crate::auth::guards::{require_admin, require_session};
 use crate::db::paginacao::Recorte;
+use crate::error::AppError;
 use crate::maps_reports::domain::{
     ContagemRotulada, DesignacaoMatrizFiltro, DesignacaoMatrizLinha, DriverRankingItem,
     EnquadramentoContagem, MapPeriodRequest, MapPrintItem, MapPrintRequest, MapRow, ReportFilter,
@@ -29,6 +30,15 @@ pub async fn reports_map_rows(
     .await)
 }
 
+/// Teto de espera do documento do mapa.
+///
+/// A tela chama isto atrás de um véu de carregamento que só fecha quando a
+/// resposta chega. Sem teto, banco lento não vira erro: vira véu girando para
+/// sempre, que é indistinguível de app travado e não diz a ninguém o que houve.
+/// O valor é folgado de propósito — é rede de segurança, não orçamento de
+/// desempenho: o mapa inteiro cabe em segundos.
+const ESPERA_MAXIMA_DO_MAPA: std::time::Duration = std::time::Duration::from_secs(90);
+
 #[tauri::command]
 pub async fn reports_map_print_data(
     state: State<'_, AppState>,
@@ -38,7 +48,19 @@ pub async fn reports_map_print_data(
         async {
             require_session(&state).await?;
             let pool = state.pool().await?;
-            repository::map_print_data(&pool, &request).await
+            match tokio::time::timeout(
+                ESPERA_MAXIMA_DO_MAPA,
+                repository::map_print_data(&pool, &request),
+            )
+            .await
+            {
+                Ok(resultado) => resultado,
+                Err(_) => Err(AppError::Domain(
+                    "O banco de dados não respondeu a tempo de montar o mapa. \
+                     Verifique a conexão e tente novamente."
+                        .to_string(),
+                )),
+            }
         }
         .await,
     )
