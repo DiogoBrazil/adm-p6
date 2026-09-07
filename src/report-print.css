@@ -357,6 +357,22 @@
     margin-inline: auto;
   }
 
+  /* O alternador Gráfico/Tabela é controle de tela, e desde a decisão 69 ele
+     não descreve mais o que o papel traz: a impressão leva SEMPRE a tabela.
+     Deixá-lo sairia um par de botões inertes no PDF, um deles marcado
+     "Gráfico" ao lado de uma tabela. */
+  body.relatorio-pdf-ativo .analytics-toggle {
+    display: none !important;
+  }
+
+  /* Rede de segurança do `tabelasNoLugarDosGraficos`, que é quem de fato tira a
+     view do gráfico do DOM. Se algum caminho de impressão futuro não passar por
+     ele, o canvas ainda assim não vai ao papel — e é ele que sai como retângulo
+     preto chapado sob o compositing. */
+  body.relatorio-pdf-ativo .analytics-view--chart {
+    display: none !important;
+  }
+
   body.relatorio-pdf-ativo .analytics-view--table .table-wrap {
     max-height: none;
   }

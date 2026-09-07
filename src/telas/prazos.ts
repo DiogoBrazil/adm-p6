@@ -82,6 +82,8 @@ export const COLUNAS: Coluna[] = [
  * empurrar o bloco inteiro para a folha seguinte.
  */
 const LINHAS_POR_BLOCO = 14;
+/** Ver o comentário no `aoImprimir`: a folha 1 divide espaço com os KPIs. */
+const LINHAS_NO_PRIMEIRO_BLOCO = 10;
 
 /**
  * Os dois recortes da tela, e a razão de serem **exclusivos**.
@@ -303,10 +305,22 @@ export async function renderPrazos(ctx: ContextoTela): Promise<void> {
         ${tabela(COLUNAS, linhas(todos.vencidos), "Nenhum prazo vencido.", {
           listagem: true,
           linhasPorFragmentoImpressao: LINHAS_POR_BLOCO,
+          // Só a PRIMEIRA tabela divide a folha 1 com o cabeçalho
+          // institucional, o título, a faixa de KPIs e este `<h2>` — e a faixa
+          // fica fora do `seletorSubstituido`, então vai ao papel. Sem este
+          // valor os 14 não cabiam e o bloco inteiro ia para a folha 2, que é
+          // como a folha 1 saía só com cabeçalho e KPIs. Dez é o maior que cabe
+          // (`tools/impressao`, `calibrado-prazos`, varrido de 6 a 14: 12 e 14
+          // ainda empurram tudo, 6 repete o cabeçalho no meio da folha).
+          linhasNoPrimeiroFragmentoImpressao: LINHAS_NO_PRIMEIRO_BLOCO,
         })}
         <h2>Vencendo em até ${escapeHtml(janelaDias)} dias</h2>
         ${tabela(COLUNAS, linhas(todos.aVencer), "Nenhum prazo na janela.", {
           listagem: true,
+          // A segunda tabela NÃO ganha primeiro bloco reduzido, e é deliberado:
+          // onde ela começa depende de quantos vencidos a primeira teve. Um
+          // valor fixo acertaria um acervo e erraria o seguinte, e não há como
+          // medi-lo — o bloco normal é o que vale em qualquer posição.
           linhasPorFragmentoImpressao: LINHAS_POR_BLOCO,
         })}`;
     },

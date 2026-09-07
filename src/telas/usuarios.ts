@@ -472,7 +472,18 @@ async function desenharListaUsuarios(ctx: ContextoTela): Promise<void> {
         }),
         "Nenhum policial militar cadastrado.",
         // Vinte cabem na folha em paisagem no pior caso (`medicao-usuarios`).
-        { listagem: true, linhasPorFragmentoImpressao: 16 },
+        //
+        // A folha 1 divide espaço com o cabeçalho institucional e o título, e
+        // por isso o primeiro bloco é menor. Sem ele, os 16 não cabiam ali e o
+        // bloco inteiro ia para a folha 2: a primeira saía **sem uma linha
+        // sequer** de tabela. Doze é o maior que cabe — com 14 a última linha
+        // transborda a margem inferior (`tools/impressao`, `calibrado-usuarios`,
+        // varrido de 8 a 16). Uma folha a menos no total.
+        {
+          listagem: true,
+          linhasPorFragmentoImpressao: 16,
+          linhasNoPrimeiroFragmentoImpressao: 12,
+        },
       );
     },
     {

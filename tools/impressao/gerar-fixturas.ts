@@ -165,6 +165,14 @@ type Conjunto = {
   fragmentoPrimeiro?: number;
   /** O mesmo, quando o perfil documento imprime a mesma tabela em 10pt. */
   fragmentoAtualDocumento?: number;
+  /**
+   * O que a tela imprime ENTRE o título e a tabela — hoje, a faixa de KPIs.
+   *
+   * Não é enfeite da fixtura: é ele que decide quanto sobra da folha 1 para o
+   * primeiro bloco, e uma fixtura sem ele mede uma folha que a tela não
+   * imprime. Prazos tem a faixa; Usuários não tem.
+   */
+  kpis?: string;
   /** Onde o valor mora, para que calibrar não vire caça ao arquivo. */
   origem: string;
   /**
@@ -209,7 +217,23 @@ const CONJUNTOS: Record<string, Conjunto> = {
   prazos: {
     orientacao: "paisagem",
     fragmentoAtual: 14,
+    // Dez é o maior primeiro bloco que ainda cabe sob o cabeçalho institucional,
+    // o título, a faixa de KPIs e o `<h2>` da seção. Varrido de 6 a 14: com 12 e
+    // 14 a tabela INTEIRA vai para a folha 2, e com 6 o bloco fica menor que a
+    // página e o cabeçalho se repete no meio dela.
+    fragmentoPrimeiro: 10,
     origem: "src/telas/prazos.ts (aoImprimir)",
+    // A tela imprime a faixa de KPIs e o `<h2>` da primeira seção ANTES da
+    // tabela: os dois saem do `seletorSubstituido`, que troca só
+    // `#conteudo-paginado-prazos`. Sem eles a fixtura media uma folha 1 mais
+    // vazia do que a real, e aprovava um primeiro bloco que não cabe.
+    kpis:
+      `<div class="analytics-kpis">${[
+        kpiAnalitico(37, "Com prazo vigente"),
+        kpiAnalitico(9, "Vencidos", { tom: "alerta", detalhe: "Fora do prazo" }),
+        kpiAnalitico(6, "Vencem em 15 dias", { tom: "andamento" }),
+        kpiAnalitico(22, "Regulares", { tom: "sucesso" }),
+      ].join("")}</div><h2>Vencidos</h2>`,
     colunas: [
       { rotulo: "Apuratório", largura: 16, alinhamento: "centro", truncar: true },
       { rotulo: "Unidade", largura: 18, alinhamento: "centro", truncar: true },
@@ -231,6 +255,10 @@ const CONJUNTOS: Record<string, Conjunto> = {
   usuarios: {
     orientacao: "paisagem",
     fragmentoAtual: 16,
+    // Doze é o maior que cabe sob o cabeçalho institucional e o título — aqui
+    // não há faixa de KPIs. Varrido de 8 a 16: com 16 a tabela inteira vai para
+    // a folha 2, e com 14 a última linha transborda a margem inferior.
+    fragmentoPrimeiro: 12,
     origem: "src/telas/usuarios.ts (aoImprimir)",
     colunas: [
       {
@@ -321,6 +349,8 @@ const CONJUNTOS: Record<string, Conjunto> = {
   // src/telas/estatisticas.ts (tabelaSituacao) — cinco colunas, linhas curtas
   situacao: {
     orientacao: "paisagem",
+    // Primeiro bloco medido em `calibrado-situacao`: com 16 a tabela inteira vai para a folha 2; com 15 a última linha transborda.
+    fragmentoPrimeiro: 14,
     fragmentoAtual: 16,
     origem: "src/telas/estatisticas.ts (tabelaSituacao)",
     colunas: [
@@ -343,6 +373,8 @@ const CONJUNTOS: Record<string, Conjunto> = {
   // src/telas/estatisticas.ts (tabelaEnquadramento) — a descrição legal inteira
   enquadramento: {
     orientacao: "paisagem",
+    // Primeiro bloco medido em `calibrado-enquadramento`: com 8 a folha 1 transborda; com 6 e 7 um segundo cabeçalho aparece no meio da folha.
+    fragmentoPrimeiro: 5,
     fragmentoAtual: 8,
     origem: "src/telas/estatisticas.ts (tabelaEnquadramento)",
     colunas: [
@@ -384,6 +416,8 @@ const CONJUNTOS: Record<string, Conjunto> = {
   // dom.ts::painelContagem — duas colunas, a tabela mais estreita
   contagem: {
     orientacao: "paisagem",
+    // Primeiro bloco medido em `calibrado-contagem`: com 16 a folha 6 transborda e a última sai vazia.
+    fragmentoPrimeiro: 15,
     fragmentoAtual: 20,
     origem: "src/dom.ts (painelContagem)",
     colunas: [
@@ -621,16 +655,17 @@ function rotuloDaPrimeiraColuna(conjunto: Conjunto): string {
  * O cartão analítico como `cartaoAnalitico` o emite, com a caixa do gráfico já
  * dimensionada em px.
  *
- * Dimensionar em px é o que `prepararGraficosParaImpressao` faz no app antes de
- * abrir o diálogo — `px` é unidade absoluta na impressão, e é assim que a
- * medida feita na tela vale para a folha. Aqui interessa porque é essa altura,
- * somada à moldura do cartão, que decide se ele cabe na folha 1.
+ * Dimensionar em px preserva a medição histórica: `px` é unidade absoluta na
+ * impressão, e é essa altura, somada à moldura do cartão, que decidia se ele
+ * cabia na folha 1. Desde a decisão 69 o app não manda gráfico para o papel —
+ * estas fixturas continuam porque são elas que provam **por que** não manda.
  */
 function cartaoDeGrafico(
   titulo: string,
   descricao: string,
   altura: number,
   caixa: string,
+  tabelaDoCartao = "",
 ): string {
   const texto = descricao
     ? `<p class="analytics-card__description">${escapeHtml(descricao)}</p>`
@@ -648,8 +683,46 @@ function cartaoDeGrafico(
     <div class="analytics-view analytics-view--chart" data-analytics-view="grafico">
       <div class="analytics-chart" style="width:960px;height:${altura}px">${caixa}</div>
     </div>
+    ${
+      tabelaDoCartao
+        ? `<div class="analytics-view analytics-view--table" data-analytics-view="tabela" hidden>${tabelaDoCartao}</div>`
+        : ""
+    }
   </section>`;
 }
+
+/**
+ * A sequência do aplicativo desde a decisão 69: o canvas é composto **visível**,
+ * e então a view do gráfico sai do DOM e a da tabela deixa de estar oculta.
+ *
+ * O "visível primeiro" é o que dá honestidade à fixtura — um canvas que nasce
+ * oculto nunca ganha camada de composição, e aprovaria o que o PDF reprova.
+ * Reproduz `graficos/index.ts::tabelasNoLugarDosGraficos`.
+ */
+const trocaPelaTabela = `<script>
+  (function () {
+    document.querySelectorAll("canvas[data-desenho]").forEach(function (canvas) {
+      var ctx = canvas.getContext("2d");
+      var l = canvas.width;
+      var a = canvas.height;
+      var cores = ["#1d6fa5", "#2f9e6f", "#c9821f", "#a33b3b"];
+      for (var i = 0; i < 12; i++) {
+        ctx.fillStyle = cores[i % cores.length];
+        var altura = ((i % 6) + 1) * (a / 8);
+        ctx.fillRect(i * (l / 12) + 6, a - altura, l / 12 - 12, altura);
+      }
+    });
+    setTimeout(function () {
+      document.querySelectorAll("[data-analytics-card], .analytics-card").forEach(function (cartao) {
+        var grafico = cartao.querySelector('[data-analytics-view="grafico"]');
+        var tabela = cartao.querySelector('[data-analytics-view="tabela"]');
+        if (grafico) grafico.remove();
+        if (tabela) tabela.hidden = false;
+      });
+      document.documentElement.dataset.pronto = "1";
+    }, 120);
+  })();
+</script>`;
 
 /**
  * Pinta um `<canvas>` **visível**, deixa o motor compor alguns quadros e só
@@ -714,8 +787,8 @@ const trocaPeloPng = (estrategia: "oculto" | "removido") => `<script>
  *
  * O arnês roda em Node, onde não há canvas nem Chart.js — e o desenho não é o
  * ponto. O que se mede é se o WebKitGTK **pinta** um `<canvas>` no caminho de
- * impressão, e se pinta o PNG que `toDataURL()` tira dele. É a mesma chamada
- * que `congelarGraficosParaImpressao` faz no app.
+ * impressão, e se pinta o PNG que `toDataURL()` tira dele. Foi esta medição que
+ * mostrou o retângulo preto, e é dela que a decisão 69 decorre.
  */
 const DESENHO_DE_TESTE = `<script>
   (function () {
@@ -763,16 +836,33 @@ function catalogo(): Fixtura[] {
     });
 
     // Como a tela imprime hoje, com o valor que ela declara.
+    //
+    // `textosNaMesmaPagina` é o que faltava: sem ele, uma tabela inteiramente
+    // empurrada para a folha 2 passava — as três asserções antigas (nada se
+    // perdeu, nada foi partido, um cabeçalho por folha) continuam verdadeiras
+    // com a folha 1 em branco. Era o defeito relatado em Usuários.
+    const tituloDoCalibrado = `Fragmentado — ${nome}`;
     lista.push({
       nome: `calibrado-${nome}`,
       orientacao: conjunto.orientacao,
-      proposito: `fragmento de ${conjunto.fragmentoAtual} linhas — ${conjunto.origem}`,
+      proposito: conjunto.fragmentoPrimeiro
+        ? `blocos de ${conjunto.fragmentoAtual}, primeiro de ${conjunto.fragmentoPrimeiro} — ${conjunto.origem}`
+        : `fragmento de ${conjunto.fragmentoAtual} linhas — ${conjunto.origem}`,
       rotuloCabecalho: rotuloDaPrimeiraColuna(conjunto),
       corpo: painel(
-        cabecalho(`Fragmentado — ${nome}`, `Blocos de ${conjunto.fragmentoAtual} linhas.`) +
-          tabelaFragmentada(conjunto, 120, conjunto.fragmentoAtual),
+        cabecalho(tituloDoCalibrado, `Blocos de ${conjunto.fragmentoAtual} linhas.`) +
+          (conjunto.kpis ?? "") +
+          tabelaFragmentada(
+            conjunto,
+            120,
+            conjunto.fragmentoAtual,
+            0,
+            "",
+            conjunto.fragmentoPrimeiro ?? conjunto.fragmentoAtual,
+          ),
       ),
       marcadores: 120,
+      textosNaMesmaPagina: [[tituloDoCalibrado, "L0001"]],
     });
   }
 
@@ -1163,12 +1253,33 @@ function catalogo(): Fixtura[] {
   ].join("")}</div>`;
   // A altura real do cartão de carga: `min(700, max(250, n * 42 + 70))` de
   // `graficos/index.ts::graficoCarga`, com os 11 militares do caso relatado.
-  const cartaoDeCarga = (caixa: string) =>
+  // A view de tabela do mesmo cartão: é ela que vai ao papel desde a decisão 69.
+  const tabelaDaCarga = tabela(
+    [
+      { rotulo: "Policial militar", largura: 40, truncar: true },
+      { rotulo: "Concluídos", largura: 20, alinhamento: "centro", nowrap: true },
+      { rotulo: "No prazo", largura: 20, alinhamento: "centro", nowrap: true },
+      { rotulo: "Vencidos", largura: 20, alinhamento: "centro", nowrap: true },
+    ],
+    Array.from({ length: 11 }, (_, i) => ({
+      celulas: [
+        `${POSTOS[i % POSTOS.length]} ${100000 + i} ${NOMES[i % NOMES.length]}`,
+        { texto: String((i % 4) + 1), numerica: true },
+        { texto: String((i % 3) + 1), numerica: true },
+        { texto: String(i % 2), numerica: true },
+      ],
+    })),
+    "Sem designações.",
+    { listagem: true },
+  );
+
+  const cartaoDeCarga = (caixa: string, comTabela = false) =>
     `<div class="analytics-grid">${cartaoDeGrafico(
       "Carga de trabalho por policial militar",
       "Concluídos, em andamento no prazo e vencidos, no escopo do filtro.",
       532,
       caixa,
+      comTabela ? tabelaDaCarga : "",
     )}</div>`;
   const matrizDoPapel = (primeiro: number) =>
     `<div class="somente-impressao matriz-designacoes--impressao">
@@ -1180,13 +1291,15 @@ function catalogo(): Fixtura[] {
     "Designações por Policial Militar",
     "Carga de trabalho por policial militar e por espécie, na situação de hoje.",
   );
-  // Post-correção o canvas é composto, desenhado e **removido** do DOM antes de
-  // imprimir, exatamente como `congelarGraficosParaImpressao` faz. Reproduzir a
-  // sequência, e não só o resultado, é o que faz a fixtura valer: um canvas que
-  // nasce oculto nunca ganha camada de composição e aprova o que o PDF reprova.
-  const graficoDaCarga = () =>
+  // O canvas é composto, desenhado e **removido** do DOM antes de imprimir —
+  // hoje é `graficos/index.ts::tabelasNoLugarDosGraficos` quem o remove, junto
+  // com a view inteira do gráfico. Reproduzir a sequência, e não só o resultado,
+  // é o que faz a fixtura valer: um canvas que nasce oculto nunca ganha camada
+  // de composição e aprova o que o PDF reprova.
+  const graficoDaCarga = (comTabela = false) =>
     cartaoDeCarga(
       `<canvas data-desenho="b" width="1920" height="1064" role="img" aria-label="Carga de trabalho por policial militar"></canvas>`,
+      comTabela,
     );
   // Antes: o cartão entre os KPIs e a matriz. Duas folhas se vão antes da
   // primeira linha — a segunda fica só com o `h2`, porque o gráfico transborda
@@ -1223,14 +1336,14 @@ function catalogo(): Fixtura[] {
     perfil: "analitico",
     compositing: true,
     semFaixaPreta: true,
-    proposito: `matriz na folha 1 e cartão no fim, primeiro bloco de ${matriz.fragmentoPrimeiro} — src/telas/encarregados.ts`,
+    proposito: `matriz na folha 1 e cartão (em TABELA) no fim, primeiro bloco de ${matriz.fragmentoPrimeiro} — src/telas/encarregados.ts`,
     rotuloCabecalho: "QUANTIDADE",
     corpo: painel(
       cabecalhoDeDesignacoes +
         kpisDeDesignacoes +
         matrizDoPapel(matriz.fragmentoPrimeiro ?? matriz.fragmentoAtual) +
-        graficoDaCarga() +
-        trocaPeloPng("removido"),
+        graficoDaCarga(true) +
+        trocaPelaTabela,
     ),
     marcadores: 120,
     textosNaMesmaPagina: [["Designações por Policial Militar", "L0001"]],

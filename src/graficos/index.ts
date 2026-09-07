@@ -63,7 +63,6 @@ export type GraficoSpec = {
   rotulosCompletos: string[];
   detalhes?: string[];
   altura?: number;
-  alturaImpressao?: number;
   /**
    * Total do conjunto **antes** de qualquer recorte de exibição. Sem ele, o
    * percentual de um ranking limitado ao Top 12 dividiria pela soma dos doze
@@ -328,13 +327,9 @@ export function graficoBarras(
     totalReal: totalDe(itensOriginais),
     percentual: { base: "total", rotulo: opcoes.rotuloPercentual ?? "do total" },
     // 42px por barra é o que separa três linhas de rótulo sem elas se
-    // encavalarem. No papel vale o mesmo espaçamento — comprimir a caixa só
-    // para caber "mais bonito" fazia o primeiro rótulo cair em cima do
-    // segundo. O teto de 700px (≈185mm) é a altura útil de uma A4 paisagem.
+    // encavalarem. Vale só para a tela: desde a decisão 69 o gráfico não vai ao
+    // papel, e quem imprime é a tabela do mesmo cartão.
     altura: horizontal ? Math.max(250, itens.length * 42 + 70) : 310,
-    alturaImpressao: horizontal
-      ? Math.min(700, Math.max(250, itens.length * 42 + 70))
-      : 330,
     configuracao: {
       type: "bar",
       data: {
@@ -365,7 +360,6 @@ export function graficoSituacao(chave: string, itens: readonly SituacaoGrafico[]
     detalhes: itens.map((item) => item.tipo),
     percentual: { base: "categoria", rotulo: "do apuratório" },
     altura: 350,
-    alturaImpressao: 360,
     configuracao: {
       type: "bar",
       data: {
@@ -418,9 +412,8 @@ export function graficoCarga(
     rotulosCompletos: rotulos,
     percentual: { base: "categoria", rotulo: opcoes.rotuloPercentual ?? "da carga" },
     // Mesmos 42px por barra do ranking, pela mesma razão: é o que separa três
-    // linhas de rótulo sem elas se encavalarem, na tela e no papel.
+    // linhas de rótulo sem elas se encavalarem.
     altura: Math.max(250, itens.length * 42 + 70),
-    alturaImpressao: Math.min(700, Math.max(250, itens.length * 42 + 70)),
     configuracao: {
       type: "bar",
       data: {
@@ -448,7 +441,6 @@ export function graficoLinha(chave: string, itensOriginais: readonly ContagemGra
     totalReal: totalDe(itens),
     percentual: { base: "total", rotulo: "do período" },
     altura: 310,
-    alturaImpressao: 330,
     configuracao: {
       type: "line",
       data: {
@@ -480,7 +472,6 @@ export function graficoDonut(chave: string, itens: readonly ContagemGrafico[]): 
     totalReal: totalDe(itens),
     percentual: { base: "total", rotulo: "do total" },
     altura: 310,
-    alturaImpressao: 320,
     configuracao: {
       type: "doughnut",
       data: {
@@ -527,7 +518,6 @@ export function graficoPrazos(chave: string, faixas: readonly FaixaPrazo[]): Gra
     rotulosCompletos: ["Prazos vigentes"],
     percentual: { base: "categoria", rotulo: "dos prazos" },
     altura: 180,
-    alturaImpressao: 210,
     configuracao: {
       type: "bar",
       data: {
@@ -617,152 +607,53 @@ export function destruirGraficos(): void {
 }
 
 /**
- * Largura da caixa do gráfico no papel, em px.
+ * Põe todo cartão analítico em modo "Tabela" para a impressão, e devolve o
+ * desfazer.
  *
- * `px` é unidade absoluta na impressão (1/96 pol), então fixar a caixa em px
- * faz a geometria medida **na tela** valer para a folha. É o que torna a
- * preparação possível: canvas é bitmap, e a largura útil do papel só existe
- * depois que a impressão começou — tarde demais para medir.
+ * **O gráfico não vai ao papel, em tela nenhuma** (decisão 69). Antes ele ia:
+ * o cartão em modo "Gráfico" era congelado num PNG e impresso assim. Trocar
+ * pela tabela é melhor por três razões, e nenhuma delas é estética:
  *
- * 960px ≈ 254mm. Cabe na área útil de um A4 paisagem (297mm) descontando as
- * margens do page setup, o `padding` do `.panel` (`clamp(18px, 2vw, 28px)`) e
- * os 12px do cartão no `@media print`, com folga para o papel que o GTK
- * escolher.
+ * - a tabela é **mais completa**. O ranking plota Top 12 e a tabela lista tudo
+ *   — o papel passa a levar o conjunto inteiro, não o recorte;
+ * - o número impresso vira texto **selecionável e pesquisável** no PDF, em vez
+ *   de pixels;
+ * - some a classe inteira de defeitos do `<canvas>` no papel: o retângulo preto
+ *   do compositing, o desenho esticado, a imagem ainda não decodificada, o
+ *   canvas impresso em duplicata ao lado do PNG. Nada disso tem como voltar por
+ *   um caminho que não existe mais.
+ *
+ * A view do gráfico **sai do DOM**, e não basta escondê-la: o Chart.js escreve
+ * `style.display = 'block'` no canvas ao montar, e estilo inline vence a regra
+ * `[hidden]` do navegador — que é a única que existe, porque o projeto não
+ * declara nenhuma `[hidden]` global. Foi assim que o canvas já saiu pintado de
+ * preto **ao lado** do PNG certo. Tirar do DOM não depende de especificidade
+ * nem de ordem de folha de estilo.
+ *
+ * O `hidden` da tabela é guardado e devolvido: o modo escolhido pelo operador é
+ * preferência dele, e imprimir não pode reescrevê-la.
  */
-const LARGURA_IMPRESSAO = 960;
-
-/** Densidade do bitmap no papel: os 96 dpi da tela saem borrados impressos. */
-const DENSIDADE_IMPRESSAO = 2;
-
-/**
- * Muda a caixa e redimensiona o gráfico por ela, garantindo que seja agora.
- *
- * A ordem aqui não é decorativa. `Chart.resize()` **adia** o pedido quando há
- * animação em curso, e quem o aplica é o `draw()` seguinte — com as medidas
- * guardadas, não com as atuais. Um pedido do `ResizeObserver` podia estar
- * pendente desde a montagem: mudar a caixa e chamar `resize()` fazia o gráfico
- * ir para a medida certa e voltar para a antiga no mesmo quadro, e quatro dos
- * nove saíam impressos com o bitmap de meia coluna esticado até a folha.
- *
- * Então: `stop()` encerra a animação (senão o `resize()` novo também é
- * adiado), `draw()` consome a pendência enquanto ela ainda é inofensiva — as
- * medidas guardadas são as que estão valendo —, e só aí a caixa muda. O
- * `resize()` final é síncrono: a transição `resize` tem duração zero.
- */
-function pararEredimensionar(instancia: Chart, redimensionarCaixa: () => void): void {
-  instancia.stop();
-  instancia.draw();
-  redimensionarCaixa();
-  instancia.resize();
-}
-
-/**
- * Dá ao gráfico a geometria da folha antes de a folha existir.
- *
- * Quem é redimensionado é a **caixa**, não o gráfico. `instancia.resize(l, a)`
- * mexia só no bitmap, e como `.analytics-chart canvas` fixa `width`/`height` em
- * `100% !important` — é isso que faz o canvas seguir a caixa —, a caixa
- * renderizada não acompanhava: o desenho saía esticado no papel, 4,8% na
- * horizontal e 17,6% na vertical. Dimensionando a caixa e chamando `resize()`
- * sem medidas, o Chart.js relê o container e bitmap e caixa voltam a coincidir.
- */
-export function prepararGraficosParaImpressao(): void {
-  for (const { instancia, spec } of graficos.values()) {
-    if (instancia.canvas.closest<HTMLElement>("[data-analytics-view]")?.hidden) continue;
-    const caixa = instancia.canvas.parentElement;
-    if (!caixa) continue;
-    instancia.options.devicePixelRatio = Math.max(
-      DENSIDADE_IMPRESSAO,
-      window.devicePixelRatio || 1,
-    );
-    pararEredimensionar(instancia, () => {
-      caixa.style.width = `${LARGURA_IMPRESSAO}px`;
-      caixa.style.height = `${spec.alturaImpressao ?? spec.altura ?? ALTURA_PADRAO}px`;
-    });
-  }
-}
-
-/**
- * Troca cada gráfico visível pelo PNG dele mesmo, e devolve o desfazer.
- *
- * O caminho de impressão do WebKitGTK **não pinta** o conteúdo de um `<canvas>`
- * quando o compositing está ligado — que é como o aplicativo roda: o desenho
- * vira textura de GPU e o que sai no papel é um retângulo preto chapado, sem
- * erro no console nem no `failed` da operação. Medido em
- * `tools/impressao/medicao-grafico-canvas`: 31,2% da folha em preto puro com o
- * compositing ligado, contra as barras coloridas do mesmo desenho com ele
- * desligado. Um `<img>` o motor pinta nas duas condições.
- *
- * Nenhuma fixtura do arnês tinha `<canvas>`, e é por isso que a rodada 30
- * calibrou nove tamanhos de bloco sem nunca imprimir um gráfico.
- *
- * A ordem importa em três pontos:
- *
- * - vem **depois** de `prepararGraficosParaImpressao`, senão o PNG sai com a
- *   geometria da tela em vez da geometria da folha;
- * - `draw()` antes de `toBase64Image()`, porque o `resize()` daquela pode ter
- *   deixado o desenho para o quadro seguinte e o PNG sairia do bitmap velho;
- * - `decode()` no fim, porque o diálogo de impressão não espera imagem
- *   carregar — sem isso o papel sai com o espaço vazio no lugar do gráfico.
- *
- * O canvas sai do **DOM**, e não basta escondê-lo. `hidden` não o esconde: o
- * Chart.js escreve `style.display = 'block'` no elemento ao montar
- * (`chart.js`, `initCanvas`), e estilo inline vence a regra `[hidden]` do
- * navegador — que é a única que existe, porque o projeto não declara nenhuma
- * `[hidden]` global. O canvas seguia ocupando caixa e sendo pintado de preto
- * **ao lado** do PNG certo: no PDF de Estatísticas, cada gráfico saía como duas
- * imagens do mesmo tamanho, a boa com `smask` e a chapada sem, e o par ainda
- * atravessava a quebra de página. Reproduzido em
- * `tools/impressao/medicao-grafico-oculto` — 31,2% de preto e duas imagens de
- * 1920×600 — contra `calibrado-grafico-removido`, com uma imagem e 0,0%.
- *
- * O cartão em modo "Tabela" é pulado pelo mesmo motivo de
- * `prepararGraficosParaImpressao`: quem está sob `[hidden]` não vai ao papel.
- */
-export async function congelarGraficosParaImpressao(): Promise<() => void> {
-  const imagens: HTMLImageElement[] = [];
+export function tabelasNoLugarDosGraficos(): () => void {
   const desfazer: (() => void)[] = [];
 
-  for (const { instancia } of graficos.values()) {
-    if (instancia.canvas.closest<HTMLElement>("[data-analytics-view]")?.hidden) continue;
-    const canvas = instancia.canvas;
-    const caixa = canvas.parentElement;
-    if (!caixa) continue;
-    instancia.draw();
-    const imagem = document.createElement("img");
-    imagem.src = instancia.toBase64Image();
-    imagem.alt = canvas.getAttribute("aria-label") ?? "";
-    // Pela CSSOM, não por `style=""` no HTML: a CSP recusa estilo interpolado.
-    // A caixa já está dimensionada em px, então 100% é a medida da folha.
-    imagem.style.width = "100%";
-    imagem.style.height = "100%";
-    // O vizinho é lido antes da remoção para devolver o canvas ao lugar exato:
-    // a caixa também hospeda o `.analytics-tooltip`, que é irmão dele.
-    const vizinho = canvas.nextSibling;
-    canvas.remove();
-    caixa.insertBefore(imagem, vizinho);
-    imagens.push(imagem);
+  for (const cartao of document.querySelectorAll<HTMLElement>("[data-analytics-card]")) {
+    const grafico = cartao.querySelector<HTMLElement>('[data-analytics-view="grafico"]');
+    const tabela = cartao.querySelector<HTMLElement>('[data-analytics-view="tabela"]');
+    if (!grafico || !tabela) continue;
+
+    // O vizinho é lido antes da remoção para devolver a view ao lugar exato.
+    const pai = grafico.parentElement;
+    const vizinho = grafico.nextSibling;
+    const estavaOculta = tabela.hidden;
+    grafico.remove();
+    tabela.hidden = false;
     desfazer.push(() => {
-      imagem.remove();
-      caixa.insertBefore(canvas, vizinho);
+      tabela.hidden = estavaOculta;
+      pai?.insertBefore(grafico, vizinho);
     });
   }
-
-  await Promise.all(imagens.map((imagem) => imagem.decode().catch(() => undefined)));
 
   return () => desfazer.forEach((restaurar) => restaurar());
-}
-
-export function restaurarGraficosDepoisDaImpressao(): void {
-  for (const { instancia, spec } of graficos.values()) {
-    const caixa = instancia.canvas.parentElement;
-    instancia.options.devicePixelRatio = window.devicePixelRatio || 1;
-    pararEredimensionar(instancia, () => {
-      if (!caixa) return;
-      caixa.style.width = "";
-      caixa.style.height = `${spec.altura ?? ALTURA_PADRAO}px`;
-    });
-  }
 }
 
 export { baldesComDado, BALDES_SITUACAO, CORES, totalDaSituacao, totalDe } from "./dados";

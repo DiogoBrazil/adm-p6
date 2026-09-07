@@ -160,8 +160,15 @@ export function tabelaContagem(
     itens.map((item) => [item.rotulo, { texto: String(item.total), numerica: true }]),
     vazio,
     // Vinte e três linhas destas cabem na folha em paisagem
-    // (`medicao-contagem`); 20 deixa a folga da linha alta.
-    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 20 : undefined },
+    // (`medicao-contagem`); 20 deixa a folga da linha alta. O primeiro bloco é
+    // menor porque a folha 1 divide espaço com o cabeçalho institucional e o
+    // título: com 20 a tabela INTEIRA ia para a folha 2 e a primeira saía sem
+    // uma linha sequer. Quinze é o maior que cabe (`calibrado-contagem`).
+    {
+      listagem: true,
+      linhasPorFragmentoImpressao: opcoes.fragmentar ? 20 : undefined,
+      linhasNoPrimeiroFragmentoImpressao: opcoes.fragmentar ? 15 : undefined,
+    },
   );
 }
 
@@ -186,8 +193,14 @@ export function tabelaSituacao(
       { texto: String(item.total), numerica: true },
     ]),
     "Nenhum apuratório neste escopo.",
-    // Vinte cabem na folha em paisagem (`medicao-situacao`).
-    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 16 : undefined },
+    // Vinte cabem na folha em paisagem (`medicao-situacao`). Mesma razão do
+    // primeiro bloco reduzido acima: com 16 a tabela inteira caía na folha 2, e
+    // com 15 a última linha transborda a margem (`calibrado-situacao`).
+    {
+      listagem: true,
+      linhasPorFragmentoImpressao: opcoes.fragmentar ? 16 : undefined,
+      linhasNoPrimeiroFragmentoImpressao: opcoes.fragmentar ? 14 : undefined,
+    },
   );
 }
 
@@ -217,7 +230,17 @@ export function tabelaEnquadramento(
     "Nada registrado neste escopo.",
     // Dez cabem na folha em paisagem (`medicao-enquadramento`) — a descrição
     // legal inteira faz destas as linhas mais altas do relatório.
-    { listagem: true, linhasPorFragmentoImpressao: opcoes.fragmentar ? 8 : undefined },
+    //
+    // O primeiro bloco desce a cinco, e aqui ele é bem menor que os outros: com
+    // 8 a última linha da folha 1 transborda a margem, e com 6 ou 7 o bloco
+    // fica menor que o resto da folha e um SEGUNDO cabeçalho aparece no meio do
+    // papel (`calibrado-enquadramento`, varrido de 5 a 8). Custa uma folha a
+    // mais, e é o preço de a linha mais alta do relatório ser esta.
+    {
+      listagem: true,
+      linhasPorFragmentoImpressao: opcoes.fragmentar ? 8 : undefined,
+      linhasNoPrimeiroFragmentoImpressao: opcoes.fragmentar ? 5 : undefined,
+    },
   );
 }
 

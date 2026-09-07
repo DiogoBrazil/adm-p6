@@ -9,9 +9,7 @@
 import { call, type SpreadsheetSheet } from "./api";
 import { brasaoUrl } from "./brasao";
 import {
-  congelarGraficosParaImpressao,
-  prepararGraficosParaImpressao,
-  restaurarGraficosDepoisDaImpressao,
+  tabelasNoLugarDosGraficos,
 } from "./graficos";
 import TomSelect from "tom-select";
 
@@ -691,9 +689,8 @@ export function blocosDeImpressao(
  * brasões na mesma folha é defeito. A guarda é aqui e não no CSS de propósito:
  * assim a `<img>` nem chega a existir, e não há `decode()` para esperar.
  *
- * É `async` pelo mesmo motivo que `congelarGraficosParaImpressao`: a imagem
- * nasce no clique, e o WebKitGTK imprime **espaço em branco** por uma `<img>`
- * ainda não decodificada, sem erro nenhum. `mapa-pdf.ts::aguardarImagens` é o
+ * É `async` porque a imagem nasce no clique, e o WebKitGTK imprime **espaço em
+ * branco** por uma `<img>` ainda não decodificada, sem erro nenhum. `mapa-pdf.ts::aguardarImagens` é o
  * precedente, e falhar aqui é preferível a um PDF oficial sem brasão.
  */
 async function inserirCabecalhoInstitucional(
@@ -1366,7 +1363,7 @@ async function abrirImpressao(
   let limparCabecalho = () => {};
   let limparOrdem = () => {};
   let limparFragmentos = () => {};
-  let limparImagens = () => {};
+  let limparGraficos = () => {};
   // A classe existe só pelo quadro em que a caixa do gráfico fica maior que o
   // painel; sem ela, uma janela estreita mostra a barra de rolagem aparecer e
   // sumir antes de o diálogo abrir.
@@ -1385,14 +1382,13 @@ async function abrirImpressao(
         limparCabecalho = await inserirCabecalhoInstitucional(perfil);
         // Antes de fragmentar, para que o clone em blocos já nasça na posição final.
         limparOrdem = adiarBlocosParaOFimDaImpressao();
+        // Antes de fragmentar não: trocar gráfico por tabela MUDA a altura do
+        // que vem antes da tabela, e é essa altura que o primeiro bloco mediu.
+        limparGraficos = tabelasNoLugarDosGraficos();
         limparFragmentos = fragmentarTabelasParaImpressao();
-        prepararGraficosParaImpressao();
-        // Um quadro para a folha deitada e a nova geometria dos gráficos valerem
-        // antes de o documento virar papel. O canvas já foi redesenhado pelo
-        // `resize()`, que é síncrono; o layout ao redor dele não.
+        // Um quadro para a folha deitada e o novo conteúdo dos cartões valerem
+        // antes de o documento virar papel.
         await proximoQuadro();
-        // Só agora: o PNG tem de sair do canvas já com a geometria da folha.
-        limparImagens = await congelarGraficosParaImpressao();
 
         await passo("Abrindo a impressão…");
         const comando = orientacao === "paisagem" ? "print_report_landscape" : "print_portrait";
@@ -1418,11 +1414,10 @@ async function abrirImpressao(
     notificar(erro instanceof Error ? erro.message : "Falha ao abrir a impressão.", "erro");
   } finally {
     folhaFallback?.remove();
-    limparImagens();
     limparFragmentos();
+    limparGraficos();
     limparOrdem();
     limparCabecalho();
-    restaurarGraficosDepoisDaImpressao();
     document.body.classList.remove("preparando-impressao", "relatorio-pdf-ativo", classePerfil);
   }
 }
