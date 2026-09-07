@@ -424,3 +424,143 @@ async fn citacao_de_documento_e_configuravel_e_sobrevive_a_outras_gravacoes() {
     })
     .await;
 }
+
+// ── Exclusão física da configuração ──────────────────────────────────────────
+
+/// O par físico de `deactivate_documento`, e as duas metades da decisão 54: a
+/// linha nunca usada sai do banco; a que um processo já cita é recusada, com
+/// uma frase que manda desativar.
+///
+/// A recusa vem da FK composta `fk_processo_apuratorio_documento`, que é
+/// `ON DELETE RESTRICT`. O que o repositório acrescenta é a **frase** — e é por
+/// isso que a asserção olha o texto, não só o `is_err()`.
+#[tokio::test]
+async fn documento_em_uso_nao_e_apagado_e_a_mensagem_orienta() {
+    util::com_banco_descartavel("apconfig_del_doc", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // O `documento_curto` está configurado e não é citado por processo
+        // nenhum: é o cadastro digitado errado, e pode sair.
+        let mut tx = pool.begin().await.unwrap();
+        assert!(
+            repository::delete_documento(&mut tx, &m.apuratorio, &m.documento_curto)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            !cfg.documentos
+                .iter()
+                .any(|d| d.tipo_documento_id == m.documento_curto),
+            "a linha excluída não volta na configuração"
+        );
+
+        // Excluir de novo não é erro nem sucesso: não havia o que apagar.
+        let mut tx = pool.begin().await.unwrap();
+        assert!(
+            !repository::delete_documento(&mut tx, &m.apuratorio, &m.documento_curto)
+                .await
+                .unwrap(),
+            "sem linha, o comando responde `false` em vez de estourar"
+        );
+        tx.commit().await.unwrap();
+
+        // Agora o que está em uso.
+        sqlx::query(
+            "INSERT INTO processos_procedimentos
+                 (apuratorio_id, documento_iniciador_id, numero_documento,
+                  unidade_origem_id, municipio_fato_id, natureza_fato_id, data_instauracao)
+             VALUES ($1::uuid, $2::uuid, '001', $3::uuid, $4::uuid, $5::uuid, DATE '2026-01-10')",
+        )
+        .bind(&m.apuratorio)
+        .bind(&m.documento)
+        .bind(&m.unidade)
+        .bind(&m.municipio)
+        .bind(&m.natureza)
+        .execute(&pool)
+        .await
+        .expect("processo com o par configurado");
+
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::delete_documento(&mut tx, &m.apuratorio, &m.documento)
+            .await
+            .expect_err("a FK composta segura");
+        let texto = erro.to_string();
+        assert!(
+            texto.contains("Desative-o"),
+            "a recusa tem de dizer o que fazer: {texto}"
+        );
+        // E a frase é a da EXCLUSÃO. `error.rs` tem texto próprio para
+        // `fk_designacao_apuratorio_papel`, escrito para a direção do insert
+        // ("Cadastre-a…"); deixar a recusa cair lá mandaria cadastrar o que já
+        // existe.
+        assert!(
+            !texto.contains("Cadastre-a"),
+            "a mensagem é a da exclusão, não a do insert: {texto}"
+        );
+        drop(tx);
+
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            cfg.documentos
+                .iter()
+                .any(|d| d.tipo_documento_id == m.documento),
+            "recusar a exclusão não pode ter apagado nada"
+        );
+    })
+    .await;
+}
+
+/// O par físico de `deactivate_papel`, e a guarda que ele herda.
+///
+/// O responsável é recusado pela mesma razão de lá — listagem, painel e
+/// relatórios resolvem quem responde por `e_responsavel` —, e aqui a guarda pesa
+/// mais: desativar se desfaz reativando, excluir não se desfaz de jeito nenhum.
+#[tokio::test]
+async fn papel_responsavel_e_papel_em_uso_nao_sao_apagados() {
+    util::com_banco_descartavel("apconfig_del_papel", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // Encarregado é o responsável na fixture.
+        let mut tx = pool.begin().await.unwrap();
+        let erro = repository::delete_papel(&mut tx, &m.apuratorio, &m.papel_encarregado)
+            .await
+            .expect_err("o responsável não sai");
+        assert!(
+            erro.to_string().contains("responde pelo apuratório"),
+            "{erro}"
+        );
+        drop(tx);
+
+        // O Escrivão não responde por nada e não foi designado: pode sair.
+        let mut tx = pool.begin().await.unwrap();
+        assert!(
+            repository::delete_papel(&mut tx, &m.apuratorio, &m.papel_escrivao)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+
+        let cfg = repository::get(&pool, &m.apuratorio)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            !cfg.papeis.iter().any(|p| p.papel_id == m.papel_escrivao),
+            "a função excluída não volta na configuração"
+        );
+        assert!(
+            cfg.papeis.iter().any(|p| p.papel_id == m.papel_encarregado),
+            "e o responsável continua onde estava"
+        );
+    })
+    .await;
+}

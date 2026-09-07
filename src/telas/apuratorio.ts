@@ -136,7 +136,7 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
                               ${
                                 d.ativo
                                   ? botaoIcone("desativar", "Desativar", {
-                                      classe: "danger",
+                                      classe: "outline",
                                       dados: { "desativar-doc": d.tipo_documento_id },
                                     })
                                   : botaoIcone("reativar", "Reativar", {
@@ -151,6 +151,19 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
                                       dados: { "padrao-doc": d.tipo_documento_id },
                                     })
                                   : ""
+                              }
+                              ${
+                                // `em_uso` é a mesma pergunta que a FK composta
+                                // faria ao recusar o DELETE: sem processo que a
+                                // cite, a linha pode sair. Esconder o botão
+                                // poupa uma recusa previsível — mas quem decide
+                                // continua sendo o banco, não esta condição.
+                                d.em_uso
+                                  ? ""
+                                  : botaoIcone("excluir", "Excluir", {
+                                      classe: "danger",
+                                      dados: { "excluir-doc": d.tipo_documento_id },
+                                    })
                               }
                             </td>`
                          : ""
@@ -213,7 +226,7 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
                               ${
                                 p.ativo
                                   ? botaoIcone("desativar", "Desativar", {
-                                      classe: "danger",
+                                      classe: "outline",
                                       dados: { "desativar-papel": p.papel_id },
                                     })
                                   : botaoIcone("reativar", "Reativar", {
@@ -239,6 +252,18 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
                                   dados: { "documento-papel": p.papel_id },
                                 },
                               )}
+                              ${
+                                // Fora `em_uso`, o responsável também não sai:
+                                // listagem, painel e relatórios resolvem quem
+                                // responde por `e_responsavel`, e aqui não há
+                                // reativar para desfazer o engano.
+                                p.em_uso || p.e_responsavel
+                                  ? ""
+                                  : botaoIcone("excluir", "Excluir", {
+                                      classe: "danger",
+                                      dados: { "excluir-papel": p.papel_id },
+                                    })
+                              }
                             </td>`
                          : ""
                      }
@@ -342,6 +367,35 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
     }),
   );
 
+  // Excluir é FÍSICO e não se desfaz: é a linha de configuração cadastrada por
+  // engano, e nada além disso — o critério da decisão 54. A tela só oferece o
+  // botão onde `em_uso` está vazio, mas quem recusa de verdade é a FK composta
+  // `ON DELETE RESTRICT`, e o repositório traduz essa recusa numa frase que
+  // manda desativar. O `confirm` fica fora do véu, como no resto do app.
+  document.querySelectorAll<HTMLButtonElement>("[data-excluir-doc]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Excluir este documento iniciador da configuração desta espécie?\n\n" +
+            "A linha sai do banco e NÃO há como desfazer. Para apenas tirá-la de " +
+            "circulação, use Desativar.",
+        )
+      )
+        return;
+      await comCarregamento(
+        "Excluindo o documento…",
+        async () => {
+          const r = await call("apuratorio_config_delete_documento", {
+            apuratorioId: apuratorioSelecionado,
+            tipoDocumentoId: b.dataset.excluirDoc!,
+          });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
+    }),
+  );
+
   const salvarPapel = async (
     papelId: string,
     campos: {
@@ -416,6 +470,34 @@ async function desenharConfiguracaoApuratorio(ctx: ContextoTela): Promise<void> 
           const r = await call("apuratorio_config_deactivate_papel", {
             apuratorioId: apuratorioSelecionado,
             papelId: b.dataset.desativarPapel!,
+          });
+          await reportar(r.ok, r.error);
+        },
+        b,
+      );
+    }),
+  );
+
+  // O par físico de desativar. Além de `em_uso`, o botão não nasce para o papel
+  // responsável: quem responde pelo apuratório é resolvido por `e_responsavel`
+  // em listagem, painel e relatórios, e aqui não existe reativar para desfazer.
+  // O backend recusa os dois casos de qualquer forma.
+  document.querySelectorAll<HTMLButtonElement>("[data-excluir-papel]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "Excluir esta função da configuração desta espécie?\n\n" +
+            "A linha sai do banco e NÃO há como desfazer. Para apenas tirá-la de " +
+            "circulação, use Desativar.",
+        )
+      )
+        return;
+      await comCarregamento(
+        "Excluindo o papel…",
+        async () => {
+          const r = await call("apuratorio_config_delete_papel", {
+            apuratorioId: apuratorioSelecionado,
+            papelId: b.dataset.excluirPapel!,
           });
           await reportar(r.ok, r.error);
         },

@@ -609,7 +609,8 @@ pub async fn transgressoes(
           WHERE p.ativo
             {FILTRO_ESCOPO}
           GROUP BY t.id, ar.artigo, t.inciso, t.texto, nt.nome
-          ORDER BY total DESC, ar.artigo, t.inciso
+          ORDER BY total DESC, numero_do_artigo(ar.artigo) NULLS LAST, ar.artigo,
+                   valor_do_romano(t.inciso) NULLS LAST, t.inciso
           LIMIT $3"
     ))
     .bind(escopo(&filter.apuratorio_ids))
@@ -640,7 +641,8 @@ pub async fn infracoes_estatuto(
           WHERE p.ativo
             {FILTRO_ESCOPO}
           GROUP BY ie.id, ie.artigo, ie.inciso, ie.texto, dl.nome
-          ORDER BY total DESC, ie.artigo, ie.inciso
+          ORDER BY total DESC, numero_do_artigo(ie.artigo) NULLS LAST, ie.artigo,
+                   valor_do_romano(ie.inciso) NULLS LAST, ie.inciso
           LIMIT $3"
     ))
     .bind(escopo(&filter.apuratorio_ids))
@@ -681,7 +683,10 @@ pub async fn infracoes_penais(
             {FILTRO_ESCOPO}
           GROUP BY ip.id, dl.nome, ip.artigo, ip.paragrafo, ip.inciso, ip.alinea,
                    ip.descricao, ef.nome, esp.nome
-          ORDER BY total DESC, dl.nome, ip.artigo
+          ORDER BY total DESC, dl.nome, numero_do_artigo(ip.artigo) NULLS LAST,
+                   ip.artigo, ip.paragrafo NULLS FIRST,
+                   valor_do_romano(ip.inciso) NULLS FIRST, ip.inciso NULLS FIRST,
+                   ip.alinea NULLS FIRST
           LIMIT $3"
     ))
     .bind(escopo(&filter.apuratorio_ids))

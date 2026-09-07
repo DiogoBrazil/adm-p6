@@ -389,31 +389,71 @@ let referenciasCarregadas: Record<string, { value: string; label: string }[]> = 
 /** Cancela a pesquisa pendente ao sair da tela. Ver `dom.ts`. */
 let cancelarBusca: (() => void) | null = null;
 
-/** As linhas que o termo alcança. O filtro é o mesmo desde sempre. */
+/** As linhas que o termo alcança, sobre o que o render já carregou. */
 function linhasFiltradas(cat: Catalogo): Linha[] {
-  if (!estado.busca) return linhasCarregadas;
-  const termo = estado.busca.toLowerCase();
-  return linhasCarregadas.filter((l) =>
-    colunasVisiveis(cat).some((c) => String(l[c.nome] ?? "").toLowerCase().includes(termo)),
+  return linhasQueOTermoAlcanca(
+    colunasVisiveis(cat),
+    linhasCarregadas,
+    referenciasCarregadas,
+    estado.busca,
+  );
+}
+
+/**
+ * O filtro, separado do estado do módulo para caber no Vitest.
+ *
+ * **Compara com o que a tela MOSTRA, não com o que a linha guarda.** Em coluna
+ * de referência o valor bruto é o UUID: em Transgressões do RDPM a tabela
+ * exibe "Art. 15" e a linha guarda `artigo_rdpm_id`, então procurar por `15`
+ * não alcançava o artigo — e podia casar por acaso com o hexadecimal de um
+ * UUID qualquer. Vale para as referências dos 26 catálogos (Município, Tipo,
+ * Círculo hierárquico, Unidade PM…), nenhuma das quais era pesquisável.
+ */
+export function linhasQueOTermoAlcanca(
+  colunas: Coluna[],
+  linhas: Linha[],
+  referencias: Record<string, { value: string; label: string }[]>,
+  busca: string,
+): Linha[] {
+  if (!busca) return linhas;
+  const termo = busca.toLowerCase();
+  return linhas.filter((l) =>
+    colunas.some((c) => textoDaListagem(c, l, referencias).toLowerCase().includes(termo)),
   );
 }
 
 /** O rótulo de uma referência, resolvido pelo que o cache trouxe. */
-function rotuloReferencia(coluna: Coluna, valor: unknown): string {
+function rotuloReferencia(
+  coluna: Coluna,
+  valor: unknown,
+  referencias: Record<string, { value: string; label: string }[]>,
+): string {
   return (
-    referenciasCarregadas[coluna.alvo ?? ""]?.find((o) => o.value === String(valor))?.label ??
+    referencias[coluna.alvo ?? ""]?.find((o) => o.value === String(valor))?.label ??
     (valor === null || valor === undefined ? "" : String(valor))
   );
+}
+
+/**
+ * O texto de uma célula, já com a referência resolvida — **sem** o travessão do
+ * vazio, que é decoração de tela e não pode virar termo pesquisável: com ele,
+ * digitar "—" traria de volta todas as linhas de campo em branco.
+ */
+function textoDaListagem(
+  coluna: Coluna,
+  linha: Linha,
+  referencias: Record<string, { value: string; label: string }[]>,
+): string {
+  return ehReferencia(coluna)
+    ? rotuloReferencia(coluna, linha[coluna.nome], referencias)
+    : cellDisplay(linha[coluna.nome]);
 }
 
 // Listagem administrativa segue o mesmo vazio visual das demais telas. Isso
 // torna explícito, por exemplo, que uma linha de município não tem município
 // pai porque não representa um distrito.
 function valorDaListagem(coluna: Coluna, linha: Linha): string {
-  const texto = ehReferencia(coluna)
-    ? rotuloReferencia(coluna, linha[coluna.nome])
-    : cellDisplay(linha[coluna.nome]);
-  return texto || "—";
+  return textoDaListagem(coluna, linha, referenciasCarregadas) || "—";
 }
 
 /**
@@ -433,7 +473,9 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
   // genérico e nenhuma tela sabe de antemão quais colunas ele tem. O que se
   // sabe é que Situação e Ações são estreitas e de conteúdo previsível.
   const larguraSituacao = 10;
-  const larguraAcoes = podeEscrever ? 10 : 0;
+  // Três `.botao-icone` de 32px fixos mais os vãos não cabem em 10% de uma
+  // tabela de 900px mínimos — Usuários usa 12 para o mesmo trio.
+  const larguraAcoes = podeEscrever ? 13 : 0;
   const larguraDado = (100 - larguraSituacao - larguraAcoes) / colunasVisiveis(cat).length;
 
   const corpo = daPagina.length
@@ -474,11 +516,11 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
                 ${
                   podeEscrever
                     ? `<td class="row-actions col--centro col--nowrap">
-                         ${botaoIcone("editar", "Editar", { classe: "secondary", dados: { editar: linha.id } })}
+                         ${botaoIcone("editar", "Editar", { classe: "outline", dados: { editar: linha.id } })}
                          ${
                            linha.ativo
                              ? botaoIcone("desativar", "Desativar", {
-                                 classe: "danger",
+                                 classe: "outline",
                                  dados: { desativar: linha.id },
                                })
                              : botaoIcone("reativar", "Reativar", {
@@ -486,6 +528,10 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
                                  dados: { reativar: linha.id },
                                })
                          }
+                         ${botaoIcone("excluir", "Excluir", {
+                           classe: "danger",
+                           dados: { excluir: linha.id },
+                         })}
                        </td>`
                     : ""
                 }
@@ -516,13 +562,14 @@ function ligarResultadosCatalogo(cat: Catalogo, ctx: ContextoTela): void {
     });
   });
 
-  // Desativar, não apagar: o item some dos cadastros novos e continua visível
-  // nos registros históricos que já o usam.
+  // Desativar é o caminho normal, e o único que serve para quem tem histórico:
+  // o item some dos cadastros novos e continua visível nos registros que já o
+  // usam (o princípio 6). Excluir, logo abaixo, é a outra coisa.
   //
-  // Desativar e reativar **não** redefinem o escopo, e por isso mantêm a
-  // página: quem desativou o terceiro item da 4ª página quer continuar ali,
+  // Desativar, reativar e excluir **não** redefinem o escopo, e por isso mantêm
+  // a página: quem desativou o terceiro item da 4ª página quer continuar ali,
   // não voltar ao começo. Se aquela página tiver deixado de existir, o clamp
-  // do render recua uma; é o bastante. E os dois passam pelo `renderCatalogo`
+  // do render recua uma; é o bastante. E os três passam pelo `renderCatalogo`
   // inteiro de propósito — mudaram dado, e o cache tem de se refazer.
   document.querySelectorAll<HTMLButtonElement>("[data-desativar]").forEach((botao) => {
     botao.addEventListener("click", async () => {
@@ -535,6 +582,41 @@ function ligarResultadosCatalogo(cat: Catalogo, ctx: ContextoTela): void {
         async (passo) => {
           const r = await call("legal_catalogs_deactivate", { catalogo: cat.chave, id });
           if (!r.ok) notificar(r.error ?? "Falha ao desativar.", "erro");
+          await passo("Atualizando a lista…");
+          await renderCatalogo(cat.chave, ctx);
+        },
+        botao,
+      );
+    });
+  });
+
+  // Excluir é FÍSICO e não se desfaz — é o cadastro digitado errado, e nada
+  // além disso (o critério da decisão 54, agora aplicado aos catálogos). Quem
+  // já foi usado é recusado pelas FKs `ON DELETE RESTRICT`, e o backend traduz
+  // a recusa numa frase que manda desativar; por isso ela vai inteira para o
+  // `notificar`, sem mensagem própria da tela por cima.
+  //
+  // O `confirm` fica FORA do véu: é diálogo nativo, e abri-lo sobre a tela
+  // coberta faria o operador decidir olhando para um loader.
+  document.querySelectorAll<HTMLButtonElement>("[data-excluir]").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      const id = botao.dataset.excluir!;
+      if (
+        !confirm(
+          `Excluir este item de "${cat.rotulo}" definitivamente?\n\n` +
+            "O registro sai do banco e NÃO há como desfazer. Para tirá-lo de circulação " +
+            "sem perder o histórico, use Desativar.",
+        )
+      )
+        return;
+      await comCarregamento(
+        "Excluindo…",
+        async (passo) => {
+          const r = await call("legal_catalogs_delete", { catalogo: cat.chave, id });
+          if (!r.ok) {
+            notificar(r.error ?? "Falha ao excluir.", "erro");
+            return;
+          }
           await passo("Atualizando a lista…");
           await renderCatalogo(cat.chave, ctx);
         },

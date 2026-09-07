@@ -60,7 +60,9 @@ pub async fn search_infracoes_penais(
           WHERE ip.ativo
             AND ($2::uuid IS NULL OR ip.dispositivo_legal_id = $2::uuid)
             AND (lower(ip.artigo) LIKE $1 OR lower(ip.descricao) LIKE $1)
-          ORDER BY dl.nome, ip.artigo
+          ORDER BY dl.nome, numero_do_artigo(ip.artigo) NULLS LAST, ip.artigo,
+                   ip.paragrafo NULLS FIRST, valor_do_romano(ip.inciso) NULLS FIRST,
+                   ip.inciso NULLS FIRST, ip.alinea NULLS FIRST
           LIMIT 50"
     ))
     .bind(format!("%{}%", termo.trim().to_lowercase()))
@@ -83,7 +85,8 @@ pub async fn search_transgressoes(
           WHERE t.ativo
             AND ($2::uuid IS NULL OR ar.natureza_transgressao_id = $2::uuid)
             AND (lower(t.inciso) LIKE $1 OR lower(t.texto) LIKE $1)
-          ORDER BY ar.artigo, t.inciso
+          ORDER BY numero_do_artigo(ar.artigo) NULLS LAST, ar.artigo,
+                   valor_do_romano(t.inciso) NULLS LAST, t.inciso
           LIMIT 50"
     ))
     .bind(format!("%{}%", termo.trim().to_lowercase()))
@@ -105,7 +108,8 @@ pub async fn search_infracoes_estatuto(
           WHERE ie.ativo
             AND ($2::text IS NULL OR ie.artigo = $2)
             AND (lower(ie.inciso) LIKE $1 OR lower(ie.texto) LIKE $1)
-          ORDER BY ie.artigo, ie.inciso
+          ORDER BY numero_do_artigo(ie.artigo) NULLS LAST, ie.artigo,
+                   valor_do_romano(ie.inciso) NULLS LAST, ie.inciso
           LIMIT 50"
     ))
     .bind(format!("%{}%", termo.trim().to_lowercase()))
@@ -185,7 +189,10 @@ pub async fn load_for_envolvidos(
            JOIN dispositivos_legais dl     ON dl.id = ip.dispositivo_legal_id
            JOIN especies_infracao_penal e  ON e.id = ip.especie_id
           WHERE eip.envolvido_id = ANY($1::uuid[])
-          ORDER BY eip.envolvido_id, dl.nome, ip.artigo"
+          ORDER BY eip.envolvido_id, dl.nome,
+                   numero_do_artigo(ip.artigo) NULLS LAST, ip.artigo,
+                   ip.paragrafo NULLS FIRST, valor_do_romano(ip.inciso) NULLS FIRST,
+                   ip.inciso NULLS FIRST, ip.alinea NULLS FIRST"
     ))
     .bind(envolvido_ids)
     .fetch_all(&mut *conn)
@@ -201,7 +208,9 @@ pub async fn load_for_envolvidos(
            JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
            JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
           WHERE et.envolvido_id = ANY($1::uuid[])
-          ORDER BY et.envolvido_id, ar.artigo, t.inciso"
+          ORDER BY et.envolvido_id,
+                   numero_do_artigo(ar.artigo) NULLS LAST, ar.artigo,
+                   valor_do_romano(t.inciso) NULLS LAST, t.inciso"
     ))
     .bind(envolvido_ids)
     .fetch_all(&mut *conn)
@@ -225,7 +234,9 @@ pub async fn load_for_envolvidos(
            JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
            JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
           WHERE eie.envolvido_id = ANY($1::uuid[])
-          ORDER BY eie.envolvido_id, ie.artigo, ie.inciso"
+          ORDER BY eie.envolvido_id,
+                   numero_do_artigo(ie.artigo) NULLS LAST, ie.artigo,
+                   valor_do_romano(ie.inciso) NULLS LAST, ie.inciso"
     ))
     .bind(envolvido_ids)
     .fetch_all(&mut *conn)

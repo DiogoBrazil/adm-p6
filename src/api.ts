@@ -174,6 +174,8 @@ export interface Commands {
   apuratorio_config_save_papel: { args: { request: SavePapelRequest }; result: boolean };
   apuratorio_config_deactivate_documento: { args: { apuratorioId: string, tipoDocumentoId: string }; result: boolean };
   apuratorio_config_deactivate_papel: { args: { apuratorioId: string, papelId: string }; result: boolean };
+  apuratorio_config_delete_documento: { args: { apuratorioId: string, tipoDocumentoId: string }; result: boolean };
+  apuratorio_config_delete_papel: { args: { apuratorioId: string, papelId: string }; result: boolean };
 
   // ── Processos e procedimentos ─────────────────────────────────────
   proceedings_list: { args: { filter?: ProceedingFilter | null }; result: ProceedingListResult };

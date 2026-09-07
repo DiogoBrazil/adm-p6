@@ -273,3 +273,97 @@ pub async fn deactivate_papel(
         }
     }
 }
+
+/// Exclusão FÍSICA de um documento iniciador da configuração de um apuratório.
+///
+/// É o par de `deactivate_documento`, e a diferença é a mesma da decisão 54:
+/// desativar tira das escolhas novas sem perder nada, e é o único caminho para
+/// quem tem histórico; excluir é para a linha cadastrada por engano, e não se
+/// desfaz.
+///
+/// A FK composta `fk_processo_apuratorio_documento` é `ON DELETE RESTRICT`, e é
+/// ela quem realmente decide — a tela esconde o botão quando `em_uso`, mas tela
+/// não é guarda. O que a interceptação abaixo acrescenta é a **frase**: sem ela,
+/// a recusa chega à tela pela rede genérica de `error.rs`.
+pub async fn delete_documento(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    tipo_documento_id: &str,
+) -> Result<bool, AppError> {
+    let resultado = sqlx::query(
+        "DELETE FROM apuratorio_documentos_iniciadores
+          WHERE apuratorio_id = $1::uuid AND tipo_documento_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(tipo_documento_id)
+    .execute(&mut **tx)
+    .await;
+
+    match resultado {
+        Ok(r) => Ok(r.rows_affected() > 0),
+        Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => Err(AppError::Domain(
+            "Este documento iniciador já foi usado em algum apuratório e não pode ser excluído. \
+             Desative-o."
+                .to_string(),
+        )),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Exclusão FÍSICA de uma função da configuração de um apuratório.
+///
+/// Mantém a guarda de `deactivate_papel` — o papel que responde pelo apuratório
+/// é recusado, porque listagem, painel e relatórios resolvem o responsável por
+/// `e_responsavel` e tirá-lo faria o responsável sumir de todos os processos
+/// daquela espécie. Aqui a guarda pesa mais, não menos: desativar se desfaz
+/// reativando, excluir não.
+///
+/// A interceptação da FK não é conveniência. `fk_designacao_apuratorio_papel`
+/// tem frase própria em `error.rs::mensagem_de_constraint`, e ela foi escrita
+/// para a direção do INSERT: *"A função escolhida não está prevista para esta
+/// espécie de apuratório. Cadastre-a…"*. Numa exclusão recusada, seria a regra
+/// certa descrevendo a situação errada — mandaria cadastrar o que já existe.
+pub async fn delete_papel(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    papel_id: &str,
+) -> Result<bool, AppError> {
+    let e_responsavel: Option<bool> = sqlx::query_scalar(
+        "SELECT e_responsavel FROM apuratorio_papeis
+          WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(papel_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    match e_responsavel {
+        None => Ok(false),
+        Some(true) => Err(AppError::Domain(
+            "Esta função responde pelo apuratório. Indique outra responsável antes de excluí-la."
+                .to_string(),
+        )),
+        Some(false) => {
+            let resultado = sqlx::query(
+                "DELETE FROM apuratorio_papeis
+                  WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+            )
+            .bind(apuratorio_id)
+            .bind(papel_id)
+            .execute(&mut **tx)
+            .await;
+
+            match resultado {
+                Ok(r) => Ok(r.rows_affected() > 0),
+                Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => {
+                    Err(AppError::Domain(
+                        "Esta função já foi designada em algum apuratório e não pode ser \
+                         excluída. Desative-a."
+                            .to_string(),
+                    ))
+                }
+                Err(e) => Err(e.into()),
+            }
+        }
+    }
+}

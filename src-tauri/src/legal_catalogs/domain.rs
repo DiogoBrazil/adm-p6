@@ -393,7 +393,13 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto_opcional("inciso", "Inciso")),
             centralizada(texto_opcional("alinea", "Alínea")),
         ],
-        ordenacao: "artigo",
+        // Ordenar 'artigo' como texto poria 'Art. 5' depois de 'Art. 32'. As
+        // funções da 0023 leem o número e o romano; o desempate textual que vem
+        // depois de cada uma é o que mantém a ordem ESTÁVEL entre páginas quando
+        // dois artigos têm o mesmo número ('121' e '121-A').
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
+                    paragrafo NULLS FIRST, valor_do_romano(inciso) NULLS FIRST, \
+                    inciso NULLS FIRST, alinea NULLS FIRST",
         assunto_sql: r#"
             SELECT 'Art. ' || ip.artigo
                      || COALESCE(', § ' || ip.paragrafo, '')
@@ -414,7 +420,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("artigo", "Artigo")),
             centralizada(referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao")),
         ],
-        ordenacao: "artigo",
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo",
         assunto_sql: r#"
             SELECT ar.artigo || ' do RDPM (' || nt.nome || ')'
               FROM artigos_rdpm ar
@@ -431,7 +437,13 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("inciso", "Inciso")),
             texto("texto", "Texto"),
         ],
-        ordenacao: "inciso",
+        // Ordenava só pelo inciso, e por isso os 95 incisos dos Arts. 15, 16 e 17
+        // saíam INTERCALADOS — três "I" seguidos, três "II"… O artigo mora na
+        // tabela ao lado e `list` não faz JOIN, então ele entra por subconsulta
+        // escalar; o romano vem da 0023, senão IX viria antes de V.
+        ordenacao: "(SELECT numero_do_artigo(ar.artigo) FROM artigos_rdpm ar \
+                      WHERE ar.id = transgressoes.artigo_rdpm_id) NULLS LAST, \
+                    valor_do_romano(inciso) NULLS LAST, inciso",
         assunto_sql: r#"
             SELECT ar.artigo || ', inciso ' || t.inciso || ' do RDPM ('
                      || nt.nome || ') - ' || t.texto
@@ -454,7 +466,12 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("inciso", "Inciso")),
             texto("texto", "Texto"),
         ],
-        ordenacao: "artigo, inciso",
+        // Só o Art. 29 está cadastrado, então a ordenação pelo artigo nunca chegou
+        // a ser exercida — não é que acertasse, é que não havia o que ordenar. A
+        // coluna existe porque a tabela funde os antigos `_art29` e `_art32` da
+        // base legada (0003): no dia em que o 32 entrar, quem ordena é o número.
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
+                    valor_do_romano(inciso) NULLS LAST, inciso",
         assunto_sql: r#"
             SELECT ie.artigo || ', inciso ' || ie.inciso
                      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome

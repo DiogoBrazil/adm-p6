@@ -498,6 +498,191 @@ async fn item_nunca_usado_pode_ser_apagado() {
     .await;
 }
 
+// ── Ordenação dos catálogos jurídicos ────────────────────────────────────────
+
+/// O texto de uma coluna da linha lida, para asserção legível.
+fn campo(linha: &Map<String, Value>, nome: &str) -> String {
+    linha
+        .get(nome)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// As duas mentiras da ordenação alfabética, num teste só.
+///
+/// `transgressoes` ordenava por `inciso` e mais nada, então os incisos dos
+/// Arts. 15, 16 e 17 saíam INTERCALADOS. E o inciso é romano em TEXT: como
+/// texto, IX vem antes de V.
+///
+/// O artigo de fixtura é 'Art. 5' — número de um dígito, que é justamente o que
+/// a ordenação textual erra (o '5' > o '1' de 'Art. 15'). Não colide com os três
+/// artigos semeados pela 0003, e não carrega "Teste" no nome porque é o número
+/// dele que está sob teste.
+#[tokio::test]
+async fn transgressao_sai_por_artigo_e_depois_por_inciso() {
+    util::com_banco_descartavel("cat_ordem_transgressao", |pool| async move {
+        let artigo_5 = gravar(
+            &pool,
+            "artigos_rdpm",
+            None,
+            json!({
+                "artigo": "Art. 5",
+                // "Leve", semeada pela 0003.
+                "natureza_transgressao_id": "c6000000-0000-4000-8000-000000000001",
+            }),
+        )
+        .await;
+
+        // Gravados FORA de ordem de propósito: se a consulta não ordenasse, a
+        // asserção passaria pela ordem de inserção.
+        for inciso in ["IX", "IV", "V"] {
+            gravar(
+                &pool,
+                "transgressoes",
+                None,
+                json!({
+                    "artigo_rdpm_id": artigo_5,
+                    "inciso": inciso,
+                    "texto": format!("transgressao de teste {inciso}"),
+                }),
+            )
+            .await;
+        }
+
+        let cat = catalogo("transgressoes").unwrap();
+        let linhas = repository::list(&pool, cat, false).await.unwrap();
+
+        // Art. 5 abre a lista inteira: 5 < 15. Como texto, viria depois dos três.
+        let do_artigo_5: Vec<String> = linhas.iter().take(3).map(|l| campo(l, "inciso")).collect();
+        assert_eq!(
+            do_artigo_5,
+            vec!["IV", "V", "IX"],
+            "o Art. 5 tem de abrir a lista, e os incisos saírem em ordem romana"
+        );
+        assert!(
+            linhas
+                .iter()
+                .take(3)
+                .all(|l| campo(l, "artigo_rdpm_id") == artigo_5),
+            "as três primeiras linhas têm de ser todas do Art. 5"
+        );
+
+        // E o resto não fica intercalado: cada artigo sai em bloco.
+        let artigos: Vec<String> = linhas.iter().map(|l| campo(l, "artigo_rdpm_id")).collect();
+        let mut vistos: Vec<&String> = Vec::new();
+        for a in &artigos {
+            if vistos.last() != Some(&a) {
+                assert!(
+                    !vistos.contains(&a),
+                    "o artigo {a} reapareceu depois de outro: a lista está intercalada"
+                );
+                vistos.push(a);
+            }
+        }
+    })
+    .await;
+}
+
+/// O Estatuto já ordenava "artigo, inciso" — e acertava por coincidência, já que
+/// só existem os artigos 29 e 32 e '29' < '32'. Um artigo de um dígito expõe o
+/// que a ordenação textual faz: manda o 5 para depois do 32.
+#[tokio::test]
+async fn infracao_do_estatuto_ordena_o_artigo_pelo_numero() {
+    util::com_banco_descartavel("cat_ordem_estatuto", |pool| async move {
+        gravar(
+            &pool,
+            "infracoes_estatuto",
+            None,
+            json!({
+                "artigo": "Art. 5",
+                "inciso": "II",
+                "texto": "infracao de teste do artigo 5",
+            }),
+        )
+        .await;
+
+        let cat = catalogo("infracoes_estatuto").unwrap();
+        let linhas = repository::list(&pool, cat, false).await.unwrap();
+
+        assert_eq!(
+            campo(&linhas[0], "artigo"),
+            "Art. 5",
+            "o artigo 5 tem de abrir a lista, não fechá-la"
+        );
+
+        // E os incisos do Art. 29 saem em ordem romana, não alfabética.
+        let do_29: Vec<String> = linhas
+            .iter()
+            .filter(|l| campo(l, "artigo") == "Art. 29")
+            .map(|l| campo(l, "inciso"))
+            .collect();
+        let esperado: Vec<String> = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            do_29.iter().take(10).cloned().collect::<Vec<_>>(),
+            esperado,
+            "IX não pode vir antes de V"
+        );
+    })
+    .await;
+}
+
+/// As duas funções da 0023, olhadas de perto.
+///
+/// O caso que importa é o NULL: `sum()` ignora nulos, então uma implementação
+/// que confiasse na propagação devolveria 100 para 'C ú' — e o inciso torto
+/// receberia posição inventada em vez de cair no `NULLS LAST`.
+#[tokio::test]
+async fn ordenacao_le_o_numero_do_artigo_e_o_valor_do_romano() {
+    util::com_banco_descartavel("cat_ordem_funcoes", |pool| async move {
+        let numero = |t: &'static str| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, Option<i32>>("SELECT numero_do_artigo($1)")
+                    .bind(t)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(numero("Art. 15").await, Some(15));
+        assert_eq!(numero("Art. 5").await, Some(5));
+        assert_eq!(numero("121").await, Some(121));
+        assert_eq!(numero("  Art. 121-A ").await, Some(121));
+        assert_eq!(numero("Único").await, None);
+
+        let romano = |t: &'static str| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, Option<i32>>("SELECT valor_do_romano($1)")
+                    .bind(t)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(romano("I").await, Some(1));
+        assert_eq!(romano("IV").await, Some(4));
+        assert_eq!(romano("IX").await, Some(9));
+        assert_eq!(romano("XIV").await, Some(14));
+        assert_eq!(romano("XL").await, Some(40));
+        assert_eq!(romano("MCMXC").await, Some(1990));
+        assert_eq!(romano("iv").await, Some(4), "a caixa não decide o valor");
+        assert_eq!(romano(" X ").await, Some(10), "o espaço em volta não conta");
+        assert_eq!(
+            romano("C ú").await,
+            None,
+            "letra fora de IVXLCDM invalida tudo"
+        );
+        assert_eq!(romano("1").await, None);
+        assert_eq!(romano("").await, None);
+    })
+    .await;
+}
+
 // ── Busca ────────────────────────────────────────────────────────────────────
 
 /// A busca recebe o nome do campo do frontend, então valida contra o registro

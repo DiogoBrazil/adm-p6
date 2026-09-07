@@ -134,8 +134,8 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 180 testes
-cd .. && npm test && npm run typecheck            # 20 testes frontend
+cd src-tauri && cargo fmt --check && cargo test   # 195 testes
+cd .. && npm test && npm run typecheck            # 33 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

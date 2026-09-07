@@ -1343,6 +1343,134 @@ fn as_fichas_do_mapa_chegam_sem_o_andaime_do_agrupamento() {
 /// É a lição do `DEACTIVATE` que ficou latente desde a `0001`: o repositório
 /// tinha teste, o comando não, e o comando era quem estava quebrado. Aqui se
 /// exercita o que só existe na camada do comando: o guard de administrador, a
+/// Desativar e excluir também são coisas diferentes nos catálogos, e o comando
+/// de exclusão só ganhou botão nesta rodada.
+///
+/// O que este teste cobra, e o de repositório não alcança: a guarda de
+/// administrador, e a **trilha** — `operacao = "DELETE"` com o assunto legível,
+/// que só existe porque o comando o lê ANTES do `DELETE`. Depois da linha sumir
+/// não há de onde ler, e a trilha guardaria um UUID órfão.
+#[test]
+fn desativar_e_excluir_item_de_catalogo_sao_comandos_diferentes() {
+    com_app_banco_e_mundo("ipc_catalogo_exclusao", |app, webview, conta, mundo| {
+        // Operador comum não mexe em catálogo.
+        autenticar(&app, &conta, false);
+        for comando in ["legal_catalogs_deactivate", "legal_catalogs_delete"] {
+            let mensagem = erro(&invocar(
+                &webview,
+                comando,
+                json!({ "catalogo": "tipos_documento", "id": mundo.documento }),
+            ));
+            assert!(
+                mensagem.to_lowercase().contains("somente leitura"),
+                "{comando} sem admin: {mensagem}"
+            );
+        }
+
+        autenticar(&app, &conta, true);
+
+        // Um item nunca usado: nasce, e some de vez.
+        let novo = ok(&invocar(
+            &webview,
+            "legal_catalogs_save",
+            json!({ "request": {
+                "catalogo": "tipos_documento",
+                "valores": { "nome": "Engano Teste IPC" },
+            } }),
+        ))["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        ok(&invocar(
+            &webview,
+            "legal_catalogs_delete",
+            json!({ "catalogo": "tipos_documento", "id": novo }),
+        ));
+        let listados = ok(&invocar(
+            &webview,
+            "legal_catalogs_list",
+            json!({ "catalogo": "tipos_documento", "incluirInativos": true }),
+        ))
+        .clone();
+        assert!(
+            !listados
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|l| l["id"] == json!(novo)),
+            "o item excluído não volta nem com os inativos à mostra"
+        );
+
+        // A trilha diz DELETE, e diz sobre o quê — mesmo com a linha apagada.
+        let trilha = ok(&invocar(&webview, "audit_list", json!({ "perPage": 200 }))).clone();
+        let linha = trilha["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["registro_id"] == json!(novo))
+            .expect("a exclusão foi auditada")
+            .clone();
+        assert_eq!(linha["operacao"], json!("DELETE"));
+        assert_eq!(
+            linha["acao"],
+            json!("Excluiu um item de tipos de documento")
+        );
+        assert_eq!(
+            linha["assunto"],
+            json!("Engano Teste IPC"),
+            "o assunto tem de ter sido lido antes do DELETE"
+        );
+
+        // O que já foi usado é recusado — e a frase manda desativar, em vez de
+        // deixar o operador sem saída.
+        let mensagem = erro(&invocar(
+            &webview,
+            "legal_catalogs_delete",
+            json!({ "catalogo": "tipos_documento", "id": mundo.documento }),
+        ));
+        assert!(
+            mensagem.contains("Desative-o"),
+            "a recusa tem de dizer o que fazer: {mensagem}"
+        );
+
+        // E desativar, esse sim, funciona: a linha fica, marcada.
+        ok(&invocar(
+            &webview,
+            "legal_catalogs_deactivate",
+            json!({ "catalogo": "tipos_documento", "id": mundo.documento }),
+        ));
+        let listados = ok(&invocar(
+            &webview,
+            "legal_catalogs_list",
+            json!({ "catalogo": "tipos_documento", "incluirInativos": true }),
+        ))
+        .clone();
+        let item = listados
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["id"] == json!(mundo.documento))
+            .expect("o item desativado continua na listagem");
+        assert_eq!(item["ativo"], json!(false));
+
+        let trilha = ok(&invocar(&webview, "audit_list", json!({ "perPage": 200 }))).clone();
+        let linha = trilha["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["registro_id"] == json!(mundo.documento))
+            .expect("a desativação foi auditada")
+            .clone();
+        assert_eq!(
+            linha["operacao"],
+            json!("UPDATE"),
+            "desativar é UPDATE: `ck_auditoria_operacao` só aceita três verbos, e \
+             quem diz que foi desativação é a `acao`"
+        );
+    });
+}
+
 /// mensagem que nomeia o vínculo e a linha de auditoria que cada um escreve.
 #[test]
 fn desativar_e_excluir_militar_sao_comandos_diferentes() {

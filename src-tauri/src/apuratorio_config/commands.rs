@@ -205,3 +205,88 @@ pub async fn apuratorio_config_deactivate_papel(
     )
     .await)
 }
+
+/// Exclusão física do documento iniciador. Par de `_deactivate_documento`.
+///
+/// O assunto é lido **antes** do `DELETE`: ele sai de junção com a linha, e
+/// depois de apagada não há de onde ler — a trilha guardaria um par de UUIDs
+/// que não aponta mais para nada.
+#[tauri::command]
+pub async fn apuratorio_config_delete_documento(
+    state: State<'_, AppState>,
+    apuratorio_id: String,
+    tipo_documento_id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+
+            let assunto =
+                assunto::de_documento_do_apuratorio(&mut tx, &apuratorio_id, &tipo_documento_id)
+                    .await;
+            let ok =
+                repository::delete_documento(&mut tx, &apuratorio_id, &tipo_documento_id).await?;
+            if ok {
+                audit_repository::registrar(
+                    &mut tx,
+                    Acao {
+                        entidade: "apuratorio_documentos_iniciadores",
+                        registro_id: &registro(&apuratorio_id, &tipo_documento_id),
+                        operacao: "DELETE",
+                        acao: "Excluiu um documento iniciador do apuratório",
+                        assunto,
+                        alteracoes: None,
+                    },
+                    Some(&actor.id),
+                )
+                .await?;
+            }
+            tx.commit().await?;
+            Ok(ok)
+        }
+        .await,
+    )
+    .await)
+}
+
+/// Exclusão física da função do apuratório. Par de `_deactivate_papel`.
+///
+/// Mesma ordem do irmão acima, e pela mesma razão: assunto, `DELETE`, trilha.
+#[tauri::command]
+pub async fn apuratorio_config_delete_papel(
+    state: State<'_, AppState>,
+    apuratorio_id: String,
+    papel_id: String,
+) -> Result<ApiResponse<bool>, String> {
+    Ok(from_result(
+        async {
+            let actor = require_admin(&state).await?;
+            let pool = state.pool().await?;
+            let mut tx = pool.begin().await?;
+
+            let assunto = assunto::de_papel_do_apuratorio(&mut tx, &apuratorio_id, &papel_id).await;
+            let ok = repository::delete_papel(&mut tx, &apuratorio_id, &papel_id).await?;
+            if ok {
+                audit_repository::registrar(
+                    &mut tx,
+                    Acao {
+                        entidade: "apuratorio_papeis",
+                        registro_id: &registro(&apuratorio_id, &papel_id),
+                        operacao: "DELETE",
+                        acao: "Excluiu uma função do apuratório",
+                        assunto,
+                        alteracoes: None,
+                    },
+                    Some(&actor.id),
+                )
+                .await?;
+            }
+            tx.commit().await?;
+            Ok(ok)
+        }
+        .await,
+    )
+    .await)
+}
