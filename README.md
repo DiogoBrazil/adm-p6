@@ -53,7 +53,7 @@ Os testes sobem e derrubam o próprio banco; não tocam no de desenvolvimento.
 **Não rode `docker compose down -v`.** O banco de desenvolvimento tem os dados
 de produção dentro, e recriar o volume apaga oito anos de registro.
 
-Mudança de schema agora é **migration nova** (`0021`…) — os arquivos existentes
+Mudança de schema agora é **migration nova** (`0023`…) — os arquivos existentes
 de `src-tauri/migrations/` são imutáveis, e editar um já aplicado
 quebra o startup seguinte com `VersionMismatch`.
 

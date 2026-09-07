@@ -15,7 +15,7 @@ entender X → olhe em Y".
   volume apaga oito anos de registro.
 - **Editar migration já aplicada.** `sqlx` guarda checksum por versão e o
   startup seguinte quebra com `VersionMismatch`. Mudança de schema é migration
-  nova (`0018`…).
+  nova (`0023`…).
 - **Tocar em `adm-p6.sql`, ou versionar um `*.dump`.** Dump de produção, 44 MB,
   somente leitura, fora do git — e com dados pessoais de 235 militares. Os backups
   da seção 6.1 nascem na raiz e carregam os mesmos dados: o `.gitignore` cobre
@@ -113,6 +113,7 @@ entender X → olhe em Y".
 | `BEGIN;`/`COMMIT;` em arquivo servido por `psql --single-transaction` | o `BEGIN` vira aviso e o `COMMIT` **encerra a transação externa**: o resto corre em autocommit e a carga deixa de ser tudo-ou-nada, sem erro nenhum. As etapas de `importacao/` não abrem transação — quem abre é `scripts/migrar_dados_legados.sh` |
 | Converter `timestamp` do legado sem dizer o fuso | a hora do legado é ingênua e foi digitada em Ariquemes; o cast para `timestamptz` usa o fuso da **sessão**, que no container é `Etc/UTC`. Tudo entra 4h adiantado e o que passou das 20h muda de dia. `SET LOCAL TimeZone = 'America/Porto_Velho'` |
 | Contar com migration corretiva para consertar dado importado | a 0007 (Escrivão de Processo), a 0008 (cadeia de substituição) e a 0016 ("À apurar") corrigiam a carga **e já foram aplicadas**: não rodam de novo. O dado nasce certo na etapa de importação, ou não nasce |
+| Semear catálogo por migration quando quem o INSERE é a importação | `sqlx::migrate!` corre no start do app, portanto **antes** de `importacao/01_catalogos.sql`. Num destino novo o `UPDATE ... WHERE lower(sigla)='sr'` acha a tabela vazia, não acerta linha nenhuma **sem erro**, e o catálogo nasce todo no `DEFAULT`. Foi assim que o Neon perdeu a ordem SR/IPM/PADS do mapa (0019 → 0022): o valor vai no `INSERT` da etapa de importação, e a migration só alcança o que já foi importado |
 | Carregar o dump legado sob outro nome de schema | os 10 arquivos de `importacao/` dizem `legado.` literalmente, e um `legado` preexistente com o dump ANTERIOR faz ler 128 processos em vez de 163 **em silêncio**. O preflight conta a origem e recusa |
 | `psql -At -F','` para gerar CSV | não escapa nada: `Art. 29, IV` vira duas colunas. `psql --csv` |
 | Imagem criada no clique de imprimir | o WebKitGTK imprime **espaço em branco** por uma `<img>` ainda não decodificada, sem erro. `await img.decode()` antes de chamar o comando de impressão — `mapa-pdf.ts::aguardarImagens` e `dom.ts::inserirCabecalhoInstitucional` |
@@ -121,7 +122,7 @@ entender X → olhe em Y".
 | Testar `resposta.cabecalho.titulo` num struct achatado | é o campo do struct, que o serde não altera: o teste passa com e sem o flatten. Quem afere contrato de JSON serializa e olha o JSON — `tests/commands_ipc.rs`, e as duas metades (campo no topo **e** ausência do aninhado) |
 
 | Passar um botão de **ícone** como gatilho de `comCarregamento` | ele escreve a mensagem no botão e restaura o rótulo no fim; num `.botao-icone` o conteúdo é um `<svg>` e `textContent` é vazio, então escrever **apaga o desenho** e restaurar devolve nada — o botão fica um quadrado em branco até a tela redesenhar. O helper pula os `.botao-icone`: quem informa ali é o véu |
-| Migration nova sem mexer no preflight da importação | `importacao/00_preflight.sql` compara o número de migrations por **igualdade** (`n <> 21`), para recusar também um destino adiante do código. Toda migration nova o quebra, e **nenhum teste pega**: `tests/importacao.rs` roda as 9 etapas e não o preflight. O sintoma só aparece na hora de migrar produção |
+| Migration nova sem mexer no preflight da importação | `importacao/00_preflight.sql` compara o número de migrations por **igualdade** (`n <> 22`), para recusar também um destino adiante do código. Toda migration nova o quebra, e **nenhum teste pega**: `tests/importacao.rs` roda as 9 etapas e não o preflight. O sintoma só aparece na hora de migrar produção |
 | Mexer no status de prazo em um lugar só | A regra vive em **quatro** derivações independentes: o badge (`telas/status-prazo.ts`), o `$9` do `FILTRO` em `proceedings/repository.rs`, o `FILTRO_REPORT` + `dashboard()` de `deadlines/repository.rs` e o `prazos_vencidos` do Painel. Mudar uma deixa a coluna dizendo "Entregue" enquanto o filtro devolve a mesma linha como "Vencido", sem erro nenhum. O `BALDE` de Designações é uma **quinta** que deliberadamente não acompanha — decisões 63 e 65 |
 | Excluir algo do relatório de prazos sem excluir do cartão | Prazos e Painel desenham o KPI com uma consulta e a tabela abaixo dele com outra. O número deixa de bater com as linhas, e é exatamente o defeito que o piso da janela veio corrigir. Toda exclusão nova entra nas duas ao mesmo tempo |
 | Coluna `nowrap` mais estreita que o conteúdo em tabela `--fixa` | `table-layout: fixed` não encolhe nem corta: a célula **transborda por cima da vizinha**. Só `truncar` corta com reticências (e dá o `title`). Largura de coluna com dado de tamanho conhecido se mede no motor, não se estima — data `dd/mm/aaaa` pede ~96px |

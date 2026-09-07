@@ -60,7 +60,7 @@ servidor:       admp6db_owner@ep-blue-union-ae94habf.c-2.us-east-2.aws.neon.tech
 | Colação | o banco foi criado com `LOCALE_PROVIDER icu ICU_LOCALE 'pt-BR'`. Com o `C.UTF-8` que a Neon dá por padrão, os 58 militares com acento no nome — ÉRIKA, ÉVERTON, ÉRICA, ÉRMERSON e o sentinela "À APURAR" — cairiam **depois do Z** em toda lista ordenada por nome |
 | `app_user` | o dump legado nomeia esse dono 25 vezes e ele não existe na Neon. O script o cria `NOLOGIN` antes de carregar o dump e o remove no fim; nada disso alcança o destino, que recebe o schema por `pg_dump --no-owner` |
 | Espaço | plano free: **512 MB** por branch. O destino migrado dá ~56 MB (31 `public` + 25 `legado`); o ensaio e o banco auxiliar do dump somam ~87 MB temporários |
-| O resto | igual. Mesmas 21 migrations, mesmas 10 etapas, mesma transação única, mesma conferência. **0 divergências**, e 197 pendências em vez de 201 — a diferença está explicada em "Lendo os relatórios" |
+| O resto | igual. Mesmas 22 migrations, mesmas 10 etapas, mesma transação única, mesma conferência. **0 divergências**, e 197 pendências em vez de 201 — a diferença está explicada em "Lendo os relatórios" |
 
 ### Quem lê qual arquivo
 
@@ -88,7 +88,7 @@ derrubam bancos.
 
 ## Banco de produção novo, ainda sem schema
 
-O preflight exige as **21 migrations aplicadas** — ele recusa um banco vazio, e
+O preflight exige as **22 migrations aplicadas** — ele recusa um banco vazio, e
 recusa também um schema que alguém tenha aplicado com `psql`, porque aí não
 existe `_sqlx_migrations` e o startup seguinte tentaria recriar tudo. Quem aplica
 é o `sqlx`:
@@ -117,7 +117,7 @@ migrations no startup. Depois disso, o script de migração.
 
 | | |
 |---|---|
-| Banco de destino | com as migrations **0001 a 0021** aplicadas (veja a seção acima) |
+| Banco de destino | com as migrations **0001 a 0022** aplicadas (veja a seção acima) |
 | Dump legado | `admp6_db_atualizado.sql` na raiz — SQL puro, 44 MB |
 | Postgres | o serviço `postgres` do `docker-compose.yml` **no ar** — mesmo migrando para outra máquina, é dele que saem os binários |
 | Ferramentas | `docker` e `sha256sum`. `psql`/`pg_dump` do host são opcionais |

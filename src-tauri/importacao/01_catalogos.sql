@@ -95,10 +95,18 @@ ON CONFLICT DO NOTHING;
 --                         espécie exige rubrica se TODOS os seus processos a
 --                         têm. Dá true em FP/IPM/SR/SV e false em CP e nos 5
 --                         disciplinares — a CP realmente não tem rubrica.
+--   ordem               : a sequência das seções do mapa (decisão 64). Sai
+--                         daqui, e não só da migration que criou a coluna: a
+--                         0019 roda no start do app, portanto ANTES desta
+--                         etapa, e num destino novo os UPDATE dela não acham
+--                         linha nenhuma — foi assim que o Neon de produção
+--                         nasceu com as dez espécies no `DEFAULT 100` e o mapa
+--                         voltou a sair alfabético. A 0022 alcança o que já foi
+--                         importado; esta coluna faz o dado nascer certo.
 INSERT INTO apuratorios (sigla, nome, tipo_apuratorio_id, prazo_base_dias,
                          max_envolvidos, exige_natureza_fato, codigo_extensao,
                          permite_acusacao, permite_acusacao_penal,
-                         permite_indicios, permite_solucao_sugerida)
+                         permite_indicios, permite_solucao_sugerida, ordem)
 SELECT e.tipo_detalhe,
        e.tipo_detalhe,                       -- nome por extenso: revisar na tela
        ta.id,
@@ -110,7 +118,13 @@ SELECT e.tipo_detalhe,
        upper(e.tipo_detalhe) IN ('PADS', 'CD', 'CJ', 'PAD'),
        upper(e.tipo_detalhe) IN ('CD', 'CJ', 'PAD'),
        e.tipo_geral = 'procedimento',
-       e.tipo_geral = 'procedimento'
+       e.tipo_geral = 'procedimento',
+       -- Quem não foi nomeado fica no 100 do `DEFAULT`, e o desempate por sigla
+       -- do `ORDER BY` de `map_rows` mantém esse resto em ordem alfabética.
+       CASE lower(e.tipo_detalhe) WHEN 'sr'   THEN 1
+                                  WHEN 'ipm'  THEN 2
+                                  WHEN 'pads' THEN 3
+                                  ELSE 100 END
   FROM (
       SELECT tipo_geral,
              tipo_detalhe,

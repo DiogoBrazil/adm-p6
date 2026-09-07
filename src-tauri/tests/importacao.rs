@@ -733,6 +733,36 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
             "todo apuratorio precisa de exatamente um papel responsavel"
         );
 
+        // A ordem do mapa nasce da IMPORTAÇÃO, não só da migration que criou a
+        // coluna (decisão 64). A 0019 semeava `ordem`, mas `sqlx::migrate!`
+        // corre no start do app e portanto ANTES desta etapa: num destino novo
+        // ela achou a tabela vazia, não acertou linha nenhuma — sem erro — e as
+        // dez espécies nasceram no `DEFAULT 100`. Com `ordem` empatada o
+        // desempate por sigla assume, e o mapa de produção voltou a abrir por
+        // CD em vez de SR.
+        //
+        // O teste de `maps_reports_repository.rs` prova o MECANISMO (a coluna
+        // vence a sigla) com espécies de fixtura, e por isso não pegou isto.
+        // Aqui se afirma o DADO: as três siglas reais, depois da importação.
+        let ordem_por_sigla: Vec<(String, i32)> =
+            sqlx::query_as("SELECT sigla, ordem FROM apuratorios ORDER BY ordem, sigla")
+                .fetch_all(&pool)
+                .await
+                .expect("ler a ordem das especies");
+        assert_eq!(
+            ordem_por_sigla
+                .iter()
+                .filter(|(_, ordem)| *ordem < 100)
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![
+                ("SR".to_string(), 1),
+                ("IPM".to_string(), 2),
+                ("PADS".to_string(), 3),
+            ],
+            "o mapa abre por SR, IPM e PADS, e so essas tres sao nomeadas"
+        );
+
         // O anexo entra, com nome e mime — os bytes da fixture são truncados.
         let anexo: (String, String) =
             sqlx::query_as("SELECT nome_arquivo, mime_type FROM processo_anexos")
