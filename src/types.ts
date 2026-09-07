@@ -415,6 +415,12 @@ export interface Coluna {
   visivel_se: string | null;
   /** Centraliza os valores desta coluna na listagem administrativa. */
   centralizar: boolean;
+  /** Rótulo curto para o cabeçalho da listagem. O do formulário continua em */
+  /** `rotulo`, e o completo vai para o `title` do cabeçalho. */
+  rotulo_curto: string | null;
+  /** Se a coluna aparece na listagem. `false` a tira só da tabela — ela */
+  /** continua no formulário e no que é gravado. */
+  na_listagem: boolean;
 }
 
 /** `legal_catalogs` */

@@ -94,6 +94,106 @@ function colunasVisiveis(cat: Catalogo): Coluna[] {
 }
 
 /**
+ * Colunas que a **tabela** mostra.
+ *
+ * Subconjunto do formulário, não o contrário: `na_listagem: false` marca o
+ * campo que o administrador precisa editar mas que não ajuda a comparar uma
+ * linha com a outra — e que, numa tabela de dezesseis colunas, só tirava
+ * largura de quem identifica o registro. É o caso de "Ordem no mapa".
+ */
+export function colunasDaListagem(cat: Catalogo): Coluna[] {
+  return colunasVisiveis(cat).filter((c) => c.na_listagem);
+}
+
+/**
+ * Larguras da listagem, em px.
+ *
+ * São px e não porcentagem porque o problema é de conteúdo, não de proporção:
+ * uma coluna de "sim/não" precisa dos mesmos ~78px em Apuratórios (dezesseis
+ * colunas) e em Naturezas do fato (três). Repartir 100% em partes iguais dava
+ * ~76px para "Máximo de envolvidos" e para "Nome" — e era o Nome que saía
+ * "Consel…".
+ *
+ * Quem não tem largura declarada absorve a sobra: com `table-layout: fixed`,
+ * a coluna sem `width` fica com todo o espaço que as outras não usaram. É por
+ * isso que a coluna de identificação não entra neste mapa.
+ */
+export const LARGURA_PX = {
+  /** "sim"/"não" centralizado, com o cabeçalho quebrando em duas linhas. */
+  booleano: 78,
+  /** Cabe "Máx. envolvidos" em duas linhas e três dígitos no corpo. */
+  inteiro: 84,
+  /** Texto curto e centralizado: sigla, artigo, inciso. */
+  textoCompacto: 96,
+  /** Rótulo resolvido de outro catálogo — "Procedimento", "7º BPM". */
+  referencia: 150,
+  /** Só precisa acomodar as tarjas "ativo"/"inativo". */
+  situacao: 92,
+  /** Três `.botao-icone` de 32px, dois vãos de 8 e o padding de 8 da célula. */
+  acoes: 128,
+  /** O que a coluna de identificação garante ao entrar no piso da tabela. */
+  identificacaoMinima: 220,
+} as const;
+
+/**
+ * A largura fixa de uma coluna, ou `null` quando ela é a que absorve a sobra.
+ *
+ * O sinal de "texto longo" já estava declarado no registro e é o `centralizar`:
+ * sigla, artigo e inciso são centralizados; nome, texto e descrição, não. É a
+ * mesma distinção que `classeDadoNaListagem` usa para alinhar — aqui ela decide
+ * quem manda na largura.
+ */
+export function larguraFixaPx(coluna: Coluna): number | null {
+  switch (coluna.tipo) {
+    case "booleano":
+      return LARGURA_PX.booleano;
+    case "inteiro":
+    case "inteiro_opcional":
+      return LARGURA_PX.inteiro;
+    case "referencia":
+    case "referencia_opcional":
+      return LARGURA_PX.referencia;
+    default:
+      return coluna.centralizar ? LARGURA_PX.textoCompacto : null;
+  }
+}
+
+/**
+ * As colunas que absorvem a sobra de largura, por nome.
+ *
+ * Precisa haver ao menos uma, senão o navegador reparte o excedente entre
+ * todas e a coluna de Ações cresce sem motivo numa tela larga. Quando o
+ * catálogo só tem texto centralizado — vários têm um único `Nome` assim —, a
+ * primeira coluna assume o papel.
+ */
+export function colunasFlexiveis(colunas: Coluna[]): Set<string> {
+  const flexiveis = colunas.filter((c) => larguraFixaPx(c) === null);
+  const escolhidas = flexiveis.length ? flexiveis : colunas.slice(0, 1);
+  return new Set(escolhidas.map((c) => c.nome));
+}
+
+/**
+ * A largura mínima da tabela, abaixo da qual ela rola em vez de espremer.
+ *
+ * `.tabela-dados--fixa` declara `min-width: 0`, então sem este piso a tabela
+ * SEMPRE cabe em 100% — que é o que esmagava dezesseis colunas. O `.table-wrap`
+ * já rola; faltava dar-lhe o que rolar. Quem aplica é `dom.ts::aplicarLarguras`,
+ * porque `style=""` interpolado é recusado pela CSP.
+ */
+export function pisoDaTabela(
+  colunas: Coluna[],
+  flexiveis: Set<string>,
+  podeEscrever: boolean,
+): number {
+  const dados = colunas.reduce(
+    (soma, c) =>
+      soma + (flexiveis.has(c.nome) ? LARGURA_PX.identificacaoMinima : (larguraFixaPx(c) ?? 0)),
+    0,
+  );
+  return dados + LARGURA_PX.situacao + (podeEscrever ? LARGURA_PX.acoes : 0);
+}
+
+/**
  * Na listagem, números e booleanos são compactos e ficam centralizados. Texto
  * e referências seguem o alinhamento declarado pelo catálogo; descrições
  * longas permanecem à esquerda para preservar a leitura por varredura.
@@ -392,7 +492,7 @@ let cancelarBusca: (() => void) | null = null;
 /** As linhas que o termo alcança, sobre o que o render já carregou. */
 function linhasFiltradas(cat: Catalogo): Linha[] {
   return linhasQueOTermoAlcanca(
-    colunasVisiveis(cat),
+    colunasDaListagem(cat),
     linhasCarregadas,
     referenciasCarregadas,
     estado.busca,
@@ -469,30 +569,33 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
   const inicio = (estado.pagina - 1) * ITENS_POR_PAGINA;
   const daPagina = linhas.slice(inicio, inicio + ITENS_POR_PAGINA);
 
-  // As colunas de dado repartem o que sobra em partes iguais: o catálogo é
-  // genérico e nenhuma tela sabe de antemão quais colunas ele tem. O que se
-  // sabe é que Situação e Ações são estreitas e de conteúdo previsível.
-  const larguraSituacao = 10;
-  // Três `.botao-icone` de 32px fixos mais os vãos não cabem em 10% de uma
-  // tabela de 900px mínimos — Usuários usa 12 para o mesmo trio.
-  const larguraAcoes = podeEscrever ? 13 : 0;
-  const larguraDado = (100 - larguraSituacao - larguraAcoes) / colunasVisiveis(cat).length;
+  const colunas = colunasDaListagem(cat);
+  const flexiveis = colunasFlexiveis(colunas);
+  const piso = pisoDaTabela(colunas, flexiveis, podeEscrever);
 
   const corpo = daPagina.length
     ? `
       <div class="table-wrap">
-        <table class="tabela-dados tabela-dados--fixa tabela-dados--listagem tabela-catalogos">
+        <table class="tabela-dados tabela-dados--fixa tabela-dados--listagem tabela-catalogos"
+               data-piso="${piso}">
           <colgroup>
-            ${colunasVisiveis(cat)
-              .map(() => `<col data-largura="${larguraDado.toFixed(2)}" />`)
+            ${colunas
+              .map((c) =>
+                flexiveis.has(c.nome) ? `<col />` : `<col data-largura-px="${larguraFixaPx(c)}" />`,
+              )
               .join("")}
-            <col data-largura="${larguraSituacao}" />
-            ${podeEscrever ? `<col data-largura="${larguraAcoes}" />` : ""}
+            <col data-largura-px="${LARGURA_PX.situacao}" />
+            ${podeEscrever ? `<col data-largura-px="${LARGURA_PX.acoes}" />` : ""}
           </colgroup>
           <thead>
             <tr>
-              ${colunasVisiveis(cat)
-                .map((c) => `<th class="col--trunc col--rotulo-quebra">${escapeHtml(c.rotulo)}</th>`)
+              ${colunas
+                .map(
+                  (c) =>
+                    `<th class="col--trunc col--rotulo-quebra" title="${escapeHtml(c.rotulo)}">${escapeHtml(
+                      c.rotulo_curto ?? c.rotulo,
+                    )}</th>`,
+                )
                 .join("")}
               <th class="col--centro col--nowrap">Situação</th>
               ${podeEscrever ? `<th class="col--centro col--nowrap">Ações</th>` : ""}
@@ -503,7 +606,7 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
               .map(
                 (linha) => `
               <tr${linha.ativo ? "" : ' class="inativo"'}>
-                ${colunasVisiveis(cat)
+                ${colunas
                   .map(
                     (c) =>
                       ((texto) =>

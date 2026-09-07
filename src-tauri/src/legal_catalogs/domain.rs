@@ -44,6 +44,22 @@ pub struct Coluna {
     pub visivel_se: Option<&'static str>,
     /// Centraliza os valores desta coluna na listagem administrativa.
     pub centralizar: bool,
+    /// Rótulo curto para o CABEÇALHO da listagem, quando o do formulário é
+    /// longo demais para uma coluna estreita.
+    ///
+    /// São dois textos porque são dois lugares: no formulário o rótulo fica ao
+    /// lado do campo, com espaço e com o `efeito` explicando embaixo; na
+    /// listagem ele divide a largura com mais quinze colunas. Encurtar o
+    /// `rotulo` resolveria a tabela e pioraria o cadastro. O completo continua
+    /// alcançável na tabela pelo `title` do cabeçalho.
+    pub rotulo_curto: Option<&'static str>,
+    /// Se a coluna aparece na LISTAGEM. Quando `false`, ela continua no
+    /// formulário, no `save` e no `get` — some apenas da tabela.
+    ///
+    /// Diferente de `ReferenciaFixa`, que não existe em tela nenhuma: aqui o
+    /// administrador precisa editar o valor, mas comparar linha a linha não
+    /// ajuda ninguém e a coluna só rouba largura de quem identifica o registro.
+    pub na_listagem: bool,
 }
 
 const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -56,6 +72,8 @@ const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
@@ -68,6 +86,8 @@ const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -80,6 +100,8 @@ const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
@@ -92,6 +114,8 @@ const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str)
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 const fn inteiro_opcional(
@@ -108,6 +132,8 @@ const fn inteiro_opcional(
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str) -> Coluna {
@@ -120,6 +146,8 @@ const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 /// Referência que o sistema resolve pela linha marcada com `marcador` no
@@ -134,6 +162,8 @@ const fn referencia_fixa(nome: &'static str, alvo: &'static str, marcador: &'sta
         marcador: Some(marcador),
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
@@ -154,6 +184,8 @@ const fn referencia_condicional(
         marcador: None,
         visivel_se: Some(gatilho),
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
@@ -171,12 +203,26 @@ const fn referencia_opcional(
         marcador: None,
         visivel_se: None,
         centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
 /** Marca uma coluna textual ou de referência como compacta na listagem. */
 const fn centralizada(mut coluna: Coluna) -> Coluna {
     coluna.centralizar = true;
+    coluna
+}
+
+/// Encurta o cabeçalho **da listagem**, preservando o rótulo do formulário.
+const fn abreviada(mut coluna: Coluna, curto: &'static str) -> Coluna {
+    coluna.rotulo_curto = Some(curto);
+    coluna
+}
+
+/// Tira a coluna da listagem sem tirá-la do formulário.
+const fn fora_da_listagem(mut coluna: Coluna) -> Coluna {
+    coluna.na_listagem = false;
     coluna
 }
 
@@ -228,31 +274,34 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("sigla", "Sigla")),
             texto("nome", "Nome"),
             referencia("tipo_apuratorio_id", "Tipo", "tipos_apuratorio"),
-            inteiro("ordem", "Ordem no mapa",
+            // Fora da listagem: é campo de cadastro, não de comparação linha a
+            // linha — e numa tabela de 16 colunas ele só tirava largura de quem
+            // identifica a espécie. Continua obrigatório no formulário.
+            fora_da_listagem(inteiro("ordem", "Ordem no mapa",
                 "Posição desta espécie no mapa mensal — menor vem primeiro. \
                  Empate cai na ordem alfabética da sigla. Vale para o documento \
-                 emitido e para a tabela da tela; não muda a ordem dos filtros."),
-            inteiro("prazo_base_dias", "Prazo base (dias)",
-                "Prazo inicial padrão desta espécie. Um documento iniciador pode sobrescrevê-lo."),
-            inteiro_opcional("max_envolvidos", "Máximo de envolvidos",
-                "Em branco = sem limite. O banco recusa gravar acima deste número."),
-            booleano("exige_natureza_fato", "Exige natureza geral do fato",
-                "Torna a rubrica do fato apurado obrigatória no cadastro."),
-            booleano("permite_julgamento", "Permite julgamento",
-                "Revela a data de julgamento no cadastro do processo."),
-            booleano("permite_punicao", "Permite punição",
+                 emitido e para a tabela da tela; não muda a ordem dos filtros.")),
+            abreviada(inteiro("prazo_base_dias", "Prazo base (dias)",
+                "Prazo inicial padrão desta espécie. Um documento iniciador pode sobrescrevê-lo."), "Prazo base"),
+            abreviada(inteiro_opcional("max_envolvidos", "Máximo de envolvidos",
+                "Em branco = sem limite. O banco recusa gravar acima deste número."), "Máx. envolvidos"),
+            abreviada(booleano("exige_natureza_fato", "Exige natureza geral do fato",
+                "Torna a rubrica do fato apurado obrigatória no cadastro."), "Natureza do fato"),
+            abreviada(booleano("permite_julgamento", "Permite julgamento",
+                "Revela a data de julgamento no cadastro do processo."), "Julgamento"),
+            abreviada(booleano("permite_punicao", "Permite punição",
                 "Revela penalidade e dias em cada envolvido. Vale junto com o atributo \
-                 da solução decidida: a espécie precisa punir E o desfecho precisa punir."),
-            booleano("permite_remessa_comissao", "Permite remessa à comissão",
-                "Revela a data de remessa à comissão no cadastro do processo."),
-            booleano("permite_acusacao", "Permite acusação disciplinar",
-                "Exige enquadramento jurídico do acusado no cadastro do processo."),
-            booleano("permite_acusacao_penal", "Permite acusação penal",
-                "Libera crimes e contravenções na acusação, além das infrações disciplinares."),
-            booleano("permite_indicios", "Permite indícios",
-                "Libera o registro de indícios para procedimentos investigativos."),
-            booleano("permite_solucao_sugerida", "Permite solução sugerida",
-                "Libera a proposta de solução pelo encarregado no resultado do envolvido."),
+                 da solução decidida: a espécie precisa punir E o desfecho precisa punir."), "Punição"),
+            abreviada(booleano("permite_remessa_comissao", "Permite remessa à comissão",
+                "Revela a data de remessa à comissão no cadastro do processo."), "Remessa à comissão"),
+            abreviada(booleano("permite_acusacao", "Permite acusação disciplinar",
+                "Exige enquadramento jurídico do acusado no cadastro do processo."), "Acusação disciplinar"),
+            abreviada(booleano("permite_acusacao_penal", "Permite acusação penal",
+                "Libera crimes e contravenções na acusação, além das infrações disciplinares."), "Acusação penal"),
+            abreviada(booleano("permite_indicios", "Permite indícios",
+                "Libera o registro de indícios para procedimentos investigativos."), "Indícios"),
+            abreviada(booleano("permite_solucao_sugerida", "Permite solução sugerida",
+                "Libera a proposta de solução pelo encarregado no resultado do envolvido."), "Solução sugerida"),
             // `codigo_extensao` NÃO entra: é o único código técnico do schema
             // (§5.3), e acrescentar uma extensão de formulário é mudança de
             // código, não operação de administrador. A coluna continua no banco

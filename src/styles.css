@@ -3481,6 +3481,40 @@ tr.atrasado {
   }
 }
 
+/* ── A listagem de Catálogos ──────────────────────────────────────────────
+   A tela é uma só para os 26 catálogos, e o pior caso é Apuratórios: dezesseis
+   colunas, oito delas cabeçalhos de atributo. As larguras vêm em px por
+   `data-largura-px` (`catalogos.ts::LARGURA_PX`), e o piso da tabela em
+   `data-piso` — as duas aplicadas pela CSSOM, porque `style=""` interpolado é
+   recusado pela CSP. O que fica aqui é só a tipografia do cabeçalho.
+
+   O corpo NÃO encolhe junto: são "sim"/"não" e tarjas, que precisam do tamanho
+   normal para serem lidos de relance. */
+.tabela-dados.tabela-catalogos thead th {
+  padding-inline: 6px;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+/* Cabeçalho de três linhas cabe sem empurrar a altura do corpo, e sem cortar a
+   última linha — a altura fixa de 46px de `.tabela-dados--fixa` valeria também
+   aqui, e "Remessa à comissão" em coluna de 78px ocupa três.
+
+   Seletor COMPOSTO de propósito: `.tabela-dados thead th.col--rotulo-quebra`, lá
+   em cima, tem a mesma especificidade que `.tabela-catalogos thead th…` teria, e
+   aí quem venceria seria a posição no arquivo — não a intenção. Com as duas
+   classes da tabela no seletor, a decisão é por especificidade e sobrevive a
+   qualquer reordenação. */
+.tabela-dados.tabela-catalogos thead th.col--rotulo-quebra {
+  height: auto;
+  padding-block: 8px;
+  white-space: normal;
+  /* Rótulo mais largo que a coluna quebra DENTRO dela em vez de invadir a
+     vizinha: sem isto, "disciplinar" numa coluna de 78px transborda. */
+  overflow-wrap: break-word;
+}
+
 /* ── A listagem de processos ──────────────────────────────────────────────
    O que sobra aqui é só o que é dela: as larguras das nove colunas — que
    antecedem `Coluna` e seguem em classe, porque esta tela mantém markup

@@ -920,6 +920,13 @@ export function aplicarLarguras(raiz: ParentNode = document): void {
   raiz.querySelectorAll<HTMLElement>("col[data-largura]").forEach((col) => {
     col.style.width = `${col.dataset.largura}%`;
   });
+  // Largura absoluta, para a coluna cujo conteúdo tem tamanho conhecido e não
+  // deve encolher com a tabela — "sim"/"não", a tarja de situação, os botões de
+  // ação. Convive com a de porcentagem: são tabelas diferentes, e o `<col>` sem
+  // nenhuma das duas é o que absorve a sobra sob `table-layout: fixed`.
+  raiz.querySelectorAll<HTMLElement>("col[data-largura-px]").forEach((col) => {
+    col.style.width = `${col.dataset.larguraPx}px`;
+  });
   raiz.querySelectorAll<HTMLElement>("table[data-piso]").forEach((tabela) => {
     tabela.style.minWidth = `${tabela.dataset.piso}px`;
   });

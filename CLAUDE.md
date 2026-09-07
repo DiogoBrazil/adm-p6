@@ -65,6 +65,7 @@ entender X → olhe em Y".
 | Comando paginado servindo de lista de **opções** | O teto de 200 **corta em silêncio**. Lista de opções não pagina (`users_list_ativos`); paginação é da listagem de tela, e precisa de controle de página |
 | Listagem de tela nova | o recorte é `db::paginacao::Recorte` (padrão 10, teto 200), e o envelope devolve `page`/`per_page` — sem isso a tela desenha um controle de página com o que **pediu**, não com o que foi servido |
 | Largura de coluna | vem de `dom.ts::Coluna.largura`, sai em `data-largura` e é aplicada por `aplicarLarguras` (chamada de `shell()`). Num `<col style="">` a CSP recusa igual, e a tabela volta a se dimensionar pelo conteúdo sem avisar |
+| Repartir largura em partes iguais numa tabela genérica | funciona com três colunas e falha com dezesseis: a coluna que identifica o registro recebe a mesma fatia da de "sim/não". E `.tabela-dados--fixa` declara `min-width: 0`, então a tabela **sempre** cabe em 100% — o `.table-wrap` rola, mas nunca tem o que rolar. Largura por **tipo** (`catalogos.ts::LARGURA_PX`), a coluna de identificação **sem** `width` para absorver a sobra, e `data-piso` na tabela |
 | Redesenhar **parte** de uma listagem | não passa pelo `shell()`, e por isso não passa por `aplicarLarguras`: chame-a você mesmo sobre a área (`aplicarLarguras(area)`), senão as larguras somem sem avisar |
 | Debounce de busca sem `aoDigitar` | o estado do módulo tem de mudar a **cada tecla**; só o redesenho espera. Quem exporta a planilha ou aplica filtro dentro dos 250 ms lê a variável, não o campo. `dom.ts::ligarBuscaInstantanea` já separa os dois |
 | Mais de uma ação na mesma célula | `dom.ts::Celula.acoes`, e **cada botão com o seu `data-`** (`dado`): o padrão é `data-tabela-acao`, e repetido nos três os cliques caem todos no mesmo listener |
@@ -135,7 +136,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo test   # 195 testes
-cd .. && npm test && npm run typecheck            # 33 testes frontend
+cd .. && npm test && npm run typecheck            # 40 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —
