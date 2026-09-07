@@ -245,7 +245,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                  da solução decidida: a espécie precisa punir E o desfecho precisa punir."),
             booleano("permite_remessa_comissao", "Permite remessa à comissão",
                 "Revela a data de remessa à comissão no cadastro do processo."),
-            booleano("permite_acusacao", "Permite acusação",
+            booleano("permite_acusacao", "Permite acusação disciplinar",
                 "Exige enquadramento jurídico do acusado no cadastro do processo."),
             booleano("permite_acusacao_penal", "Permite acusação penal",
                 "Libera crimes e contravenções na acusação, além das infrações disciplinares."),
@@ -475,7 +475,7 @@ pub const CATALOGOS: &[Catalogo] = &[
     Catalogo {
         chave: "papeis_pessoa",
         tabela: "papeis_pessoa",
-        rotulo: "Papéis de pessoa",
+        rotulo: "Papéis de pessoa (Exceto Vítima)",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
         assunto_sql: "SELECT nome FROM papeis_pessoa WHERE id = $1::uuid",
