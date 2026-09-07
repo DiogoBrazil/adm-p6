@@ -29,7 +29,8 @@
     "active": true,
     "linux": {
       "deb": {
-        "desktopTemplate": "gestao-p6.desktop"
+        "desktopTemplate": "gestao-p6.desktop",
+        "recommends": ["gnome-keyring"]
       }
     },
     "shortDescription": "Sistema da Seção de Justiça e Disciplina do 7º BPM/PMRO",

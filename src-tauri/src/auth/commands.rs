@@ -21,6 +21,7 @@ pub async fn auth_login(
     email: String,
     senha: String,
 ) -> Result<ApiResponse<SessionUser>, String> {
+    let _guard = state.lifecycle.lock().await;
     Ok(from_result(login(&state, LoginRequest { email, senha }).await).await)
 }
 

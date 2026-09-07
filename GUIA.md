@@ -132,7 +132,7 @@ npm run build                        # typecheck + vite build
 # distintivo do 7º BPM virou ícone do app. `--no-bundle` continua servindo para
 # conferir só a CSP, sem esperar os três pacotes.
 npm run tauri build
-./src-tauri/target/release/adm-p6-tauri
+./src-tauri/target/release/gestao-p6
 ```
 
 Login inicial: `admin@sistema.com` / `123456`.
@@ -140,6 +140,20 @@ Login inicial: `admin@sistema.com` / `123456`.
 > **`cargo run` e `npm run tauri dev` usam a `devCsp`**, que afrouxa `style-src` e libera o
 > WebSocket do HMR. Servem para desenvolver; **não** servem para conferir a CSP. Para isso
 > é o binário de produção acima.
+
+**Geração dos instaladores:** o passo a passo fica no
+[README — Instaladores e conexão no primeiro uso](README.md#instaladores-e-conexão-no-primeiro-uso).
+Ele cobre `.deb` pelo script `scripts/empacotar.sh`, `.exe` Windows x64 pelo
+WSL/Linux com `cargo-xwin` e NSIS, e `.exe`/`.msi` no Windows. O instalador Windows
+gerado pelo WSL foi testado com sucesso em 07/09/2026.
+
+**Conexão nos builds release:** não há credenciais embutidas nem leitura de
+`.env.producao`. Antes do login, o app pede URL ou campos separados, testa a
+conexão e salva no cofre da conta do sistema operacional (Gerenciador de
+Credenciais no Windows; Secret Service no Linux). Só então aplica migrations e
+libera o login. Nas próximas aberturas, recupera a configuração do cofre. O
+ambiente/`.env` continua sendo usado somente no desenvolvimento; falha de rede
+não apaga a configuração salva. No Linux, o cofre precisa estar disponível.
 
 ### 1.1 Primeiro uso — **só numa instalação nova**
 
@@ -461,7 +475,7 @@ onde mora o risco:
 
 ```bash
 npm run tauri build
-./src-tauri/target/release/adm-p6-tauri
+./src-tauri/target/release/gestao-p6
 ```
 
 ---
@@ -1171,7 +1185,7 @@ npm run tauri build
 docker compose up -d
 
 # 3. Abrir o app
-./src-tauri/target/release/adm-p6-tauri
+./src-tauri/target/release/gestao-p6
 ```
 
 Entre com `admin@sistema.com` / `123456` e **deixe o console aberto (F12)**.
@@ -1982,7 +1996,7 @@ imagem que ela precisa aceitar.
       escuro** — o fundo é transparente, e um halo claro em volta do distintivo
       significa que a limpeza do PNG não pegou
 - [ ] `npm run tauri build` empacota sem `--no-bundle`, e o `.deb` traz
-      `usr/share/icons/hicolor/*/apps/adm-p6-tauri.png`
+      `usr/share/icons/hicolor/*/apps/gestao-p6.png`
 
 ### p-quinquies) Loaders e a tabela do mapa (seção 12, rodada 33)
 

@@ -4,6 +4,7 @@ pub mod app_state;
 pub mod apuratorio_config;
 pub mod audit;
 pub mod auth;
+pub mod database_config;
 pub mod db;
 pub mod deadlines;
 pub mod error;
@@ -29,6 +30,8 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
     builder
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            database_config::database_initialize,
+            database_config::database_save,
             auth::commands::auth_login,
             auth::commands::auth_logout,
             auth::commands::auth_current_user,
@@ -132,19 +135,30 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // SQLx também consulta PG* implicitamente. Remover antes de iniciar threads
+    // impede que o ambiente altere a configuração do cofre em um app instalado.
+    #[cfg(not(debug_assertions))]
+    for key in [
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGUSER",
+        "PGPASSWORD",
+        "PGDATABASE",
+        "PGSSLMODE",
+        "PGSSLROOTCERT",
+        "PGSSLCERT",
+        "PGSSLKEY",
+        "PGAPPNAME",
+        "PGOPTIONS",
+        "PGPASSFILE",
+    ] {
+        std::env::remove_var(key);
+    }
+    // Somente builds de desenvolvimento consultam o ambiente/.env.
+    #[cfg(debug_assertions)]
     dotenvy::dotenv().ok();
-    let state = AppState::from_env();
-
-    tauri::async_runtime::block_on(async {
-        let pool = state
-            .pool()
-            .await
-            .expect("Falha ao conectar ao banco de dados");
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("Falha ao aplicar migrations do banco de dados");
-    });
+    let state = AppState::for_application();
 
     registrar_comandos(tauri::Builder::default())
         .manage(state)

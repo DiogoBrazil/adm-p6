@@ -1,4 +1,4 @@
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::PgPool;
 use std::time::Duration;
 
@@ -11,6 +11,10 @@ use std::time::Duration;
 /// tela, e por isso todas estão declaradas — quem mexer aqui está mexendo em
 /// tempo de tela, não em detalhe de configuração.
 pub async fn connect(database_url: &str) -> Result<PgPool, sqlx::Error> {
+    connect_options(database_url.parse()?).await
+}
+
+pub async fn connect_options(options: PgConnectOptions) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(5)
         // Zero, e declarado. É tentador manter uma conexão quente para não
@@ -26,7 +30,7 @@ pub async fn connect(database_url: &str) -> Result<PgPool, sqlx::Error> {
         // Cabe o pior caso honesto: acordar um compute suspenso mais o
         // handshake. Estourar isto é erro de verdade, e chega à tela como tal.
         .acquire_timeout(Duration::from_secs(30))
-        .connect(database_url)
+        .connect_with(options)
         .await
 }
 

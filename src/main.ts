@@ -42,6 +42,7 @@ import {
 } from "./telas/mapas";
 import { ROTA as ROTA_ESTATISTICAS, renderEstatisticas } from "./telas/estatisticas";
 import { ROTA as ROTA_ANUAL, renderRelatorioAnual } from "./telas/anual";
+import { iniciarBanco, configurarBanco } from "./database-setup";
 import { brasaoUrl } from "./brasao";
 
 // Shell da aplicação: sessão, menu e roteamento. Nada mais.
@@ -326,11 +327,13 @@ function renderLogin(error = "") {
         <label>Senha<input name="senha" type="password" autocomplete="current-password" placeholder="Digite sua senha" required /></label>
         <p id="login-erro" class="feedback feedback--error" role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
         <button type="submit">Entrar no GESTÃO P6/7ºBPM</button>
+        <button type="button" id="configurar-banco" class="secondary">Configurar conexão</button>
       </form>
       <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     </main>
   `;
 
+  document.querySelector("#configurar-banco")!.addEventListener("click", () => configurarBanco(app, () => renderLogin()));
   const formulario = document.querySelector<HTMLFormElement>("#login-form")!;
   const erro = document.querySelector<HTMLElement>("#login-erro")!;
 
@@ -449,10 +452,8 @@ async function despacharRota() {
 
 
 
-void loadSession().then(() => {
-  if (session) {
-    void renderRoute();
-  } else {
-    renderLogin();
-  }
+void iniciarBanco(app, async () => {
+  await loadSession();
+  if (session) await renderRoute();
+  else renderLogin();
 });

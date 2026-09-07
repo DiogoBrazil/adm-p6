@@ -44,6 +44,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 dotenvy = "0.15"
+url = "2"
 regex = "1"
 # Planilhas XLSX dos relatórios. A geração fica no backend para manter o
 # frontend sem outra biblioteca pesada e para entregar bytes pelo mesmo fluxo
@@ -54,8 +55,12 @@ rust_xlsxwriter = { version = "0.99", features = ["chrono"] }
 # `@page { size: … }` e só o `GtkPageSetup` decide. Ver src/print/commands.rs.
 # As duas já chegavam por `wry`; declaradas para que a versão não mude sem aviso.
 [target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
 webkit2gtk = "2.0"
 gtk = "0.18"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.3", features = ["windows-native"] }
 
 
 [dev-dependencies]

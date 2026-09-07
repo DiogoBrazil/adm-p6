@@ -1586,3 +1586,29 @@ fn desativar_e_excluir_militar_sao_comandos_diferentes() {
         );
     });
 }
+
+#[test]
+fn configuracao_banco_valida_entrada_e_recusa_troca_com_sessao() {
+    // Estes dois caminhos devem terminar antes de acessar rede ou cofre.
+    let (app, webview) = app_de_teste("postgres://unused:unused@localhost/unused");
+    let response = invocar(
+        &webview,
+        "database_save",
+        json!({
+            "input": { "mode": "url", "url": "https://user:SEGREDO_NAO_EXIBIR@host/db" }
+        }),
+    );
+    assert_eq!(ok(&response)["state"], "invalid_config");
+    assert!(!response.to_string().contains("SEGREDO_NAO_EXIBIR"));
+    autenticar(&app, "sessao-local", true);
+    let response = invocar(
+        &webview,
+        "database_save",
+        json!({
+            "input": { "mode": "fields", "host": "localhost", "port": 5432,
+                "database": "test", "username": "test", "password": "SEGREDO_NAO_EXIBIR", "sslmode": "verify-full" }
+        }),
+    );
+    assert!(erro(&response).contains("Saia da sua sessão"));
+    assert!(!response.to_string().contains("SEGREDO_NAO_EXIBIR"));
+}

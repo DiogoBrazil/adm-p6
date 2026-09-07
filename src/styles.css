@@ -4628,3 +4628,14 @@ button.filtro-chip:focus-visible {
     display: none !important;
   }
 }
+
+/* Configuração inicial: reutiliza o modal e a tipografia dos cadastros. */
+#db-form { display: grid; gap: 16px; }
+#db-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+#db-form .db-mode { display: flex; flex-wrap: wrap; gap: 16px; }
+#db-form .db-mode label { display: flex; align-items: center; gap: 8px; }
+#db-form .db-mode input { width: auto; }
+#db-form .db-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+#db-form [hidden] { display: none; }
+.db-actions { display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 600px) { #db-form .db-fields { grid-template-columns: 1fr; } }

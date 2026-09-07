@@ -66,25 +66,21 @@ servidor:       admp6db_owner@ep-blue-union-ae94habf.c-2.us-east-2.aws.neon.tech
 
 | Quem | Lê | Como aponta para outro banco |
 |---|---|---|
-| A aplicação (`lib.rs:133`, `dotenvy::dotenv()`) | `.env` | editando `DB_HOST/PORT/NAME/USER/PASSWORD` |
+| A aplicação em desenvolvimento (`dotenvy::dotenv()`) | `.env` | editando `DB_HOST/PORT/NAME/USER/PASSWORD` |
+| A aplicação instalada | Cofre do sistema | botão **Configurar conexão**, antes do login |
 | Os testes (`tests/util/mod.rs`) | `../.env` | idem — e por isso o `.env` deve ficar no banco local |
 | `sqlx migrate run` | `DATABASE_URL` do ambiente ou do `.env` | passando `DATABASE_URL=...` na linha de comando |
 | **O script de migração** | o que `--env-file` disser (padrão `.env`) | **`--env-file .env.producao`** |
 
-Dois detalhes que costumam confundir:
+Diferença entre desenvolvimento e instalação:
 
-- A **aplicação ignora o `DATABASE_URL`**. Ela monta a URL a partir das cinco
-  variáveis `DB_*` (`app_state.rs::from_env`). O `DATABASE_URL` existe só para as
-  ferramentas de linha de comando do `sqlx`.
-- **Trocar de banco no script não é editar o `.env`** — é passar outro arquivo.
-  É de propósito: o `.env` é o que a aplicação e os testes leem, e mantê-lo
-  apontando para o banco local é o que impede um `cargo test` ou um
-  `npm run tauri dev` de alcançarem produção por engano. Um teste roda
-  `DROP DATABASE` em banco descartável; apontado para o lugar errado, seria caro.
+- Em **desenvolvimento**, a aplicação usa `DB_*` quando `DB_HOST` está presente;
+  caso contrário aceita `DATABASE_URL`. O aplicativo **instalado** usa somente
+  o cofre seguro do sistema, configurado no primeiro uso. `.env.producao` continua
+  disponível aos scripts administrativos e não entra nos instaladores.
 
-Se você quiser que a **aplicação** também abra o banco de produção, aí sim edita
-o `.env` — mas então lembre que os testes passam a mirar lá, e eles criam e
-derrubam bancos.
+Para abrir produção em desenvolvimento, use `scripts/rodar_contra_neon.sh`.
+Preserve o `.env` local, pois os testes criam e derrubam bancos a partir dele.
 
 ## Banco de produção novo, ainda sem schema
 

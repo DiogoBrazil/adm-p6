@@ -131,6 +131,14 @@ export type ApiResponse<T> = {
   error: string | null;
 };
 
+export type ConnectionInput =
+  | { mode: "url"; url: string }
+  | { mode: "fields"; host: string; port: number; database: string; username: string; password: string; sslmode: string };
+export type StartupStatus = {
+  state: "ready" | "missing" | "vault_error" | "invalid_config" | "connection_error" | "migration_error";
+  message: string;
+};
+
 /**
  * Contrato dos comandos registrados em `src-tauri/src/lib.rs`.
  *
@@ -138,6 +146,8 @@ export type ApiResponse<T> = {
  * deliberado: a divergência vira erro de compilação em vez de erro de runtime.
  */
 export interface Commands {
+  database_initialize: { args: Record<string, never>; result: StartupStatus };
+  database_save: { args: { input: ConnectionInput }; result: StartupStatus };
   // ── Sessão ────────────────────────────────────────────────────────
   auth_login: { args: { email: string, senha: string }; result: SessionUser };
   auth_logout: { args: Record<string, never>; result: boolean };
@@ -296,7 +306,8 @@ export async function call<K extends CommandName>(
     // desserialização): informação de implementação na cara de quem usa o
     // sistema, e sem nenhuma ação possível. O detalhe fica no console, onde
     // serve para diagnóstico; a tela recebe o que dá para fazer.
-    console.error(`[adm-p6] falha de IPC em ${command}:`, error);
+    // Configuração transporta segredos: nem erros de desserialização devem ser logados.
+    if (command !== "database_save") console.error(`[adm-p6] falha de IPC em ${command}:`, error);
     return {
       ok: false,
       data: null,
