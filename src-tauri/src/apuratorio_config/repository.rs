@@ -1,0 +1,369 @@
+use sqlx::{PgPool, Postgres, Transaction};
+
+use crate::apuratorio_config::domain::{
+    ApuratorioConfig, DocumentoIniciadorItem, PapelItem, SaveDocumentoIniciadorRequest,
+    SavePapelRequest,
+};
+use crate::error::AppError;
+
+/// Configuração completa de um apuratório.
+///
+/// **Não filtra `ativo`**: esta é a tela de administração, e um item desativado
+/// precisa continuar visível para poder ser reativado. Quem filtra `ativo` são as
+/// listas de opções de um cadastro novo.
+pub async fn get(pool: &PgPool, apuratorio_id: &str) -> Result<Option<ApuratorioConfig>, AppError> {
+    // Os atributos de comportamento vêm daqui, e não do registro de catálogos —
+    // ver o cabeçalho de `ApuratorioConfig` para o porquê.
+    type Cabecalho = (
+        String,
+        String,
+        i32,
+        Option<i32>,
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        bool,
+        Option<String>,
+    );
+    let cabecalho: Option<Cabecalho> = sqlx::query_as(
+        "SELECT sigla, nome, prazo_base_dias, max_envolvidos, exige_natureza_fato,
+                permite_julgamento, permite_punicao, permite_remessa_comissao,
+                permite_acusacao, permite_acusacao_penal, permite_indicios,
+                permite_solucao_sugerida, permite_cadastro_vitima,
+                codigo_extensao
+           FROM apuratorios WHERE id = $1::uuid",
+    )
+    .bind(apuratorio_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some((
+        sigla,
+        nome,
+        prazo_base_dias,
+        max_envolvidos,
+        exige_natureza_fato,
+        permite_julgamento,
+        permite_punicao,
+        permite_remessa_comissao,
+        permite_acusacao,
+        permite_acusacao_penal,
+        permite_indicios,
+        permite_solucao_sugerida,
+        permite_cadastro_vitima,
+        codigo_extensao,
+    )) = cabecalho
+    else {
+        return Ok(None);
+    };
+
+    let documentos: Vec<DocumentoIniciadorItem> = sqlx::query_as(
+        "SELECT adi.tipo_documento_id::text          AS tipo_documento_id,
+                td.nome                              AS tipo_documento,
+                adi.prazo_base_dias                  AS prazo_base_dias,
+                COALESCE(adi.prazo_base_dias, a.prazo_base_dias) AS prazo_efetivo_dias,
+                adi.padrao                           AS padrao,
+                adi.ativo                            AS ativo,
+                EXISTS (SELECT 1 FROM processos_procedimentos p
+                         WHERE p.apuratorio_id = adi.apuratorio_id
+                           AND p.documento_iniciador_id = adi.tipo_documento_id) AS em_uso
+           FROM apuratorio_documentos_iniciadores adi
+           JOIN tipos_documento td ON td.id = adi.tipo_documento_id
+           JOIN apuratorios     a  ON a.id  = adi.apuratorio_id
+          WHERE adi.apuratorio_id = $1::uuid
+          ORDER BY adi.padrao DESC, td.nome",
+    )
+    .bind(apuratorio_id)
+    .fetch_all(pool)
+    .await?;
+
+    let papeis: Vec<PapelItem> = sqlx::query_as(
+        "SELECT ap.papel_id::text  AS papel_id,
+                pp.nome            AS papel,
+                ap.obrigatorio     AS obrigatorio,
+                ap.max_ocupantes   AS max_ocupantes,
+                ap.e_responsavel   AS e_responsavel,
+                ap.usa_documento_designacao AS usa_documento_designacao,
+                ap.ativo           AS ativo,
+                EXISTS (SELECT 1 FROM processo_designacoes d
+                         WHERE d.apuratorio_id = ap.apuratorio_id
+                           AND d.papel_id = ap.papel_id) AS em_uso
+           FROM apuratorio_papeis ap
+           JOIN papeis_processo pp ON pp.id = ap.papel_id
+          WHERE ap.apuratorio_id = $1::uuid
+          ORDER BY ap.e_responsavel DESC, pp.nome",
+    )
+    .bind(apuratorio_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(Some(ApuratorioConfig {
+        apuratorio_id: apuratorio_id.to_string(),
+        sigla,
+        nome,
+        prazo_base_dias,
+        max_envolvidos,
+        exige_natureza_fato,
+        permite_julgamento,
+        permite_punicao,
+        permite_remessa_comissao,
+        permite_acusacao,
+        permite_acusacao_penal,
+        permite_indicios,
+        permite_solucao_sugerida,
+        permite_cadastro_vitima,
+        codigo_extensao,
+        documentos,
+        papeis,
+    }))
+}
+
+/// Habilita (ou reconfigura) um documento iniciador para o apuratório.
+pub async fn save_documento(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveDocumentoIniciadorRequest,
+) -> Result<(), AppError> {
+    // `uq_apdoc_padrao` admite um único padrão por apuratório. Zerar o anterior
+    // antes de gravar é o que permite trocar o padrão sem violar o índice.
+    if request.padrao {
+        sqlx::query(
+            "UPDATE apuratorio_documentos_iniciadores
+                SET padrao = false, updated_at = now()
+              WHERE apuratorio_id = $1::uuid AND tipo_documento_id <> $2::uuid AND padrao",
+        )
+        .bind(&request.apuratorio_id)
+        .bind(&request.tipo_documento_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    sqlx::query(
+        "INSERT INTO apuratorio_documentos_iniciadores
+             (apuratorio_id, tipo_documento_id, prazo_base_dias, padrao, ativo)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5)
+         ON CONFLICT (apuratorio_id, tipo_documento_id) DO UPDATE
+            SET prazo_base_dias = EXCLUDED.prazo_base_dias,
+                padrao          = EXCLUDED.padrao,
+                ativo           = EXCLUDED.ativo,
+                updated_at      = now()",
+    )
+    .bind(&request.apuratorio_id)
+    .bind(&request.tipo_documento_id)
+    .bind(request.prazo_base_dias)
+    .bind(request.padrao)
+    .bind(request.ativo)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Habilita (ou reconfigura) um papel para o apuratório.
+///
+/// Baixar `max_ocupantes` **não** invalida designações já gravadas: a constraint
+/// trigger só dispara em escrita de `processo_designacoes`. É o princípio de que
+/// configuração define o comportamento futuro e não reescreve fatos passados.
+///
+/// O `ON CONFLICT` regrava a linha **inteira**, inclusive
+/// `usa_documento_designacao`. Quem chama para mexer num atributo só precisa
+/// mandar os demais como estão — é o que a tela faz ao mesclar com o item atual.
+pub async fn save_papel(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SavePapelRequest,
+) -> Result<(), AppError> {
+    // `uq_appapel_responsavel` admite um único responsável por apuratório.
+    if request.e_responsavel {
+        sqlx::query(
+            "UPDATE apuratorio_papeis
+                SET e_responsavel = false, updated_at = now()
+              WHERE apuratorio_id = $1::uuid AND papel_id <> $2::uuid AND e_responsavel",
+        )
+        .bind(&request.apuratorio_id)
+        .bind(&request.papel_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    sqlx::query(
+        "INSERT INTO apuratorio_papeis
+             (apuratorio_id, papel_id, obrigatorio, max_ocupantes, e_responsavel,
+              usa_documento_designacao, ativo)
+         VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+         ON CONFLICT (apuratorio_id, papel_id) DO UPDATE
+            SET obrigatorio   = EXCLUDED.obrigatorio,
+                max_ocupantes = EXCLUDED.max_ocupantes,
+                e_responsavel = EXCLUDED.e_responsavel,
+                usa_documento_designacao = EXCLUDED.usa_documento_designacao,
+                ativo         = EXCLUDED.ativo,
+                updated_at    = now()",
+    )
+    .bind(&request.apuratorio_id)
+    .bind(&request.papel_id)
+    .bind(request.obrigatorio)
+    .bind(request.max_ocupantes)
+    .bind(request.e_responsavel)
+    .bind(request.usa_documento_designacao)
+    .bind(request.ativo)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Desativa um documento iniciador: some dos cadastros novos, e os processos que
+/// já o usam continuam íntegros — a FK composta aponta para a PK, não para
+/// `ativo`. Perde o `padrao` junto, porque padrão desativado não faz sentido.
+pub async fn deactivate_documento(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    tipo_documento_id: &str,
+) -> Result<bool, AppError> {
+    let afetadas = sqlx::query(
+        "UPDATE apuratorio_documentos_iniciadores
+            SET ativo = false, padrao = false, updated_at = now()
+          WHERE apuratorio_id = $1::uuid AND tipo_documento_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(tipo_documento_id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    Ok(afetadas > 0)
+}
+
+/// Desativa um papel do apuratório.
+///
+/// Recusa desativar o papel que responde pelo apuratório: listagem, dashboard e
+/// relatórios resolvem o responsável por `e_responsavel`, e desativá-lo faria o
+/// responsável sumir de todos os processos daquela espécie. O caminho correto é
+/// apontar `e_responsavel` para outro papel antes.
+pub async fn deactivate_papel(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    papel_id: &str,
+) -> Result<bool, AppError> {
+    let e_responsavel: Option<bool> = sqlx::query_scalar(
+        "SELECT e_responsavel FROM apuratorio_papeis
+          WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(papel_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    match e_responsavel {
+        None => Ok(false),
+        Some(true) => Err(AppError::Domain(
+            "Esta função responde pelo apuratório. Indique outra responsável antes de desativá-la."
+                .to_string(),
+        )),
+        Some(false) => {
+            sqlx::query(
+                "UPDATE apuratorio_papeis SET ativo = false, updated_at = now()
+                  WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+            )
+            .bind(apuratorio_id)
+            .bind(papel_id)
+            .execute(&mut **tx)
+            .await?;
+            Ok(true)
+        }
+    }
+}
+
+/// Exclusão FÍSICA de um documento iniciador da configuração de um apuratório.
+///
+/// É o par de `deactivate_documento`, e a diferença é a mesma da decisão 54:
+/// desativar tira das escolhas novas sem perder nada, e é o único caminho para
+/// quem tem histórico; excluir é para a linha cadastrada por engano, e não se
+/// desfaz.
+///
+/// A FK composta `fk_processo_apuratorio_documento` é `ON DELETE RESTRICT`, e é
+/// ela quem realmente decide — a tela esconde o botão quando `em_uso`, mas tela
+/// não é guarda. O que a interceptação abaixo acrescenta é a **frase**: sem ela,
+/// a recusa chega à tela pela rede genérica de `error.rs`.
+pub async fn delete_documento(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    tipo_documento_id: &str,
+) -> Result<bool, AppError> {
+    let resultado = sqlx::query(
+        "DELETE FROM apuratorio_documentos_iniciadores
+          WHERE apuratorio_id = $1::uuid AND tipo_documento_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(tipo_documento_id)
+    .execute(&mut **tx)
+    .await;
+
+    match resultado {
+        Ok(r) => Ok(r.rows_affected() > 0),
+        Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => Err(AppError::Domain(
+            "Este documento iniciador já foi usado em algum apuratório e não pode ser excluído. \
+             Desative-o."
+                .to_string(),
+        )),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Exclusão FÍSICA de uma função da configuração de um apuratório.
+///
+/// Mantém a guarda de `deactivate_papel` — o papel que responde pelo apuratório
+/// é recusado, porque listagem, painel e relatórios resolvem o responsável por
+/// `e_responsavel` e tirá-lo faria o responsável sumir de todos os processos
+/// daquela espécie. Aqui a guarda pesa mais, não menos: desativar se desfaz
+/// reativando, excluir não.
+///
+/// A interceptação da FK não é conveniência. `fk_designacao_apuratorio_papel`
+/// tem frase própria em `error.rs::mensagem_de_constraint`, e ela foi escrita
+/// para a direção do INSERT: *"A função escolhida não está prevista para esta
+/// espécie de apuratório. Cadastre-a…"*. Numa exclusão recusada, seria a regra
+/// certa descrevendo a situação errada — mandaria cadastrar o que já existe.
+pub async fn delete_papel(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+    papel_id: &str,
+) -> Result<bool, AppError> {
+    let e_responsavel: Option<bool> = sqlx::query_scalar(
+        "SELECT e_responsavel FROM apuratorio_papeis
+          WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+    )
+    .bind(apuratorio_id)
+    .bind(papel_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    match e_responsavel {
+        None => Ok(false),
+        Some(true) => Err(AppError::Domain(
+            "Esta função responde pelo apuratório. Indique outra responsável antes de excluí-la."
+                .to_string(),
+        )),
+        Some(false) => {
+            let resultado = sqlx::query(
+                "DELETE FROM apuratorio_papeis
+                  WHERE apuratorio_id = $1::uuid AND papel_id = $2::uuid",
+            )
+            .bind(apuratorio_id)
+            .bind(papel_id)
+            .execute(&mut **tx)
+            .await;
+
+            match resultado {
+                Ok(r) => Ok(r.rows_affected() > 0),
+                Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => {
+                    Err(AppError::Domain(
+                        "Esta função já foi designada em algum apuratório e não pode ser \
+                         excluída. Desative-a."
+                            .to_string(),
+                    ))
+                }
+                Err(e) => Err(e.into()),
+            }
+        }
+    }
+}

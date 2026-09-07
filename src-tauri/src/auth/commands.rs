@@ -21,6 +21,7 @@ pub async fn auth_login(
     email: String,
     senha: String,
 ) -> Result<ApiResponse<SessionUser>, String> {
+    let _guard = state.lifecycle.lock().await;
     Ok(from_result(login(&state, LoginRequest { email, senha }).await).await)
 }
 
@@ -31,7 +32,9 @@ pub async fn auth_logout(state: State<'_, AppState>) -> Result<ApiResponse<bool>
 }
 
 #[tauri::command]
-pub async fn auth_current_user(state: State<'_, AppState>) -> Result<ApiResponse<SessionUser>, String> {
+pub async fn auth_current_user(
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<SessionUser>, String> {
     Ok(match state.session().await {
         Some(user) => ApiResponse::ok(user),
         None => ApiResponse::err(AppError::Unauthorized),
@@ -40,11 +43,11 @@ pub async fn auth_current_user(state: State<'_, AppState>) -> Result<ApiResponse
 
 async fn login(state: &AppState, request: LoginRequest) -> Result<SessionUser, AppError> {
     let pool = state.pool().await?;
-    let row = repository::find_operator_by_email(&pool, request.email.trim())
+    let row = repository::find_account_by_email(&pool, request.email.trim())
         .await?
         .ok_or(AppError::InvalidCredentials)?;
 
-    let stored_hash = row.senha.clone().ok_or(AppError::InvalidCredentials)?;
+    let stored_hash = row.senha_hash.clone();
     let valid = if stored_hash.starts_with("$2") {
         verify(&request.senha, &stored_hash).unwrap_or(false)
     } else if stored_hash.len() == 64 {
@@ -62,7 +65,7 @@ async fn login(state: &AppState, request: LoginRequest) -> Result<SessionUser, A
 
     if !stored_hash.starts_with("$2") {
         let upgraded = hash(&request.senha, DEFAULT_COST)
-            .map_err(|error| AppError::Domain(format!("falha ao atualizar hash: {error}")))?;
+            .map_err(|erro| AppError::Interno(format!("rehash da senha: {erro}")))?;
         repository::update_password_hash(&pool, &row.id, &upgraded).await?;
     }
 

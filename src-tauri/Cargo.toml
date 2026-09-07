@@ -18,10 +18,24 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# Diálogo nativo de "salvar como". No WebView o `<a download>` não define
+# destino nem abre seletor — ver src/files/commands.rs.
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync"] }
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"] }
+# `migrate` chegava por unificacao transitiva de features, embora
+# `sqlx::migrate!` seja usado em lib.rs e nos testes. Declarado, para que uma
+# mudanca de dependencia nao derrube o build sem aviso.
+#
+# `macros` NAO entra: as macros `query!`/`query_as!` verificam o SQL em
+# compilacao, mas exigem `uuid::Uuid` onde o parametro e `$n::uuid` — e a
+# aplicacao carrega ids como String de ponta a ponta, desde o JSON do frontend.
+# Isso alcancaria 9 das 128 consultas. A verificacao equivalente, para as 128,
+# esta em tests/sql_prepare.rs. Ver secao 8.3 do guia.
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls", "postgres", "chrono", "uuid", "json", "migrate",
+] }
 thiserror = "2"
 bcrypt = "0.16"
 sha2 = "0.10"
@@ -30,5 +44,30 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 dotenvy = "0.15"
+url = "2"
 regex = "1"
+# Planilhas XLSX dos relatórios. A geração fica no backend para manter o
+# frontend sem outra biblioteca pesada e para entregar bytes pelo mesmo fluxo
+# nativo já usado nos demais downloads.
+rust_xlsxwriter = { version = "0.99", features = ["chrono"] }
 
+# A orientação da folha impressa não existe no CSS: o WebKitGTK ignora
+# `@page { size: … }` e só o `GtkPageSetup` decide. Ver src/print/commands.rs.
+# As duas já chegavam por `wry`; declaradas para que a versão não mude sem aviso.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
+webkit2gtk = "2.0"
+gtk = "0.18"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.3", features = ["windows-native"] }
+
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+futures-util = "0.3"
+calamine = "0.36"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+# `test` habilita tauri::test::mock_builder, que roda os comandos por IPC de
+# verdade — guards, desserialização e envelope inclusos. Só em teste.
+tauri = { version = "2", features = ["test"] }

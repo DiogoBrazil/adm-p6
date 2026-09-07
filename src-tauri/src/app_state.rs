@@ -1,40 +1,59 @@
 use sqlx::PgPool;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::auth::domain::SessionUser;
+use crate::database_config::ConnectionInput;
 
 pub struct AppState {
-    database_url: String,
-    pool: RwLock<Option<PgPool>>,
+    // Serializa login, troca de conexão e migrations; nunca guardar este lock em pool().
+    pub(crate) lifecycle: Mutex<()>,
+    pub(crate) pool: RwLock<Option<PgPool>>,
+    pub(crate) development: Option<ConnectionInput>,
+    test_url: Option<String>,
     session: RwLock<Option<SessionUser>>,
 }
 
 impl AppState {
-    pub fn from_env() -> Self {
-        let database_url = {
-            let host = std::env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
-            let port = std::env::var("DB_PORT").unwrap_or_else(|_| "5438".to_string());
-            let name = std::env::var("DB_NAME").unwrap_or_else(|_| "adm_p6_db_normalized".to_string());
-            let user = std::env::var("DB_USER").unwrap_or_else(|_| "adm_p6_user".to_string());
-            let password = std::env::var("DB_PASSWORD").unwrap_or_else(|_| "adm_p6_password".to_string());
-            format!("postgres://{user}:{password}@{host}:{port}/{name}")
-        };
-
+    pub fn for_application() -> Self {
         Self {
-            database_url,
+            lifecycle: Mutex::new(()),
             pool: RwLock::new(None),
+            development: {
+                #[cfg(debug_assertions)]
+                {
+                    Some(crate::database_config::development_config())
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    None
+                }
+            },
+            test_url: None,
+            session: RwLock::new(None),
+        }
+    }
+
+    /// Estado explícito para testes com banco descartável, sem cofre/migrations automáticas.
+    pub fn from_url(database_url: String) -> Self {
+        Self {
+            lifecycle: Mutex::new(()),
+            pool: RwLock::new(None),
+            development: None,
+            test_url: Some(database_url),
             session: RwLock::new(None),
         }
     }
 
     pub async fn pool(&self) -> Result<PgPool, sqlx::Error> {
-        if let Some(pool) = self.pool.read().await.clone() {
-            return Ok(pool);
+        let mut pool = self.pool.write().await;
+        if let Some(pool) = pool.as_ref() {
+            return Ok(pool.clone());
         }
-
-        let pool = crate::db::pool::connect(&self.database_url).await?;
-        *self.pool.write().await = Some(pool.clone());
-        Ok(pool)
+        // A aplicação só publica o pool depois de salvar no cofre e migrar.
+        let url = self.test_url.as_ref().ok_or(sqlx::Error::PoolClosed)?;
+        let connected = crate::db::pool::connect(url).await?;
+        *pool = Some(connected.clone());
+        Ok(connected)
     }
 
     pub async fn set_session(&self, user: Option<SessionUser>) {

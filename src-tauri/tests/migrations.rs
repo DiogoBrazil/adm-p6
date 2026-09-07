@@ -1,0 +1,940 @@
+//! Aplica as migrations do zero num banco descartável e confere o schema resultante.
+//!
+//! É a rede mínima contra o modo de falha que produziu 62 queries quebradas no
+//! schema anterior: nada, no `cargo build`, olha para o SQL. Este teste olha.
+//!
+//! Precisa de um PostgreSQL acessível. Configure `DATABASE_URL` (o `.env.example`
+//! traz a URL que o `docker-compose.yml` deste repositório sobe). Sem a variável,
+//! o teste é ignorado com aviso.
+
+use sqlx::{Connection, Executor, PgConnection, Row};
+
+mod util;
+
+/// Devolve (url_de_manutencao, url_do_banco_de_teste, nome_do_banco).
+fn urls() -> Option<(String, String, String)> {
+    let _ = dotenvy::from_filename("../.env");
+    let base = std::env::var("DATABASE_URL").ok()?;
+    let (prefix, _) = base.rsplit_once('/')?;
+    let nome = format!("adm_p6_test_{}", std::process::id());
+    Some((
+        format!("{prefix}/postgres"),
+        format!("{prefix}/{nome}"),
+        nome,
+    ))
+}
+
+#[tokio::test]
+async fn migrations_aplicam_do_zero_e_produzem_o_schema_esperado() {
+    let Some((manutencao, teste, nome)) = urls() else {
+        eprintln!("DATABASE_URL ausente: teste ignorado");
+        return;
+    };
+
+    let mut admin = PgConnection::connect(&manutencao)
+        .await
+        .expect("conectar ao banco de manutencao");
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .expect("descartar banco de teste anterior");
+    admin
+        .execute(&*format!(r#"CREATE DATABASE "{nome}""#))
+        .await
+        .expect("criar banco de teste");
+
+    let resultado = verificar(&teste).await;
+
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .expect("remover banco de teste");
+
+    resultado.unwrap();
+}
+
+async fn verificar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut conn = PgConnection::connect(url).await?;
+
+    sqlx::migrate!("./migrations").run(&mut conn).await?;
+    // Reaplicar tem de ser inócuo: é o que acontece a cada startup do app.
+    sqlx::migrate!("./migrations").run(&mut conn).await?;
+
+    // O hub e as tabelas por espécie não podem ressuscitar.
+    for extinta in [
+        "historico_processo_procedimentos",
+        "sindicancia_regular",
+        "inquerito_policial_militar",
+        "processo_apuratorio_disciplinar_sumario",
+        "conselho_disciplina",
+        "carta_precatoria",
+        "pm_envolvido_crimes_militares",
+        "pm_envolvido_crimes_comuns",
+        "infracoes_estatuto_art29",
+        "infracoes_estatuto_art32",
+        "tipos_prazo",
+        "crimes_contravencoes",
+        // Nunca teve uma linha, aqui ou no legado, e nenhuma consulta a
+        // projetava. Removida pela 0006 — ver decisão 30.
+        "subdivisao_textos_normativos",
+    ] {
+        let existe: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
+            .bind(format!("public.{extinta}"))
+            .fetch_one(&mut conn)
+            .await?;
+        assert!(!existe, "tabela {extinta} deveria ter sido eliminada");
+    }
+
+    // A 0012 tirou o ofendido de `processo_pessoas` e o pôs em tabela própria,
+    // sem papel de catálogo. É o que faz a seção do formulário não depender de
+    // uma linha que alguém precise ter cadastrado antes.
+    let vitimas: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.processo_vitimas') IS NOT NULL")
+            .fetch_one(&mut conn)
+            .await?;
+    assert!(vitimas, "processo_vitimas deveria existir desde a 0012");
+
+    // A 0016 torna "À apurar" um estado do vínculo, não um policial fictício.
+    let pm_envolvido_nulo: String = sqlx::query_scalar(
+        "SELECT is_nullable::text FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'processo_envolvidos'
+            AND column_name = 'policial_militar_id'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(pm_envolvido_nulo, "YES");
+    let indice_a_apurar: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.uq_envolvido_a_apurar') IS NOT NULL")
+            .fetch_one(&mut conn)
+            .await?;
+    assert!(indice_a_apurar, "índice único do estado À apurar ausente");
+
+    // As três unicidades do envolvido são adiadas até o `commit`. Se alguma
+    // voltar a ser imediata, reordenar linhas, trocar dois militares entre si
+    // ou mudar o condutor de envolvido volta a colidir no meio da transação —
+    // com o estado FINAL válido. Ver a armadilha do `ON CONFLICT` na seção 7
+    // antes de escrever upsert nesta tabela.
+    let imediatas: Vec<String> = sqlx::query_scalar(
+        "SELECT conname FROM pg_constraint
+          WHERE conrelid = 'public.processo_envolvidos'::regclass
+            AND conname IN ('uq_envolvido_pm', 'uq_envolvido_ordem',
+                            'uq_envolvido_condutor')
+            AND NOT condeferrable
+          ORDER BY conname",
+    )
+    .fetch_all(&mut conn)
+    .await?;
+    assert!(
+        imediatas.is_empty(),
+        "unicidade do envolvido deixou de ser adiável: {imediatas:?}"
+    );
+
+    // Toda FK precisa de ON DELETE explícito. No schema anterior as 111 FKs
+    // ficavam todas em NO ACTION por omissão.
+    let sem_acao: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_constraint
+          WHERE connamespace = 'public'::regnamespace
+            AND contype = 'f' AND confdeltype = 'a'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(sem_acao, 0, "ha FK sem ON DELETE explicito");
+
+    // JSONB só nas duas colunas justificadas: snapshot de mapa e diff de auditoria.
+    let jsonb: Vec<(String, String)> = sqlx::query(
+        "SELECT table_name::text, column_name::text
+           FROM information_schema.columns
+          WHERE table_schema = 'public' AND data_type = 'jsonb'
+          ORDER BY 1, 2",
+    )
+    .fetch_all(&mut conn)
+    .await?
+    .into_iter()
+    .map(|r| (r.get(0), r.get(1)))
+    .collect();
+    assert_eq!(
+        jsonb,
+        vec![
+            ("auditoria".to_string(), "alteracoes".to_string()),
+            ("mapas_salvos".to_string(), "dados_mapa".to_string()),
+        ],
+        "JSONB inesperado no schema"
+    );
+
+    // As duas constraint triggers de configuração existem.
+    let triggers: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
+          AND tgname IN ('tg_max_envolvidos', 'tg_max_ocupantes', 'tg_cadeia_designacao')",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(triggers, 3, "constraint triggers de configuracao ausentes");
+
+    // A regra de citação do documento pertence à relação apuratório × papel.
+    // Ela precisa nascer obrigatória e ligada; a 0009 desliga apenas as linhas
+    // legadas correspondentes ao Escrivão do IPM.
+    let configuracao_documento: (String, Option<String>) = sqlx::query_as(
+        "SELECT is_nullable::text, column_default::text
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'apuratorio_papeis'
+            AND column_name = 'usa_documento_designacao'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(configuracao_documento.0, "NO");
+    assert_eq!(configuracao_documento.1.as_deref(), Some("true"));
+
+    // Seed técnico: uma conta administrativa, sem policial associado.
+    let admins: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM usuarios u
+           JOIN perfis_acesso p ON p.id = u.perfil_id
+          WHERE p.pode_administrar AND u.ativo AND u.policial_militar_id IS NULL",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(admins, 1, "esperado exatamente um administrador tecnico");
+
+    // A fronteira da decisão de seed: o que é LEI vem semeado pela 0003 (não
+    // varia por instalação); o que é OPERACIONAL nasce vazio e é cadastrado
+    // pelo administrador da unidade. Este teste é o que trava essa fronteira —
+    // semear um catálogo operacional aqui é uma decisão, não um descuido.
+    for (tabela, esperado) in [
+        ("circulos_hierarquicos", 2),
+        ("postos_graduacoes", 13),
+        ("municipios_distritos", 112),
+        ("dispositivos_legais", 7),
+        ("especies_infracao_penal", 2),
+        ("esferas_penais", 2),
+        ("naturezas_transgressao", 3),
+        ("artigos_rdpm", 3),
+        ("transgressoes", 95),
+        // 26 e 20, não 27 e 23: a 0003 descarta explicitamente 1 duplicata de
+        // chave única (art. 42 da LCP) e 3 linhas de teste já inativas do
+        // legado (inciso "LX" do art. 29).
+        ("infracoes_penais", 26),
+        ("infracoes_estatuto", 20),
+    ] {
+        let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {tabela}"))
+            .fetch_one(&mut conn)
+            .await?;
+        assert_eq!(
+            n, esperado,
+            "catalogo legal {tabela} com contagem inesperada"
+        );
+    }
+
+    for vazio in [
+        "apuratorios",
+        "tipos_apuratorio",
+        "apuratorio_documentos_iniciadores",
+        "apuratorio_papeis",
+        "tipos_documento",
+        "policiais_militares",
+        "naturezas_fato",
+        "tipos_penalidade",
+        "tipos_solucao_decidida",
+        "tipos_solucao_sugerida",
+        "status_envolvido",
+        "categorias_indicio",
+        "unidades_pm",
+        "subunidades_secoes",
+        "papeis_processo",
+        "papeis_pessoa",
+        "tipos_andamento",
+    ] {
+        let n: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {vazio}"))
+            .fetch_one(&mut conn)
+            .await?;
+        assert_eq!(n, 0, "catalogo operacional {vazio} nao deveria vir semeado");
+    }
+
+    // A 0007 traz um bloco que SEPARA o escrivão do IPM do escrivão do
+    // processo, e para isso insere uma linha em `papeis_processo` — catálogo
+    // operacional, que a asserção acima exige VAZIO num banco novo.
+    //
+    // Os dois convivem porque o bloco é condicionado a haver o que separar: sem
+    // papel 'Escrivão' cadastrado, ele retorna sem tocar em nada. É uma
+    // migration de DADO, corretiva, para a instalação que já importou o legado;
+    // numa instalação nova quem cadastra os papéis é o administrador (§7.1).
+    //
+    // Esta asserção é o que impede alguém "melhorar" a 0007 tirando a condição:
+    // sem ela, todo banco novo nasceria com um papel que ninguém pediu.
+    let escrivaes: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM papeis_processo WHERE nome ILIKE 'escriv%'")
+            .fetch_one(&mut conn)
+            .await?;
+    assert_eq!(
+        escrivaes, 0,
+        "a separacao do escrivao da 0007 nao pode semear papel em banco novo"
+    );
+
+    Ok(())
+}
+
+/// Os atributos que decidem quais campos o formulário de processo mostra.
+///
+/// Nascem **desligados**: o comportamento vem do dado, e quem o liga é o
+/// administrador, por apuratório. Antes da 0007 o formulário mostrava os mesmos
+/// campos para as dez espécies — data de julgamento num IPM, remessa à comissão
+/// numa sindicância.
+#[tokio::test]
+async fn atributos_de_comportamento_do_apuratorio_nascem_desligados() {
+    util::com_banco_descartavel("mig_atributos", |pool| async move {
+        for coluna in [
+            "permite_julgamento",
+            "permite_punicao",
+            "permite_remessa_comissao",
+            "permite_acusacao",
+            "permite_acusacao_penal",
+            "permite_indicios",
+            "permite_solucao_sugerida",
+            "permite_cadastro_vitima",
+        ] {
+            let (tipo, anulavel, padrao): (String, String, Option<String>) = sqlx::query_as(
+                "SELECT data_type, is_nullable, column_default
+                   FROM information_schema.columns
+                  WHERE table_name = 'apuratorios' AND column_name = $1",
+            )
+            .bind(coluna)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|_| panic!("coluna {coluna} nao existe em apuratorios"));
+
+            assert_eq!(tipo, "boolean", "{coluna} tem de ser booleana (§3.2)");
+            assert_eq!(anulavel, "NO", "{coluna} nao pode ser nula");
+            assert_eq!(
+                padrao.as_deref(),
+                Some("false"),
+                "{coluna} nasce desligada: quem liga e o administrador"
+            );
+        }
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn remessa_legada_vira_remessa_da_comissao_quando_o_rito_usa_comissao() {
+    util::com_banco_descartavel("mig_remessa_comissao", |pool| async move {
+        let m = util::fixtures::mundo_configurado(&pool).await;
+        sqlx::query("UPDATE apuratorios SET permite_remessa_comissao = true WHERE id = $1::uuid")
+            .bind(&m.apuratorio)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let id: String = sqlx::query_scalar(
+            "INSERT INTO processos_procedimentos
+                 (apuratorio_id, documento_iniciador_id, numero_documento,
+                  unidade_origem_id, municipio_fato_id, natureza_fato_id,
+                  data_instauracao, data_remessa_encarregado)
+             VALUES ($1::uuid, $2::uuid, 'REMESSA-LEGADA', $3::uuid, $4::uuid,
+                     $5::uuid, DATE '2026-01-10', DATE '2026-02-01')
+          RETURNING id::text",
+        )
+        .bind(&m.apuratorio)
+        .bind(&m.documento)
+        .bind(&m.unidade)
+        .bind(&m.municipio)
+        .bind(&m.natureza)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let migration = std::fs::read_to_string("migrations/0010_unificar_remessa_comissao.sql")
+            .expect("ler migration de remessa");
+        sqlx::raw_sql(&migration).execute(&pool).await.unwrap();
+
+        let datas: (Option<chrono::NaiveDate>, Option<chrono::NaiveDate>) = sqlx::query_as(
+            "SELECT data_remessa_encarregado, data_remessa_comissao
+               FROM processos_procedimentos WHERE id = $1::uuid",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(datas.0, None);
+        assert_eq!(
+            datas.1,
+            Some(chrono::NaiveDate::from_ymd_opt(2026, 2, 1).unwrap())
+        );
+    })
+    .await;
+}
+
+/// A `0018` acrescenta as duas colunas que tornam a trilha legível, e o domínio
+/// de `operacao` **continua** com três valores.
+///
+/// O segundo assert é o que importa: a desativação da configuração de apuratório
+/// gravava um quarto verbo (`DEACTIVATE`) que este CHECK recusa, e a transação
+/// inteira caía junto. A correção foi passar a gravar `UPDATE` com a `acao`
+/// dizendo que foi desativação — não alargar o domínio. Se alguém alargar,
+/// este teste falha e obriga a reler o porquê.
+#[tokio::test]
+async fn a_0018_torna_a_trilha_legivel_sem_alargar_o_dominio_da_operacao() {
+    util::com_banco_descartavel("aud_0018", |pool| async move {
+        let colunas: Vec<String> = sqlx::query_scalar(
+            "SELECT column_name::text FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'auditoria'
+              ORDER BY 1",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert!(colunas.contains(&"acao".to_string()), "{colunas:?}");
+        assert!(colunas.contains(&"assunto".to_string()), "{colunas:?}");
+
+        let check: String = sqlx::query_scalar(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+              WHERE conrelid = 'auditoria'::regclass AND conname = 'ck_auditoria_operacao'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        for verbo in ["CREATE", "UPDATE", "DELETE"] {
+            assert!(check.contains(verbo), "{check}");
+        }
+        assert!(
+            !check.contains("DEACTIVATE"),
+            "desativação é UPDATE com `acao` própria, não um quarto verbo: {check}"
+        );
+
+        // As duas nascem anuláveis: os registros anteriores à 0018 não têm como
+        // ganhar a frase exata, e a listagem precisa continuar servindo-os.
+        sqlx::query(
+            "INSERT INTO auditoria (entidade, registro_id, operacao)
+             VALUES ('processos_procedimentos', 'x', 'UPDATE')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    })
+    .await;
+}
+
+/// A view é contrato: quatro módulos leem dela. Uma coluna renomeada quebraria
+/// os quatro de uma vez, e só em runtime.
+#[tokio::test]
+async fn a_view_de_processos_e_um_contrato_estavel() {
+    util::com_banco_descartavel("view_processos", |pool| async move {
+        let colunas: Vec<String> = sqlx::query_scalar(
+            "SELECT column_name::text FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'v_processos_detalhados'
+              ORDER BY 1",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+        let esperadas = vec![
+            "apuratorio_id",
+            "apuratorio_nome",
+            "apuratorio_sigla",
+            "ativo",
+            "concluido",
+            "data_conclusao",
+            "data_instauracao",
+            "data_recebimento",
+            "data_remessa",
+            "documento_iniciador",
+            "documento_iniciador_id",
+            "entregue",
+            "id",
+            "municipio_fato",
+            "municipio_fato_id",
+            "natureza_fato",
+            "natureza_fato_id",
+            "numero_controle",
+            "numero_documento",
+            "numero_rgf",
+            "prazo_dias_restantes",
+            "prazo_ordem",
+            "prazo_vencimento",
+            "processo_sei",
+            "responsavel_id",
+            "responsavel_nome",
+            "responsavel_papel",
+            "resumo_fatos",
+            "rotulo",
+            "subunidade_secao_origem",
+            "subunidade_secao_origem_id",
+            "tipo_apuratorio",
+            "tipo_apuratorio_id",
+            "total_envolvidos",
+            "unidade_origem",
+            "unidade_origem_id",
+        ];
+        assert_eq!(colunas, esperadas, "o contrato da view mudou");
+
+        // NÃO é a antiga `v_processos`, que existia para esconder dez tabelas
+        // quase idênticas — o problema que a remodelagem eliminou.
+        let antiga: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.views
+                             WHERE table_schema='public' AND table_name='v_processos')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!antiga, "a antiga v_processos nao pode voltar");
+    })
+    .await;
+}
+
+/// A retroalimentação da 0008 sobre histórico que já existia.
+///
+/// Os 19 processos importados do legado e qualquer substituição feita antes
+/// desta migration têm a cadeia no dado — `data_fim` de uma igual a
+/// `data_inicio` da outra — mas nenhum vínculo explícito. A migration liga o que
+/// é inequívoco e **deixa NULL o que é ambíguo**, que é o comportamento que
+/// importa: um papel de dois ocupantes com duas trocas no mesmo dia daria dois
+/// pares possíveis, e ligar a sucessora de uma cadeia à antecessora da outra
+/// seria pior do que não ligar.
+///
+/// O teste roda a mesma função que a migration chamou (`fn_vincular_cadeias_existentes`),
+/// sobre histórico montado à mão sem vínculo — que é exatamente a situação do
+/// banco de produção no instante em que a 0008 subir.
+#[tokio::test]
+async fn a_retroalimentacao_liga_o_inequivoco_e_deixa_o_ambiguo_em_branco() {
+    util::com_banco_descartavel("mig_cadeia", |pool| async move {
+        let m = util::fixtures::mundo_configurado(&pool).await;
+
+        // Cadeia inequívoca no Encarregado (um ocupante): PM UM → PM DOIS.
+        let processo = util::fixtures::processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "HIST-001",
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+
+        // Duas cadeias do Escrivão trocando no MESMO dia: par ambíguo.
+        let processo_ambiguo = util::fixtures::processo(
+            &pool,
+            &m,
+            &m.apuratorio,
+            "HIST-002",
+            chrono::NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            None,
+        )
+        .await;
+
+        let designar =
+            |processo: String, pm: String, papel: String, inicio: &str, fim: Option<&str>| {
+                let pool = pool.clone();
+                let apuratorio = m.apuratorio.clone();
+                let inicio = inicio.to_string();
+                let fim = fim.map(str::to_string);
+                async move {
+                    sqlx::query_scalar::<_, String>(
+                        "INSERT INTO processo_designacoes
+                         (processo_id, apuratorio_id, policial_militar_id, papel_id,
+                          data_inicio, data_fim)
+                     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::date, $6::date)
+                  RETURNING id::text",
+                    )
+                    .bind(processo)
+                    .bind(apuratorio)
+                    .bind(pm)
+                    .bind(papel)
+                    .bind(inicio)
+                    .bind(fim)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+                }
+            };
+
+        let antecessora = designar(
+            processo.clone(),
+            m.pm_um.clone(),
+            m.papel_encarregado.clone(),
+            "2026-01-10",
+            Some("2026-02-01"),
+        )
+        .await;
+        let sucessora = designar(
+            processo.clone(),
+            m.pm_dois.clone(),
+            m.papel_encarregado.clone(),
+            "2026-02-01",
+            None,
+        )
+        .await;
+
+        // Escrivão aceita 2: duas cadeias em paralelo, ambas trocando em 01/02.
+        for (saindo, entrando) in [(&m.pm_um, &m.pm_dois), (&m.pm_dois, &m.pm_tres)] {
+            designar(
+                processo_ambiguo.clone(),
+                saindo.clone(),
+                m.papel_escrivao.clone(),
+                "2026-01-10",
+                Some("2026-02-01"),
+            )
+            .await;
+            designar(
+                processo_ambiguo.clone(),
+                entrando.clone(),
+                m.papel_escrivao.clone(),
+                "2026-02-01",
+                None,
+            )
+            .await;
+        }
+
+        // Nada está vinculado ainda: é o estado que a migration encontra.
+        let soltas: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM processo_designacoes WHERE designacao_anterior_id IS NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(soltas, 6);
+
+        let vinculadas: i32 = sqlx::query_scalar("SELECT fn_vincular_cadeias_existentes()")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(vinculadas, 1, "so a cadeia inequivoca e ligada");
+
+        let anterior: Option<String> = sqlx::query_scalar(
+            "SELECT designacao_anterior_id::text FROM processo_designacoes WHERE id = $1::uuid",
+        )
+        .bind(&sucessora)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(anterior.as_deref(), Some(antecessora.as_str()));
+
+        // As quatro do processo ambíguo continuam sem palpite.
+        let ambiguas: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM processo_designacoes
+              WHERE processo_id = $1::uuid AND designacao_anterior_id IS NOT NULL",
+        )
+        .bind(&processo_ambiguo)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(ambiguas, 0, "par ambiguo fica em branco, nao chutado");
+
+        // Idempotente: reaplicar a migration num banco já atualizado não muda
+        // nada — é o que acontece a cada startup do app.
+        let segunda: i32 = sqlx::query_scalar("SELECT fn_vincular_cadeias_existentes()")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(segunda, 0);
+    })
+    .await;
+}
+
+// ─────────────────────────── 0016: o PM fictício vira estado do vínculo ──
+
+/// A 0016 é a única migration deste repositório que CONVERTE dado de produção:
+/// os vínculos do policial artificial "À APURAR" passam a `NULL` no próprio
+/// `processo_envolvidos`. Um teste que aplique tudo de uma vez não veria a
+/// conversão — o banco de teste nasce sem o cadastro artificial. Então aqui as
+/// migrations param na 0015, o cenário legado é montado, e só então a 0016 roda.
+async fn aplicar_faixa(
+    conn: &mut PgConnection,
+    primeira: i64,
+    ultima: i64,
+) -> Result<(), sqlx::Error> {
+    for migration in sqlx::migrate!("./migrations")
+        .iter()
+        .filter(|m| m.version >= primeira && m.version <= ultima)
+    {
+        conn.execute(&*migration.sql).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_0016_converte_o_pm_ficticio_sem_perder_o_que_pendurava_nele() {
+    let Some((manutencao, teste, nome)) = urls() else {
+        eprintln!("DATABASE_URL ausente: teste ignorado");
+        return;
+    };
+    let nome = format!("{nome}_a_apurar");
+    let teste = teste.rsplit_once('/').unwrap().0.to_string() + "/" + &nome;
+
+    let mut admin = PgConnection::connect(&manutencao).await.unwrap();
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute(&*format!(r#"CREATE DATABASE "{nome}""#))
+        .await
+        .unwrap();
+
+    let resultado = converter_a_apurar(&teste).await;
+
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    resultado.unwrap();
+}
+
+async fn converter_a_apurar(url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut conn = PgConnection::connect(url).await?;
+    aplicar_faixa(&mut conn, 1, 15).await?;
+
+    // Cenário legado mínimo: o cadastro artificial e um militar de verdade
+    // envolvidos no mesmo processo. O artificial carrega tudo o que a conversão
+    // precisa preservar — status, condutor, enquadramento, indício e resultado.
+    conn.execute(
+        r#"
+        INSERT INTO tipos_apuratorio (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000001', 'Procedimento');
+        INSERT INTO tipos_documento (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000002', 'Portaria');
+        INSERT INTO apuratorios (id, sigla, nome, tipo_apuratorio_id, max_envolvidos)
+             VALUES ('30000000-0000-0000-0000-000000000003', 'SIND',
+                     'Sindicancia', '30000000-0000-0000-0000-000000000001', NULL);
+        INSERT INTO apuratorio_documentos_iniciadores (apuratorio_id, tipo_documento_id)
+             VALUES ('30000000-0000-0000-0000-000000000003',
+                     '30000000-0000-0000-0000-000000000002');
+        INSERT INTO unidades_pm (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000004', '7 BPM');
+        INSERT INTO status_envolvido (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000005', 'Sindicado');
+        INSERT INTO tipos_solucao_decidida (id, nome, permite_penalidade) VALUES
+            ('30000000-0000-0000-0000-000000000006', 'Punido', true);
+        INSERT INTO tipos_penalidade (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000007', 'Prisao');
+        INSERT INTO categorias_indicio (id, nome) VALUES
+            ('30000000-0000-0000-0000-000000000008', 'Indicio de transgressao');
+
+        -- O par nome/matrícula é exatamente o que a 0016 procura.
+        INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id, ativo)
+        SELECT '30000000-0000-0000-0000-00000000000a', '100000000', 'À APURAR', pg.id, true
+          FROM postos_graduacoes pg ORDER BY pg.sigla LIMIT 1;
+        INSERT INTO policiais_militares (id, matricula, nome, posto_graduacao_id, ativo)
+        SELECT '30000000-0000-0000-0000-00000000000b', '900000001', 'FULANO DE TAL', pg.id, true
+          FROM postos_graduacoes pg ORDER BY pg.sigla LIMIT 1;
+
+        INSERT INTO processos_procedimentos
+            (id, apuratorio_id, documento_iniciador_id, numero_documento,
+             unidade_origem_id, municipio_fato_id, data_instauracao)
+        SELECT '30000000-0000-0000-0000-0000000000c0',
+               '30000000-0000-0000-0000-000000000003',
+               '30000000-0000-0000-0000-000000000002',
+               '001/2019',
+               '30000000-0000-0000-0000-000000000004',
+               md.id, DATE '2019-03-01'
+          FROM municipios_distritos md ORDER BY md.nome LIMIT 1;
+
+        INSERT INTO processo_envolvidos
+            (id, processo_id, policial_militar_id, status_envolvido_id, ordem,
+             e_condutor, solucao_decidida_id, penalidade_tipo_id, penalidade_dias)
+        VALUES
+            ('30000000-0000-0000-0000-0000000000e1',
+             '30000000-0000-0000-0000-0000000000c0',
+             '30000000-0000-0000-0000-00000000000a',
+             '30000000-0000-0000-0000-000000000005', 1, true,
+             '30000000-0000-0000-0000-000000000006',
+             '30000000-0000-0000-0000-000000000007', 5),
+            ('30000000-0000-0000-0000-0000000000e2',
+             '30000000-0000-0000-0000-0000000000c0',
+             '30000000-0000-0000-0000-00000000000b',
+             '30000000-0000-0000-0000-000000000005', 2, false, NULL, NULL, NULL);
+
+        INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ('30000000-0000-0000-0000-0000000000e1',
+                     '30000000-0000-0000-0000-000000000008');
+        INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+        SELECT '30000000-0000-0000-0000-0000000000e1', t.id
+          FROM transgressoes t ORDER BY t.inciso LIMIT 1;
+        "#,
+    )
+    .await?;
+
+    aplicar_faixa(&mut conn, 16, 16).await?;
+
+    let linha = sqlx::query(
+        "SELECT policial_militar_id IS NULL AS a_apurar,
+                e_condutor,
+                solucao_decidida_id IS NOT NULL AS tem_solucao,
+                penalidade_dias
+           FROM processo_envolvidos
+          WHERE id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert!(
+        linha.get::<bool, _>("a_apurar"),
+        "o vínculo do PM fictício deveria ter virado À apurar"
+    );
+    assert!(
+        !linha.get::<bool, _>("e_condutor"),
+        "quem não está identificado não pode continuar condutor"
+    );
+    assert!(
+        linha.get::<bool, _>("tem_solucao"),
+        "o resultado do envolvido é fato registrado e não se perde"
+    );
+    assert_eq!(linha.get::<Option<i32>, _>("penalidade_dias"), Some(5));
+
+    // O id do vínculo não muda, então nada pendurado nele se perde.
+    let indicios: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM envolvido_categorias_indicio
+          WHERE envolvido_id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(indicios, 1);
+    let transgressoes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM envolvido_transgressoes
+          WHERE envolvido_id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(transgressoes, 1);
+
+    // O envolvido de verdade fica intacto.
+    let identificado: Option<String> = sqlx::query_scalar(
+        "SELECT policial_militar_id::text FROM processo_envolvidos
+          WHERE id = '30000000-0000-0000-0000-0000000000e2'",
+    )
+    .fetch_one(&mut conn)
+    .await?;
+    assert_eq!(
+        identificado.as_deref(),
+        Some("30000000-0000-0000-0000-00000000000b")
+    );
+
+    // Catálogo em uso se desativa, não se apaga: a linha continua lá, inativa,
+    // fora das listas de opção.
+    let ficticio = sqlx::query(
+        "SELECT ativo FROM policiais_militares
+          WHERE id = '30000000-0000-0000-0000-00000000000a'",
+    )
+    .fetch_optional(&mut conn)
+    .await?
+    .expect("o cadastro artificial não deve ser excluído");
+    assert!(!ficticio.get::<bool, _>("ativo"));
+
+    // Depois da conversão o marcador é único por processo e não pode conduzir.
+    let segundo_nulo = sqlx::query(
+        "UPDATE processo_envolvidos SET policial_militar_id = NULL
+          WHERE id = '30000000-0000-0000-0000-0000000000e2'",
+    )
+    .execute(&mut conn)
+    .await;
+    assert!(segundo_nulo.is_err(), "dois À apurar no mesmo processo");
+
+    let condutor_nao_identificado = sqlx::query(
+        "UPDATE processo_envolvidos SET e_condutor = true
+          WHERE id = '30000000-0000-0000-0000-0000000000e1'",
+    )
+    .execute(&mut conn)
+    .await;
+    assert!(
+        condutor_nao_identificado.is_err(),
+        "À apurar não pode ser condutor"
+    );
+
+    Ok(())
+}
+
+/// A `0020` embrulha o snapshot antigo sem perder o que foi publicado.
+///
+/// A migration roda em banco vazio nos testes, então o `UPDATE` dela é um
+/// no-op: a conversão em si nunca seria exercida. Aqui uma linha na forma
+/// antiga — o array cru de `MapRow` — é inserida à mão e a **mesma** instrução
+/// da migration é aplicada sobre ela. O SQL é lido do arquivo em vez de
+/// copiado: copiado, ele envelheceria sozinho no dia em que a migration
+/// mudasse, e o teste passaria a aprovar outra coisa.
+#[tokio::test]
+async fn a_0020_embrulha_o_snapshot_antigo_sem_perder_o_resumo() {
+    let Some((manutencao, teste, nome)) = urls() else {
+        eprintln!("DATABASE_URL ausente: teste ignorado");
+        return;
+    };
+    let nome = format!("{nome}_0020");
+    let teste = teste.replace(teste.rsplit_once('/').unwrap().1, &nome);
+
+    let mut admin = PgConnection::connect(&manutencao).await.unwrap();
+    admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await
+        .unwrap();
+    admin
+        .execute(&*format!(r#"CREATE DATABASE "{nome}""#))
+        .await
+        .unwrap();
+
+    let mut conn = PgConnection::connect(&teste).await.unwrap();
+    sqlx::migrate!("./migrations").run(&mut conn).await.unwrap();
+
+    // A forma antiga: `dados_mapa` era o array de linhas, sem envelope.
+    let resumo = serde_json::json!([
+        { "rotulo": "SR nº 1/2026/7ºBPM", "data_instauracao": "2026-07-25" },
+        { "rotulo": "IPM nº 5/2026/7ºBPM", "data_instauracao": "2026-08-19" }
+    ]);
+    sqlx::query(
+        "INSERT INTO mapas_salvos
+             (id, titulo, periodo_inicio, periodo_fim, total_processos, dados_mapa)
+         VALUES ('40000000-0000-0000-0000-000000000001'::uuid, 'Mapa legado',
+                 DATE '2026-08-01', DATE '2026-08-31', 2, $1)",
+    )
+    .bind(&resumo)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+
+    let sql = std::fs::read_to_string("migrations/0020_snapshot_mapa_completo.sql").unwrap();
+    conn.execute(&*sql).await.unwrap();
+
+    let convertido: serde_json::Value = sqlx::query_scalar(
+        "SELECT dados_mapa FROM mapas_salvos
+          WHERE id = '40000000-0000-0000-0000-000000000001'::uuid",
+    )
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+
+    assert_eq!(convertido["versao"], serde_json::json!(2));
+    assert_eq!(
+        convertido["resumo"], resumo,
+        "o resumo publicado tem de sobreviver byte a byte: a migration embrulha, nao reescreve"
+    );
+    assert_eq!(
+        convertido["completo"],
+        serde_json::Value::Null,
+        "o documento completo daquele mapa nunca foi tirado, e inventa-lo hoje publicaria \
+         outra coisa com a data de ontem"
+    );
+
+    // Idempotente: rodar de novo não embrulha o envelope dentro de outro.
+    conn.execute(&*sql).await.unwrap();
+    let de_novo: serde_json::Value = sqlx::query_scalar(
+        "SELECT dados_mapa FROM mapas_salvos
+          WHERE id = '40000000-0000-0000-0000-000000000001'::uuid",
+    )
+    .fetch_one(&mut conn)
+    .await
+    .unwrap();
+    assert_eq!(de_novo, convertido, "a conversao e idempotente");
+
+    drop(conn);
+    let _ = admin
+        .execute(&*format!(
+            r#"DROP DATABASE IF EXISTS "{nome}" WITH (FORCE)"#
+        ))
+        .await;
+}

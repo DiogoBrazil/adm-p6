@@ -1,0 +1,32 @@
+{
+  // O build era `vite build`, que só transpila via esbuild e NÃO checa tipos:
+  // nenhum erro de tipo quebrava a compilação. Era por isso que 87 comandos
+  // inexistentes conviviam no `main.ts` sem ninguém notar. O `npm run build`
+  // agora roda `tsc --noEmit` antes do Vite.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+
+    // O código monta HTML por concatenação e re-registra listeners a cada
+    // render; variáveis intermediárias não usadas são ruído previsível.
+    // Ligar depois da reescrita das telas.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}

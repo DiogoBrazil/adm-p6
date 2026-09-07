@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ADM P6",
+  "productName": "Gestao P6",
+  "mainBinaryName": "gestao-p6",
   "version": "0.1.0",
   "identifier": "br.gov.pmro.admp6",
   "build": {
@@ -12,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "ADM P6",
+        "title": "GESTÃO P6/7ºBPM",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -20,12 +21,26 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-src 'none'; form-action 'none'",
+      "devCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5173 http://127.0.0.1:5173; object-src 'none'; base-uri 'self'; frame-src 'none'; form-action 'none'"
     }
   },
   "bundle": {
     "active": true,
+    "linux": {
+      "deb": {
+        "desktopTemplate": "gestao-p6.desktop",
+        "recommends": ["gnome-keyring"]
+      }
+    },
+    "shortDescription": "Sistema da Seção de Justiça e Disciplina do 7º BPM/PMRO",
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }

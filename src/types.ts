@@ -1,0 +1,1231 @@
+// GERADO a partir de `src-tauri/src/*/domain.rs`. Não editar à mão.
+//
+// Regerar com o script descrito em `src/api.ts`. A conversão segue:
+//   String/NaiveDate/DateTime<Utc> -> string      Option<T>      -> T | null
+//   i32/i64/f64                    -> number      Vec<T>         -> T[]
+//   bool                           -> boolean     Map<String,Value> -> Record<string, unknown>
+//
+// Em structs de request e de filtro, `Option<T>` e `#[serde(default)]` viram
+// campos OPCIONAIS: omitir é válido do lado do Rust, e o compilador reproduz
+// exatamente essa regra.
+
+/** `legal_catalogs` */
+export type TipoColuna = "texto" | "texto_opcional" | "booleano" | "inteiro" | "inteiro_opcional" | "referencia" | "referencia_opcional" | "referencia_fixa";
+
+/** `apuratorio_config` */
+export interface ApuratorioConfig {
+  apuratorio_id: string;
+  sigla: string;
+  nome: string;
+  /** Prazo herdado por um documento iniciador que não declare o seu. */
+  prazo_base_dias: number;
+
+  // Atributos de comportamento: é o que o formulário de processo consulta para
+  // saber quais campos existem nesta espécie. Vêm daqui, e não de
+  // `legal_catalogs_list("apuratorios")`, que projeta só o que está no registro
+  // de administração — ver o cabeçalho de `ApuratorioConfig` no Rust.
+
+  /** Em branco = sem limite de envolvidos. */
+  max_envolvidos: number | null;
+  /** A rubrica do fato é obrigatória nesta espécie. */
+  exige_natureza_fato: boolean;
+  /** A espécie é julgada: revela a data de julgamento. */
+  permite_julgamento: boolean;
+  /** Da espécie pode resultar punição: revela penalidade e dias no envolvido. */
+  permite_punicao: boolean;
+  /** A espécie tramita por comissão: revela a data de remessa à comissão. */
+  permite_remessa_comissao: boolean;
+  /** O cadastro recebe o enquadramento jurídico do acusado. */
+  permite_acusacao: boolean;
+  /** A acusação pode incluir crime ou contravenção. */
+  permite_acusacao_penal: boolean;
+  /** A espécie permite registrar indícios ao final da investigação. */
+  permite_indicios: boolean;
+  /** O encarregado pode propor uma solução. */
+  permite_solucao_sugerida: boolean;
+  /**
+   * A espécie registra Ofendido/Vítima: opcional, e em qualquer quantidade.
+   * Diferente dos outros, este atributo NÃO aparece no cadastro do apuratório —
+   * é capacidade do procedimento, não escolha de administrador.
+   */
+  permite_cadastro_vitima: boolean;
+  /** Único código técnico do schema. Hoje só `carta_precatoria`. */
+  codigo_extensao: string | null;
+
+  documentos: DocumentoIniciadorItem[];
+  papeis: PapelItem[];
+}
+
+/** `apuratorio_config` */
+export interface DocumentoIniciadorItem {
+  tipo_documento_id: string;
+  tipo_documento: string;
+  /** NULL = herda o prazo do apuratório. */
+  prazo_base_dias: number | null;
+  /** O `COALESCE` já resolvido: é este o prazo que o processo vai receber. */
+  prazo_efetivo_dias: number;
+  padrao: boolean;
+  ativo: boolean;
+  /** Já existe processo com este par. Desativar continua permitido; apagar não. */
+  em_uso: boolean;
+}
+
+/** `apuratorio_config` */
+export interface PapelItem {
+  papel_id: string;
+  papel: string;
+  obrigatorio: boolean;
+  max_ocupantes: number;
+  e_responsavel: boolean;
+  /** As designações deste papel citam tipo e número do documento autorizador. */
+  usa_documento_designacao: boolean;
+  ativo: boolean;
+  em_uso: boolean;
+}
+
+/** `apuratorio_config` */
+export interface SaveDocumentoIniciadorRequest {
+  apuratorio_id: string;
+  tipo_documento_id: string;
+  prazo_base_dias?: number | null;
+  padrao?: boolean;
+  ativo?: boolean;
+}
+
+/** `apuratorio_config` */
+export interface SavePapelRequest {
+  apuratorio_id: string;
+  papel_id: string;
+  obrigatorio?: boolean;
+  max_ocupantes: number;
+  e_responsavel?: boolean;
+  /** Ausente = cita documento. O backend regrava a linha inteira: mande o
+   *  valor corrente ao mexer em qualquer outro atributo do papel. */
+  usa_documento_designacao?: boolean;
+  ativo?: boolean;
+}
+
+/** `audit` */
+export interface AuditDetailItem {
+  id: string;
+  entidade: string;
+  registro_id: string;
+  operacao: string;
+  usuario_id: string | null;
+  usuario_nome: string | null;
+  usuario_posto: string | null;
+  usuario_matricula: string | null;
+  /** O que foi feito, em português: "Reabriu o apuratório". `null` só nos */
+  /** registros anteriores à `0018`, que a tela cobre com frase genérica. */
+  acao: string | null;
+  /** Sobre o quê, como o registro se chamava no momento da ação. `null` */
+  /** quando a linha já tinha sido apagada antes da `0018` poder nomeá-la. */
+  assunto: string | null;
+  /** Diff da operação, quando registrado. Preenchido nas alterações de */
+  /** configuração, que mudam o comportamento futuro do sistema. */
+  alteracoes: unknown | null;
+  ocorrido_em: string;
+}
+
+/** `audit` */
+export interface AuditOperationStat {
+  operacao: string;
+  total: number;
+}
+
+/** `audit` */
+export interface AuditTableStat {
+  entidade: string;
+  total: number;
+  /** O mesmo em português. Vem do backend para não haver um segundo mapa de */
+  /** tabela→nome aqui, que divergiria do primeiro sem ninguém notar. */
+  rotulo: string;
+}
+
+/** `audit` */
+export interface AuditStatistics {
+  total: number;
+  por_operacao: AuditOperationStat[];
+  por_entidade: AuditTableStat[];
+}
+
+/** `audit` */
+export interface AuditPageResult {
+  items: AuditDetailItem[];
+  /** Total do escopo filtrado, não da página. */
+  total: number;
+  /** A página **servida**, que pode não ser a pedida: o backend corrige. */
+  page: number;
+  /** O tamanho **servido**. Pedir acima do teto devolve o teto, e é aqui que */
+  /** a tela descobre isso em vez de desenhar um controle de página mentiroso. */
+  per_page: number;
+}
+
+/** `audit` */
+export interface AuditStatisticsFilter {
+  data_inicio?: string | null;
+  data_fim?: string | null;
+}
+
+/** `auth` */
+export interface UserAuthRow {
+  id: string;
+  /** Nome de exibição da conta: vem do policial militar vinculado ou, quando a */
+  /** conta não representa um militar, do próprio `nome_exibicao`. */
+  nome: string;
+  email: string;
+  senha_hash: string;
+  perfil: string;
+  /** Autorização vem deste atributo semântico, nunca do nome do perfil — o */
+  /** administrador pode renomear "Administrador" sem perder o acesso. */
+  pode_administrar: boolean;
+  policial_militar_id: string | null;
+  matricula: string | null;
+  posto_graduacao: string | null;
+}
+
+/** `auth` */
+export interface SessionUser {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: string;
+  is_admin: boolean;
+  policial_militar_id: string | null;
+  matricula: string | null;
+  posto_graduacao: string | null;
+}
+
+/** `deadlines` */
+export interface DeadlineSummary {
+  total: number;
+  vencidos: number;
+  proximos: number;
+}
+
+/** `deadlines` */
+export interface DeadlineItem {
+  id: string;
+  processo_id: string;
+  ordem: number;
+  data_inicio: string;
+  dias: number;
+  data_vencimento: string;
+  motivo: string | null;
+  documento_autorizador_id: string | null;
+  documento_autorizador: string | null;
+  numero_documento: string | null;
+  data_documento: string | null;
+  autoridade_id: string | null;
+  autoridade: string | null;
+  /** Vigente = é o prazo de maior ordem do processo. */
+  vigente: boolean;
+}
+
+/** `deadlines` */
+export interface DeadlineReportItem {
+  processo_id: string;
+  apuratorio_sigla: string;
+  numero_controle: string;
+  unidade_origem: string;
+  subunidade_secao_origem: string | null;
+  responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
+  data_vencimento: string;
+  /** Negativo = já venceu. */
+  dias_restantes: number;
+  ordem: number;
+}
+
+/** `deadlines` */
+export interface DeadlineReportFilter {
+  /** Espécies de apuratório a incluir. Vazio = todas. Substitui os `IN (...)` */
+  /** de siglas que existiam escritos no SQL. */
+  apuratorio_ids?: string[] | null;
+  responsavel_id?: string | null;
+  /** Só o que venceu **antes de hoje**. */
+  apenas_vencidos?: boolean | null;
+  /** Janela em dias: de hoje até hoje + N. **Não alcança o que já venceu.** */
+  dias_ate_vencer?: number | null;
+  ano?: number | null;
+  page?: number | null;
+  per_page?: number | null;
+}
+
+/** `deadlines` */
+export interface DeadlineReportResult {
+  items: DeadlineReportItem[];
+  /** Total do escopo filtrado, não da página. */
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/** `deadlines` */
+export interface CalculateDeadlineResult {
+  data_vencimento: string;
+  dias: number;
+  /** De onde veio o número de dias: a combinação apuratório × documento */
+  /** iniciador, ou o padrão do apuratório. */
+  origem: string;
+}
+
+/** `deadlines` */
+export interface AddExtensionRequest {
+  processo_id: string;
+  /** Data final escolhida; o backend deriva os dias do vencimento vigente. */
+  nova_data_vencimento: string;
+  motivo: string;
+  documento_autorizador_id?: string | null;
+  numero_documento?: string | null;
+  data_documento?: string | null;
+  /** Autoridade que concedeu a prorrogação, quando registrada. */
+  autoridade_id?: string | null;
+}
+
+/** `deadlines` */
+export interface UpdateExtensionRequest {
+  processo_id: string;
+  prazo_id: string;
+  /** Nova data da última prorrogação; deve ser posterior ao prazo anterior. */
+  nova_data_vencimento: string;
+}
+
+/** `evidence` */
+export interface CategoriaIndicioItem {
+  id: string;
+  nome: string;
+  indica_ausencia: boolean;
+}
+
+/** `evidence` */
+export interface InfracaoPenalItem {
+  id: string;
+  dispositivo_legal: string;
+  especie: string;
+  artigo: string;
+  descricao: string;
+  rotulo: string;
+}
+
+/** `evidence` */
+export interface TransgressaoItem {
+  id: string;
+  artigo: string;
+  natureza: string;
+  inciso: string;
+  texto: string;
+  rotulo: string;
+}
+
+/** `evidence` */
+export interface InfracaoEstatutoItem {
+  id: string;
+  dispositivo_legal: string;
+  artigo: string;
+  inciso: string;
+  texto: string;
+  rotulo: string;
+}
+
+/** `evidence` */
+export interface InfracaoPenalVinculo {
+  infracao_penal_id: string;
+  esfera_penal_id: string;
+  esfera_penal: string;
+  dispositivo_legal: string;
+  especie: string;
+  artigo: string;
+  descricao: string;
+  rotulo: string;
+}
+
+/** `evidence` */
+export interface InfracaoEstatutoVinculo {
+  infracao_estatuto_id: string;
+  rotulo: string;
+  analogia_transgressao_id: string;
+  analogia_rotulo: string;
+}
+
+/** `evidence` */
+export interface SelecaoInfracaoPenal {
+  infracao_penal_id: string;
+  esfera_penal_id: string;
+}
+
+/** `evidence` */
+export interface SelecaoInfracaoEstatuto {
+  infracao_estatuto_id: string;
+  analogia_transgressao_id: string;
+}
+
+/** Enquadramentos jurídicos usados por uma acusação formal. */
+export interface AcusacoesRequest {
+  infracoes_penais?: SelecaoInfracaoPenal[];
+  transgressoes_ids?: string[];
+  infracoes_estatuto?: SelecaoInfracaoEstatuto[];
+}
+
+/** `evidence` */
+export interface SaveEvidenceRequest {
+  envolvido_id: string;
+  categorias_ids: string[];
+  infracoes_penais: SelecaoInfracaoPenal[];
+  transgressoes_ids: string[];
+  infracoes_estatuto: SelecaoInfracaoEstatuto[];
+}
+
+/** `evidence` */
+export interface EvidenceData {
+  envolvido_id: string;
+  categorias: CategoriaIndicioItem[];
+  infracoes_penais: InfracaoPenalVinculo[];
+  transgressoes: TransgressaoItem[];
+  infracoes_estatuto: InfracaoEstatutoVinculo[];
+}
+
+/** `evidence` */
+export interface EnvolvidoComIndicios {
+  envolvido_id: string;
+  policial_militar_id: string | null;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  status_envolvido: string;
+  ordem: number;
+  indicios: EvidenceData;
+}
+
+/** `legal_catalogs` */
+export interface Coluna {
+  nome: string;
+  rotulo: string;
+  tipo: TipoColuna;
+  /** Catálogo referenciado, quando o tipo é uma referência. */
+  alvo: string | null;
+  /** Explicação do efeito da coluna quando ela carrega comportamento, e não só */
+  /** apresentação. É o texto que a tela mostra ao lado do campo. */
+  efeito: string | null;
+  /** Coluna booleana do catálogo `alvo` que marca a linha a usar, quando o */
+  /** tipo é `referencia_fixa`. */
+  marcador: string | null;
+  /** Nome de uma coluna booleana DESTE catálogo que revela este campo. */
+  visivel_se: string | null;
+  /** Centraliza os valores desta coluna na listagem administrativa. */
+  centralizar: boolean;
+  /** Rótulo curto para o cabeçalho da listagem. O do formulário continua em */
+  /** `rotulo`, e o completo vai para o `title` do cabeçalho. */
+  rotulo_curto: string | null;
+  /** Se a coluna aparece na listagem. `false` a tira só da tabela — ela */
+  /** continua no formulário e no que é gravado. */
+  na_listagem: boolean;
+}
+
+/** `legal_catalogs` */
+export interface Catalogo {
+  /** Identificador estável usado pelo frontend e pela auditoria. Não é exibido. */
+  chave: string;
+  /** Nome físico da tabela. Só sai daqui — nunca de um parâmetro de requisição. */
+  tabela: string;
+  rotulo: string;
+  colunas: Coluna[];
+  ordenacao: string;
+}
+
+/** `legal_catalogs` */
+export interface SaveCatalogRequest {
+  catalogo: string;
+  id?: string | null;
+  valores: Record<string, unknown>;
+}
+
+/** `legal_catalogs` */
+export interface SaveCatalogResult {
+  id: string;
+}
+
+/** `maps_reports` */
+export interface SavedMapListItem {
+  id: string;
+  titulo: string;
+  apuratorio_id: string | null;
+  apuratorio_sigla: string | null;
+  periodo_inicio: string;
+  periodo_fim: string;
+  total_processos: number;
+  total_concluidos: number;
+  total_andamento: number;
+  gerado_por: string | null;
+  created_at: string;
+}
+
+/** `maps_reports` */
+export interface SavedMapListResult {
+  items: SavedMapListItem[];
+  /** Total do escopo ativo, não da página. */
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/**
+ * `maps_reports` — o conteúdo do `dados_mapa`.
+ *
+ * O mapa salvo guarda as duas saídas que a tela do período produz: o `resumo`,
+ * que é a tabela, e o `completo`, que são as capas e fichas do documento A4.
+ * As duas moram no mesmo JSONB porque o schema admite exatamente duas colunas
+ * desse tipo, e `tests/migrations.rs` reprova uma terceira — a decisão está
+ * registrada, e o envelope é o jeito de respeitá-la.
+ *
+ * O período **não** entra aqui: `periodo_inicio` e `periodo_fim` já são colunas
+ * de `mapas_salvos`, e repeti-los criaria uma segunda fonte de verdade para o
+ * mesmo fato.
+ */
+export interface SavedMapSnapshot {
+  versao: number;
+  resumo: MapRow[];
+  /** `null` em mapa salvo antes de a rodada 35 passar a guardar o documento. */
+  completo: MapPrintItem[] | null;
+}
+
+/** `maps_reports` */
+export interface SavedMapFull extends SavedMapListItem {
+  /** Snapshot imutável do mapa como foi emitido. É o único JSONB de domínio do */
+  /** schema, e é justificado: recalcular hoje daria outro resultado — preservar */
+  /** exatamente o que foi publicado é a razão de o mapa ser salvo. */
+  dados_mapa: SavedMapSnapshot;
+}
+
+/** `maps_reports` */
+export interface MapPeriodRequest {
+  periodo_inicio: string;
+  periodo_fim: string;
+  /** Espécies a incluir. Vazio = todas. Substitui o `tipo_processo` textual com */
+  /** o sentinela "TODOS" que existia antes. */
+  apuratorio_ids?: string[] | null;
+}
+
+/** `maps_reports` — recorte do mapa que será preparado para impressão detalhada. */
+export interface MapPrintRequest extends MapPeriodRequest {
+  /** Ausente = documento completo; preenchido = somente esta ficha, se ela pertencer ao mapa. */
+  processo_id?: string | null;
+}
+
+/** `maps_reports` */
+export interface SaveMapRequest {
+  titulo: string;
+  apuratorio_id?: string | null;
+  periodo_inicio: string;
+  periodo_fim: string;
+  total_processos: number;
+  total_concluidos: number;
+  total_andamento: number;
+  dados_mapa: SavedMapSnapshot;
+}
+
+/** `maps_reports` */
+export interface MapRow {
+  processo_id: string;
+  apuratorio_sigla: string;
+  rotulo: string;
+  unidade_origem: string;
+  subunidade_secao_origem: string | null;
+  natureza_fato: string | null;
+  data_instauracao: string;
+  data_conclusao: string | null;
+  responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
+  envolvidos: string | null;
+  prazo_vencimento: string | null;
+  ultimo_andamento: string | null;
+  ultimo_andamento_em: string | null;
+}
+
+/** `maps_reports` — todas as fontes necessárias para uma ficha A4 do mapa. */
+export interface MapPrintItem {
+  processo: ProceedingDetail;
+  /** A espécie define se a remessa à comissão se aplica; nunca a sigla. */
+  permite_remessa_comissao: boolean;
+  prazos: DeadlineItem[];
+  andamentos: MovementItem[];
+  enquadramentos: EnvolvidoComIndicios[];
+}
+
+/** `maps_reports` */
+export interface ContagemRotulada {
+  id: string;
+  rotulo: string;
+  total: number;
+}
+
+/** `maps_reports` */
+export interface DriverRankingItem {
+  policial_militar_id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  total: number;
+}
+
+/** `maps_reports` */
+export interface ReportFilter {
+  apuratorio_ids?: string[] | null;
+  ano?: number | null;
+  limit?: number | null;
+}
+
+/** `maps_reports` */
+export interface GeneratedFile {
+  nome_arquivo: string;
+  conteudo_base64: string;
+}
+
+/**
+ * `files` — arquivo a entregar ao usuário.
+ *
+ * O conteúdo vai em base64 porque anexos e planilhas não são necessariamente
+ * texto e atravessam o IPC pela mesma convenção.
+ */
+export interface SaveFileRequest {
+  /** Nome oferecido no diálogo; a extensão daqui vira o filtro do seletor. */
+  nome_sugerido: string;
+  conteudo_base64: string;
+}
+
+/** `files` — modelo declarativo de uma pasta de trabalho XLSX. */
+export type SpreadsheetColumnType = "texto" | "inteiro" | "data" | "data_hora";
+export type SpreadsheetAlignment = "esquerda" | "centro" | "direita";
+export type SpreadsheetTone = "informacao" | "sucesso" | "atencao" | "perigo" | "inativo";
+export type SpreadsheetValue = string | number | boolean | null;
+
+export interface SpreadsheetMetadata {
+  rotulo: string;
+  valor: string;
+}
+
+export interface SpreadsheetColumn {
+  rotulo: string;
+  tipo?: SpreadsheetColumnType;
+  largura: number;
+  alinhamento?: SpreadsheetAlignment;
+  tom?: SpreadsheetTone | null;
+}
+
+export interface SpreadsheetRow {
+  celulas: SpreadsheetValue[];
+  tom?: SpreadsheetTone | null;
+}
+
+export interface SpreadsheetSheet {
+  nome: string;
+  titulo: string;
+  metadados?: SpreadsheetMetadata[];
+  colunas: SpreadsheetColumn[];
+  linhas: SpreadsheetRow[];
+  congelar_colunas?: number;
+}
+
+export interface SpreadsheetRequest {
+  nome_sugerido: string;
+  abas: SpreadsheetSheet[];
+}
+
+/** `maps_reports` — situação dos processos de um apuratório no escopo do filtro. */
+export interface StatusPorApuratorio {
+  apuratorio_id: string;
+  sigla: string;
+  nome: string;
+  /** Permite agrupar processo × procedimento sem conhecer sigla nenhuma. */
+  tipo_apuratorio_id: string;
+  tipo_apuratorio_nome: string;
+  em_andamento: number;
+  concluidos: number;
+  total: number;
+}
+
+/** `maps_reports` — o encarregado sugere, a autoridade decide. Dois catálogos. */
+export interface SolucoesResumo {
+  sugeridas: ContagemRotulada[];
+  decididas: ContagemRotulada[];
+}
+
+/**
+ * `maps_reports` — contagem de um enquadramento imputado a envolvidos.
+ *
+ * `classificacao` vem sempre de JOIN: a esfera penal escolhida no vínculo, a
+ * espécie do artigo ou a gravidade do artigo do RDPM. Nas infrações penais a
+ * mesma infração pode aparecer em duas linhas, uma por esfera — é o art. 9º do
+ * CPM, não duplicata.
+ */
+export interface EnquadramentoContagem {
+  id: string;
+  rotulo: string;
+  descricao: string;
+  classificacao: string | null;
+  total: number;
+}
+
+/** `maps_reports` — `ReportFilter` mais o recorte por papel. */
+export interface DesignacaoMatrizFiltro {
+  apuratorio_ids?: string[] | null;
+  papel_ids?: string[] | null;
+  ano?: number | null;
+  /** Recorta num militar só, para a ficha individual da tela. */
+  policial_militar_id?: string | null;
+  /**
+   * Um dos quatro baldes — `concluidos`, `no_prazo`, `vencidos`, `sem_prazo` —
+   * ou `em_andamento`, que é a **união** de `no_prazo` e `vencidos`.
+   *
+   * `em_andamento` não é um quinto balde: os quatro seguem exclusivos e somando
+   * o total, e a união se resolve no filtro do backend. Ela deixa `sem_prazo`
+   * de fora de propósito — ver `repository::baldes_do_filtro`.
+   *
+   * O recorte vale para os **apuratórios contados**, e as datas saem do
+   * conjunto filtrado — é o que faz "quem concluiu por último" responder.
+   */
+  situacao?: string | null;
+  /**
+   * `total` (padrão), `recebimento_recente`, `recebimento_antigo`,
+   * `conclusao_recente` ou `conclusao_antiga`.
+   */
+  ordenacao?: string | null;
+  /**
+   * Só as designações ainda vigentes. O padrão é **todas**, inclusive as
+   * encerradas por substituição — são duas perguntas diferentes, e quem
+   * escolhe é quem lê.
+   */
+  somente_vigentes?: boolean | null;
+  limit?: number | null;
+}
+
+/**
+ * Situação dos apuratórios de uma célula ou de uma linha da matriz.
+ *
+ * Os quatro baldes são exclusivos e somam `total`. `sem_prazo` é o apuratório
+ * em andamento cuja data de recebimento nunca foi informada: não tem prazo
+ * nenhum, e contá-lo como "no prazo" afirmaria um prazo que não existe.
+ */
+export interface SituacaoDesignacao {
+  concluidos: number;
+  no_prazo: number;
+  vencidos: number;
+  sem_prazo: number;
+  total: number;
+  /**
+   * A maior data de recebimento do conjunto, e a maior de conclusão. Vêm do
+   * conjunto já filtrado, inclusive pelo balde. `null` quando nenhum
+   * apuratório do conjunto tem a data.
+   */
+  ultimo_recebimento: string | null;
+  ultima_conclusao: string | null;
+}
+
+/** Uma espécie de apuratório na linha do militar, com a situação dela. */
+export interface DesignacaoCelula extends SituacaoDesignacao {
+  id: string;
+  rotulo: string;
+}
+
+/**
+ * `maps_reports` — linha da matriz militar × apuratório.
+ *
+ * `celulas` traz só os apuratórios em que o militar foi designado (`id` =
+ * apuratório, `rotulo` = sigla); as colunas da tabela saem do catálogo.
+ */
+export interface DesignacaoMatrizLinha extends SituacaoDesignacao {
+  policial_militar_id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  celulas: DesignacaoCelula[];
+}
+
+/** `movements` */
+export interface MovementItem {
+  id: string;
+  descricao: string;
+  ocorrido_em: string;
+  tipo_andamento_id: string | null;
+  tipo_andamento: string | null;
+  /** Autor do andamento. O jsonb legado guardava o nome do usuário e a tabela */
+  /** que o substituiu havia perdido essa informação; aqui ela volta como FK. */
+  registrado_por_id: string | null;
+  registrado_por: string | null;
+}
+
+/** `movements` */
+export interface AddMovementRequest {
+  processo_id: string;
+  descricao: string;
+  /** Classificação vinda do catálogo `tipos_andamento`. Opcional: um andamento */
+  /** pode ser só texto. */
+  tipo_andamento_id?: string | null;
+  ocorrido_em?: string | null;
+}
+
+/** `movements` */
+export interface UpdateMovementRequest {
+  processo_id: string;
+  andamento_id: string;
+  descricao: string;
+  /** A edição corrige ou remove a classificação sem alterar autor e data. */
+  tipo_andamento_id?: string | null;
+}
+
+/** `proceedings` */
+export interface MilitarQualificado {
+  posto_graduacao: string;
+  matricula: string;
+  nome: string;
+  a_apurar: boolean;
+}
+
+/** `proceedings` */
+export interface ProceedingListItem {
+  id: string;
+  apuratorio_id: string;
+  apuratorio_sigla: string;
+  apuratorio_nome: string;
+  tipo_apuratorio: string;
+  documento_iniciador_id: string;
+  documento_iniciador: string;
+  numero_documento: string;
+  /** Número de controle efetivo: o informado ou, quando ausente, o do documento. */
+  numero_controle: string;
+  processo_sei: string | null;
+  /** Rótulo montado a partir do dado, no formato usado pela Seção: */
+  /** `SIGLA nº CONTROLE/ANO/UNIDADE[/SUBUNIDADE]`. */
+  rotulo: string;
+  /** Os ids acompanham os rótulos porque o formulário de edição precisa */
+  /** repopular os selects. Resolver por nome falharia justamente no caso que */
+  /** o modelo protege: um catálogo desativado não aparece na lista de opções, */
+  /** e o processo antigo perderia o vínculo em silêncio. */
+  unidade_origem_id: string;
+  unidade_origem: string;
+  subunidade_secao_origem_id: string | null;
+  subunidade_secao_origem: string | null;
+  municipio_fato_id: string;
+  municipio_fato: string;
+  natureza_fato_id: string | null;
+  natureza_fato: string | null;
+  data_instauracao: string;
+  data_recebimento: string | null;
+  /**
+   * Remessa efetiva: as duas colunas de remessa são alternativas da mesma
+   * etapa, e a view já resolve qual delas vale.
+   */
+  data_remessa: string | null;
+  /** Derivado de `data_remessa IS NOT NULL`, como `concluido` da conclusão. */
+  entregue: boolean;
+  data_conclusao: string | null;
+  /** Derivado de `data_conclusao IS NOT NULL` — não existe coluna booleana. */
+  concluido: boolean;
+  resumo_fatos: string | null;
+  /** Quem ocupa, neste apuratório, o papel configurado como responsável. */
+  responsavel_nome: string | null;
+  responsavel_matricula: string | null;
+  responsavel_posto_graduacao: string | null;
+  responsavel_papel: string | null;
+  total_envolvidos: number;
+  /** Qualificação resumida dos envolvidos, na ordem definida no processo. */
+  envolvidos_resumo: MilitarQualificado[];
+  prazo_vencimento: string | null;
+  prazo_dias_restantes: number | null;
+}
+
+/** `proceedings` */
+export interface EnvolvidoItem {
+  id: string;
+  policial_militar_id: string | null;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  status_envolvido_id: string;
+  status_envolvido: string;
+  ordem: number;
+  e_condutor: boolean;
+  solucao_sugerida_id: string | null;
+  solucao_sugerida: string | null;
+  solucao_decidida_id: string | null;
+  solucao_decidida: string | null;
+  penalidade_tipo_id: string | null;
+  penalidade_tipo: string | null;
+  penalidade_dias: number | null;
+}
+
+/** `proceedings` */
+export interface DesignacaoItem {
+  id: string;
+  papel_id: string;
+  papel: string;
+  e_responsavel: boolean;
+  /** A relação apuratório × papel define se a designação cita documento. */
+  usa_documento_designacao: boolean;
+  policial_militar_id: string;
+  nome: string;
+  posto_graduacao: string;
+  matricula: string;
+  data_inicio: string;
+  /** Exclusiva: é o dia em que o sucessor assume. Nula = designação vigente. */
+  data_fim: string | null;
+  documento_autorizador_id: string | null;
+  documento_autorizador: string | null;
+  numero_documento: string | null;
+  motivo: string | null;
+  /**
+   * A designação que esta sucedeu. Combinada com `data_fim`, decide sozinha o
+   * que a tela oferece em cada linha:
+   *
+   * | `data_fim` | `designacao_anterior_id` | linha |
+   * |---|---|---|
+   * | nula | nula | inicial vigente — Substituir, e editável no cadastro |
+   * | nula | preenchida | última da cadeia — Substituir, Editar e Remover |
+   * | preenchida | qualquer | histórico — só leitura |
+   */
+  designacao_anterior_id: string | null;
+}
+
+/** `proceedings` */
+export interface PessoaItem {
+  id: string;
+  papel_pessoa_id: string;
+  papel_pessoa: string;
+  nome: string;
+  ordem: number;
+}
+
+/** `proceedings` — Ofendido/Vítima. Não tem papel: a espécie decide, não o catálogo. */
+export interface VitimaItem {
+  id: string;
+  nome: string;
+  ordem: number;
+}
+
+/** `proceedings` */
+export interface AnexoItem {
+  id: string;
+  nome_arquivo: string;
+  mime_type: string;
+  tamanho_bytes: number;
+  enviado_por: string | null;
+  created_at: string;
+}
+
+/** `proceedings` */
+export interface CartaPrecatoriaDetalhes {
+  deprecante: string;
+  unidade_deprecada_id: string;
+  unidade_deprecada: string;
+}
+
+/** `proceedings` */
+export interface ProceedingDetail extends ProceedingListItem {
+  numero_rgf: string | null;
+  data_remessa_encarregado: string | null;
+  data_remessa_comissao: string | null;
+  data_julgamento: string | null;
+  envolvidos: EnvolvidoItem[];
+  designacoes: DesignacaoItem[];
+  pessoas: PessoaItem[];
+  vitimas: VitimaItem[];
+  anexos: AnexoItem[];
+  carta_precatoria: CartaPrecatoriaDetalhes | null;
+}
+
+/** `proceedings` */
+export interface EnvolvidoRequest {
+  /** Presente na edição para preservar enquadramentos, indícios e resultados. */
+  id?: string | null;
+  /** Nulo representa o estado válido “À apurar”. */
+  policial_militar_id: string | null;
+  status_envolvido_id: string;
+  ordem: number;
+  e_condutor?: boolean;
+  /** Ausente preserva a acusação atual; presente sincroniza toda a seleção. */
+  acusacoes?: AcusacoesRequest | null;
+}
+
+/** Datas informadas somente depois que o processo existe. */
+export interface UpdateProceedingDatesRequest {
+  processo_id: string;
+  data_remessa_encarregado?: string | null;
+  data_remessa_comissao?: string | null;
+  data_julgamento?: string | null;
+  data_conclusao?: string | null;
+}
+
+/** Resultado individual informado na página de detalhes do processo. */
+export interface UpdateInvolvedOutcomeRequest {
+  processo_id: string;
+  envolvido_id: string;
+  solucao_sugerida_id?: string | null;
+  solucao_decidida_id?: string | null;
+  penalidade_tipo_id?: string | null;
+  penalidade_dias?: number | null;
+}
+
+/** `proceedings` */
+export interface DesignacaoRequest {
+  /** Presente = atualiza a linha existente; ausente = designação nova. */
+  id?: string | null;
+  policial_militar_id: string;
+  papel_id: string;
+}
+
+/** `proceedings` */
+export interface PessoaRequest {
+  papel_pessoa_id: string;
+  nome: string;
+  ordem: number;
+}
+
+/** `proceedings` */
+export interface VitimaRequest {
+  nome: string;
+  ordem: number;
+}
+
+/** `proceedings` */
+export interface CartaPrecatoriaRequest {
+  deprecante: string;
+  unidade_deprecada_id: string;
+}
+
+/** `proceedings` */
+export interface SubstituirDesignacaoRequest {
+  processo_id: string;
+  /** A designação vigente que será encerrada — não o papel. */
+  designacao_id: string;
+  sucessor_id: string;
+  /** Dia em que o sucessor assume. É também o fim (exclusivo) da designação */
+  /** anterior, então não há sobreposição nem lacuna. */
+  data_troca: string;
+  motivo: string;
+  documento_autorizador_id?: string | null;
+  numero_documento?: string | null;
+}
+
+/** `proceedings` */
+export interface AtualizarSubstituicaoRequest {
+  processo_id: string;
+  /** A designação criada pela substituição que se quer corrigir. */
+  designacao_id: string;
+  sucessor_id: string;
+  data_troca: string;
+  motivo: string;
+  documento_autorizador_id?: string | null;
+  numero_documento?: string | null;
+}
+
+/** `proceedings` */
+export interface SaveProceedingRequest {
+  id?: string | null;
+  apuratorio_id: string;
+  documento_iniciador_id: string;
+  numero_documento: string;
+  /** Ausente = igual ao número do documento. É assim que o índice único trata. */
+  numero_controle?: string | null;
+  processo_sei?: string | null;
+  numero_rgf?: string | null;
+  unidade_origem_id: string;
+  subunidade_secao_origem_id?: string | null;
+  municipio_fato_id: string;
+  natureza_fato_id?: string | null;
+  data_instauracao: string;
+  data_recebimento?: string | null;
+  resumo_fatos?: string | null;
+  envolvidos?: EnvolvidoRequest[];
+  designacoes?: DesignacaoRequest[];
+  pessoas?: PessoaRequest[];
+  /** Vazio quando a espécie não registra ofendido — o backend recusa o contrário. */
+  vitimas?: VitimaRequest[];
+  carta_precatoria?: CartaPrecatoriaRequest | null;
+}
+
+/** `proceedings` */
+export type ProceedingSituation =
+  | "em_andamento"
+  | "concluido"
+  | "entregue"
+  | "no_prazo"
+  | "vencido";
+
+/** `proceedings` */
+export interface ProceedingFilter {
+  busca?: string | null;
+  /** Espécies a incluir. Vazio = todas. Substitui os `IN (...)` de sigla. */
+  apuratorio_ids?: string[] | null;
+  tipo_apuratorio_id?: string | null;
+  unidade_origem_id?: string | null;
+  natureza_fato_id?: string | null;
+  responsavel_id?: string | null;
+  ano?: number | null;
+  vitima_nome?: string | null;
+  situacao?: ProceedingSituation | null;
+  data_instauracao_inicio?: string | null;
+  data_instauracao_fim?: string | null;
+  municipio_fato_id?: string | null;
+  envolvido_id?: string | null;
+  documento_iniciador_id?: string | null;
+  page?: number | null;
+  per_page?: number | null;
+}
+
+/** `proceedings` */
+export interface ProceedingFilterOption {
+  id: string;
+  rotulo: string;
+  ativo: boolean;
+}
+
+/** `proceedings` */
+export interface ProceedingMilitaryFilterOption {
+  id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao: string;
+  ativo: boolean;
+}
+
+/** `proceedings` */
+export interface ProceedingFilterOptions {
+  tipos_apuratorio: ProceedingFilterOption[];
+  unidades: ProceedingFilterOption[];
+  responsaveis: ProceedingMilitaryFilterOption[];
+  vitimas: string[];
+  anos: number[];
+  locais_fato: ProceedingFilterOption[];
+  envolvidos: ProceedingMilitaryFilterOption[];
+  documentos_iniciadores: ProceedingFilterOption[];
+}
+
+/** `proceedings` */
+export interface ProceedingListResult {
+  items: ProceedingListItem[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/** `proceedings` */
+export interface UploadAttachmentRequest {
+  processo_id: string;
+  nome_arquivo: string;
+  mime_type: string;
+  /** Conteúdo em base64. */
+  conteudo: string;
+}
+
+/** `proceedings` */
+export interface AttachmentContent {
+  nome_arquivo: string;
+  mime_type: string;
+  conteudo: string;
+}
+
+/**
+ * `proceedings` — os quatro números do painel de entrada, e só eles.
+ *
+ * As quatro quebras que moravam aqui saíram na rodada 29: eram sempre do acervo
+ * inteiro, e por isso duas telas as desenhavam ao lado de cartões recortados por
+ * ano e espécie. Agora vêm de `reports_by_nature`, `reports_by_unit`,
+ * `reports_by_year` e `reports_status_by_apuratorio`, que respeitam o escopo.
+ */
+export interface DashboardSummary {
+  total: number;
+  em_andamento: number;
+  concluidos: number;
+  prazos_vencidos: number;
+}
+
+/** `users` */
+export interface UserListItem {
+  id: string;
+  nome: string;
+  matricula: string;
+  posto_graduacao_id: string;
+  posto_graduacao: string;
+  posto_graduacao_sigla: string;
+  circulo_hierarquico: string;
+  is_encarregado: boolean;
+  ativo: boolean;
+  conta_id: string | null;
+  conta_email: string | null;
+  conta_perfil_id: string | null;
+  conta_perfil: string | null;
+  conta_ativa: boolean | null;
+}
+
+/** `users` */
+export interface UserFormSchema {
+  title: string;
+  admin_only: boolean;
+  fields: string[];
+  validations: string[];
+}
+
+/** `users` */
+export interface SaveAccountRequest {
+  email: string;
+  perfil_id: string;
+  /** Obrigatória ao criar a conta; ausente numa edição mantém a senha atual. */
+  senha?: string | null;
+}
+
+/** `users` */
+export interface SaveUserRequest {
+  /** Identidade do policial militar. Ausente = cadastro novo. */
+  id?: string | null;
+  nome: string;
+  matricula: string;
+  /** Catálogo resolvido por id, nunca por nome — renomear um posto não pode */
+  /** quebrar o cadastro. */
+  posto_graduacao_id: string;
+  is_encarregado: boolean;
+  conta?: SaveAccountRequest | null;
+}
+
+/** `users` */
+export interface SaveUserResult {
+  id: string;
+  conta_id: string | null;
+}
+
+/** `users` */
+export interface UserListResult {
+  items: UserListItem[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+/** `users` */
+export interface UserStatistics {
+  /** Quantas designações o militar teve em cada papel (encarregado, escrivão…). */
+  designacoes_por_papel: ContagemRotulada[];
+  /** Quantas designações em cada espécie de apuratório. */
+  designacoes_por_apuratorio: ContagemRotulada[];
+  /** Em quantos processos figurou com cada status de envolvido. */
+  envolvimentos_por_status: ContagemRotulada[];
+}
+
+/** `users` */
+export interface UserProcessItem {
+  id: string;
+  apuratorio_id: string;
+  apuratorio_sigla: string;
+  apuratorio_nome: string;
+  tipo_apuratorio: string;
+  numero_documento: string;
+  numero_controle: string;
+  resumo_fatos: string | null;
+  data_instauracao: string;
+  data_conclusao: string | null;
+  /** Papel exercido, quando a listagem é de designações. */
+  papel: string | null;
+  /** Status no processo, quando a listagem é de envolvimentos. */
+  status_envolvido: string | null;
+}

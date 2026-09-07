@@ -1,0 +1,29 @@
+-- =============================================================================
+-- RECORTE DO BANCO LEGADO — fixture de tests/importacao.rs
+--
+-- GERADO, não escrito à mão. 26 dos 128 processos, escolhidos para exercitar
+-- cada caminho da importação:
+--
+--   IPM 1     8 prorrogações (o máximo do banco)
+--   IPM 3     prazos + duas substituições, uma delas no mesmo dia
+--   IPM 8     9 envolvidos (o máximo) + substituições no mesmo dia
+--   IPM 1/P6  o anexo
+--   IPM 9     4 transgressões do RDPM + 4 crimes
+--   SR 1      RDPM + crimes das duas esferas penais
+--   SR 2      condutor (motorista) + art. 29 sem analogia
+--   SR 5      art. 29 sem analogia (2 vínculos) + prazos
+--   SR 20     três substituições no MESMO DIA (o caso do colapso)
+--   PADS 1    penalidade, e sem envolvido registrado (os 37 da decisão 14)
+--   CP 1      carta precatória (extensão 1:0..1)
+--   CD, CJ, PAD, PADE, SV, FP entram INTEIROS: são poucas linhas, e sem eles a
+--   etapa 02 não derivaria Presidente, Interrogante nem o prazo do FP.
+--
+-- Catálogos e os 236 militares entram inteiros — são pequenos.
+--
+-- O ANEXO É TRUNCADO: o arquivo real tem 20 MB. Ficam os primeiros 512 bytes.
+-- O teste afirma que o anexo existe com nome e mime corretos, não os bytes.
+--
+-- O schema chega como `amostra` e o teste o renomeia para `legado` — mesma
+-- técnica do roteiro de produção, e sem editar uma linha do arquivo.
+-- =============================================================================
+

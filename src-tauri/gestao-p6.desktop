@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GESTÃO P6/7ºBPM
+Comment=Sistema da Seção de Justiça e Disciplina do 7º BPM/PMRO
+Categories=Office;
+Exec={{exec}} {{exec_arg}}
+Icon={{icon}}
+Terminal=false
+StartupWMClass={{exec}}

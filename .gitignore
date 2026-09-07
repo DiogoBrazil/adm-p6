@@ -1,3 +1,38 @@
 .env
+# Aponta o script de migracao para o servidor de producao, e tem senha.
+# O `.env.producao.example` e que e versionado.
+.env.producao
 src-tauri/target
 node_modules
+.claude/settings.json
+# Dump do banco em producao: 44 MB com dados pessoais de 236 militares.
+# Fonte somente-leitura para gerar seeds e para a importacao; nunca versionar.
+adm-p6.sql
+adm_p6_normalized.sql
+admp6_db_atualizado.sql
+
+# Backups gerados pela secao 6.1 do GUIA (`adm_p6_db_AAAA-MM-DD.dump`). Carregam
+# os mesmos dados pessoais que o `adm-p6.sql`, e nascem na raiz do repositorio:
+# sem esta linha, um `git add -A` distraido versiona os 235 militares.
+*.dump
+*.sql.gz
+
+# Build do Vite: artefato, regenerado por `npm run build`.
+dist
+
+# Arquivos temporários usados para revisar drafts do Superdesign.
+.superdesign/tmp/
+
+# Saída do arnês de impressão: HTML e PDF regenerados por
+# `tools/impressao/gerar-fixturas.ts` e `imprimir.py`. O que se versiona é o
+# arnês, não o que ele produz.
+tools/impressao/fixturas/
+tools/impressao/saida/
+
+# Saida de `scripts/migrar_dados_legados.sh`: log, relatorio de conferencia e
+# `pendencias.csv`, que traz NOME de militar, numero de processo e enquadramento.
+# Nasce na raiz do repositorio, como os backups da secao 6.1: sem estas linhas
+# um `git add -A` distraido versiona os dados pessoais de 235 militares.
+migracao_*/
+backups/
+tools/tela/paginas/

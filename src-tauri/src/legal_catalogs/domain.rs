@@ -1,539 +1,641 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct CrimeItem {
-    pub id: String,
-    pub dispositivo_legal: Option<String>,
-    pub dispositivo_legal_id: Option<String>,
-    pub artigo: Option<String>,
-    pub descricao_artigo: Option<String>,
-    pub paragrafo: Option<String>,
-    pub inciso: Option<String>,
-    pub alinea: Option<String>,
-    pub ativo: Option<bool>,
+/// Tipo de uma coluna configurável. Determina como o valor é lido do banco e
+/// como é ligado na escrita — nunca há interpolação de valor em SQL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TipoColuna {
+    Texto,
+    TextoOpcional,
+    Booleano,
+    Inteiro,
+    InteiroOpcional,
+    /// Referência a outro catálogo. `alvo` diz qual, para o formulário montar o select.
+    Referencia,
+    ReferenciaOpcional,
+    /// Referência que o sistema resolve sozinho, e que por isso NÃO aparece
+    /// nem no formulário nem na lista. O valor sai da linha do catálogo `alvo`
+    /// marcada por `marcador` — nunca de comparação por nome.
+    ///
+    /// Existe para a coluna que é obrigatória no banco e cuja resposta é
+    /// sempre a mesma: perguntá-la seria pedir ao administrador que confirme
+    /// o óbvio, e removê-la do schema custaria o rótulo que ela monta.
+    ReferenciaFixa,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TransgressionItem {
-    pub id: String,
-    pub artigo: Option<String>,
-    pub natureza: Option<String>,
-    pub artigo_id: Option<String>,
-    pub inciso: Option<String>,
-    pub texto: Option<String>,
-    pub ativo: Option<bool>,
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Coluna {
+    pub nome: &'static str,
+    pub rotulo: &'static str,
+    pub tipo: TipoColuna,
+    /// Catálogo referenciado, quando o tipo é uma referência.
+    pub alvo: Option<&'static str>,
+    /// Explicação do efeito da coluna quando ela carrega comportamento, e não só
+    /// apresentação. É o texto que a tela mostra ao lado do campo.
+    pub efeito: Option<&'static str>,
+    /// Coluna booleana do catálogo `alvo` que marca a linha a usar, quando o
+    /// tipo é `ReferenciaFixa`.
+    pub marcador: Option<&'static str>,
+    /// Nome de uma coluna booleana DESTE catálogo que revela este campo. O
+    /// formulário o esconde enquanto ela estiver desmarcada, e limpa o valor
+    /// ao desmarcar. Quem garante a regra é o banco; isto é a tela não pedir
+    /// o que não se aplica.
+    pub visivel_se: Option<&'static str>,
+    /// Centraliza os valores desta coluna na listagem administrativa.
+    pub centralizar: bool,
+    /// Rótulo curto para o CABEÇALHO da listagem, quando o do formulário é
+    /// longo demais para uma coluna estreita.
+    ///
+    /// São dois textos porque são dois lugares: no formulário o rótulo fica ao
+    /// lado do campo, com espaço e com o `efeito` explicando embaixo; na
+    /// listagem ele divide a largura com mais quinze colunas. Encurtar o
+    /// `rotulo` resolveria a tabela e pioraria o cadastro. O completo continua
+    /// alcançável na tabela pelo `title` do cabeçalho.
+    pub rotulo_curto: Option<&'static str>,
+    /// Se a coluna aparece na LISTAGEM. Quando `false`, ela continua no
+    /// formulário, no `save` e no `get` — some apenas da tabela.
+    ///
+    /// Diferente de `ReferenciaFixa`, que não existe em tela nenhuma: aqui o
+    /// administrador precisa editar o valor, mas comparar linha a linha não
+    /// ajuda ninguém e a coluna só rouba largura de quem identifica o registro.
+    pub na_listagem: bool,
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Art29Item {
-    pub id: String,
-    pub inciso: Option<String>,
-    pub texto: Option<String>,
-    pub ativo: Option<bool>,
+const fn texto(nome: &'static str, rotulo: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::Texto,
+        alvo: None,
+        efeito: None,
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
 }
-
-#[derive(Debug, Serialize)]
-pub struct ProceedingCatalogs {
-    pub crimes: Vec<CrimeItem>,
-    pub transgressoes: Vec<TransgressionItem>,
-    pub art29: Vec<Art29Item>,
+const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::TextoOpcional,
+        alvo: None,
+        efeito: None,
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
 }
-
-#[derive(Debug, Deserialize)]
-pub struct SaveCrimeRequest {
-    pub id: Option<String>,
-    pub dispositivo_legal_id: Option<String>,
-    pub artigo: String,
-    pub descricao_artigo: Option<String>,
-    pub paragrafo: Option<String>,
-    pub inciso: Option<String>,
-    pub alinea: Option<String>,
+const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::Booleano,
+        alvo: None,
+        efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
 }
-
-impl SaveCrimeRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.artigo.trim().is_empty() {
-            return Err("artigo e obrigatorio".to_string());
-        }
-        if let Some(alinea) = self.alinea.as_deref() {
-            if !alinea.is_empty() && (alinea.len() != 1 || !alinea.chars().all(|c| c.is_ascii_lowercase())) {
-                return Err("alinea deve ser uma letra minuscula".to_string());
-            }
-        }
-        Ok(())
+const fn inteiro(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::Inteiro,
+        alvo: None,
+        efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
+}
+const fn inteiro_opcional(
+    nome: &'static str,
+    rotulo: &'static str,
+    efeito: &'static str,
+) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::InteiroOpcional,
+        alvo: None,
+        efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
+}
+const fn referencia(nome: &'static str, rotulo: &'static str, alvo: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::Referencia,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
+}
+/// Referência que o sistema resolve pela linha marcada com `marcador` no
+/// catálogo `alvo`. Não aparece na tela — ver `TipoColuna::ReferenciaFixa`.
+const fn referencia_fixa(nome: &'static str, alvo: &'static str, marcador: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo: "",
+        tipo: TipoColuna::ReferenciaFixa,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: Some(marcador),
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SaveTransgressionRequest {
-    pub id: Option<String>,
-    pub artigo_id: Option<String>,
-    pub inciso: Option<String>,
-    pub texto: String,
-}
-
-impl SaveTransgressionRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.texto.trim().is_empty() {
-            return Err("texto e obrigatorio".to_string());
-        }
-        Ok(())
+/// Igual a `referencia_opcional`, mas só exibida quando a coluna booleana
+/// `gatilho` deste mesmo catálogo estiver marcada.
+const fn referencia_condicional(
+    nome: &'static str,
+    rotulo: &'static str,
+    alvo: &'static str,
+    gatilho: &'static str,
+) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::ReferenciaOpcional,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: None,
+        visivel_se: Some(gatilho),
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SaveArt29Request {
-    pub id: Option<String>,
-    pub inciso: String,
-    pub texto: String,
-}
-
-impl SaveArt29Request {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.inciso.trim().is_empty() {
-            return Err("inciso e obrigatorio".to_string());
-        }
-        if self.texto.trim().is_empty() {
-            return Err("texto e obrigatorio".to_string());
-        }
-        Ok(())
+const fn referencia_opcional(
+    nome: &'static str,
+    rotulo: &'static str,
+    alvo: &'static str,
+) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::ReferenciaOpcional,
+        alvo: Some(alvo),
+        efeito: None,
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
     }
 }
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct Art32Item {
-    pub id: String,
-    pub inciso: Option<String>,
-    pub texto: Option<String>,
-    pub ativo: Option<bool>,
+/** Marca uma coluna textual ou de referência como compacta na listagem. */
+const fn centralizada(mut coluna: Coluna) -> Coluna {
+    coluna.centralizar = true;
+    coluna
+}
+
+/// Encurta o cabeçalho **da listagem**, preservando o rótulo do formulário.
+const fn abreviada(mut coluna: Coluna, curto: &'static str) -> Coluna {
+    coluna.rotulo_curto = Some(curto);
+    coluna
+}
+
+/// Tira a coluna da listagem sem tirá-la do formulário.
+const fn fora_da_listagem(mut coluna: Coluna) -> Coluna {
+    coluna.na_listagem = false;
+    coluna
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Catalogo {
+    /// Identificador estável usado pelo frontend e pela auditoria. Não é exibido.
+    pub chave: &'static str,
+    /// Nome físico da tabela. Só sai daqui — nunca de um parâmetro de requisição.
+    pub tabela: &'static str,
+    pub rotulo: &'static str,
+    pub colunas: &'static [Coluna],
+    pub ordenacao: &'static str,
+    /// Consulta que devolve o assunto de UMA linha para a trilha de auditoria.
+    /// `$1` é o id; o resultado é o texto da coluna "Sobre o quê".
+    ///
+    /// É consulta inteira, e não nome de coluna, porque não existe uma coluna de
+    /// exibição para todos: os quatro catálogos jurídicos compõem o rótulo com
+    /// junções. São as mesmas expressões de
+    /// `evidence/repository.rs::{ROTULO_PENAL, ROTULO_TRANSGRESSAO, ROTULO_ESTATUTO}`,
+    /// e o aviso de lá vale aqui — **o rótulo já termina na descrição**, não se
+    /// concatena `descricao`/`texto` de novo.
+    ///
+    /// Mora ao lado de `tabela` pela mesma razão que ela: o SQL sai da tabela de
+    /// metadados, nunca de um parâmetro de requisição.
+    pub assunto_sql: &'static str,
+}
+
+/// Registro de tudo que o administrador pode cadastrar.
+///
+/// Substitui os 68 comandos e ~2.800 linhas de CRUD repetido da versão anterior.
+/// Acrescentar um catálogo passa a ser acrescentar uma entrada aqui — e os
+/// atributos semânticos (`permite_penalidade`, `usa_quantidade_dias`,
+/// `exige_condutor`, `indica_ausencia`, `pode_administrar`) ficam declarados ao
+/// lado do campo que os carrega, com o efeito explicado para a tela.
+pub const CATALOGOS: &[Catalogo] = &[
+    Catalogo {
+        chave: "tipos_apuratorio",
+        tabela: "tipos_apuratorio",
+        rotulo: "Tipos de apuratório",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_apuratorio WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "apuratorios",
+        tabela: "apuratorios",
+        rotulo: "Apuratórios",
+        colunas: &[
+            centralizada(texto("sigla", "Sigla")),
+            texto("nome", "Nome"),
+            referencia("tipo_apuratorio_id", "Tipo", "tipos_apuratorio"),
+            // Fora da listagem: é campo de cadastro, não de comparação linha a
+            // linha — e numa tabela de 16 colunas ele só tirava largura de quem
+            // identifica a espécie. Continua obrigatório no formulário.
+            fora_da_listagem(inteiro("ordem", "Ordem no mapa",
+                "Posição desta espécie no mapa mensal — menor vem primeiro. \
+                 Empate cai na ordem alfabética da sigla. Vale para o documento \
+                 emitido e para a tabela da tela; não muda a ordem dos filtros.")),
+            abreviada(inteiro("prazo_base_dias", "Prazo base (dias)",
+                "Prazo inicial padrão desta espécie. Um documento iniciador pode sobrescrevê-lo."), "Prazo base"),
+            abreviada(inteiro_opcional("max_envolvidos", "Máximo de envolvidos",
+                "Em branco = sem limite. O banco recusa gravar acima deste número."), "Máx. envolvidos"),
+            abreviada(booleano("exige_natureza_fato", "Exige natureza geral do fato",
+                "Torna a rubrica do fato apurado obrigatória no cadastro."), "Natureza do fato"),
+            abreviada(booleano("permite_julgamento", "Permite julgamento",
+                "Revela a data de julgamento no cadastro do processo."), "Julgamento"),
+            abreviada(booleano("permite_punicao", "Permite punição",
+                "Revela penalidade e dias em cada envolvido. Vale junto com o atributo \
+                 da solução decidida: a espécie precisa punir E o desfecho precisa punir."), "Punição"),
+            abreviada(booleano("permite_remessa_comissao", "Permite remessa à comissão",
+                "Revela a data de remessa à comissão no cadastro do processo."), "Remessa à comissão"),
+            abreviada(booleano("permite_acusacao", "Permite acusação disciplinar",
+                "Exige enquadramento jurídico do acusado no cadastro do processo."), "Acusação disciplinar"),
+            abreviada(booleano("permite_acusacao_penal", "Permite acusação penal",
+                "Libera crimes e contravenções na acusação, além das infrações disciplinares."), "Acusação penal"),
+            abreviada(booleano("permite_indicios", "Permite indícios",
+                "Libera o registro de indícios para procedimentos investigativos."), "Indícios"),
+            abreviada(booleano("permite_solucao_sugerida", "Permite solução sugerida",
+                "Libera a proposta de solução pelo encarregado no resultado do envolvido."), "Solução sugerida"),
+            // `codigo_extensao` NÃO entra: é o único código técnico do schema
+            // (§5.3), e acrescentar uma extensão de formulário é mudança de
+            // código, não operação de administrador. A coluna continua no banco
+            // e continua dirigindo a carta precatória — o `UPDATE` genérico só
+            // escreve o que está declarado aqui, então editar um apuratório
+            // pela tela não a apaga.
+        ],
+        ordenacao: "sigla",
+        assunto_sql: "SELECT sigla || ' - ' || nome FROM apuratorios WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "tipos_documento",
+        tabela: "tipos_documento",
+        rotulo: "Tipos de documento",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_documento WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "papeis_processo",
+        tabela: "papeis_processo",
+        rotulo: "Funções no apuratório",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM papeis_processo WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "naturezas_transgressao",
+        tabela: "naturezas_transgressao",
+        rotulo: "Naturezas de transgressão",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM naturezas_transgressao WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "naturezas_fato",
+        tabela: "naturezas_fato",
+        rotulo: "Naturezas gerais do fato apurado",
+        colunas: &[
+            texto("nome", "Nome"),
+            booleano("exige_condutor", "Exige condutor",
+                "Marca as rubricas de sinistro: o cadastro passa a exigir o PM condutor."),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM naturezas_fato WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "status_envolvido",
+        tabela: "status_envolvido",
+        rotulo: "Status do envolvido",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM status_envolvido WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "tipos_solucao_sugerida",
+        tabela: "tipos_solucao_sugerida",
+        rotulo: "Soluções sugeridas",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_solucao_sugerida WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "tipos_solucao_decidida",
+        tabela: "tipos_solucao_decidida",
+        rotulo: "Soluções decididas",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            booleano("permite_penalidade", "Permite penalidade",
+                "Só com uma solução assim marcada o cadastro aceita tipo e dias de penalidade."),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_solucao_decidida WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "tipos_penalidade",
+        tabela: "tipos_penalidade",
+        rotulo: "Tipos de penalidade",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            booleano("usa_quantidade_dias", "Usa quantidade de dias",
+                "Habilita o campo de dias. Penalidades sem duração ficam desmarcadas."),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_penalidade WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "categorias_indicio",
+        tabela: "categorias_indicio",
+        rotulo: "Categorias de indício",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            booleano("indica_ausencia", "Indica ausência de indícios",
+                "A categoria marcada assim não pode conviver com nenhuma outra no mesmo envolvido."),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM categorias_indicio WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "esferas_penais",
+        tabela: "esferas_penais",
+        rotulo: "Esferas penais",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM esferas_penais WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "especies_infracao_penal",
+        tabela: "especies_infracao_penal",
+        rotulo: "Espécies de infração penal",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM especies_infracao_penal WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "dispositivos_legais",
+        tabela: "dispositivos_legais",
+        rotulo: "Dispositivos legais",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            centralizada(booleano("nome_feminino", "Nome feminino",
+                "Concorda o artigo com o nome ao citar o enquadramento: marcado escreve \
+                 'Art. 33 da Lei de Drogas'; desmarcado, 'Art. 312 do Código Penal'.")),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM dispositivos_legais WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "infracoes_penais",
+        tabela: "infracoes_penais",
+        rotulo: "Infrações penais",
+        colunas: &[
+            referencia("dispositivo_legal_id", "Dispositivo legal", "dispositivos_legais"),
+            centralizada(referencia("especie_id", "Espécie", "especies_infracao_penal")),
+            centralizada(texto("artigo", "Artigo")),
+            texto("descricao", "Descrição"),
+            centralizada(texto_opcional("paragrafo", "Parágrafo")),
+            centralizada(texto_opcional("inciso", "Inciso")),
+            centralizada(texto_opcional("alinea", "Alínea")),
+        ],
+        // Ordenar 'artigo' como texto poria 'Art. 5' depois de 'Art. 32'. As
+        // funções da 0023 leem o número e o romano; o desempate textual que vem
+        // depois de cada uma é o que mantém a ordem ESTÁVEL entre páginas quando
+        // dois artigos têm o mesmo número ('121' e '121-A').
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
+                    paragrafo NULLS FIRST, valor_do_romano(inciso) NULLS FIRST, \
+                    inciso NULLS FIRST, alinea NULLS FIRST",
+        assunto_sql: r#"
+            SELECT 'Art. ' || ip.artigo
+                     || COALESCE(', § ' || ip.paragrafo, '')
+                     || COALESCE(', inciso ' || ip.inciso, '')
+                     || COALESCE(', alínea ' || ip.alinea, '')
+                     || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+                     || ' - ' || ip.descricao
+              FROM infracoes_penais ip
+              JOIN dispositivos_legais dl ON dl.id = ip.dispositivo_legal_id
+             WHERE ip.id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "artigos_rdpm",
+        tabela: "artigos_rdpm",
+        rotulo: "Artigos do RDPM",
+        colunas: &[
+            centralizada(texto("artigo", "Artigo")),
+            centralizada(referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao")),
+        ],
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo",
+        assunto_sql: r#"
+            SELECT ar.artigo || ' do RDPM (' || nt.nome || ')'
+              FROM artigos_rdpm ar
+              JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+             WHERE ar.id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "transgressoes",
+        tabela: "transgressoes",
+        rotulo: "Transgressões do RDPM",
+        colunas: &[
+            centralizada(referencia("artigo_rdpm_id", "Artigo", "artigos_rdpm")),
+            centralizada(texto("inciso", "Inciso")),
+            texto("texto", "Texto"),
+        ],
+        // Ordenava só pelo inciso, e por isso os 95 incisos dos Arts. 15, 16 e 17
+        // saíam INTERCALADOS — três "I" seguidos, três "II"… O artigo mora na
+        // tabela ao lado e `list` não faz JOIN, então ele entra por subconsulta
+        // escalar; o romano vem da 0023, senão IX viria antes de V.
+        ordenacao: "(SELECT numero_do_artigo(ar.artigo) FROM artigos_rdpm ar \
+                      WHERE ar.id = transgressoes.artigo_rdpm_id) NULLS LAST, \
+                    valor_do_romano(inciso) NULLS LAST, inciso",
+        assunto_sql: r#"
+            SELECT ar.artigo || ', inciso ' || t.inciso || ' do RDPM ('
+                     || nt.nome || ') - ' || t.texto
+              FROM transgressoes t
+              JOIN artigos_rdpm ar ON ar.id = t.artigo_rdpm_id
+              JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+             WHERE t.id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "infracoes_estatuto",
+        tabela: "infracoes_estatuto",
+        rotulo: "Infrações do Estatuto",
+        colunas: &[
+            // Uma infração do Estatuto é, por definição, do Estatuto: o select
+            // só podia ter uma resposta. A coluna fica porque monta o rótulo
+            // completo, e é resolvida pelo atributo — nunca pelo nome.
+            referencia_fixa("dispositivo_legal_id", "dispositivos_legais", "e_estatuto_militar"),
+            centralizada(texto("artigo", "Artigo")),
+            centralizada(texto("inciso", "Inciso")),
+            texto("texto", "Texto"),
+        ],
+        // Só o Art. 29 está cadastrado, então a ordenação pelo artigo nunca chegou
+        // a ser exercida — não é que acertasse, é que não havia o que ordenar. A
+        // coluna existe porque a tabela funde os antigos `_art29` e `_art32` da
+        // base legada (0003): no dia em que o 32 entrar, quem ordena é o número.
+        ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
+                    valor_do_romano(inciso) NULLS LAST, inciso",
+        assunto_sql: r#"
+            SELECT ie.artigo || ', inciso ' || ie.inciso
+                     || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+                     || ' - ' || ie.texto
+              FROM infracoes_estatuto ie
+              JOIN dispositivos_legais dl ON dl.id = ie.dispositivo_legal_id
+             WHERE ie.id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "tipos_andamento",
+        tabela: "tipos_andamento",
+        rotulo: "Tipos de andamento",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM tipos_andamento WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "papeis_pessoa",
+        tabela: "papeis_pessoa",
+        rotulo: "Papéis de pessoa (Exceto Vítima)",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM papeis_pessoa WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "municipios_distritos",
+        tabela: "municipios_distritos",
+        rotulo: "Municípios e distritos",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            booleano("e_distrito", "É distrito",
+                "Marcado, exige o município a que o distrito pertence — e o banco recusa gravar sem ele."),
+            centralizada(referencia_condicional("municipio_pai_id", "Município",
+                "municipios_distritos", "e_distrito")),
+        ],
+        ordenacao: "nome",
+        assunto_sql: r#"
+            SELECT nome || CASE WHEN e_distrito THEN ' (distrito)' ELSE '' END
+              FROM municipios_distritos WHERE id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "unidades_pm",
+        tabela: "unidades_pm",
+        rotulo: "Unidades PM",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            centralizada(referencia_opcional("municipio_id", "Município", "municipios_distritos")),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM unidades_pm WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "subunidades_secoes",
+        tabela: "subunidades_secoes",
+        rotulo: "Subunidades/Seções de origem",
+        colunas: &[
+            centralizada(referencia("unidade_pm_id", "Unidade PM", "unidades_pm")),
+            centralizada(texto("nome", "Nome")),
+        ],
+        ordenacao: "unidade_pm_id, nome",
+        assunto_sql: r#"
+            SELECT u.nome || ' / ' || s.nome
+              FROM subunidades_secoes s
+              JOIN unidades_pm u ON u.id = s.unidade_pm_id
+             WHERE s.id = $1::uuid
+        "#,
+    },
+    Catalogo {
+        chave: "circulos_hierarquicos",
+        tabela: "circulos_hierarquicos",
+        rotulo: "Círculos hierárquicos",
+        colunas: &[centralizada(texto("nome", "Nome"))],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM circulos_hierarquicos WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "postos_graduacoes",
+        tabela: "postos_graduacoes",
+        rotulo: "Postos e graduações",
+        colunas: &[
+            centralizada(texto("sigla", "Sigla")),
+            centralizada(texto("nome", "Nome")),
+            centralizada(referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos")),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT sigla || ' - ' || nome FROM postos_graduacoes WHERE id = $1::uuid",
+    },
+    Catalogo {
+        chave: "perfis_acesso",
+        tabela: "perfis_acesso",
+        rotulo: "Perfis de acesso",
+        colunas: &[
+            centralizada(texto("nome", "Nome")),
+            booleano("pode_administrar", "Pode administrar",
+                "Concede acesso às telas de cadastro e configuração. O sistema impede que sobre nenhum."),
+        ],
+        ordenacao: "nome",
+        assunto_sql: "SELECT nome FROM perfis_acesso WHERE id = $1::uuid",
+    },
+];
+
+pub fn catalogo(chave: &str) -> Option<&'static Catalogo> {
+    CATALOGOS.iter().find(|c| c.chave == chave)
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SaveArt32Request {
+pub struct SaveCatalogRequest {
+    pub catalogo: String,
     pub id: Option<String>,
-    pub inciso: String,
-    pub texto: String,
-}
-
-impl SaveArt32Request {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.inciso.trim().is_empty() {
-            return Err("inciso e obrigatorio".to_string());
-        }
-        if self.texto.trim().is_empty() {
-            return Err("texto e obrigatorio".to_string());
-        }
-        Ok(())
-    }
+    pub valores: Map<String, Value>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct SaveCatalogResult {
     pub id: String,
-}
-
-// ── LocalOrigem (schema reestruturado: nome_unidade_pm + cidade FK) ──────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct LocalOrigemItem {
-    pub id: String,
-    pub nome_unidade_pm: String,
-    pub cidade_id: String,
-    pub cidade_nome: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveLocalOrigemRequest {
-    pub id: Option<String>,
-    pub nome_unidade_pm: String,
-    pub cidade_id: String,
-}
-
-impl SaveLocalOrigemRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_unidade_pm.trim().is_empty() {
-            return Err("nome_unidade_pm e obrigatoria".to_string());
-        }
-        if self.cidade_id.trim().is_empty() {
-            return Err("cidade e obrigatoria".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── MunicipioDistrito ────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct MunicipioCRUDItem {
-    pub id: String,
-    pub nome_municipio_distrito: String,
-    pub tipo: String,
-    pub is_distrito: bool,
-    pub municipio_pai: Option<String>,
-    pub municipio_pai_nome: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveMunicipioDistritoRequest {
-    pub id: Option<String>,
-    pub nome_municipio_distrito: String,
-    pub is_distrito: bool,
-    pub municipio_pai: Option<String>,
-}
-
-impl SaveMunicipioDistritoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_municipio_distrito.trim().is_empty() {
-            return Err("nome_municipio_distrito e obrigatorio".to_string());
-        }
-        if self.is_distrito && self.municipio_pai.as_deref().unwrap_or("").trim().is_empty() {
-            return Err("municipio pai e obrigatorio para distritos".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── StatusEnvolvido ───────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct StatusEnvolvidoItem {
-    pub id: String,
-    pub nome_status: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveStatusEnvolvidoRequest {
-    pub id: Option<String>,
-    pub nome_status: String,
-}
-
-impl SaveStatusEnvolvidoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_status.trim().is_empty() {
-            return Err("nome_status e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── SolucaoTipo ───────────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct SolucaoTipoItem {
-    pub id: String,
-    pub nome_solucao: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveSolucaoTipoRequest {
-    pub id: Option<String>,
-    pub nome_solucao: String,
-}
-
-impl SaveSolucaoTipoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_solucao.trim().is_empty() {
-            return Err("nome_solucao e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── TipoPenalidade ────────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoPenalidadeItem {
-    pub id: String,
-    pub nome_penalidade: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveTipoPenalidadeRequest {
-    pub id: Option<String>,
-    pub nome_penalidade: String,
-}
-
-impl SaveTipoPenalidadeRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_penalidade.trim().is_empty() {
-            return Err("nome_penalidade e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── TipoPrazo ─────────────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoPrazoItem {
-    pub id: String,
-    pub nome_prazo: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveTipoPrazoRequest {
-    pub id: Option<String>,
-    pub nome_prazo: String,
-}
-
-impl SaveTipoPrazoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_prazo.trim().is_empty() {
-            return Err("nome_prazo e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── TipoApuratorio ────────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoApuratorioItem {
-    pub id: String,
-    pub nome_tipo_apuratorio: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveTipoApuratorioRequest {
-    pub id: Option<String>,
-    pub nome_tipo_apuratorio: String,
-}
-
-impl SaveTipoApuratorioRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_tipo_apuratorio.trim().is_empty() {
-            return Err("nome_tipo_apuratorio e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── Apuratorio ────────────────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct ApuratorioItem {
-    pub id: String,
-    pub nome_apuratorio: String,
-    pub tipo_apuratorio_id: String,
-    pub tipo_apuratorio: Option<String>,
-    pub prazo_base_dias: i32,
-    pub documento_iniciador_id: String,
-    pub documento_iniciador: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveApuratorioRequest {
-    pub id: Option<String>,
-    pub nome_apuratorio: String,
-    pub tipo_apuratorio_id: String,
-    pub prazo_base_dias: i32,
-    pub documento_iniciador_id: String,
-}
-
-impl SaveApuratorioRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_apuratorio.trim().is_empty() {
-            return Err("nome_apuratorio e obrigatorio".to_string());
-        }
-        if self.tipo_apuratorio_id.trim().is_empty() {
-            return Err("tipo_apuratorio e obrigatorio".to_string());
-        }
-        if self.prazo_base_dias <= 0 {
-            return Err("prazo_base_dias deve ser positivo".to_string());
-        }
-        if self.documento_iniciador_id.trim().is_empty() {
-            return Err("documento_iniciador_id e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct PostoGraduacaoItem {
-    pub id: String,
-    pub nome_posto_graduacao: String,
-    pub tipo_usuario_id: Option<String>,
-    pub tipo_usuario: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SavePostoGraduacaoRequest {
-    pub id: Option<String>,
-    pub nome_posto_graduacao: String,
-    pub tipo_usuario_id: String,
-}
-
-impl SavePostoGraduacaoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_posto_graduacao.trim().is_empty() {
-            return Err("nome_posto_graduacao e obrigatorio".to_string());
-        }
-        if self.tipo_usuario_id.trim().is_empty() {
-            return Err("tipo_usuario e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-// ── NaturezaTransgressao ─────────────────────────────────────────────────────
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct NaturezaTransgressaoItem {
-    pub id: String,
-    pub nome_natureza: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveNaturezaTransgressaoRequest {
-    pub id: Option<String>,
-    pub nome_natureza: String,
-}
-
-impl SaveNaturezaTransgressaoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_natureza.trim().is_empty() {
-            return Err("nome_natureza e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct NaturezaItem {
-    pub id: String,
-    pub nome: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoUsuarioItem {
-    pub id: String,
-    pub nome_tipo_usuario: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveTipoUsuarioRequest {
-    pub id: Option<String>,
-    pub nome_tipo_usuario: String,
-}
-
-impl SaveTipoUsuarioRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_tipo_usuario.trim().is_empty() {
-            return Err("nome_tipo_usuario e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct DispositivoLegalItem {
-    pub id: String,
-    pub nome_dispositivo_legal: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveDispositivoLegalRequest {
-    pub id: Option<String>,
-    pub nome_dispositivo_legal: String,
-}
-
-impl SaveDispositivoLegalRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_dispositivo_legal.trim().is_empty() {
-            return Err("nome_dispositivo_legal e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct ArtigoRdpmItem {
-    pub id: String,
-    pub nome: String,
-    pub artigo: String,
-    pub natureza_id: String,
-    pub natureza: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveArtigoRdpmRequest {
-    pub id: Option<String>,
-    pub artigo: String,
-    pub natureza_id: String,
-}
-
-impl SaveArtigoRdpmRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.artigo.trim().is_empty() {
-            return Err("artigo e obrigatorio".to_string());
-        }
-        if self.natureza_id.trim().is_empty() {
-            return Err("natureza e obrigatoria".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct MunicipalityItem {
-    pub id: String,
-    pub nome_municipio_distrito: String,
-    pub tipo: Option<String>,
-    pub municipio_pai: Option<String>,
-    pub nome_exibicao: String,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct TipoDocumentoItem {
-    pub id: String,
-    pub nome_tipo_documento: String,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveTipoDocumentoRequest {
-    pub id: Option<String>,
-    pub nome_tipo_documento: String,
-}
-
-impl SaveTipoDocumentoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_tipo_documento.trim().is_empty() {
-            return Err("nome_tipo_documento e obrigatorio".to_string());
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct SubdivisaoTextoNormativoItem {
-    pub id: String,
-    pub nome_subdivisao: String,
-    pub dispositivo_legal_id: String,
-    pub dispositivo_legal: Option<String>,
-    pub ativo: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveSubdivisaoTextoNormativoRequest {
-    pub id: Option<String>,
-    pub nome_subdivisao: String,
-    pub dispositivo_legal_id: String,
-}
-
-impl SaveSubdivisaoTextoNormativoRequest {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.nome_subdivisao.trim().is_empty() {
-            return Err("nome_subdivisao e obrigatorio".to_string());
-        }
-        if self.dispositivo_legal_id.trim().is_empty() {
-            return Err("dispositivo_legal_id e obrigatorio".to_string());
-        }
-        Ok(())
-    }
 }

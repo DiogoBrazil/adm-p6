@@ -1,0 +1,39 @@
+-- A ordem dos apuratórios no mapa, semeada outra vez — agora que as espécies
+-- existem.
+--
+-- A 0019 já fez esta mesma carga, e ela é a decisão 64: no documento emitido,
+-- SR, IPM e PADS abrem o mapa quando estão no escopo; o resto, tanto faz. O que
+-- ela não podia prever é QUANDO rodaria num banco novo.
+--
+-- Quem INSERE as linhas de `apuratorios` não é migration nenhuma: é
+-- `importacao/01_catalogos.sql`, que deriva uma espécie por (tipo_geral,
+-- tipo_detalhe) do banco legado. E `sqlx::migrate!` corre no start do app
+-- (lib.rs), portanto ANTES da importação. Num destino novo — foi o caso do Neon
+-- de produção — a 0019 rodou contra a tabela vazia: os três UPDATE não acertaram
+-- linha nenhuma, sem erro e sem aviso, e as dez espécies nasceram depois no
+-- `DEFAULT 100`. Com `ordem` empatada, o `ORDER BY ap.ordem, v.apuratorio_sigla`
+-- de `map_rows` desempata pela sigla, e o mapa voltou a abrir por CD.
+--
+-- No banco de desenvolvimento a 0019 chegou DEPOIS da importação e pegou as
+-- linhas prontas. É por isso que funcionava aqui e não lá.
+--
+-- Por que uma migration nova e não editar a 0019: `sqlx` guarda checksum por
+-- versão, e mexer numa já aplicada quebra o startup seguinte com
+-- `VersionMismatch`.
+--
+-- A carga por sigla continua legítima — é o mesmo caminho de `prazo_base_dias`
+-- (decisão 23) e dos atributos da 0007 (decisão 31). O princípio 2 proíbe o
+-- CÓDIGO decidir por nome em tempo de execução, não a semeadura de uma coluna
+-- que o administrador passa a possuir.
+--
+-- Isto não reescreve fato registrado (princípio 5): mapa já salvo guarda o
+-- documento inteiro no snapshot da 0020 e continua exibindo a ordem em que foi
+-- emitido. E os UPDATE são idempotentes: rodar de novo num banco já correto não
+-- muda nada.
+--
+-- O outro lado do conserto está em `importacao/01_catalogos.sql`, que passou a
+-- escrever `ordem` no INSERT — daqui em diante o dado nasce certo, e esta
+-- migration é só quem alcança o que já foi importado.
+UPDATE apuratorios SET ordem = 1 WHERE lower(sigla) = 'sr';
+UPDATE apuratorios SET ordem = 2 WHERE lower(sigla) = 'ipm';
+UPDATE apuratorios SET ordem = 3 WHERE lower(sigla) = 'pads';

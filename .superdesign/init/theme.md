@@ -1,0 +1,2834 @@
+# Tema
+
+> **Instantâneo, não fonte de verdade.** Este arquivo foi gerado colando trechos do
+> código, e o código andou desde então. Confira sempre no arquivo citado antes de se
+> apoiar num bloco daqui; a fonte de verdade do projeto é o `GUIA.md`.
+
+## Resumo compacto de tokens
+
+- Fonte: Segoe UI, Tahoma, Geneva, Verdana, sans-serif.
+- Fundo geral: `#f8fafc`; superfícies: `#ffffff`.
+- Texto principal: `#1f2937`; secundário: `#64748b`.
+- Barra lateral: `#111827`; texto lateral: `#d1d5db`.
+- Primária operacional: verde `#10b981`; destaque amarelo `#fbbf24`.
+- Perigo: `#dc3545`; secundário: `#6c757d`.
+- Bordas: `#e5e7eb`; raio padrão: 8px.
+- Sombra de painel: `0 4px 12px rgba(0,0,0,.08)`.
+- Espaçamento recorrente: 4, 6, 8, 10, 12, 14, 16, 18, 20 e 24px.
+- Layout: sidebar fixa de 280px; conteúdo fluido; tabelas responsivas por wrapper.
+- Impressão: remove navegação e controles, abre overflow e converte grades para uma coluna.
+- Breakpoint operacional crítico: listagens permanecem sem rolagem até 900px; abaixo disso usam rolagem horizontal.
+
+## Fonte bruta — `src/styles.css`
+
+```css
+:root {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: #1f2937;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: #10b981;
+  color: #fff;
+  cursor: pointer;
+  padding: 10px 14px;
+}
+
+button.secondary {
+  background: #6c757d;
+}
+
+button.danger {
+  background: #dc3545;
+}
+
+button.small {
+  padding: 6px 9px;
+}
+
+.login-screen {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
+  display: grid;
+  gap: 16px;
+  max-width: 380px;
+  padding: 24px;
+  width: 100%;
+}
+
+.login-panel h1 {
+  margin: 0 0 8px;
+}
+
+label {
+  color: #64748b;
+  display: grid;
+  gap: 6px;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  padding: 10px 12px;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.sidebar {
+  background: #111827;
+  color: #d1d5db;
+  inset: 0 auto 0 0;
+  overflow-y: auto;
+  padding: 20px 14px;
+  position: fixed;
+  width: 280px;
+}
+
+.brand {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.brand strong {
+  color: #fff;
+  font-size: 20px;
+}
+
+.brand span,
+.topbar span {
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.nav-group {
+  margin-bottom: 18px;
+}
+
+.nav-group h2 {
+  color: #9ca3af;
+  font-size: 12px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  align-items: center;
+  background: transparent;
+  color: #d1d5db;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding: 9px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.nav-item.active,
+.nav-item:hover {
+  background: rgba(16, 185, 129, 0.16);
+  color: #fff;
+}
+
+.nav-item small {
+  color: #fbbf24;
+}
+
+.main {
+  margin-left: 280px;
+  min-height: 100vh;
+}
+
+.topbar {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.topbar div {
+  display: grid;
+  gap: 2px;
+}
+
+.panel {
+  margin: 24px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 20px;
+}
+
+.page-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+/* Numa janela estreita o cabeçalho quebra em duas linhas, e sem isto o botão
+   herda a largura toda — "Novo" atravessando a tela inteira. Botão de ação tem
+   o tamanho do seu rótulo. */
+.page-head > button {
+  flex: 0 0 auto;
+}
+
+.page-head h1 {
+  margin: 0;
+}
+
+.page-head p {
+  color: #64748b;
+  margin: 4px 0 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions code {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #1f2937;
+  padding: 8px 10px;
+}
+
+.readonly,
+.empty {
+  color: #64748b;
+}
+
+/* O formulário era UMA coluna de 760px. Com ~20 campos, o cadastro de processo
+   virava uma fita vertical: o operador rolava para achar campo, e nada se
+   relacionava visualmente com nada. Agora cada `<fieldset>` é um bloco e os
+   campos se distribuem dentro dele. */
+.crud-form {
+  display: grid;
+  gap: 14px;
+}
+
+.crud-form label {
+  color: #1f2937;
+}
+
+.crud-form .checkbox {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.crud-form .checkbox input {
+  width: 18px;
+}
+
+.form-actions,
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.error {
+  color: #dc3545;
+}
+
+/* As regras de tabela vivem todas no bloco "Listagem" do sistema visual, mais
+   abaixo. Havia aqui uma segunda geração delas — `.table-wrap`, `table`,
+   `th`/`td`, zebra, `.tabela-dados--larga` com outro `min-width` — e qual
+   vencia dependia da ordem no arquivo, não da intenção: `.tabela-dados thead th`
+   era mais específica que `th` e mantinha o cabeçalho branco só nas listagens.
+   As classes de coluna daqui (`.col-curta`, `.col-numero`, `.col-texto`,
+   `.col-principal`) não eram usadas por tela nenhuma; quem declara largura
+   agora é `dom.ts::Coluna`. */
+
+pre {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.stat-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin-bottom: 8px;
+}
+
+.stat-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 18px 16px;
+  text-align: center;
+}
+
+.stat-card--alert {
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
+
+.stat-value {
+  color: #111827;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-card--alert .stat-value {
+  color: #dc2626;
+}
+
+.stat-label {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.badge {
+  background: #e5e7eb;
+  border-radius: 12px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.badge--ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge--warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge--erro {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge--neutro {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.detail-section {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+.detail-section h2 {
+  align-items: center;
+  display: flex;
+  font-size: 15px;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.andamentos-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.andamento-item {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-left: 3px solid #10b981;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.andamento-meta {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.andamento-tipo {
+  color: #1f2937;
+}
+
+/* Texto livre que o operador digitou num `textarea`: o Resumo dos fatos, hoje.
+   `pre-wrap` preserva os parágrafos — sem ele o relato vira um bloco corrido, que
+   era o que acontecia enquanto o resumo morava numa célula da `.ficha`.
+   `break-word` acompanha pelo mesmo motivo que em `.detail-table td`: uma URL ou
+   um número de processo sem espaços estouraria a largura e faria a PÁGINA rolar
+   na horizontal. */
+.texto-livre {
+  color: #374151;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.add-movement-form {
+  border-top: 1px dashed #e5e7eb;
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+}
+
+.add-movement-form select {
+  max-width: 220px;
+}
+
+.pdf-info {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pdf-name {
+  font-weight: 600;
+}
+
+.pdf-size {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.upload-label {
+  background: #f8fafc;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  color: #10b981;
+  cursor: pointer;
+  display: inline-block;
+  font-weight: 600;
+  padding: 12px 20px;
+}
+
+.upload-label input[type="file"] {
+  display: none;
+}
+
+h1 small {
+  color: #6b7280;
+  font-size: 0.55em;
+  font-weight: 400;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.detail-table th {
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  width: 220px;
+}
+
+.detail-table td {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+button.outline {
+  background: transparent;
+  border: 1px solid #10b981;
+  color: #10b981;
+}
+
+button.outline:hover {
+  background: #10b981;
+  color: #fff;
+}
+
+.page-head-right {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Controle de página das listagens. Ver `dom.ts::paginacao`. */
+/* Controle de página das listagens. Ver `dom.ts::paginacao`.
+
+   `justify-content` era declarado duas vezes no arquivo, `center` aqui e
+   `space-between` no bloco de 2026: valia o segundo, e o primeiro só confundia
+   quem fosse ajustar. Ficou o `space-between`, que joga "Anterior" e "Próxima"
+   para as pontas e deixa o intervalo no meio. */
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* Dois paginadores na mesma tela (Prazos) não podem encostar um no outro. */
+.paginacao + h2 {
+  margin-top: 28px;
+}
+
+.paginacao span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.search-bar input[type="search"] {
+  flex: 1;
+  max-width: 400px;
+}
+
+.evidence-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.evidence-search {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.evidence-search input {
+  flex: 1;
+  max-width: 360px;
+}
+
+.evidence-results {
+  border-top: 1px dashed #e5e7eb;
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.evidence-result-item {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.evidence-item {
+  align-items: center;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+}
+
+.evidence-item small {
+  color: #64748b;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- modal ----
+   Um só no sistema: a escolha da transgressão análoga, que antes era um
+   `prompt()` do navegador. Fica em `document.body`, fora de `#app`, porque a
+   tela de indícios se redesenha inteira a cada mudança.
+
+   `z-index: 10` basta: a `.sidebar` é o único elemento posicionado do arquivo,
+   e não disputa camada com nada. */
+.modal-overlay {
+  align-items: center;
+  background: rgb(15 23 42 / 45%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 10;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  max-height: 100%;
+  max-width: 620px;
+  width: 100%;
+}
+
+.modal .page-head h1 {
+  font-size: 18px;
+}
+
+/* A busca devolve até 50 incisos; sem o recorte, a lista empurraria os botões
+   de ação para fora da tela. */
+.modal .evidence-results {
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* O item de resultado é um `button` por causa do teclado — foco e Enter saem
+   de graça —, mas precisa ler como linha de lista, não como botão de ação. */
+button.evidence-result-item {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  color: #0f172a;
+  font-weight: 400;
+  text-align: left;
+  width: 100%;
+}
+
+button.evidence-result-item:hover,
+button.evidence-result-item:focus-visible {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.extension-details summary {
+  color: #10b981;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    position: static;
+    width: auto;
+  }
+
+  .main {
+    margin-left: 0;
+  }
+
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  /* O cabeçalho de página também empilha, mas `stretch` fazia o botão de ação
+     atravessar a tela inteira — em coluna, o eixo cruzado é o horizontal. */
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* ── Tela de catálogos ─────────────────────────────────────────────────────
+   Gerada de `legal_catalogs_definitions`: os campos e o texto de ajuda saem
+   dos metadados do backend, então o CSS precisa cobrir qualquer combinação. */
+
+.filtros {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.filtros input[type="search"] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  flex: 1 1 260px;
+  padding: 8px 12px;
+}
+
+.campo {
+  display: grid;
+  gap: 4px;
+}
+
+/* Explica o efeito de um atributo semântico ("Em branco = sem limite").
+   É o que impede que a configuração vire adivinhação. */
+.campo-efeito {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Item desativado continua listado: some dos cadastros novos e permanece
+   visível nos registros históricos que já o usam. */
+tr.inativo {
+  color: #94a3b8;
+}
+
+tr.inativo td:first-child {
+  font-style: italic;
+}
+
+/* ── Configuração de apuratórios ───────────────────────────────────────── */
+
+.seletor-apuratorio select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  margin-left: 8px;
+  padding: 8px 12px;
+}
+
+.secao-ajuda {
+  color: #64748b;
+  font-size: 13px;
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+
+/* Estado em que o apuratório não aceita processo nenhum, ou aceita mas sem
+   responsável. É consequência de configuração faltando, não de erro. */
+.aviso {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  color: #92400e;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
+
+.linha-form {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 12px 0 28px;
+  padding: 14px;
+}
+
+/* Formulários contextuais de edição usam `hidden`; a regra explícita evita
+   que o `display: flex` de `.linha-form` prevaleça sobre o atributo nativo. */
+.linha-form[hidden],
+.linha-form label[hidden],
+.secao-ajuda[hidden] {
+  display: none;
+}
+
+.linha-form label {
+  display: grid;
+  font-size: 13px;
+  gap: 4px;
+}
+
+.linha-form label.checkbox {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.linha-form input,
+.linha-form select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* ── Processo: formulário e detalhe ────────────────────────────────────── */
+
+/* `auto-fit` + `minmax` faz o número de colunas seguir a largura disponível:
+   três campos por linha num monitor, um só numa janela estreita, sem media
+   query e sem tamanho fixo em lugar nenhum. */
+.crud-form fieldset {
+  align-items: start;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin: 0 0 18px;
+  padding: 16px 18px 18px;
+}
+
+.crud-form legend {
+  color: #1f2937;
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+/* Um `<legend>` não participa da grade; o que precisa atravessar a linha
+   inteira é o conteúdo largo — resumo, avisos, coleções. */
+.crud-form fieldset > .campo--largo,
+.crud-form fieldset > .aviso,
+.crud-form fieldset > .empty,
+.crud-form fieldset > .secao-ajuda,
+.crud-form fieldset > .linha-colecao,
+.crud-form fieldset > button {
+  grid-column: 1 / -1;
+}
+
+.crud-form fieldset > button {
+  justify-self: start;
+}
+
+.crud-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+/* Uma entrada de coleção aninhada (envolvido, designação, pessoa).
+   Era `flex-wrap`, e por isso cada campo tinha a largura do seu conteúdo: com
+   três envolvidos, "Situação" caía em posição diferente em cada linha e não
+   dava para ler a coluna de cima para baixo. Em grade, as linhas se alinham. */
+.linha-colecao {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px 12px;
+  /* `auto-fill`, e não `auto-fit`: as trilhas vazias PERMANECEM, então um
+     envolvido com 4 campos alinha os seus com os 4 primeiros do envolvido que
+     tem 6. `auto-fit` colapsaria as vazias e cada linha teria a sua própria
+     grade — que é o desalinhamento que se está corrigindo. */
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  padding: 12px;
+}
+
+.linha-colecao label {
+  display: grid;
+  font-size: 13px;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* O botão de remover não é um campo, e não pode disputar célula com eles: como
+   o número de campos muda por linha (condutor só em sinistro, penalidade só
+   onde se pune), ele caía numa posição diferente em cada envolvido. Ocupa a
+   linha inteira e ancora à direita — mesmo lugar, sempre. */
+.linha-colecao > button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.linha-colecao label.checkbox {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.linha-colecao input,
+.linha-colecao select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.ficha {
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.ficha th {
+  color: #64748b;
+  font-weight: 500;
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 220px;
+}
+
+.ficha td {
+  padding: 6px 12px;
+}
+
+tr.vigente {
+  background: #f0fdf4;
+}
+
+.vencido {
+  color: #b91c1c;
+}
+
+/* ── Indícios ──────────────────────────────────────────────────────────── */
+
+.lista-vinculos {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.vinculo {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.vinculo > span:first-child {
+  flex: 1 1 320px;
+}
+
+/* A analogia com o RDPM é obrigatória para toda infração estatutária. */
+.analogia {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.resultados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* Prazo já vencido: destaque, não só cor de texto. */
+tr.atrasado {
+  background: #fef2f2;
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* O conjunto completo, montado só na hora de imprimir. Ver
+   `dom.ts::ligarExportacao`: a tela mostra dez itens, e o papel leva o filtro
+   inteiro — imprimir a página visível não serve para conferir prazo nenhum. */
+.bloco-impressao {
+  display: none;
+}
+
+@media print {
+  .bloco-impressao {
+    display: block;
+  }
+
+  /* A tabela paginada sai do papel quando o bloco completo entra no lugar
+     dela, senão os dez itens sairiam impressos duas vezes. */
+  .ocultar-na-impressao {
+    display: none !important;
+  }
+
+  /* Rolagem não existe no papel: a tabela inteira tem de caber e quebrar entre
+     páginas, em vez de ficar recortada na largura da tela. */
+  .bloco-impressao .table-wrap {
+    max-height: none;
+    overflow: visible;
+    border: 0;
+  }
+
+  .bloco-impressao table {
+    min-width: 0 !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .page-head button,
+  .row-actions,
+  .export-bar,
+  .search-bar,
+  .filtro-bar,
+  .paginacao,
+  .actions {
+    display: none !important;
+  }
+
+  /* Painel de relatório não pode ser partido no meio pela quebra de página. */
+  .stat-panel {
+    break-inside: avoid;
+  }
+
+  /* Em uma coluna: duas colunas de tabela em A4 ficam ilegíveis. */
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    margin-left: 0 !important;
+  }
+
+  .panel {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}
+
+/* Coluna numérica: alinhada à direita para os dígitos se lerem em coluna. */
+td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Painéis de estatística: duas colunas em tela larga, uma na impressão. */
+.stat-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.stat-panel h2 {
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+/* Barra de filtro das telas de relatório. */
+.filtro-bar {
+  align-items: flex-end;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+}
+
+.filtro-apuratorios {
+  border: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+.filtro-apuratorios legend {
+  color: #475569;
+  font-size: 0.8rem;
+  padding: 0;
+}
+
+.checkbox-inline {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.hint {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+/* Linha de tabela que abre um detalhe. */
+tr.clicavel {
+  cursor: pointer;
+}
+
+tr.clicavel:hover {
+  background: #f1f5f9;
+}
+
+/* Linha de totais da matriz de designações. */
+tr.linha-total {
+  border-top: 2px solid #cbd5e1;
+  font-weight: 600;
+}
+
+td.total {
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Sistema visual institucional — 2026
+
+   Esta camada reúne os padrões que antes estavam espalhados pelas telas.
+   Mantém os seletores históricos acima por compatibilidade, mas define uma
+   linguagem única para shell, formulários, filtros, tabelas e feedback.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #182536;
+  background: #eef3f7;
+  --brand-950: #0a2438;
+  --brand-900: #102f47;
+  --brand-800: #17455f;
+  --brand-700: #17605f;
+  --brand-600: #087f5b;
+  --brand-100: #dff3ed;
+  --brand-50: #f0faf7;
+  --gold-500: #bd8b18;
+  --surface: #ffffff;
+  --surface-muted: #f6f8fa;
+  --surface-subtle: #eef3f7;
+  --text: #182536;
+  --text-muted: #607084;
+  --text-soft: #8492a3;
+  --border: #d8e1e9;
+  --border-strong: #c2ced9;
+  --success: #18794e;
+  --success-bg: #e8f6ef;
+  --warning: #8a5a06;
+  --warning-bg: #fff6d8;
+  --danger: #b42318;
+  --danger-bg: #fff0ef;
+  --info: #245e91;
+  --info-bg: #edf6ff;
+  --focus: #3b82f6;
+  --shadow-sm: 0 1px 2px rgb(15 35 55 / 5%);
+  --shadow-md: 0 8px 24px rgb(15 35 55 / 8%);
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --sidebar-width: 248px;
+  --sidebar-collapsed: 72px;
+  --topbar-height: 64px;
+}
+
+html {
+  min-width: 320px;
+  background: var(--surface-subtle);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 100% 0, rgb(23 96 95 / 6%), transparent 28rem),
+    var(--surface-subtle);
+}
+
+::selection {
+  color: #fff;
+  background: var(--brand-700);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+.upload-label {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-weight: 650;
+  line-height: 1.2;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease,
+    box-shadow 140ms ease, transform 140ms ease;
+}
+
+button {
+  color: #fff;
+  background: var(--brand-600);
+  box-shadow: var(--shadow-sm);
+}
+
+button:hover:not(:disabled) {
+  background: #066d4f;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgb(59 130 246 / 28%);
+  outline-offset: 1px;
+  border-color: var(--focus);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+button.secondary {
+  color: #fff;
+  background: #526477;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: #405265;
+}
+
+button.danger {
+  color: var(--danger);
+  background: transparent;
+  border-color: #efb7b2;
+  box-shadow: none;
+}
+
+button.danger:hover:not(:disabled) {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+button.outline {
+  color: var(--brand-700);
+  background: #fff;
+  border-color: #86b8ad;
+  box-shadow: none;
+}
+
+button.outline:hover:not(:disabled) {
+  color: #fff;
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+}
+
+button.ghost {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+button.ghost:hover:not(:disabled) {
+  color: var(--brand-700);
+  background: var(--brand-50);
+  border-color: #a8cec5;
+}
+
+button.small {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.86rem;
+}
+
+input,
+select,
+textarea {
+  min-height: 40px;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  color: var(--text);
+  background: #fff;
+  box-shadow: inset 0 1px 1px rgb(15 35 55 / 3%);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #9aacbb;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: var(--text-soft);
+  background: var(--surface-muted);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: auto;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--brand-600);
+  box-shadow: none;
+}
+
+textarea {
+  min-height: 104px;
+  line-height: 1.55;
+}
+
+label,
+.campo label {
+  color: #33475b;
+  font-size: 0.91rem;
+  font-weight: 600;
+}
+
+label .hint,
+label .campo-efeito,
+.campo-efeito {
+  font-weight: 400;
+}
+
+/* Shell */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+  transition: grid-template-columns 260ms ease-in-out;
+}
+
+.app-shell.sidebar-is-collapsed {
+  grid-template-columns: var(--sidebar-collapsed) minmax(0, 1fr);
+}
+
+.sidebar {
+  inset: auto;
+  position: sticky;
+  top: 0;
+  width: auto;
+  height: 100vh;
+  padding: 18px 12px;
+  color: #d7e0e7;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 4%), transparent 18rem),
+    var(--brand-950);
+  border-right: 1px solid rgb(255 255 255 / 8%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  z-index: 6;
+  transition: padding 260ms ease-in-out;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  margin: 0 4px 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+}
+
+.brand img {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.brand div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.brand strong {
+  color: #fff;
+  font-size: 1.16rem;
+  letter-spacing: 0.025em;
+}
+
+.brand span {
+  color: #9fb0bf;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 31px;
+  right: -1px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 28px;
+  padding: 0;
+  color: #dbe8e6;
+  background: var(--brand-800);
+  border-color: rgb(255 255 255 / 12%);
+  border-radius: 8px 0 0 8px;
+  box-shadow: none;
+}
+
+.nav-group {
+  margin: 0 0 5px;
+}
+
+.nav-group h2 {
+  display: none;
+}
+
+.nav-group-toggle {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 8px;
+  color: #9fb0bf;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.71rem;
+}
+
+.nav-group-toggle:hover:not(:disabled) {
+  color: #fff;
+  background: rgb(255 255 255 / 6%);
+}
+
+.nav-group-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: #b9d8d1;
+  background: rgb(8 127 91 / 18%);
+  border: 1px solid rgb(99 196 168 / 18%);
+  border-radius: 7px;
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+
+.nav-chevron {
+  justify-self: end;
+  font-size: 1rem;
+  transition: transform 200ms ease-in-out;
+}
+
+.nav-group.is-open .nav-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-group-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 220ms ease-in-out,
+    opacity 160ms ease,
+    visibility 0s linear 220ms;
+}
+
+.nav-group.is-open .nav-group-panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.nav-group-items {
+  min-height: 0;
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 5px 34px;
+  overflow: hidden;
+}
+
+.nav-item {
+  position: relative;
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 9px;
+  color: #c2ced8;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+
+.nav-item:hover:not(:disabled) {
+  color: #fff;
+  background: rgb(255 255 255 / 7%);
+}
+
+.nav-item.active {
+  color: #fff;
+  background: linear-gradient(90deg, rgb(8 127 91 / 45%), rgb(8 127 91 / 18%));
+  box-shadow: inset 3px 0 0 #6fc4a9;
+}
+
+.nav-item small {
+  color: #e8c86f;
+  font-size: 0.68rem;
+}
+
+.sidebar-is-collapsed .brand {
+  justify-content: center;
+  margin-inline: 0;
+}
+
+.sidebar-is-collapsed .brand div,
+.sidebar-is-collapsed .nav-group-label,
+.sidebar-is-collapsed .nav-chevron,
+.sidebar-is-collapsed .nav-group-panel {
+  display: none;
+}
+
+.sidebar-is-collapsed .nav-group-toggle {
+  display: flex;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar-is-collapsed .nav-group-mark {
+  width: 32px;
+  height: 32px;
+}
+
+.sidebar-is-collapsed .brand img {
+  width: 28px;
+  height: 38px;
+}
+
+.sidebar-is-collapsed .nav-group.is-open .nav-group-mark {
+  color: #fff;
+  background: var(--brand-600);
+  border-color: #70bda8;
+}
+
+.main {
+  min-width: 0;
+  min-height: 100vh;
+  margin-left: 0;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-height: var(--topbar-height);
+  padding: 10px clamp(16px, 2vw, 28px);
+  background: rgb(255 255 255 / 94%);
+  border-bottom-color: var(--border);
+  box-shadow: 0 1px 0 rgb(15 35 55 / 3%);
+  backdrop-filter: blur(10px);
+}
+
+.session-info {
+  display: flex !important;
+  grid-template: none !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.session-info > div {
+  display: grid;
+  gap: 0;
+}
+
+.session-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--brand-700) !important;
+  background: var(--brand-100);
+  border: 1px solid #b9ddd3;
+  border-radius: 50%;
+  font-size: 0.84rem !important;
+  font-weight: 750;
+}
+
+.topbar strong {
+  color: var(--text);
+  font-size: 0.91rem;
+}
+
+.topbar span {
+  color: var(--text-muted);
+}
+
+.content-area {
+  min-width: 0;
+  padding: clamp(16px, 2vw, 28px);
+}
+
+.panel {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: clamp(18px, 2vw, 28px);
+  background: var(--surface);
+  border-color: var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.page-head {
+  gap: 20px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-head h1 {
+  color: #14283b;
+  font-size: clamp(1.35rem, 1.8vw, 1.72rem);
+  line-height: 1.2;
+  letter-spacing: -0.018em;
+}
+
+.page-head p {
+  max-width: 72ch;
+  color: var(--text-muted);
+}
+
+.page-head-right {
+  align-items: flex-end;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.actions,
+.form-actions,
+.row-actions,
+.export-bar {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row-actions {
+  justify-content: flex-end;
+  min-width: max-content;
+}
+
+/* Login */
+.login-screen {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 15% 20%, rgb(189 139 24 / 15%), transparent 22rem),
+    radial-gradient(circle at 85% 75%, rgb(8 127 91 / 24%), transparent 28rem),
+    linear-gradient(135deg, var(--brand-950), #123b50 58%, #0d4d49);
+}
+
+.login-screen::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  opacity: 0.2;
+  background-image: linear-gradient(rgb(255 255 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 5%) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.login-panel {
+  gap: 18px;
+  max-width: 440px;
+  padding: 30px;
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgb(0 12 25 / 32%);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.login-brand img {
+  width: 62px;
+  height: 76px;
+  object-fit: contain;
+}
+
+.login-brand div {
+  display: grid;
+  gap: 1px;
+}
+
+.login-brand span {
+  color: var(--brand-700);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-brand h1 {
+  margin: 0;
+  color: var(--brand-950);
+  font-size: 1.75rem;
+}
+
+.login-brand p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.login-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.login-copy strong {
+  font-size: 1.05rem;
+}
+
+.login-copy span {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+/* Feedback e estados */
+.feedback,
+.aviso,
+.error:not(input):not(select):not(textarea),
+.readonly,
+.empty {
+  border-radius: var(--radius);
+  padding: 11px 13px;
+}
+
+.feedback,
+.aviso {
+  margin: 0 0 16px;
+}
+
+.feedback--error,
+.error:not(input):not(select):not(textarea) {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid #f2c2bd;
+}
+
+.aviso {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: #edd084;
+}
+
+.readonly {
+  color: var(--info);
+  background: var(--info-bg);
+  border: 1px solid #bdd9f2;
+}
+
+.empty {
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border: 1px dashed var(--border-strong);
+  text-align: center;
+}
+
+.toast-region {
+  position: fixed;
+  z-index: 30;
+  right: 22px;
+  bottom: 22px;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 44px));
+  pointer-events: none;
+}
+
+.toast {
+  padding: 12px 14px;
+  color: #fff;
+  background: #33475b;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 36px rgb(8 28 44 / 24%);
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+.toast--sucesso {
+  background: var(--success);
+}
+
+.toast--erro {
+  background: var(--danger);
+}
+
+.toast--info {
+  background: var(--info);
+}
+
+/* Filtros */
+.filtros,
+.filtro-bar,
+.search-bar,
+.linha-form {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.filtros,
+.filtro-bar,
+.linha-form {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.search-bar input[type="search"],
+.filtros input[type="search"] {
+  max-width: none;
+  min-width: 240px;
+}
+
+.search-bar input[type="search"] {
+  flex: 1 1 320px;
+}
+
+.filtros > label,
+.filtro-bar > label,
+.linha-form > label {
+  min-width: 150px;
+}
+
+.filtros > label.checkbox,
+.linha-form > label.checkbox,
+.checkbox-inline {
+  min-width: auto;
+  min-height: 40px;
+  padding: 6px 2px;
+}
+
+.filtro-apuratorios {
+  gap: 8px 16px;
+  padding: 4px 0;
+}
+
+.filtro-apuratorios legend {
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+/* Tabelas */
+.table-wrap {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  scrollbar-color: #aab8c5 transparent;
+  scrollbar-width: thin;
+}
+
+.table-wrap + .linha-form {
+  margin-top: 14px;
+}
+
+.table-wrap--viewport {
+  max-height: calc(100vh - 300px);
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  color: var(--text);
+}
+
+/* Piso para a tabela que NÃO declara largura de coluna: sem ele, uma tabela de
+   conteúdo largo se espreme até ficar ilegível. Quem declara largura
+   (`.tabela-dados--fixa`) fica de fora de propósito — ela reparte 100% da área
+   e só passa a exigir rolagem abaixo de 900px, pela media query lá embaixo.
+   Enquanto esta regra a alcançava, toda listagem operacional rolava na
+   horizontal já em 1600px, que é o oposto do pretendido. */
+.table-wrap > table:not(.detail-table):not(.ficha):not(.tabela-dados--fixa) {
+  min-width: 680px;
+}
+
+th,
+td {
+  height: 43px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e4eaf0;
+  vertical-align: middle;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: #4d6073;
+  background: #f4f7f9;
+  border-bottom-color: var(--border-strong);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Cabeçalho de LISTAGEM é branco; o das tabelas de detalhe (`.detail-table`,
+   `.ficha`) fica no cinza do `th` acima. A distinção já existia na tela, mas
+   por acidente: uma regra `.tabela-dados thead th` sobrevivente de outra
+   geração era mais específica que `th` e vencia por estar antes no arquivo.
+   Agora está escrita, e é a razão de a listagem parecer mais leve que a ficha. */
+.tabela-dados thead th {
+  background: #fff;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.tabela-dados tbody tr:nth-child(even),
+table tbody tr:nth-child(even) {
+  background: #fafbfd;
+}
+
+.tabela-dados tbody tr:hover,
+table tbody tr:hover {
+  background: #f0f7f5;
+}
+
+tr.clicavel {
+  cursor: pointer;
+}
+
+tr.clicavel:focus-within,
+tr[data-processo]:focus-within {
+  background: var(--brand-50);
+  box-shadow: inset 3px 0 0 var(--brand-600);
+}
+
+tr.inativo {
+  color: var(--text-soft);
+  background: #f7f8f9 !important;
+}
+
+tr.atrasado {
+  background: #fff6f5 !important;
+}
+
+.tabela-dados--larga {
+  min-width: 1060px;
+}
+
+/* ── Listagem de largura declarada ────────────────────────────────────────
+   O padrão que a listagem de processos fixou, disponível para toda tela.
+
+   As colunas dividem exatamente 100% da área, em percentual: sem isso a
+   primeira coluna sem restrição fica com toda a sobra e as demais encolhem até
+   "7º Batalhã…". O layout fixo impede que um nome longo redimensione a tabela
+   inteira, e as células textuais entregam o resto no `title`.
+
+   A largura de cada `<col>` NÃO está aqui: vem de `dom.ts::Coluna.largura`,
+   sai no markup como `data-largura` e é aplicada pela CSSOM em
+   `aplicarLarguras()`. `style=""` interpolado — inclusive num `<col>` — é
+   recusado pela CSP, e o elemento aparece sem estilo sem erro de build. */
+.tabela-dados--fixa {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.tabela-dados--fixa th,
+.tabela-dados--fixa td {
+  height: 46px;
+  padding: 9px 8px;
+  vertical-align: middle;
+}
+
+/* Grade leve para listagens, relatórios e tabelas administrativas que aderem ao
+   padrão. A classe separada impede que fichas e matrizes que não optaram pela
+   grade herdem divisórias por acidente. `border-inline-end` respeita a direção
+   do texto e, com `border-box`, não aumenta os 100% do `<colgroup>`. */
+.tabela-dados.tabela-dados--listagem :is(th, td):not(:last-child) {
+  border-inline-end: 1px solid var(--border);
+}
+
+.tabela-dados.tabela-dados--listagem thead th:not(:last-child) {
+  border-inline-end-color: var(--border-strong);
+}
+
+/* O cabeçalho é o eixo visual da grade e acompanha o corpo centralizado. */
+.tabela-dados.tabela-dados--listagem thead th {
+  text-align: center;
+}
+
+/* Rótulos extensos ganham altura em vez de invadir a próxima coluna. A classe
+   afeta somente o cabeçalho; células de dados continuam truncando em uma linha. */
+.tabela-dados thead th.col--rotulo-quebra {
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1.25;
+}
+
+/* As duas grades de configuração têm conteúdo compacto e conceitualmente
+   equivalente; centralizar também o corpo torna a comparação vertical direta. */
+.tabela-configuracao-apuratorio :is(th, td) {
+  text-align: center;
+}
+
+.tabela-configuracao-apuratorio .row-actions {
+  justify-content: center;
+}
+
+/* As sete listagens do detalhe do processo seguem a mesma grade das telas
+   operacionais. O conteúdo é centralizado por pedido da tela; textos longos
+   quebram dentro da própria célula, enquanto a largura mínima preserva a
+   leitura e delega a adaptação em telas estreitas ao scroll do `.table-wrap`.
+
+   Ofendidos/Vítimas e Pessoas inquiridas são as duas únicas SEM modificador
+   `--<nome>`: têm duas colunas, e o piso de 680px de `.table-wrap > table` já
+   as serve. Modificador aqui só existe para declarar `min-width` MAIOR que
+   esse piso, e nenhuma tabela de duas colunas precisa disso. */
+.tabela-detalhe-processo :is(th, td) {
+  text-align: center;
+}
+
+.tabela-detalhe-processo td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.tabela-detalhe-processo .row-actions {
+  justify-content: center;
+}
+
+.tabela-detalhe-processo--envolvidos {
+  min-width: 1080px !important;
+}
+
+.tabela-detalhe-processo--prazos {
+  min-width: 760px !important;
+}
+
+/* Sete colunas — papel, militar qualificado, início, fim, documento, motivo e
+   ações — contra as cinco de antes. O piso acompanha; abaixo dele quem adapta é
+   o scroll horizontal do `.table-wrap`, não a compressão das células. */
+.tabela-detalhe-processo--designacoes {
+  min-width: 1080px !important;
+}
+
+/* Motivo e documento são as duas colunas de texto livre da tabela: elas é que
+   ganham a folga, para que as de data não quebrem em duas linhas. */
+.tabela-detalhe-processo--designacoes td:nth-child(5),
+.tabela-detalhe-processo--designacoes td:nth-child(6) {
+  min-width: 150px;
+}
+
+.tabela-detalhe-processo--andamentos {
+  min-width: 820px !important;
+}
+
+.tabela-detalhe-processo--andamentos .col-descricao {
+  min-width: 260px;
+}
+
+.tabela-detalhe-processo--anexos {
+  min-width: 680px !important;
+}
+
+/* Modificadores que `Coluna` emite. Valem no `th` e no `td` da mesma coluna,
+   para que o rótulo acompanhe o alinhamento do conteúdo. */
+:is(th, td).col--centro {
+  text-align: center;
+}
+
+:is(th, td).col--direita {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Todas as tabelas operacionais e de relatório compartilham o alinhamento.
+   Fichas chave/valor e o detalhe de auditoria usam outras classes e preservam
+   sua leitura própria. */
+.tabela-dados :is(th, td) {
+  text-align: center;
+}
+
+:is(th, td).col--nowrap {
+  white-space: nowrap;
+}
+
+/* Trunca em vez de empurrar o resto da tabela. `max-width: 0` é o que faz o
+   `text-overflow` valer numa célula de tabela: sem ele a célula cresce com o
+   conteúdo e as reticências nunca aparecem. */
+.tabela-dados--fixa td.col--trunc {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabela-dados--fixa .row-actions {
+  justify-content: center;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.tabela-dados--fixa .row-actions button {
+  min-width: 0;
+  padding: 5px 6px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Acima de 900px a listagem operacional cabe inteira e não rola na horizontal;
+   abaixo disso, rolar é melhor que espremer as colunas até "7…" e "C…". */
+@media (max-width: 899px) {
+  .tabela-dados--fixa {
+    min-width: 900px;
+  }
+}
+
+/* ── A listagem de processos ──────────────────────────────────────────────
+   O que sobra aqui é só o que é dela: as larguras das nove colunas — que
+   antecedem `Coluna` e seguem em classe, porque esta tela mantém markup
+   próprio — e a tipografia de tipo, número e SEI. Layout fixo, alturas,
+   truncamento e a rolagem abaixo de 900px vêm de `.tabela-dados--fixa`. */
+.tabela-processos col.col-layout-tipo {
+  width: 5.5%;
+}
+
+.tabela-processos col.col-layout-ano {
+  width: 5.5%;
+}
+
+.tabela-processos col.col-layout-numero {
+  width: 8%;
+}
+
+.tabela-processos col.col-layout-origem {
+  width: 7.5%;
+}
+
+.tabela-processos col.col-layout-sei {
+  width: 15.5%;
+}
+
+.tabela-processos col.col-layout-pessoa {
+  width: 20%;
+}
+
+.tabela-processos col.col-layout-status {
+  width: 12.5%;
+}
+
+.tabela-processos col.col-layout-acao {
+  width: 5.5%;
+}
+
+.tabela-processos :is(th, td).col-tipo,
+.tabela-processos :is(th, td).col-ano,
+.tabela-processos :is(th, td).col-numero-processo,
+.tabela-processos :is(th, td).col-origem,
+.tabela-processos :is(th, td).col-sei,
+.tabela-processos :is(th, td).col-status-prazo,
+.tabela-processos :is(th, td).col-acao {
+  text-align: center;
+}
+
+.tabela-processos .col-tipo,
+.tabela-processos .col-ano,
+.tabela-processos .col-numero-processo,
+.tabela-processos .col-origem,
+.tabela-processos .col-status-prazo,
+.tabela-processos .col-acao {
+  white-space: nowrap;
+}
+
+.tabela-processos td.col-tipo {
+  font-weight: 750;
+  color: var(--brand-700);
+}
+
+.tabela-processos .col-ano {
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-processos td.col-numero-processo {
+  font-weight: 650;
+  color: #163a52;
+}
+
+.tabela-processos .col-sei {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-processos td.col-numero-processo,
+.tabela-processos td.col-origem,
+.tabela-processos td.col-sei {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabela-processos .col-status-prazo,
+.tabela-processos .col-acao {
+  overflow: hidden;
+}
+
+.tabela-processos :is(th, td).col-acao {
+  padding-inline: 5px;
+}
+
+/* Ações tabulares usam uma área quadrada estável. O texto continua disponível
+   no `title` e no `aria-label`, sem disputar largura com os dados da linha. */
+.row-actions .botao-icone,
+.tabela-dados--fixa .row-actions .botao-icone,
+.tabela-processos .row-actions .botao-icone {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+
+.icone-acao {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+}
+
+.celula-reticencias,
+.pessoas-resumo,
+.pessoas-resumo__texto {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.celula-reticencias,
+.pessoas-resumo__texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pessoas-resumo {
+  border-radius: var(--radius-sm);
+  cursor: help;
+}
+
+.pessoas-resumo:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.tooltip-pessoas {
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid #30475d;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: #182536;
+  box-shadow: var(--shadow-md);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.tooltip-pessoas > div + div {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgb(255 255 255 / 16%);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.badge--ok {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: #b8dfcd;
+}
+
+.badge--warn {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: #edd084;
+}
+
+.badge--erro {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: #f2c2bd;
+}
+
+.badge--neutro {
+  color: #536477;
+  background: #eef2f5;
+  border-color: #d9e1e7;
+}
+
+.badge--info {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: #bfd8ee;
+}
+
+.status-prazo {
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-prazo__ponto {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Formulários */
+.crud-form {
+  gap: 18px;
+}
+
+.crud-form > label,
+.crud-form > .campo {
+  min-width: 0;
+}
+
+.crud-form fieldset,
+.conta-fieldset {
+  gap: 14px 18px;
+  margin: 0;
+  padding: 18px;
+  background: #fff;
+  border-color: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.crud-form legend {
+  color: #183a50;
+  font-size: 0.96rem;
+  font-weight: 750;
+}
+
+.crud-form .campo,
+.crud-form label {
+  min-width: 0;
+}
+
+.campo {
+  gap: 6px;
+}
+
+.campo-data-controle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.campo-data-limpar {
+  align-self: stretch;
+  min-width: 62px;
+}
+
+/* As datas posteriores usam o mesmo controle do cadastro, dentro do formulário
+   contextual do detalhe. Cada campo conserva largura suficiente para data e
+   botão Limpar, mas continua quebrando de linha com a janela. */
+.linha-form--datas > .campo-data-posterior {
+  flex: 1 1 230px;
+  min-width: 230px;
+}
+
+.campo-efeito,
+.secao-ajuda,
+.hint {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.linha-colecao {
+  position: relative;
+  gap: 12px 14px;
+  padding: 16px;
+  background: var(--surface-muted);
+  border-color: var(--border);
+  border-left: 3px solid #80b8aa;
+  border-radius: var(--radius);
+}
+
+.linha-colecao + .linha-colecao {
+  margin-top: 2px;
+}
+
+.linha-colecao-head {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -3px 0 2px;
+  padding-bottom: 9px;
+  color: #183a50;
+  border-bottom: 1px solid var(--border);
+}
+
+.linha-colecao-head strong {
+  font-size: 0.84rem;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.linha-colecao > button {
+  justify-self: end;
+}
+
+.acusacoes-editor {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.acusacoes-editor__cabecalho {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.acusacoes-editor__cabecalho h3,
+.acusacao-busca strong {
+  color: #183a50;
+  margin: 0;
+}
+
+.acusacoes-editor__cabecalho p {
+  margin: 4px 0 0;
+}
+
+.acusacoes-lista {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.acusacoes-buscas {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.acusacao-busca {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.acusacao-busca .linha-form {
+  margin: 0;
+}
+
+.acusacao-busca .resultados {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.celula-acusacoes {
+  min-width: 300px;
+  white-space: normal;
+}
+
+.acusacoes-resumo {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.acusacoes-resumo li + li {
+  margin-top: 6px;
+}
+
+.form-actions {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
+  justify-content: flex-end;
+  margin: 0 -8px -8px;
+  padding: 12px 8px 8px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0%), #fff 22%);
+}
+
+.form-actions button[type="submit"] {
+  min-width: 112px;
+}
+
+.conta-fieldset #campos-conta {
+  display: grid;
+  gap: 14px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  width: 100%;
+}
+
+.conta-fieldset #campos-conta[hidden] {
+  display: none;
+}
+
+.seletor-apuratorio {
+  display: grid;
+  gap: 5px;
+  min-width: min(340px, 100%);
+}
+
+.seletor-apuratorio select {
+  margin-left: 0;
+}
+
+/* Detalhes e métricas */
+.detail-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top-color: var(--border);
+}
+
+.detail-section h2,
+.stat-panel h2,
+.panel > h2 {
+  color: #183a50;
+  font-size: 1.03rem;
+}
+
+.ficha,
+.detail-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ficha th,
+.detail-table th {
+  position: static;
+  width: 210px;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.ficha td,
+.detail-table td {
+  background: #fff;
+}
+
+.stat-grid {
+  gap: 16px;
+}
+
+.stat-card,
+.stat-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-panel {
+  padding: 16px;
+  background: #fff;
+}
+
+.stat-card {
+  background: linear-gradient(145deg, #fff, #f5f8fa);
+}
+
+.stat-value {
+  color: var(--brand-800);
+  font-variant-numeric: tabular-nums;
+}
+
+.andamento-item,
+.vinculo,
+.evidence-item {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.modal-overlay {
+  background: rgb(8 28 44 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 80px rgb(0 15 30 / 34%);
+}
+
+@media (max-width: 1180px) {
+  :root {
+    --sidebar-width: 224px;
+  }
+
+  .content-area {
+    padding: 16px;
+  }
+
+  .panel {
+    padding: 20px;
+  }
+
+  .crud-form fieldset {
+    grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  }
+}
+
+/* O binário mantém minWidth 1024, mas o fallback evita quebrar quando o
+   frontend é aberto diretamente no navegador para inspeção. */
+@media (max-width: 860px) {
+  .app-shell,
+  .app-shell.sidebar-is-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    max-height: 42vh;
+  }
+
+  .sidebar-is-collapsed .brand div,
+  .sidebar-is-collapsed .nav-group-label,
+  .sidebar-is-collapsed .nav-chevron {
+    display: grid;
+  }
+
+  .sidebar-is-collapsed .nav-group-panel {
+    display: grid;
+  }
+
+  .sidebar-is-collapsed .brand {
+    justify-content: flex-start;
+    margin-inline: 4px;
+  }
+
+  .sidebar-is-collapsed .brand img {
+    width: 36px;
+    height: 44px;
+  }
+
+  .sidebar-is-collapsed .nav-group-toggle {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) 18px;
+    justify-content: initial;
+    padding: 6px 8px;
+  }
+
+  .sidebar-is-collapsed .nav-group-mark {
+    width: 24px;
+    height: 24px;
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .topbar {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .page-head-right {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .filtros > *,
+  .filtro-bar > *,
+  .linha-form > * {
+    flex: 1 1 220px;
+  }
+}
+
+/* ── Substituição de designação ─────────────────────────────────────────────
+   O formulário segue o padrão dos Prazos (`.linha-form`), com dois acréscimos
+   que só ele tem: um resumo do que está sendo substituído, que precisa ocupar a
+   linha inteira acima dos campos, e a validação junto de cada campo — pedida
+   por ser o único formulário da tela onde cinco campos se validam entre si. */
+.linha-form--bloco {
+  align-items: flex-start;
+}
+
+.linha-form__resumo {
+  flex: 1 0 100%;
+  /* `.secao-ajuda` limita a 70ch, que é o certo para texto corrido e o errado
+     aqui: este parágrafo é a faixa que identifica o alvo da substituição e
+     precisa da linha inteira, senão os campos sobem para o lado dele. Medido
+     no navegador — o `flex-basis: 100%` sozinho ficava em 574px. */
+  max-width: none;
+  margin: 0;
+}
+
+/* O `<label>` vira coluna para que o aviso caiba embaixo do campo, e não ao
+   lado dele empurrando a grade. */
+.linha-form--bloco > label {
+  display: flex;
+  flex: 1 1 190px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo-erro {
+  color: var(--danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* `hidden` precisa vencer o `display` que a regra acima dá ao elemento. */
+.campo-erro[hidden] {
+  display: none;
+}
+
+/* A designação que já tem substituição é leitura no cadastro: a borda muda de
+   cor para dizer isso antes de o texto explicar. */
+.linha-colecao--travada {
+  border-left-color: #b8a980;
+}
+
+.linha-colecao--travada p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media print {
+  .app-shell {
+    display: block;
+  }
+
+  .content-area {
+    padding: 0;
+  }
+
+  .table-wrap {
+    overflow: visible;
+    border-color: #bbb;
+  }
+
+  th {
+    position: static;
+  }
+
+  .form-actions,
+  .toast-region {
+    display: none !important;
+  }
+}
+
+```
+
+## O que este dump não contém
+
+O bloco **Painéis analíticos** de `src/styles.css` (rodada 28) não foi capturado aqui:
+`analytics-kpi*`, `analytics-card*`, `analytics-toggle*`, `analytics-chart`,
+`analytics-tooltip`, `analytics-empty`, `analytics-filter-summary`, `filtro-chip-check`
+e as regras de impressão que os acompanham. As classes `stat-card` / `stat-grid` abaixo
+continuam válidas, mas deixaram de ser o indicador das seis telas de relatório — ver
+`extractable-components.md`.

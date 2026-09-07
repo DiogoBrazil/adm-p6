@@ -1,0 +1,15 @@
+{
+  "conversionId": "d4cb58db-0255-470f-b4ff-3c22cdc68e19",
+  "operationExpiresAt": "2026-09-09T13:50:16.021Z",
+  "manifestFile": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-estatisticas/estatisticas.layerdoc.json.assets/manifest.json",
+  "artifacts": [
+    {
+      "id": "source",
+      "role": "source",
+      "mediaType": "image/png",
+      "sha256": "18f98a045b14b1dda7ea9dc333f9602a3d8fd2a0001156041e3b58fff7511927",
+      "sourceHref": "https://12ui.com/api/v1/convert/d4cb58db-0255-470f-b4ff-3c22cdc68e19?artifact=source&expires=1788961816&signature=guribgA3dUxXNtYIqBvZ00gPNkptxz_h5WkrEWpXD4c",
+      "localPath": "/home/diogo/DEV/adm-p6/.12ui/pdf-review/runs/original-estatisticas/estatisticas.layerdoc.json.assets/source-18f98a045b14.png"
+    }
+  ]
+}

@@ -1,1447 +1,2353 @@
-use chrono::NaiveDate;
-use sqlx::{PgPool, Postgres, Transaction};
-use uuid::Uuid;
+use base64::Engine;
+use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
+use crate::db::lote::{agrupar, linha_agrupada};
+use crate::db::paginacao::{PADRAO, TETO};
+use crate::deadlines::repository as deadlines_repository;
 use crate::error::AppError;
-
-use super::domain::{
-    ActiveDeadline, CommonCrimeItem, CreateProceedingRequest, DriverRankingItem, IpmEvidenceStats,
-    InProgressStats, MilitaryCrimeItem, NatureStatItem, PadsSolutionCount, PdfMetadata, PmEnvolvido,
-    ProceedingDetail, ProceedingListFilter, ProceedingListItem, ProceedingListResult,
-    SrEvidenceStats, SubstituteResponsibleRequest, TipoCount, TopTransgressionItem,
-    UpdateProceedingRequest,
+use crate::evidence::repository as evidence_repository;
+use crate::proceedings::domain::{
+    validar_ordem_datas, AnexoItem, AttachmentContent, AtualizarSubstituicaoRequest,
+    CartaPrecatoriaDetalhes, DashboardSummary, DesignacaoItem, DesignacaoRequest, EnvolvidoItem,
+    PessoaItem, ProceedingDetail, ProceedingFilter, ProceedingFilterOption,
+    ProceedingFilterOptions, ProceedingListItem, ProceedingListResult,
+    ProceedingMilitaryFilterOption, SaveProceedingRequest, SubstituirDesignacaoRequest,
+    UpdateInvolvedOutcomeRequest, UpdateProceedingDatesRequest, UploadAttachmentRequest,
+    VitimaItem, EXTENSAO_CARTA_PRECATORIA, MOTIVO_DESIGNACAO_INICIAL,
 };
 
-fn tipo_to_table(tipo: &str) -> Result<&'static str, AppError> {
-    match tipo {
-        "SR"   => Ok("sindicancia_regular"),
-        "IPM"  => Ok("inquerito_policial_militar"),
-        "FP"   => Ok("feito_preliminar"),
-        "CP"   => Ok("carta_precatoria"),
-        "SV"   => Ok("sindicancia_verbal"),
-        "PADS" => Ok("processo_apuratorio_disciplinar_sumario"),
-        "PADE" => Ok("processo_apuratorio_dano_herario"),
-        "PAD"  => Ok("processo_administrativo_disciplinar"),
-        "CD"   => Ok("conselho_disciplina"),
-        "CJ"   => Ok("conselho_justificacao"),
-        other  => Err(AppError::Domain(format!("tipo_detalhe desconhecido: {other}"))),
-    }
+/// Limite de tamanho do anexo. Trafega em base64 pelo IPC, então o custo real em
+/// memória é cerca de 1/3 maior.
+const MAX_ANEXO_BYTES: usize = 100 * 1024 * 1024;
+
+/// Colunas da listagem. Saem de `v_processos_detalhados` (criada na 0004 e
+/// ampliada na 0014), que
+/// já resolve os catálogos, o responsável vigente, o prazo vigente e a contagem
+/// de envolvidos. Antes esta composição estava escrita aqui, em `maps_reports`,
+/// em `deadlines` e em `users` — quatro cópias que podiam divergir, e duas já
+/// divergiam.
+///
+/// Os ids saem como texto porque é assim que atravessam o IPC.
+const COLUNAS_LISTA: &str = r#"
+    v.id::text                     AS id,
+    v.apuratorio_id::text          AS apuratorio_id,
+    v.apuratorio_sigla,
+    v.apuratorio_nome,
+    v.tipo_apuratorio,
+    v.documento_iniciador_id::text AS documento_iniciador_id,
+    v.documento_iniciador,
+    v.numero_documento,
+    v.numero_controle,
+    v.processo_sei,
+    v.rotulo,
+    v.unidade_origem_id::text      AS unidade_origem_id,
+    v.unidade_origem,
+    v.subunidade_secao_origem_id::text AS subunidade_secao_origem_id,
+    v.subunidade_secao_origem,
+    v.municipio_fato_id::text      AS municipio_fato_id,
+    v.municipio_fato,
+    v.natureza_fato_id::text       AS natureza_fato_id,
+    v.natureza_fato,
+    v.data_instauracao,
+    v.data_recebimento,
+    v.data_remessa,
+    v.entregue,
+    v.data_conclusao,
+    v.concluido,
+    v.resumo_fatos,
+    v.responsavel_nome,
+    responsavel_pm.matricula        AS responsavel_matricula,
+    responsavel_posto.sigla         AS responsavel_posto_graduacao,
+    v.responsavel_papel,
+    v.total_envolvidos,
+    COALESCE(envolvidos.lista, '[]'::jsonb) AS envolvidos_resumo,
+    v.prazo_vencimento,
+    v.prazo_dias_restantes
+"#;
+
+/// Dados complementares usados somente pelo CRUD de processos. Permanecem
+/// fora da view comum para não obrigar mapas e relatórios a agregarem a lista
+/// completa de envolvidos quando não precisam dela.
+const JOINS_LISTA: &str = r#"
+    LEFT JOIN policiais_militares responsavel_pm
+           ON responsavel_pm.id = v.responsavel_id::uuid
+    LEFT JOIN postos_graduacoes responsavel_posto
+           ON responsavel_posto.id = responsavel_pm.posto_graduacao_id
+    LEFT JOIN LATERAL (
+        SELECT jsonb_agg(
+                   jsonb_build_object(
+                       'posto_graduacao', COALESCE(pg.sigla, ''),
+                       'matricula', COALESCE(pm.matricula, ''),
+                       'nome', COALESCE(pm.nome, 'À apurar'),
+                       'a_apurar', e.policial_militar_id IS NULL
+                   ) ORDER BY e.ordem
+               ) AS lista
+          FROM processo_envolvidos e
+          LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+          LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+         WHERE e.processo_id = v.id
+    ) envolvidos ON true
+"#;
+
+/// Fonte da CONTAGEM da listagem — deliberadamente as tabelas base, e não a
+/// view.
+///
+/// Medido com 5.000 processos: contar sobre a view leva 408 ms, porque o
+/// PostgreSQL não poda os `LATERAL` cujo resultado a contagem não usa. Esta
+/// projeção enxuta leva 1,8 ms — e é mais rápida até que a versão anterior
+/// (58 ms), que arrastava quatro joins de catálogo que a contagem nunca leu.
+///
+/// As colunas repetem os nomes que a view expõe, de propósito: é o que permite
+/// o mesmo `FILTRO` valer para as duas fontes.
+const BASE_CONTAGEM: &str = r#"
+    FROM (
+        SELECT pp.id,
+               pp.ativo,
+               pp.apuratorio_id,
+               aa.tipo_apuratorio_id,
+               pp.documento_iniciador_id,
+               pp.unidade_origem_id,
+               pp.municipio_fato_id,
+               pp.natureza_fato_id,
+               pp.numero_documento,
+               COALESCE(pp.numero_controle, pp.numero_documento) AS numero_controle,
+               pp.resumo_fatos,
+               pp.processo_sei,
+               pp.numero_rgf,
+               pp.data_instauracao,
+               pp.data_conclusao,
+               (pp.data_conclusao IS NOT NULL) AS concluido,
+               (COALESCE(pp.data_remessa_comissao,
+                         pp.data_remessa_encarregado) IS NOT NULL) AS entregue
+          FROM processos_procedimentos pp
+          JOIN apuratorios aa ON aa.id = pp.apuratorio_id
+    ) v
+"#;
+
+/// O filtro vale para as duas fontes acima, porque ambas expõem estes nomes.
+const FILTRO: &str = r#"
+    WHERE v.ativo
+      AND ($1::text IS NULL
+           OR lower(v.numero_documento) LIKE $1
+           OR lower(v.numero_controle) LIKE $1
+           OR lower(COALESCE(v.resumo_fatos, '')) LIKE $1
+           OR lower(COALESCE(v.processo_sei, '')) LIKE $1
+           OR lower(COALESCE(v.numero_rgf, '')) LIKE $1
+           OR EXISTS (
+              SELECT 1
+                FROM processo_designacoes d
+                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                          AND ap.papel_id = d.papel_id
+                JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+               WHERE d.processo_id = v.id AND d.data_fim IS NULL
+                 AND ap.e_responsavel AND lower(pm.nome) LIKE $1)
+           OR EXISTS (
+              SELECT 1
+                FROM processo_envolvidos e
+                JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+               WHERE e.processo_id = v.id AND lower(pm.nome) LIKE $1))
+      AND ($2::uuid[] IS NULL OR v.apuratorio_id = ANY($2::uuid[]))
+      AND ($3::uuid IS NULL OR v.tipo_apuratorio_id = $3::uuid)
+      AND ($4::uuid IS NULL OR v.unidade_origem_id = $4::uuid)
+      AND ($5::uuid IS NULL OR v.natureza_fato_id = $5::uuid)
+      AND ($6::uuid IS NULL OR EXISTS (
+              SELECT 1
+                FROM processo_designacoes d
+                JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                          AND ap.papel_id = d.papel_id
+               WHERE d.processo_id = v.id AND d.data_fim IS NULL
+                 AND ap.e_responsavel AND d.policial_militar_id = $6::uuid))
+      AND ($7::int IS NULL OR EXTRACT(YEAR FROM v.data_instauracao)::int = $7)
+      AND ($8::text IS NULL OR EXISTS (
+              SELECT 1 FROM processo_vitimas vit
+               WHERE vit.processo_id = v.id
+                 AND lower(btrim(vit.nome)) = lower(btrim($8))))
+      AND ($9::text IS NULL
+           OR ($9 = 'em_andamento' AND NOT v.concluido)
+           OR ($9 = 'concluido' AND v.concluido)
+           OR ($9 = 'entregue' AND NOT v.concluido AND v.entregue)
+           OR ($9 = 'no_prazo' AND NOT v.concluido AND NOT v.entregue AND
+               (SELECT pr.data_vencimento FROM processo_prazos pr
+                 WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) >= CURRENT_DATE)
+           OR ($9 = 'vencido' AND NOT v.concluido AND NOT v.entregue AND
+               (SELECT pr.data_vencimento FROM processo_prazos pr
+                 WHERE pr.processo_id = v.id ORDER BY pr.ordem DESC LIMIT 1) < CURRENT_DATE))
+      AND ($10::date IS NULL OR v.data_instauracao >= $10)
+      AND ($11::date IS NULL OR v.data_instauracao <= $11)
+      AND ($12::uuid IS NULL OR v.municipio_fato_id = $12::uuid)
+      AND ($13::uuid IS NULL OR EXISTS (
+              SELECT 1 FROM processo_envolvidos e
+               WHERE e.processo_id = v.id AND e.policial_militar_id = $13::uuid))
+      AND ($14::uuid IS NULL OR v.documento_iniciador_id = $14::uuid)
+"#;
+
+fn bind_filtro<'q, O>(
+    query: sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>,
+    filtro: &'q ProceedingFilter,
+    busca: Option<String>,
+) -> sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments> {
+    query
+        .bind(busca)
+        .bind(filtro.apuratorio_ids.as_deref())
+        .bind(filtro.tipo_apuratorio_id.as_deref())
+        .bind(filtro.unidade_origem_id.as_deref())
+        .bind(filtro.natureza_fato_id.as_deref())
+        .bind(filtro.responsavel_id.as_deref())
+        .bind(filtro.ano)
+        .bind(filtro.vitima_nome.as_deref())
+        .bind(filtro.situacao.as_ref().map(|situacao| situacao.as_str()))
+        .bind(filtro.data_instauracao_inicio)
+        .bind(filtro.data_instauracao_fim)
+        .bind(filtro.municipio_fato_id.as_deref())
+        .bind(filtro.envolvido_id.as_deref())
+        .bind(filtro.documento_iniciador_id.as_deref())
 }
 
-async fn get_tipo_detalhe<'e, E>(executor: E, id: &str) -> Result<String, AppError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    sqlx::query_scalar::<_, String>(
-        r#"SELECT a.nome_apuratorio
-           FROM historico_processo_procedimentos hpp
-           JOIN apuratorios a ON a.id = hpp.apuratorio_id
-           WHERE hpp.processo_procedimento_id = $1::uuid"#,
-    )
-    .bind(id)
-    .fetch_optional(executor)
-    .await?
-    .ok_or_else(|| AppError::Domain("processo nao encontrado".to_string()))
-}
-
-pub async fn list_filtered(
+pub async fn list(
     pool: &PgPool,
-    filter: &ProceedingListFilter,
+    filtro: &ProceedingFilter,
 ) -> Result<ProceedingListResult, sqlx::Error> {
-    let limit = filter.limit.unwrap_or(50).min(200);
-    let offset = filter.offset.unwrap_or(0).max(0);
-    let ano = filter.ano.map(|a| a as i64);
-    let search = filter
-        .search
+    let page = filtro.page.unwrap_or(1).max(1);
+    let per_page = filtro.per_page.unwrap_or(PADRAO).clamp(1, TETO);
+    let busca = filtro
+        .busca
         .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| format!("%{}%", s.to_lowercase()));
+        .map(|s| format!("%{}%", s.trim().to_lowercase()));
 
-    let (total,): (i64,) = sqlx::query_as(
-        r#"
-        SELECT count(*)::bigint
-        FROM v_processos p
-        WHERE coalesce(p.ativo, true) = true
-          AND ($1::text IS NULL OR p.tipo_geral = $1)
-          AND ($2::text IS NULL OR p.tipo_detalhe = $2)
-          AND ($3::bool IS NULL OR p.concluido = $3)
-          AND ($4::text IS NULL OR p.responsavel_id = $4::uuid)
-          AND ($5::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $5)
-          AND ($6::text IS NULL OR lower(p.numero) LIKE $6 OR lower(p.resumo_fatos) LIKE $6)
-        "#,
+    let total: (i64,) = bind_filtro(
+        sqlx::query_as(&format!("SELECT count(*) {BASE_CONTAGEM} {FILTRO}")),
+        filtro,
+        busca.clone(),
     )
-    .bind(filter.tipo_geral.as_deref())
-    .bind(filter.tipo_detalhe.as_deref())
-    .bind(filter.concluido)
-    .bind(filter.responsavel_id.as_deref())
-    .bind(ano)
-    .bind(search.as_deref())
     .fetch_one(pool)
     .await?;
 
-    let items = sqlx::query_as::<_, ProceedingListItem>(
-        r#"
-        SELECT p.id::text AS id, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador,
-               p.local_origem, p.data_instauracao, p.concluido, p.ativo,
-               u.nome AS responsavel_nome
-        FROM v_processos p
-        LEFT JOIN usuarios u ON u.id = p.responsavel_id
-        WHERE coalesce(p.ativo, true) = true
-          AND ($1::text IS NULL OR p.tipo_geral = $1)
-          AND ($2::text IS NULL OR p.tipo_detalhe = $2)
-          AND ($3::bool IS NULL OR p.concluido = $3)
-          AND ($4::text IS NULL OR p.responsavel_id = $4::uuid)
-          AND ($5::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $5)
-          AND ($6::text IS NULL OR lower(p.numero) LIKE $6 OR lower(p.resumo_fatos) LIKE $6)
-        ORDER BY p.created_at DESC NULLS LAST
-        LIMIT $7 OFFSET $8
-        "#,
+    let items = bind_filtro(
+        sqlx::query_as::<_, ProceedingListItem>(&format!(
+            "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA} {FILTRO}
+             ORDER BY v.data_instauracao DESC, v.numero_documento
+             LIMIT $15 OFFSET $16"
+        )),
+        filtro,
+        busca,
     )
-    .bind(filter.tipo_geral.as_deref())
-    .bind(filter.tipo_detalhe.as_deref())
-    .bind(filter.concluido)
-    .bind(filter.responsavel_id.as_deref())
-    .bind(ano)
-    .bind(search.as_deref())
-    .bind(limit)
-    .bind(offset)
+    .bind(per_page)
+    .bind((page - 1) * per_page)
     .fetch_all(pool)
     .await?;
 
-    Ok(ProceedingListResult { items, total })
+    Ok(ProceedingListResult {
+        items,
+        total: total.0,
+        page,
+        per_page,
+    })
 }
 
-pub async fn number_exists(
-    pool: &PgPool,
-    numero: &str,
-    documento_iniciador: &str,
-    tipo_detalhe: &str,
-    local_origem: Option<&str>,
-    ano_instauracao: Option<i32>,
-    exclude_id: Option<&str>,
-) -> Result<bool, sqlx::Error> {
-    let ano = ano_instauracao.map(|a| a as i64);
-    let (count,): (i64,) = sqlx::query_as(
-        r#"
-        SELECT count(*)::bigint
-        FROM v_processos
-        WHERE coalesce(ativo, true) = true
-          AND numero = $1
-          AND documento_iniciador = $2
-          AND tipo_detalhe = $3
-          AND local_origem IS NOT DISTINCT FROM $4
-          AND ($5::bigint IS NULL OR EXTRACT(YEAR FROM data_instauracao)::bigint = $5)
-          AND ($6::uuid IS NULL OR id != $6::uuid)
-        "#,
+/// Opções do modal de filtros avançados da listagem.
+///
+/// **Desvio deliberado da regra da seção 2 do guia** ("lista de opções filtra
+/// `WHERE ativo`"), e o motivo é que aqui a lista não é a mesma coisa. Um
+/// seletor de formulário oferece o que *pode* ser escolhido daqui para frente, e
+/// aí `ativo` é porta. Estas listas oferecem por onde *cortar o que já foi
+/// registrado* — e um valor que nenhum apuratório usa não corta nada: seria uma
+/// opção que devolve zero, em meio a dezenas de municípios semeados pela `0003`.
+///
+/// Então cada lista sai dos fatos: somente valores que algum apuratório **ativo**
+/// de fato registrou, como `anos` e `vitimas` já faziam por natureza. `ativo`
+/// continua no payload, mas como **rótulo** — é o princípio 6 pelo outro lado, o
+/// que garante que o apuratório de 2019 continue encontrável pela unidade
+/// desativada em 2026, marcada "(inativo)" na tela.
+///
+/// O envolvido "À apurar" é `policial_militar_id IS NULL` e por isso não gera
+/// opção nenhuma em `envolvidos`, que é o certo: não há por quem filtrar.
+pub async fn filter_options(pool: &PgPool) -> Result<ProceedingFilterOptions, sqlx::Error> {
+    let tipos_apuratorio = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT t.id::text AS id, t.nome AS rotulo, t.ativo
+           FROM tipos_apuratorio t
+          WHERE EXISTS (
+                SELECT 1
+                  FROM apuratorios a
+                  JOIN processos_procedimentos p ON p.apuratorio_id = a.id AND p.ativo
+                 WHERE a.tipo_apuratorio_id = t.id)
+          ORDER BY t.ativo DESC, t.nome",
     )
-    .bind(numero)
-    .bind(documento_iniciador)
-    .bind(tipo_detalhe)
-    .bind(local_origem)
-    .bind(ano)
-    .bind(exclude_id)
-    .fetch_one(pool)
+    .fetch_all(pool)
     .await?;
-    Ok(count > 0)
-}
-
-pub async fn create(
-    tx: &mut Transaction<'_, Postgres>,
-    request: &CreateProceedingRequest,
-) -> Result<String, AppError> {
-    let nome_vitima = request.nome_vitima.as_deref().map(|s| s.trim().to_uppercase());
-
-    let punido = request.solucao_tipo.as_deref() == Some("Punido");
-    let penalidade_tipo = if punido { request.penalidade_tipo.as_deref() } else { None };
-    let penalidade_dias = if punido { request.penalidade_dias } else { None };
-
-    // Step 1: id canônico do processo/procedimento (gerado pela app; vira a PK própria
-    // da tabela específica e o processo_procedimento_id do registro histórico).
-    let proc_id = Uuid::new_v4().to_string();
-
-    // Step 2: Insert into type-specific table (id próprio, independente)
-    insert_type_specific(tx, &proc_id, request, &nome_vitima, penalidade_tipo, penalidade_dias).await?;
-
-    // Step 3: Registrar no histórico (alvo das FKs de processo/procedimento)
-    sqlx::query(
-        r#"INSERT INTO historico_processo_procedimentos (processo_procedimento_id, apuratorio_id)
-           SELECT $1::uuid, id FROM apuratorios WHERE nome_apuratorio = $2"#,
+    let unidades = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT u.id::text AS id, u.nome AS rotulo, u.ativo
+           FROM unidades_pm u
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.unidade_origem_id = u.id AND p.ativo)
+          ORDER BY u.ativo DESC, u.nome",
     )
-    .bind(&proc_id)
-    .bind(&request.tipo_detalhe)
-    .execute(&mut **tx)
+    .fetch_all(pool)
+    .await?;
+    // Responsável é o papel marcado `e_responsavel` na configuração do
+    // apuratório, com designação vigente — a mesma definição que o filtro usa e
+    // que a view resolve para a coluna Encarregado. `is_encarregado` do militar
+    // não entra: aqui a pergunta é quem responde por algum apuratório, não quem
+    // pode vir a responder.
+    let responsaveis = sqlx::query_as::<_, ProceedingMilitaryFilterOption>(
+        "SELECT pm.id::text AS id, pm.nome, pm.matricula,
+                pg.sigla AS posto_graduacao, pm.ativo
+           FROM policiais_militares pm
+           JOIN postos_graduacoes pg ON pg.id = pm.posto_graduacao_id
+          WHERE EXISTS (
+                SELECT 1
+                  FROM processo_designacoes d
+                  JOIN apuratorio_papeis ap ON ap.apuratorio_id = d.apuratorio_id
+                                            AND ap.papel_id = d.papel_id
+                  JOIN processos_procedimentos p ON p.id = d.processo_id AND p.ativo
+                 WHERE d.policial_militar_id = pm.id AND d.data_fim IS NULL
+                   AND ap.e_responsavel)
+          ORDER BY pm.ativo DESC, pm.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    // Nome de vítima é texto livre: o `upper(btrim(...))` colapsa as variações de
+    // caixa numa opção só, e o filtro compara em `lower(btrim(...))` — de modo
+    // que escolher a opção alcança todas as grafias gravadas.
+    let vitimas = sqlx::query_scalar(
+        "SELECT DISTINCT upper(btrim(v.nome))
+           FROM processo_vitimas v
+           JOIN processos_procedimentos p ON p.id = v.processo_id AND p.ativo
+          ORDER BY 1",
+    )
+    .fetch_all(pool)
+    .await?;
+    let anos = sqlx::query_scalar(
+        "SELECT DISTINCT EXTRACT(YEAR FROM data_instauracao)::int
+           FROM processos_procedimentos WHERE ativo ORDER BY 1 DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    let locais_fato = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT m.id::text AS id,
+                m.nome || CASE WHEN m.e_distrito THEN ' — Distrito' ELSE ' — Município' END AS rotulo,
+                m.ativo
+           FROM municipios_distritos m
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.municipio_fato_id = m.id AND p.ativo)
+          ORDER BY m.ativo DESC, m.nome, m.e_distrito",
+    )
+    .fetch_all(pool)
+    .await?;
+    let envolvidos = sqlx::query_as::<_, ProceedingMilitaryFilterOption>(
+        "SELECT pm.id::text AS id, pm.nome, pm.matricula,
+                pg.sigla AS posto_graduacao, pm.ativo
+           FROM policiais_militares pm
+           JOIN postos_graduacoes pg ON pg.id = pm.posto_graduacao_id
+          WHERE EXISTS (
+                SELECT 1
+                  FROM processo_envolvidos e
+                  JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+                 WHERE e.policial_militar_id = pm.id)
+          ORDER BY pm.ativo DESC, pm.nome",
+    )
+    .fetch_all(pool)
+    .await?;
+    let documentos_iniciadores = sqlx::query_as::<_, ProceedingFilterOption>(
+        "SELECT d.id::text AS id, d.nome AS rotulo, d.ativo
+           FROM tipos_documento d
+          WHERE EXISTS (
+                SELECT 1 FROM processos_procedimentos p
+                 WHERE p.documento_iniciador_id = d.id AND p.ativo)
+          ORDER BY d.ativo DESC, d.nome",
+    )
+    .fetch_all(pool)
     .await?;
 
-    // Step 4: Insert PMs envolvidos
-    if let Some(pms) = &request.pms_envolvidos {
-        for pm_id in pms {
-            sqlx::query(
-                "INSERT INTO procedimento_pms_envolvidos (procedimento_id, pm_id) VALUES ($1::uuid, $2::uuid)",
-            )
-            .bind(&proc_id)
-            .bind(pm_id)
-            .execute(&mut **tx)
-            .await?;
-        }
-    }
-
-    Ok(proc_id)
-}
-
-async fn insert_type_specific(
-    tx: &mut Transaction<'_, Postgres>,
-    proc_id: &str,
-    r: &CreateProceedingRequest,
-    nome_vitima: &Option<String>,
-    penalidade_tipo: Option<&str>,
-    penalidade_dias: Option<i32>,
-) -> Result<(), AppError> {
-    let table = tipo_to_table(&r.tipo_detalhe)?;
-
-    match r.tipo_detalhe.as_str() {
-        "SR" | "SV" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    nome_vitima, numero_portaria, data_conclusao, data_remessa_encarregado,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20,
-                    coalesce($21, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(r.numero_portaria.as_deref()).bind(r.data_conclusao)
-            .bind(r.data_remessa_encarregado).bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "IPM" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    escrivao_id, nome_vitima, numero_portaria, data_conclusao,
-                    data_remessa_encarregado, concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17::uuid, $18, $19, $20, $21,
-                    coalesce($22, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(r.escrivao_id.as_deref())
-            .bind(nome_vitima.as_deref()).bind(r.numero_portaria.as_deref())
-            .bind(r.data_conclusao).bind(r.data_remessa_encarregado).bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "FP" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    nome_vitima, numero_feito, data_conclusao, data_remessa_encarregado,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20,
-                    coalesce($21, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(r.numero_feito.as_deref()).bind(r.data_conclusao)
-            .bind(r.data_remessa_encarregado).bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "CP" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    nome_vitima, numero_portaria, data_remessa_encarregado,
-                    unidade_deprecada, deprecante,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20, $21,
-                    coalesce($22, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(r.numero_portaria.as_deref()).bind(r.data_remessa_encarregado)
-            .bind(r.unidade_deprecada.as_deref()).bind(r.deprecante.as_deref())
-            .bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PADS" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    numero_memorando, data_conclusao, data_remessa_encarregado,
-                    data_julgamento, penalidade_dias, penalidade_tipo_id,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20, $21,
-                    (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $22),
-                    coalesce($23, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(r.numero_memorando.as_deref())
-            .bind(r.data_conclusao).bind(r.data_remessa_encarregado)
-            .bind(r.data_julgamento).bind(penalidade_dias).bind(penalidade_tipo)
-            .bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PADE" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    numero_portaria, data_conclusao, data_remessa_encarregado,
-                    data_julgamento, penalidade_tipo_id,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20,
-                    (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $21),
-                    coalesce($22, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(r.numero_portaria.as_deref())
-            .bind(r.data_conclusao).bind(r.data_remessa_encarregado)
-            .bind(r.data_julgamento).bind(penalidade_tipo)
-            .bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PAD" | "CD" | "CJ" => {
-            sqlx::query(&format!(r#"
-                INSERT INTO {table} (
-                    id, numero, tipo_geral, tipo_detalhe_id, documento_iniciador_id,
-                    local_origem_id, local_fatos_id, processo_sei, responsavel_id,
-                    data_instauracao, data_recebimento, numero_rgf, resumo_fatos,
-                    solucao_tipo_id, natureza_processo_id, solucao_final,
-                    numero_portaria, data_conclusao, data_remessa_comissao,
-                    data_julgamento, penalidade_dias, penalidade_tipo_id,
-                    presidente_id, interrogante_id, escrivao_processo_id,
-                    concluido, ativo, created_at, updated_at
-                ) VALUES (
-                    $1::uuid, $2, $3,
-                    (SELECT id FROM apuratorios WHERE nome_apuratorio = $4),
-                    (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $5),
-                    (SELECT id FROM locais_origem WHERE nome_unidade_pm = $6),
-                    (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $7),
-                    $8, $9::uuid, $10, $11, $12, $13,
-                    (SELECT id FROM solucoes_tipo WHERE codigo = $14),
-                    (SELECT id FROM natureza_transgressao WHERE codigo = $15),
-                    $16, $17, $18, $19, $20, $21,
-                    (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $22),
-                    $23::uuid, $24::uuid, $25::uuid,
-                    coalesce($26, false), true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )"#))
-            .bind(proc_id).bind(&r.numero).bind(&r.tipo_geral).bind(&r.tipo_detalhe)
-            .bind(&r.documento_iniciador).bind(r.local_origem.as_deref()).bind(&r.local_fatos)
-            .bind(r.processo_sei.as_deref()).bind(r.responsavel_id.as_deref())
-            .bind(r.data_instauracao).bind(r.data_recebimento)
-            .bind(r.numero_rgf.as_deref()).bind(r.resumo_fatos.as_deref())
-            .bind(r.solucao_tipo.as_deref()).bind(r.natureza_processo.as_deref())
-            .bind(r.solucao_final.as_deref()).bind(r.numero_portaria.as_deref())
-            .bind(r.data_conclusao).bind(r.data_remessa_comissao)
-            .bind(r.data_julgamento).bind(penalidade_dias).bind(penalidade_tipo)
-            .bind(r.presidente_id.as_deref()).bind(r.interrogante_id.as_deref())
-            .bind(r.escrivao_processo_id.as_deref()).bind(r.concluido)
-            .execute(&mut **tx).await?;
-        }
-        other => return Err(AppError::Domain(format!("tipo_detalhe nao suportado: {other}"))),
-    }
-
-    Ok(())
-}
-
-#[derive(sqlx::FromRow)]
-struct ProceedingRow {
-    id: String,
-    numero: String,
-    tipo_geral: String,
-    tipo_detalhe: String,
-    documento_iniciador: String,
-    processo_sei: Option<String>,
-    responsavel_id: Option<String>,
-    local_origem: Option<String>,
-    local_fatos: Option<String>,
-    data_instauracao: Option<NaiveDate>,
-    data_recebimento: Option<NaiveDate>,
-    escrivao_id: Option<String>,
-    nome_vitima: Option<String>,
-    natureza_processo: Option<String>,
-    resumo_fatos: Option<String>,
-    numero_portaria: Option<String>,
-    numero_memorando: Option<String>,
-    numero_feito: Option<String>,
-    numero_rgf: Option<String>,
-    concluido: Option<bool>,
-    data_conclusao: Option<NaiveDate>,
-    solucao_final: Option<String>,
-    data_remessa_encarregado: Option<NaiveDate>,
-    data_remessa_comissao: Option<NaiveDate>,
-    data_julgamento: Option<NaiveDate>,
-    solucao_tipo: Option<String>,
-    penalidade_tipo: Option<String>,
-    penalidade_dias: Option<i32>,
-    presidente_id: Option<String>,
-    interrogante_id: Option<String>,
-    escrivao_processo_id: Option<String>,
-    unidade_deprecada: Option<String>,
-    deprecante: Option<String>,
-    indicios_categorias: Option<String>,
-    historico_encarregados: Option<String>,
-    pdf_nome: Option<String>,
-    pdf_tamanho: Option<i64>,
-    responsavel_nome: Option<String>,
-    responsavel_posto: Option<String>,
-    responsavel_matricula: Option<String>,
-    escrivao_nome: Option<String>,
-    presidente_nome: Option<String>,
-    interrogante_nome: Option<String>,
-    escrivao_processo_nome: Option<String>,
-}
-
-#[derive(sqlx::FromRow)]
-struct PmRow {
-    id: String,
-    pm_id: String,
-    status_pm: Option<String>,
-    nome: Option<String>,
-    posto_graduacao: Option<String>,
-    matricula: Option<String>,
-}
-
-#[derive(sqlx::FromRow)]
-struct DeadlineRow {
-    id: String,
-    tipo_prazo: String,
-    data_inicio: NaiveDate,
-    data_vencimento: NaiveDate,
-    dias_adicionados: Option<i32>,
+    Ok(ProceedingFilterOptions {
+        tipos_apuratorio,
+        unidades,
+        responsaveis,
+        vitimas,
+        anos,
+        locais_fato,
+        envolvidos,
+        documentos_iniciadores,
+    })
 }
 
 pub async fn get(pool: &PgPool, id: &str) -> Result<Option<ProceedingDetail>, sqlx::Error> {
-    let row = sqlx::query_as::<_, ProceedingRow>(
-        r#"
-        SELECT
-            p.id::text, p.numero, p.tipo_geral, p.tipo_detalhe, p.documento_iniciador,
-            p.processo_sei,
-            p.responsavel_id::text AS responsavel_id,
-            p.local_origem, p.local_fatos, p.data_instauracao, p.data_recebimento,
-            p.escrivao_id::text AS escrivao_id,
-            p.nome_vitima, p.natureza_processo, p.resumo_fatos,
-            p.numero_portaria, p.numero_memorando, p.numero_feito, p.numero_rgf,
-            p.concluido, p.data_conclusao, p.solucao_final,
-            p.data_remessa_encarregado, p.data_remessa_comissao, p.data_julgamento,
-            p.solucao_tipo, p.penalidade_tipo, p.penalidade_dias,
-            p.presidente_id::text AS presidente_id,
-            p.interrogante_id::text AS interrogante_id,
-            p.escrivao_processo_id::text AS escrivao_processo_id,
-            p.unidade_deprecada, p.deprecante,
-            p.indicios_categorias::text AS indicios_categorias,
-            p.historico_encarregados::text AS historico_encarregados,
-            p.pdf_nome, p.pdf_tamanho,
-            u_resp.nome             AS responsavel_nome,
-            pg_resp.codigo          AS responsavel_posto,
-            u_resp.matricula        AS responsavel_matricula,
-            u_esc.nome              AS escrivao_nome,
-            u_pres.nome             AS presidente_nome,
-            u_int.nome              AS interrogante_nome,
-            u_escrp.nome            AS escrivao_processo_nome
-        FROM v_processos p
-        LEFT JOIN usuarios u_resp    ON p.responsavel_id      = u_resp.id
-        LEFT JOIN postos_graduacoes pg_resp ON pg_resp.id     = u_resp.posto_graduacao_id
-        LEFT JOIN usuarios u_esc     ON p.escrivao_id         = u_esc.id
-        LEFT JOIN usuarios u_pres    ON p.presidente_id       = u_pres.id
-        LEFT JOIN usuarios u_int     ON p.interrogante_id     = u_int.id
-        LEFT JOIN usuarios u_escrp   ON p.escrivao_processo_id = u_escrp.id
-        WHERE p.id = $1::uuid AND coalesce(p.ativo, true) = true
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
+    // Uma conexão só para as oito consultas da ficha. Com `test_before_acquire`
+    // ligado — e ele fica ligado, é o que impede receber um socket que o
+    // servidor já matou — cada `acquire` custa um ping de ida e volta. Oito
+    // acquires custavam oito pings; um custa um.
+    let mut conn = pool.acquire().await?;
+    Ok(get_muitos(&mut conn, &[id.to_string()]).await?.remove(id))
+}
+
+/// As fichas de vários processos, com um número **fixo** de consultas.
+///
+/// Recebe conexão, e não pool, porque é assim que as oito consultas viajam num
+/// `acquire` só — ver o comentário em `get`.
+pub async fn get_muitos(
+    conn: &mut sqlx::PgConnection,
+    ids: &[String],
+) -> Result<HashMap<String, ProceedingDetail>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let cabecalhos = sqlx::query_as::<_, ProceedingListItem>(&format!(
+        "SELECT {COLUNAS_LISTA} FROM v_processos_detalhados v {JOINS_LISTA}
+          WHERE v.id = ANY($1::uuid[])"
+    ))
+    .bind(ids)
+    .fetch_all(&mut *conn)
     .await?;
 
-    let row = match row {
-        Some(r) => r,
-        None => return Ok(None),
-    };
-
-    let pms_envolvidos = sqlx::query_as::<_, PmRow>(
-        r#"
-        SELECT pe.id::text AS id, pe.pm_id::text AS pm_id,
-               se.codigo AS status_pm,
-               u.nome, pg.codigo AS posto_graduacao, u.matricula
-        FROM procedimento_pms_envolvidos pe
-        LEFT JOIN usuarios u ON pe.pm_id = u.id
-        LEFT JOIN postos_graduacoes pg ON pg.id = u.posto_graduacao_id
-        LEFT JOIN status_envolvido se ON se.id = pe.status_pm_id
-        WHERE pe.procedimento_id = $1::uuid
-        ORDER BY pe.ordem NULLS LAST
-        "#,
+    let mut extras: HashMap<String, LinhaExtras> = sqlx::query_as::<_, LinhaExtras>(
+        "SELECT id::text AS id, numero_rgf, data_remessa_encarregado,
+                    data_remessa_comissao, data_julgamento
+               FROM processos_procedimentos WHERE id = ANY($1::uuid[])",
     )
-    .bind(id)
-    .fetch_all(pool)
-    .await?;
-
-    let prazo_ativo = sqlx::query_as::<_, DeadlineRow>(
-        r#"
-        SELECT pr.id::text AS id, tp.codigo AS tipo_prazo,
-               pr.data_inicio, pr.data_vencimento, pr.dias_adicionados
-        FROM prazos_processo pr
-        JOIN tipos_prazo tp ON tp.id = pr.tipo_prazo_id
-        WHERE pr.processo_id = $1::uuid AND coalesce(pr.ativo, true) = true
-        ORDER BY pr.created_at DESC NULLS LAST
-        LIMIT 1
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let andamentos: Vec<serde_json::Value> = sqlx::query_as::<_, (String, String, NaiveDate)>(
-        r#"SELECT id::text, descricao_andamento, created_at::date
-           FROM andamentos_processo_procedimentos
-           WHERE processo_procedimento_id = $1::uuid AND coalesce(ativo, true) = true
-           ORDER BY created_at DESC"#,
-    )
-    .bind(id)
-    .fetch_all(pool)
+    .bind(ids)
+    .fetch_all(&mut *conn)
     .await?
     .into_iter()
-    .map(|(aid, texto, data)| serde_json::json!({
-        "id": aid,
-        "texto": texto,
-        "data": data.format("%Y-%m-%d").to_string(),
-    }))
+    .map(|linha| (linha.id.clone(), linha))
     .collect();
 
-    let historico_encarregados: Vec<serde_json::Value> = row
-        .historico_encarregados
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok())
-        .unwrap_or_default();
+    let mut envolvidos = list_envolvidos_muitos(&mut *conn, ids).await?;
+    let mut designacoes = list_designacoes_muitos(&mut *conn, ids).await?;
+    let mut pessoas = list_pessoas_muitos(&mut *conn, ids).await?;
+    let mut vitimas = list_vitimas_muitos(&mut *conn, ids).await?;
+    let mut anexos = list_anexos_muitos(&mut *conn, ids).await?;
+    let mut cartas = carta_precatoria_muitos(&mut *conn, ids).await?;
 
-    let indicios_categorias: Option<serde_json::Value> = row
-        .indicios_categorias
-        .as_deref()
-        .and_then(|s| serde_json::from_str(s).ok());
-
-    Ok(Some(ProceedingDetail {
-        id: row.id,
-        numero: row.numero,
-        tipo_geral: row.tipo_geral,
-        tipo_detalhe: row.tipo_detalhe,
-        documento_iniciador: row.documento_iniciador,
-        processo_sei: row.processo_sei,
-        responsavel_id: row.responsavel_id,
-        local_origem: row.local_origem,
-        local_fatos: row.local_fatos,
-        data_instauracao: row.data_instauracao,
-        data_recebimento: row.data_recebimento,
-        escrivao_id: row.escrivao_id,
-        nome_vitima: row.nome_vitima,
-        natureza_processo: row.natureza_processo,
-        resumo_fatos: row.resumo_fatos,
-        numero_portaria: row.numero_portaria,
-        numero_memorando: row.numero_memorando,
-        numero_feito: row.numero_feito,
-        numero_rgf: row.numero_rgf,
-        concluido: row.concluido,
-        data_conclusao: row.data_conclusao,
-        solucao_final: row.solucao_final,
-        data_remessa_encarregado: row.data_remessa_encarregado,
-        data_remessa_comissao: row.data_remessa_comissao,
-        data_julgamento: row.data_julgamento,
-        solucao_tipo: row.solucao_tipo,
-        penalidade_tipo: row.penalidade_tipo,
-        penalidade_dias: row.penalidade_dias,
-        presidente_id: row.presidente_id,
-        interrogante_id: row.interrogante_id,
-        escrivao_processo_id: row.escrivao_processo_id,
-        unidade_deprecada: row.unidade_deprecada,
-        deprecante: row.deprecante,
-        indicios_categorias,
-        responsavel_nome: row.responsavel_nome,
-        responsavel_posto: row.responsavel_posto,
-        responsavel_matricula: row.responsavel_matricula,
-        escrivao_nome: row.escrivao_nome,
-        presidente_nome: row.presidente_nome,
-        interrogante_nome: row.interrogante_nome,
-        escrivao_processo_nome: row.escrivao_processo_nome,
-        pdf_nome: row.pdf_nome,
-        pdf_tamanho: row.pdf_tamanho,
-        pms_envolvidos: pms_envolvidos
-            .into_iter()
-            .map(|r| PmEnvolvido {
-                id: r.id,
-                pm_id: r.pm_id,
-                nome: r.nome,
-                posto_graduacao: r.posto_graduacao,
-                matricula: r.matricula,
-                status_pm: r.status_pm,
-            })
-            .collect(),
-        prazo_ativo: prazo_ativo.map(|r| ActiveDeadline {
-            id: r.id,
-            tipo_prazo: r.tipo_prazo,
-            data_inicio: r.data_inicio,
-            data_vencimento: r.data_vencimento,
-            dias_adicionados: r.dias_adicionados,
-        }),
-        andamentos,
-        historico_encarregados,
-    }))
-}
-
-pub async fn update(
-    tx: &mut Transaction<'_, Postgres>,
-    request: &UpdateProceedingRequest,
-) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, &request.id).await?;
-    let table = tipo_to_table(&tipo)?;
-
-    let nome_vitima = request.nome_vitima.as_deref().map(|s| s.trim().to_uppercase());
-    let punido = request.solucao_tipo.as_deref() == Some("Punido");
-    let penalidade_tipo = if punido { request.penalidade_tipo.as_deref() } else { None };
-    let penalidade_dias = if punido { request.penalidade_dias } else { None };
-
-    match tipo.as_str() {
-        "SR" | "SV" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    nome_vitima = $16, numero_portaria = $17, data_conclusao = $18,
-                    data_remessa_encarregado = $19,
-                    concluido = coalesce($20, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(request.numero_portaria.as_deref()).bind(request.data_conclusao)
-            .bind(request.data_remessa_encarregado).bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "IPM" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    escrivao_id = $16::uuid,
-                    nome_vitima = $17, numero_portaria = $18, data_conclusao = $19,
-                    data_remessa_encarregado = $20,
-                    concluido = coalesce($21, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(request.escrivao_id.as_deref())
-            .bind(nome_vitima.as_deref()).bind(request.numero_portaria.as_deref())
-            .bind(request.data_conclusao).bind(request.data_remessa_encarregado)
-            .bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "FP" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    nome_vitima = $16, numero_feito = $17, data_conclusao = $18,
-                    data_remessa_encarregado = $19,
-                    concluido = coalesce($20, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(request.numero_feito.as_deref()).bind(request.data_conclusao)
-            .bind(request.data_remessa_encarregado).bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "CP" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    nome_vitima = $16, numero_portaria = $17, data_remessa_encarregado = $18,
-                    unidade_deprecada = $19, deprecante = $20,
-                    concluido = coalesce($21, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(nome_vitima.as_deref())
-            .bind(request.numero_portaria.as_deref()).bind(request.data_remessa_encarregado)
-            .bind(request.unidade_deprecada.as_deref()).bind(request.deprecante.as_deref())
-            .bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PADS" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    numero_memorando = $16, data_conclusao = $17, data_remessa_encarregado = $18,
-                    data_julgamento = $19, penalidade_dias = $20,
-                    penalidade_tipo_id = (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $21),
-                    concluido = coalesce($22, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(request.numero_memorando.as_deref())
-            .bind(request.data_conclusao).bind(request.data_remessa_encarregado)
-            .bind(request.data_julgamento).bind(penalidade_dias).bind(penalidade_tipo)
-            .bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PADE" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    numero_portaria = $16, data_conclusao = $17, data_remessa_encarregado = $18,
-                    data_julgamento = $19,
-                    penalidade_tipo_id = (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $20),
-                    concluido = coalesce($21, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(request.numero_portaria.as_deref())
-            .bind(request.data_conclusao).bind(request.data_remessa_encarregado)
-            .bind(request.data_julgamento).bind(penalidade_tipo)
-            .bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        "PAD" | "CD" | "CJ" => {
-            sqlx::query(&format!(r#"
-                UPDATE {table} SET
-                    numero = $2, tipo_geral = $3,
-                    documento_iniciador_id = (SELECT id FROM tipos_documentos WHERE nome_tipo_documento = $4),
-                    local_origem_id = (SELECT id FROM locais_origem WHERE nome_unidade_pm = $5),
-                    local_fatos_id = (SELECT id FROM municipios_distritos WHERE nome_municipio_distrito = $6),
-                    processo_sei = $7, responsavel_id = $8::uuid,
-                    data_instauracao = $9, data_recebimento = $10,
-                    numero_rgf = $11, resumo_fatos = $12,
-                    solucao_tipo_id = (SELECT id FROM solucoes_tipo WHERE codigo = $13),
-                    natureza_processo_id = (SELECT id FROM natureza_transgressao WHERE codigo = $14),
-                    solucao_final = $15,
-                    numero_portaria = $16, data_conclusao = $17, data_remessa_comissao = $18,
-                    data_julgamento = $19, penalidade_dias = $20,
-                    penalidade_tipo_id = (SELECT id FROM tipos_penalidade WHERE nome_penalidade = $21),
-                    presidente_id = $22::uuid, interrogante_id = $23::uuid,
-                    escrivao_processo_id = $24::uuid,
-                    concluido = coalesce($25, false), updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1::uuid AND coalesce(ativo, true) = true
-            "#))
-            .bind(&request.id).bind(&request.numero).bind(&request.tipo_geral)
-            .bind(&request.documento_iniciador).bind(request.local_origem.as_deref())
-            .bind(&request.local_fatos).bind(request.processo_sei.as_deref())
-            .bind(request.responsavel_id.as_deref())
-            .bind(request.data_instauracao).bind(request.data_recebimento)
-            .bind(request.numero_rgf.as_deref()).bind(request.resumo_fatos.as_deref())
-            .bind(request.solucao_tipo.as_deref()).bind(request.natureza_processo.as_deref())
-            .bind(request.solucao_final.as_deref()).bind(request.numero_portaria.as_deref())
-            .bind(request.data_conclusao).bind(request.data_remessa_comissao)
-            .bind(request.data_julgamento).bind(penalidade_dias).bind(penalidade_tipo)
-            .bind(request.presidente_id.as_deref()).bind(request.interrogante_id.as_deref())
-            .bind(request.escrivao_processo_id.as_deref()).bind(request.concluido)
-            .execute(&mut **tx).await?;
-        }
-        other => return Err(AppError::Domain(format!("tipo_detalhe nao suportado: {other}"))),
+    let mut fichas = HashMap::with_capacity(cabecalhos.len());
+    for cabecalho in cabecalhos {
+        let id = cabecalho.id.clone();
+        // A linha de `processos_procedimentos` sempre existe quando a view
+        // devolveu o cabeçalho — a view nasce dela. Ausência aqui seria a linha
+        // sumindo no meio da leitura, e o `RowNotFound` diz isso melhor do que
+        // uma ficha montada com campos vazios.
+        let Some(extra) = extras.remove(&id) else {
+            return Err(sqlx::Error::RowNotFound);
+        };
+        fichas.insert(
+            id.clone(),
+            ProceedingDetail {
+                cabecalho,
+                numero_rgf: extra.numero_rgf,
+                data_remessa_encarregado: extra.data_remessa_encarregado,
+                data_remessa_comissao: extra.data_remessa_comissao,
+                data_julgamento: extra.data_julgamento,
+                envolvidos: envolvidos.remove(&id).unwrap_or_default(),
+                designacoes: designacoes.remove(&id).unwrap_or_default(),
+                pessoas: pessoas.remove(&id).unwrap_or_default(),
+                vitimas: vitimas.remove(&id).unwrap_or_default(),
+                anexos: anexos.remove(&id).unwrap_or_default(),
+                carta_precatoria: cartas.remove(&id),
+            },
+        );
     }
-
-    if let Some(pms) = &request.pms_envolvidos {
-        sqlx::query("DELETE FROM procedimento_pms_envolvidos WHERE procedimento_id = $1::uuid")
-            .bind(&request.id)
-            .execute(&mut **tx)
-            .await?;
-        for pm_id in pms {
-            sqlx::query(
-                "INSERT INTO procedimento_pms_envolvidos (procedimento_id, pm_id) VALUES ($1::uuid, $2::uuid)",
-            )
-            .bind(&request.id)
-            .bind(pm_id)
-            .execute(&mut **tx)
-            .await?;
-        }
-    }
-
-    Ok(())
+    Ok(fichas)
 }
 
-pub async fn delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, id).await?;
-    let table = tipo_to_table(&tipo)?;
-    sqlx::query(&format!(
-        "UPDATE {table} SET ativo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid"
-    ))
-    .bind(id)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+#[derive(sqlx::FromRow)]
+struct LinhaExtras {
+    id: String,
+    numero_rgf: Option<String>,
+    data_remessa_encarregado: Option<chrono::NaiveDate>,
+    data_remessa_comissao: Option<chrono::NaiveDate>,
+    data_julgamento: Option<chrono::NaiveDate>,
 }
 
-pub async fn reopen(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, id).await?;
-    let table = tipo_to_table(&tipo)?;
-    sqlx::query(&format!(
-        "UPDATE {table} SET concluido = false, data_conclusao = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid AND coalesce(ativo, true) = true"
-    ))
-    .bind(id)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
-}
+linha_agrupada!(LinhaEnvolvido, EnvolvidoItem);
+linha_agrupada!(LinhaDesignacao, DesignacaoItem);
+linha_agrupada!(LinhaPessoa, PessoaItem);
+linha_agrupada!(LinhaVitima, VitimaItem);
+linha_agrupada!(LinhaAnexo, AnexoItem);
+linha_agrupada!(LinhaCartaPrecatoria, CartaPrecatoriaDetalhes);
 
-pub async fn insert_initial_deadline(
-    tx: &mut Transaction<'_, Postgres>,
+pub async fn list_envolvidos<'e, E: PgExecutor<'e>>(
+    executor: E,
     processo_id: &str,
-    data_inicio: NaiveDate,
-    dias: i32,
-) -> Result<(), sqlx::Error> {
-    let data_vencimento = data_inicio + chrono::Duration::days(dias as i64);
-    sqlx::query(
-        r#"
-        INSERT INTO prazos_processo (
-            processo_id, tipo_prazo_id, data_inicio, data_vencimento,
-            dias_adicionados, ativo, created_at
-        )
-        VALUES (
-            $1::uuid,
-            (SELECT id FROM tipos_prazo WHERE codigo = 'inicial'),
-            $2, $3, $4, true, CURRENT_TIMESTAMP
-        )
-        "#,
+) -> Result<Vec<EnvolvidoItem>, sqlx::Error> {
+    Ok(list_envolvidos_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_envolvidos_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<EnvolvidoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaEnvolvido>(
+        "SELECT e.processo_id::text           AS chave,
+                e.id::text                    AS id,
+                e.policial_militar_id::text   AS policial_militar_id,
+                COALESCE(pm.nome, 'À apurar') AS nome,
+                COALESCE(pm.matricula, '')    AS matricula,
+                COALESCE(pg.sigla, '')        AS posto_graduacao,
+                se.id::text                   AS status_envolvido_id,
+                se.nome                       AS status_envolvido,
+                e.ordem                       AS ordem,
+                e.e_condutor                  AS e_condutor,
+                e.solucao_sugerida_id::text   AS solucao_sugerida_id,
+                ss.nome                       AS solucao_sugerida,
+                e.solucao_decidida_id::text   AS solucao_decidida_id,
+                sd.nome                       AS solucao_decidida,
+                e.penalidade_tipo_id::text    AS penalidade_tipo_id,
+                tp.nome                       AS penalidade_tipo,
+                e.penalidade_dias             AS penalidade_dias
+           FROM processo_envolvidos e
+           LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+           JOIN status_envolvido se    ON se.id = e.status_envolvido_id
+           LEFT JOIN tipos_solucao_sugerida ss ON ss.id = e.solucao_sugerida_id
+           LEFT JOIN tipos_solucao_decidida sd ON sd.id = e.solucao_decidida_id
+           LEFT JOIN tipos_penalidade tp       ON tp.id = e.penalidade_tipo_id
+          WHERE e.processo_id = ANY($1::uuid[])
+          ORDER BY e.processo_id, e.ordem",
     )
-    .bind(processo_id)
-    .bind(data_inicio)
-    .bind(data_vencimento)
-    .bind(dias)
-    .execute(&mut **tx)
+    .bind(processo_ids)
+    .fetch_all(executor)
     .await?;
-    Ok(())
+    Ok(agrupar(linhas.into_iter().map(LinhaEnvolvido::partir)))
 }
 
-pub async fn save_pdf(
-    tx: &mut Transaction<'_, Postgres>,
+/// Designações vigentes e encerradas. O histórico de substituição de encarregado
+/// é consequência desta tabela — não existe jsonb nem tabela paralela.
+pub async fn list_designacoes<'e, E: PgExecutor<'e>>(
+    executor: E,
     processo_id: &str,
-    nome: &str,
-    content_type: &str,
-    bytes: &[u8],
-) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, processo_id).await?;
-    let table = tipo_to_table(&tipo)?;
-    sqlx::query(&format!(
-        r#"UPDATE {table}
-           SET pdf_arquivo = $2, pdf_nome = $3, pdf_content_type = $4,
-               pdf_tamanho = $5, pdf_upload_em = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $1::uuid AND coalesce(ativo, true) = true"#
-    ))
-    .bind(processo_id)
-    .bind(bytes)
-    .bind(nome)
-    .bind(content_type)
-    .bind(bytes.len() as i64)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+) -> Result<Vec<DesignacaoItem>, sqlx::Error> {
+    Ok(
+        list_designacoes_muitos(executor, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id)
+            .unwrap_or_default(),
+    )
 }
 
-#[derive(sqlx::FromRow)]
-struct PdfRowMeta {
-    pdf_nome: Option<String>,
-    pdf_content_type: Option<String>,
-    pdf_tamanho: Option<i64>,
-    pdf_upload_em: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(sqlx::FromRow)]
-struct PdfRowFull {
-    pdf_nome: Option<String>,
-    pdf_content_type: Option<String>,
-    pdf_tamanho: Option<i64>,
-    pdf_upload_em: Option<chrono::DateTime<chrono::Utc>>,
-    pdf_arquivo: Option<Vec<u8>>,
-}
-
-pub async fn get_pdf(
-    pool: &PgPool,
-    processo_id: &str,
-    include_content: bool,
-) -> Result<Option<PdfMetadata>, sqlx::Error> {
-    if include_content {
-        let row = sqlx::query_as::<_, PdfRowFull>(
-            "SELECT pdf_nome, pdf_content_type, pdf_tamanho, pdf_upload_em, pdf_arquivo FROM v_processos WHERE id = $1::uuid AND coalesce(ativo, true) = true",
-        )
-        .bind(processo_id)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| {
-            use base64::Engine as _;
-            PdfMetadata {
-                nome: r.pdf_nome,
-                content_type: r.pdf_content_type,
-                tamanho: r.pdf_tamanho,
-                upload_em: r.pdf_upload_em.map(|dt| dt.to_rfc3339()),
-                conteudo: r.pdf_arquivo.map(|b| base64::engine::general_purpose::STANDARD.encode(b)),
-            }
-        }))
-    } else {
-        let row = sqlx::query_as::<_, PdfRowMeta>(
-            "SELECT pdf_nome, pdf_content_type, pdf_tamanho, pdf_upload_em FROM v_processos WHERE id = $1::uuid AND coalesce(ativo, true) = true",
-        )
-        .bind(processo_id)
-        .fetch_optional(pool)
-        .await?;
-
-        Ok(row.map(|r| PdfMetadata {
-            nome: r.pdf_nome,
-            content_type: r.pdf_content_type,
-            tamanho: r.pdf_tamanho,
-            upload_em: r.pdf_upload_em.map(|dt| dt.to_rfc3339()),
-            conteudo: None,
-        }))
+pub async fn list_designacoes_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<DesignacaoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
     }
-}
-
-pub async fn remove_pdf(
-    tx: &mut Transaction<'_, Postgres>,
-    processo_id: &str,
-) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, processo_id).await?;
-    let table = tipo_to_table(&tipo)?;
-    sqlx::query(&format!(
-        r#"UPDATE {table}
-           SET pdf_arquivo = NULL, pdf_nome = NULL, pdf_content_type = NULL,
-               pdf_tamanho = NULL, pdf_upload_em = NULL, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $1::uuid AND coalesce(ativo, true) = true"#
-    ))
-    .bind(processo_id)
-    .execute(&mut **tx)
+    let linhas = sqlx::query_as::<_, LinhaDesignacao>(
+        "SELECT d.processo_id::text            AS chave,
+                d.id::text                     AS id,
+                pap.id::text                   AS papel_id,
+                pap.nome                       AS papel,
+                ap.e_responsavel               AS e_responsavel,
+                ap.usa_documento_designacao    AS usa_documento_designacao,
+                pm.id::text                    AS policial_militar_id,
+                pm.nome                        AS nome,
+                pg.sigla                       AS posto_graduacao,
+                pm.matricula                   AS matricula,
+                d.data_inicio                  AS data_inicio,
+                d.data_fim                     AS data_fim,
+                d.documento_autorizador_id::text AS documento_autorizador_id,
+                td.nome                        AS documento_autorizador,
+                d.numero_documento             AS numero_documento,
+                d.motivo                       AS motivo,
+                d.designacao_anterior_id::text AS designacao_anterior_id
+           FROM processo_designacoes d
+           JOIN papeis_processo pap    ON pap.id = d.papel_id
+           JOIN apuratorio_papeis ap   ON ap.apuratorio_id = d.apuratorio_id
+                                      AND ap.papel_id = d.papel_id
+           JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+           JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+           LEFT JOIN tipos_documento td ON td.id = d.documento_autorizador_id
+          WHERE d.processo_id = ANY($1::uuid[])
+          ORDER BY d.processo_id, pap.nome, d.data_inicio",
+    )
+    .bind(processo_ids)
+    .fetch_all(executor)
     .await?;
-    Ok(())
+    Ok(agrupar(linhas.into_iter().map(LinhaDesignacao::partir)))
 }
 
-pub async fn substitute_responsible(
-    tx: &mut Transaction<'_, Postgres>,
-    req: &SubstituteResponsibleRequest,
-) -> Result<(), AppError> {
-    let tipo = get_tipo_detalhe(&mut **tx, &req.id).await?;
-    let table = tipo_to_table(&tipo)?;
+pub async fn list_pessoas<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<PessoaItem>, sqlx::Error> {
+    Ok(list_pessoas_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
 
-    let row: Option<(Option<String>, Option<String>)> = sqlx::query_as(&format!(
-        r#"SELECT t.responsavel_id::text, u.nome
-           FROM {table} t
-           LEFT JOIN usuarios u ON u.id = t.responsavel_id
-           WHERE t.id = $1::uuid AND coalesce(t.ativo, true) = true"#
-    ))
-    .bind(&req.id)
+pub async fn list_pessoas_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<PessoaItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaPessoa>(
+        "SELECT pp.processo_id::text AS chave,
+                pp.id::text        AS id,
+                pap.id::text       AS papel_pessoa_id,
+                pap.nome           AS papel_pessoa,
+                pp.nome            AS nome,
+                pp.ordem           AS ordem
+           FROM processo_pessoas pp
+           JOIN papeis_pessoa pap ON pap.id = pp.papel_pessoa_id
+          WHERE pp.processo_id = ANY($1::uuid[])
+          ORDER BY pp.processo_id, pap.nome, pp.ordem",
+    )
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaPessoa::partir)))
+}
+
+/// Ofendidos/Vítimas, na ordem em que foram informados. Sem JOIN em catálogo:
+/// o ofendido não tem papel, e é isso que faz a seção nunca depender de uma
+/// linha que alguém precise ter cadastrado antes.
+pub async fn list_vitimas<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<VitimaItem>, sqlx::Error> {
+    Ok(list_vitimas_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_vitimas_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<VitimaItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaVitima>(
+        "SELECT processo_id::text AS chave, id::text AS id, nome, ordem
+           FROM processo_vitimas
+          WHERE processo_id = ANY($1::uuid[])
+          ORDER BY processo_id, ordem",
+    )
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaVitima::partir)))
+}
+
+/// Metadados dos anexos. O conteúdo fica de fora: `octet_length` devolve o
+/// tamanho sem carregar o arquivo, e sem uma coluna que possa divergir dele.
+pub async fn list_anexos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Vec<AnexoItem>, sqlx::Error> {
+    Ok(list_anexos_muitos(executor, &[processo_id.to_string()])
+        .await?
+        .remove(processo_id)
+        .unwrap_or_default())
+}
+
+pub async fn list_anexos_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<AnexoItem>>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaAnexo>(
+        "SELECT an.processo_id::text               AS chave,
+                an.id::text                        AS id,
+                an.nome_arquivo                    AS nome_arquivo,
+                an.mime_type                       AS mime_type,
+                octet_length(an.conteudo)::bigint  AS tamanho_bytes,
+                CASE WHEN pm.id IS NULL THEN u.nome_exibicao
+                     ELSE pg.sigla || ' ' || pm.matricula || ' ' || pm.nome END AS enviado_por,
+                an.created_at                      AS created_at
+           FROM processo_anexos an
+           LEFT JOIN usuarios u             ON u.id = an.enviado_por_id
+           LEFT JOIN policiais_militares pm ON pm.id = u.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+          WHERE an.processo_id = ANY($1::uuid[]) AND an.cancelado_em IS NULL
+          ORDER BY an.processo_id, an.created_at DESC",
+    )
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaAnexo::partir)))
+}
+
+pub async fn carta_precatoria<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_id: &str,
+) -> Result<Option<CartaPrecatoriaDetalhes>, sqlx::Error> {
+    Ok(
+        carta_precatoria_muitos(executor, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id),
+    )
+}
+
+/// Diferente das demais: a carta precatória é **uma por processo**, então o
+/// lote devolve o item direto, não uma coleção.
+pub async fn carta_precatoria_muitos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    processo_ids: &[String],
+) -> Result<HashMap<String, CartaPrecatoriaDetalhes>, sqlx::Error> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let linhas = sqlx::query_as::<_, LinhaCartaPrecatoria>(
+        "SELECT cp.processo_id::text AS chave,
+                cp.deprecante, cp.unidade_deprecada_id::text, un.nome AS unidade_deprecada
+           FROM carta_precatoria_detalhes cp
+           JOIN unidades_pm un ON un.id = cp.unidade_deprecada_id
+          WHERE cp.processo_id = ANY($1::uuid[])",
+    )
+    .bind(processo_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(linhas
+        .into_iter()
+        .map(LinhaCartaPrecatoria::partir)
+        .collect())
+}
+
+// ── Escrita ──────────────────────────────────────────────────────────────────
+
+/// Configuração do apuratório que a gravação precisa consultar. Tudo o que antes
+/// era literal no Rust (`"IPM" => 40`, `tipo_detalhe == "CP"`, `exige natureza`)
+/// vem daqui, do cadastro.
+#[derive(sqlx::FromRow)]
+struct ConfigApuratorio {
+    exige_natureza_fato: bool,
+    permite_acusacao: bool,
+    permite_acusacao_penal: bool,
+    permite_cadastro_vitima: bool,
+    codigo_extensao: Option<String>,
+}
+
+async fn config_apuratorio(
+    tx: &mut Transaction<'_, Postgres>,
+    apuratorio_id: &str,
+) -> Result<ConfigApuratorio, AppError> {
+    sqlx::query_as::<_, ConfigApuratorio>(
+        "SELECT exige_natureza_fato, permite_acusacao, permite_acusacao_penal,
+                permite_cadastro_vitima, codigo_extensao
+           FROM apuratorios WHERE id = $1::uuid",
+    )
+    .bind(apuratorio_id)
     .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("apuratorio nao encontrado".to_string()))
+}
+
+/// Validações que dependem de configuração. Todas leem atributos semânticos dos
+/// catálogos — nenhuma compara nome exibido.
+async fn validar_contra_configuracao(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveProceedingRequest,
+    config: &ConfigApuratorio,
+) -> Result<(), AppError> {
+    if let Some(processo_id) = request.id.as_deref() {
+        let reclassificaria_enquadramento: bool = sqlx::query_scalar(
+            "SELECT p.apuratorio_id <> $2::uuid
+                    AND EXISTS (
+                        SELECT 1 FROM processo_envolvidos e
+                         WHERE e.processo_id = p.id
+                           AND (EXISTS (SELECT 1 FROM envolvido_categorias_indicio c WHERE c.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_infracoes_penais i WHERE i.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_transgressoes t WHERE t.envolvido_id = e.id)
+                             OR EXISTS (SELECT 1 FROM envolvido_infracoes_estatuto s WHERE s.envolvido_id = e.id))
+                    )
+               FROM processos_procedimentos p
+              WHERE p.id = $1::uuid AND p.ativo",
+        )
+        .bind(processo_id)
+        .bind(&request.apuratorio_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .unwrap_or(false);
+        if reclassificaria_enquadramento {
+            return Err(AppError::Domain(
+                "não é possível trocar a espécie porque já há acusação ou indícios registrados"
+                    .to_string(),
+            ));
+        }
+    }
+
+    if config.exige_natureza_fato && request.natureza_fato_id.is_none() {
+        return Err(AppError::Domain(
+            "este apuratorio exige a natureza geral do fato apurado".to_string(),
+        ));
+    }
+
+    // Recusar em vez de ignorar: uma vítima descartada em silêncio some sem
+    // que ninguém saiba. A tela não desenha a seção quando o atributo está
+    // desligado, então esta mensagem só alcança quem chamou o IPC direto.
+    if !config.permite_cadastro_vitima && !request.vitimas.is_empty() {
+        return Err(AppError::Domain(
+            "este apuratório não registra ofendido/vítima".to_string(),
+        ));
+    }
+
+    let enviou_acusacao = request.envolvidos.iter().any(|e| e.acusacoes.is_some());
+    if !config.permite_acusacao && enviou_acusacao {
+        return Err(AppError::Domain(
+            "este apuratório não recebe acusação no cadastro".to_string(),
+        ));
+    }
+
+    if config.permite_acusacao {
+        if !config.permite_acusacao_penal
+            && request.envolvidos.iter().any(|e| {
+                e.acusacoes
+                    .as_ref()
+                    .is_some_and(|a| !a.infracoes_penais.is_empty())
+            })
+        {
+            return Err(AppError::Domain(
+                "este processo admite somente acusações disciplinares do RDPM ou do Estatuto"
+                    .to_string(),
+            ));
+        }
+
+        let quantidade_efetiva = if let Some(processo_id) = request.id.as_deref() {
+            let mut total = 0_i64;
+            for envolvido in &request.envolvidos {
+                total += match &envolvido.acusacoes {
+                    Some(acusacoes) => acusacoes.quantidade() as i64,
+                    None => sqlx::query_scalar(
+                        "SELECT
+                            (SELECT count(*) FROM envolvido_infracoes_penais p WHERE p.envolvido_id = e.id)
+                          + (SELECT count(*) FROM envolvido_transgressoes t WHERE t.envolvido_id = e.id)
+                          + (SELECT count(*) FROM envolvido_infracoes_estatuto s WHERE s.envolvido_id = e.id)
+                           FROM processo_envolvidos e
+                          WHERE e.processo_id = $1::uuid
+                            AND (($2::uuid IS NOT NULL AND e.id = $2::uuid)
+                              OR ($2::uuid IS NULL AND $3::uuid IS NOT NULL
+                                  AND e.policial_militar_id = $3::uuid)
+                              OR ($2::uuid IS NULL AND $3::uuid IS NULL
+                                  AND e.policial_militar_id IS NULL))",
+                    )
+                    .bind(processo_id)
+                    .bind(envolvido.id.as_deref())
+                    .bind(envolvido.policial_militar_id.as_deref())
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .unwrap_or(0),
+                };
+            }
+            total
+        } else {
+            request
+                .envolvidos
+                .iter()
+                .filter_map(|e| e.acusacoes.as_ref())
+                .map(|a| a.quantidade() as i64)
+                .sum()
+        };
+
+        if request.id.is_none() {
+            if request.envolvidos.len() != 1 {
+                return Err(AppError::Domain(
+                    "informe o policial militar acusado neste processo".to_string(),
+                ));
+            }
+            if quantidade_efetiva == 0 {
+                return Err(AppError::Domain(
+                    "selecione ao menos uma acusação para o policial militar".to_string(),
+                ));
+            }
+        } else {
+            let processo_id = request.id.as_deref().expect("id verificado acima");
+            let quantidade_atual: i64 = sqlx::query_scalar(
+                "SELECT
+                    (SELECT count(*) FROM envolvido_infracoes_penais p
+                      JOIN processo_envolvidos e ON e.id = p.envolvido_id
+                     WHERE e.processo_id = $1::uuid)
+                  + (SELECT count(*) FROM envolvido_transgressoes t
+                      JOIN processo_envolvidos e ON e.id = t.envolvido_id
+                     WHERE e.processo_id = $1::uuid)
+                  + (SELECT count(*) FROM envolvido_infracoes_estatuto s
+                      JOIN processo_envolvidos e ON e.id = s.envolvido_id
+                     WHERE e.processo_id = $1::uuid)",
+            )
+            .bind(processo_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if quantidade_atual > 0 && quantidade_efetiva == 0 {
+                return Err(AppError::Domain(
+                    "um processo que já possui acusação não pode ficar sem enquadramento"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    // `naturezas_fato.exige_condutor` substitui o
+    // `natureza.toLowerCase().includes('sinistro de trânsito')` do frontend legado.
+    if let Some(natureza_id) = request.natureza_fato_id.as_deref() {
+        let exige_condutor: bool =
+            sqlx::query_scalar("SELECT exige_condutor FROM naturezas_fato WHERE id = $1::uuid")
+                .bind(natureza_id)
+                .fetch_optional(&mut **tx)
+                .await?
+                .ok_or_else(|| {
+                    AppError::Domain("natureza geral do fato nao encontrada".to_string())
+                })?;
+
+        if exige_condutor && !request.envolvidos.iter().any(|e| e.e_condutor) {
+            return Err(AppError::Domain(
+                "esta natureza exige indicar o PM condutor entre os envolvidos".to_string(),
+            ));
+        }
+    }
+
+    if config.codigo_extensao.as_deref() == Some(EXTENSAO_CARTA_PRECATORIA)
+        && request.carta_precatoria.is_none()
+    {
+        return Err(AppError::Domain(
+            "este apuratorio exige deprecante e unidade deprecada".to_string(),
+        ));
+    }
+
+    // Papéis obrigatórios do apuratório precisam estar designados.
+    let faltando: Vec<String> = sqlx::query_scalar(
+        "SELECT pap.nome
+           FROM apuratorio_papeis ap
+           JOIN papeis_processo pap ON pap.id = ap.papel_id
+          WHERE ap.apuratorio_id = $1::uuid AND ap.obrigatorio AND ap.ativo
+            AND NOT (ap.papel_id::text = ANY($2::text[]))",
+    )
+    .bind(&request.apuratorio_id)
+    .bind(
+        request
+            .designacoes
+            .iter()
+            .map(|d| d.papel_id.clone())
+            .collect::<Vec<_>>(),
+    )
+    .fetch_all(&mut **tx)
     .await?;
-
-    let (responsavel_id, responsavel_nome) = row
-        .ok_or_else(|| AppError::Domain("Processo nao encontrado".to_string()))?;
-
-    let entry = serde_json::json!({
-        "id": responsavel_id,
-        "nome": responsavel_nome.unwrap_or_default(),
-        "data_substituicao": chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
-        "justificativa": req.justificativa,
-    });
-
-    let entry_str = serde_json::to_string(&entry)
-        .map_err(|e| AppError::Domain(format!("falha ao serializar historico: {e}")))?;
-
-    sqlx::query(&format!(
-        r#"UPDATE {table}
-           SET responsavel_id = $2::uuid,
-               historico_encarregados = coalesce(historico_encarregados, '[]'::jsonb)
-                                        || jsonb_build_array($3::jsonb),
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = $1::uuid AND coalesce(ativo, true) = true"#
-    ))
-    .bind(&req.id)
-    .bind(&req.novo_responsavel_id)
-    .bind(&entry_str)
-    .execute(&mut **tx)
-    .await?;
+    if !faltando.is_empty() {
+        return Err(AppError::Domain(format!(
+            "Falta designar quem responde por: {}. Esta espécie de apuratório exige.",
+            faltando.join(", ")
+        )));
+    }
 
     Ok(())
 }
 
-pub async fn pads_solutions(
-    pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<Vec<PadsSolutionCount>, sqlx::Error> {
-    sqlx::query_as::<_, PadsSolutionCount>(
-        r#"
-        SELECT solucao_tipo, count(*)::bigint AS quantidade
-        FROM v_processos
-        WHERE coalesce(ativo, true) = true
-          AND tipo_detalhe = 'PADS'
-          AND coalesce(concluido, false) = true
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM data_instauracao)::bigint = $1::bigint)
-        GROUP BY solucao_tipo
-        ORDER BY quantidade DESC
-        "#,
-    )
-    .bind(ano.map(|a| a as i64))
-    .fetch_all(pool)
-    .await
-}
+/// Grava o processo inteiro numa transação: cabeçalho, extensão, envolvidos,
+/// designações e pessoas. Na criação, o prazo inicial nasce junto quando há data
+/// de recebimento.
+///
+/// Uma tabela só — não existe mais o `match tipo_detalhe` que escolhia entre dez
+/// tabelas físicas nem a segunda escrita no hub de identidade.
+pub async fn save(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveProceedingRequest,
+) -> Result<String, AppError> {
+    let config = config_apuratorio(tx, &request.apuratorio_id).await?;
+    validar_contra_configuracao(tx, request, &config).await?;
 
-pub async fn ipm_evidence_stats(
-    pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<IpmEvidenceStats, sqlx::Error> {
-    #[derive(sqlx::FromRow)]
-    struct Row {
-        crimes_cpm: i64,
-        transgressoes_rdpm: i64,
-        transgressoes_art29: i64,
-        sem_indicios: i64,
+    if let Some(subunidade_id) = request.subunidade_secao_origem_id.as_deref() {
+        let pertence: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                 SELECT 1 FROM subunidades_secoes
+                  WHERE id = $1::uuid AND unidade_pm_id = $2::uuid
+             )",
+        )
+        .bind(subunidade_id)
+        .bind(&request.unidade_origem_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !pertence {
+            return Err(AppError::Domain(
+                "A subunidade/seção escolhida não pertence à unidade de origem informada."
+                    .to_string(),
+            ));
+        }
     }
 
-    let row: Row = sqlx::query_as(
-        r#"
-        SELECT
-          count(*) FILTER (
-            WHERE 'crimes_cpm' = ANY(
-              SELECT jsonb_array_elements_text(pei.categorias_indicios)
-            )
-          )::bigint AS crimes_cpm,
-          count(*) FILTER (
-            WHERE 'transgressoes_rdpm' = ANY(
-              SELECT jsonb_array_elements_text(pei.categorias_indicios)
-            )
-          )::bigint AS transgressoes_rdpm,
-          count(*) FILTER (
-            WHERE 'transgressoes_art29' = ANY(
-              SELECT jsonb_array_elements_text(pei.categorias_indicios)
-            )
-          )::bigint AS transgressoes_art29,
-          count(*) FILTER (
-            WHERE NOT EXISTS (
-              SELECT 1 FROM pm_envolvido_indicios pei2
-              WHERE pei2.pm_envolvido_id = ppe.id
-                AND coalesce(pei2.ativo, true) = true
-            )
-          )::bigint AS sem_indicios
-        FROM procedimento_pms_envolvidos ppe
-        LEFT JOIN pm_envolvido_indicios pei
-          ON pei.pm_envolvido_id = ppe.id AND coalesce(pei.ativo, true) = true
-        JOIN v_processos p ON p.id = ppe.procedimento_id
-        WHERE coalesce(p.ativo, true) = true
-          AND p.tipo_detalhe IN ('IPM', 'IPPM')
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1::bigint)
-        "#,
-    )
-    .bind(ano.map(|a| a as i64))
-    .fetch_one(pool)
-    .await?;
+    let numero_controle = request
+        .numero_controle
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
-    Ok(IpmEvidenceStats {
-        crimes_cpm: row.crimes_cpm,
-        transgressoes_rdpm: row.transgressoes_rdpm,
-        transgressoes_art29: row.transgressoes_art29,
-        sem_indicios: row.sem_indicios,
-    })
-}
-
-pub async fn common_crimes_stats(
-    pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<Vec<CommonCrimeItem>, sqlx::Error> {
-    sqlx::query_as::<_, CommonCrimeItem>(
-        r#"
-        SELECT
-            (cc.dispositivo_legal || ' - Art. ' || cc.artigo) AS artigo,
-            cc.descricao_artigo AS descricao,
-            CASE WHEN ti.codigo = 'Crime' THEN 'Crime Comum' ELSE 'Contravenção Penal' END AS classificacao,
-            COUNT(pec.id)::bigint AS quantidade
-        FROM v_processos p
-        JOIN pm_envolvido_indicios pei ON pei.procedimento_id = p.id
-        JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
-        JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
-        LEFT JOIN tipos_infracao_penal ti ON ti.id = cc.tipo_id
-        WHERE coalesce(p.ativo, true) = true
-          AND p.tipo_detalhe IN ('IPM', 'IPPM', 'SR')
-          AND cc.dispositivo_legal IN ('Código Penal', 'Lei de Contravenções Penais')
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-        GROUP BY cc.artigo, cc.descricao_artigo, cc.dispositivo_legal, ti.codigo
-        ORDER BY quantidade DESC, cc.artigo
-        "#,
-    )
-    .bind(ano.map(|a| a as i64))
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn sr_evidence_stats(
-    pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<SrEvidenceStats, sqlx::Error> {
-    let ano_val = ano.map(|a| a as i64);
-    let base_filter = "coalesce(p.ativo, true) = true AND p.tipo_detalhe = 'SR' AND coalesce(p.concluido, false) = true";
-
-    let (crimes_comuns,): (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(pec.id)::bigint
-        FROM v_processos p
-        JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
-        JOIN pm_envolvido_crimes pec ON pec.pm_indicios_id = i.id
-        JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
-        WHERE {base_filter}
-          AND cc.dispositivo_legal IN ('Código Penal', 'Lei de Contravenções Penais')
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-        "#
-    ))
-    .bind(ano_val)
-    .fetch_one(pool)
-    .await?;
-
-    let (rdpm_count,): (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(r.id)::bigint
-        FROM v_processos p
-        JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
-        JOIN pm_envolvido_rdpm r ON r.pm_indicios_id = i.id
-        WHERE {base_filter}
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-        "#
-    ))
-    .bind(ano_val)
-    .fetch_one(pool)
-    .await?;
-
-    let (art29_count,): (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(a.id)::bigint
-        FROM v_processos p
-        JOIN pm_envolvido_indicios i ON i.procedimento_id = p.id
-        JOIN pm_envolvido_art29 a ON a.pm_indicios_id = i.id
-        WHERE {base_filter}
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-        "#
-    ))
-    .bind(ano_val)
-    .fetch_one(pool)
-    .await?;
-
-    let (sem_indicios,): (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT ppe.id)::bigint
-        FROM procedimento_pms_envolvidos ppe
-        LEFT JOIN pm_envolvido_indicios pei
-          ON pei.pm_envolvido_id = ppe.id AND coalesce(pei.ativo, true) = true
-        JOIN v_processos p ON p.id = ppe.procedimento_id
-        WHERE {base_filter}
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-          AND pei.id IS NULL
-        "#
-    ))
-    .bind(ano_val)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(SrEvidenceStats {
-        crimes_comuns,
-        transgressoes: rdpm_count + art29_count,
-        sem_indicios,
-    })
-}
-
-pub async fn top10_transgressions(
-    pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<Vec<TopTransgressionItem>, sqlx::Error> {
-    sqlx::query_as::<_, TopTransgressionItem>(
-        r#"
-        WITH rdpm_counts AS (
-            SELECT t.id::text AS transgressao_id,
-                   'RDPM Art. ' ||
-                   CASE nt.codigo WHEN 'leve' THEN '15' WHEN 'media' THEN '16' WHEN 'grave' THEN '17' ELSE '?' END
-                   || ', Inc. ' || coalesce(t.inciso, '') AS artigo_label,
-                   LEFT(t.texto, 50) AS descricao_curta,
-                   COUNT(*)::bigint AS quantidade
-            FROM pm_envolvido_rdpm r
-            JOIN pm_envolvido_indicios i ON r.pm_indicios_id = i.id
-            JOIN v_processos p ON i.procedimento_id = p.id
-            JOIN transgressoes t ON r.transgressao_id = t.id
-            JOIN natureza_transgressao nt ON nt.id = t.gravidade_id
-            WHERE coalesce(p.ativo, true) = true
-              AND p.tipo_detalhe IN ('IPM', 'IPPM', 'SR')
-              AND coalesce(p.concluido, false) = true
-              AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-            GROUP BY t.id, t.inciso, nt.codigo, t.texto
-        ),
-        art29_counts AS (
-            SELECT a.id::text AS transgressao_id,
-                   'Art. 29, Inc. ' || coalesce(a.inciso, '') AS artigo_label,
-                   LEFT(a.texto, 50) AS descricao_curta,
-                   COUNT(*)::bigint AS quantidade
-            FROM pm_envolvido_art29 pa
-            JOIN pm_envolvido_indicios i ON pa.pm_indicios_id = i.id
-            JOIN v_processos p ON i.procedimento_id = p.id
-            JOIN infracoes_estatuto_art29 a ON pa.art29_id = a.id
-            WHERE coalesce(p.ativo, true) = true
-              AND p.tipo_detalhe IN ('IPM', 'IPPM', 'SR')
-              AND coalesce(p.concluido, false) = true
-              AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-            GROUP BY a.id, a.inciso, a.texto
+    // A data anterior precisa ser lida antes do UPDATE para que a sincronização
+    // do prazo saiba distinguir uma edição comum de uma tentativa de reescrever
+    // uma cadeia que já possui prorrogações.
+    let data_recebimento_anterior: Option<Option<chrono::NaiveDate>> = if let Some(id) =
+        request.id.as_deref()
+    {
+        let (
+            anterior,
+            tem_prorrogacao,
+            remessa_encarregado,
+            remessa_comissao,
+            julgamento,
+            conclusao,
+        ): (
+            Option<chrono::NaiveDate>,
+            bool,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+            Option<chrono::NaiveDate>,
+        ) = sqlx::query_as(
+            "SELECT p.data_recebimento,
+                        EXISTS (SELECT 1 FROM processo_prazos pr
+                                 WHERE pr.processo_id = p.id AND pr.ordem > 0),
+                        p.data_remessa_encarregado, p.data_remessa_comissao,
+                        p.data_julgamento, p.data_conclusao
+                   FROM processos_procedimentos p
+                  WHERE p.id = $1::uuid AND p.ativo",
         )
-        SELECT transgressao_id, artigo_label, descricao_curta, SUM(quantidade)::bigint AS quantidade
-        FROM (SELECT * FROM rdpm_counts UNION ALL SELECT * FROM art29_counts) combined
-        GROUP BY transgressao_id, artigo_label, descricao_curta
-        ORDER BY quantidade DESC
-        LIMIT 10
-        "#,
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
+
+        validar_ordem_datas(
+            request.data_instauracao,
+            request.data_recebimento,
+            remessa_encarregado,
+            remessa_comissao,
+            julgamento,
+            conclusao,
+        )
+        .map_err(AppError::Domain)?;
+
+        // A verificacao vem antes de qualquer UPDATE: assim nenhuma
+        // constraint atingida mais adiante mascara a regra com o fallback
+        // generico de banco de dados.
+        if tem_prorrogacao && anterior != request.data_recebimento {
+            return Err(AppError::Domain(
+                    "A data de recebimento não pode ser alterada porque este apuratório já possui prorrogação de prazo.".to_string(),
+                ));
+        }
+        Some(anterior)
+    } else {
+        None
+    };
+
+    // Trocar o apuratório de um processo que já tem designações é impossível:
+    // `processo_designacoes` amarra `(processo_id, apuratorio_id)` por FK
+    // composta e as designações NUNCA são apagadas — são registro histórico de
+    // quem respondeu pelo apuratório e quando. Sem esta verificação o usuário
+    // recebia a violação de FK crua do PostgreSQL na tela.
+    if let Some(id) = request.id.as_deref() {
+        let conflito: Option<String> = sqlx::query_scalar(
+            "SELECT a.sigla
+               FROM processos_procedimentos p
+               JOIN apuratorios a ON a.id = p.apuratorio_id
+              WHERE p.id = $1::uuid
+                AND p.apuratorio_id <> $2::uuid
+                AND EXISTS (SELECT 1 FROM processo_designacoes d WHERE d.processo_id = p.id)",
+        )
+        .bind(id)
+        .bind(&request.apuratorio_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some(sigla) = conflito {
+            return Err(AppError::Domain(format!(
+                "este apuratório já tem designações registradas como {sigla}; não é possível trocar a espécie do apuratório"
+            )));
+        }
+    }
+
+    let id: String = match request.id.as_deref() {
+        Some(id) => sqlx::query_scalar(
+            "UPDATE processos_procedimentos SET
+                     apuratorio_id = $2::uuid, documento_iniciador_id = $3::uuid,
+                     numero_documento = $4, numero_controle = $5, processo_sei = $6,
+                     numero_rgf = $7, unidade_origem_id = $8::uuid,
+                     subunidade_secao_origem_id = $9::uuid,
+                     municipio_fato_id = $10::uuid, natureza_fato_id = $11::uuid,
+                     data_instauracao = $12, data_recebimento = $13,
+                     resumo_fatos = $14,
+                     updated_at = now()
+                 WHERE id = $1::uuid AND ativo
+             RETURNING id::text",
+        )
+        .bind(id)
+        .bind(&request.apuratorio_id)
+        .bind(&request.documento_iniciador_id)
+        .bind(request.numero_documento.trim())
+        .bind(numero_controle)
+        .bind(request.processo_sei.as_deref())
+        .bind(request.numero_rgf.as_deref())
+        .bind(&request.unidade_origem_id)
+        .bind(request.subunidade_secao_origem_id.as_deref())
+        .bind(&request.municipio_fato_id)
+        .bind(request.natureza_fato_id.as_deref())
+        .bind(request.data_instauracao)
+        .bind(request.data_recebimento)
+        .bind(request.resumo_fatos.as_deref())
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?,
+        None => {
+            sqlx::query_scalar(
+                "INSERT INTO processos_procedimentos
+                     (apuratorio_id, documento_iniciador_id, numero_documento, numero_controle,
+                      processo_sei, numero_rgf, unidade_origem_id,
+                      subunidade_secao_origem_id, municipio_fato_id,
+                      natureza_fato_id, data_instauracao, data_recebimento, resumo_fatos)
+                 VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid,
+                         $9::uuid, $10::uuid, $11, $12, $13)
+             RETURNING id::text",
+            )
+            .bind(&request.apuratorio_id)
+            .bind(&request.documento_iniciador_id)
+            .bind(request.numero_documento.trim())
+            .bind(numero_controle)
+            .bind(request.processo_sei.as_deref())
+            .bind(request.numero_rgf.as_deref())
+            .bind(&request.unidade_origem_id)
+            .bind(request.subunidade_secao_origem_id.as_deref())
+            .bind(&request.municipio_fato_id)
+            .bind(request.natureza_fato_id.as_deref())
+            .bind(request.data_instauracao)
+            .bind(request.data_recebimento)
+            .bind(request.resumo_fatos.as_deref())
+            .fetch_one(&mut **tx)
+            .await?
+        }
+    };
+
+    gravar_extensao(tx, &id, request, &config).await?;
+    gravar_envolvidos(tx, &id, request).await?;
+    gravar_designacoes(tx, &id, request).await?;
+    gravar_pessoas(tx, &id, request).await?;
+    gravar_vitimas(tx, &id, request, &config).await?;
+
+    match data_recebimento_anterior {
+        Some(anterior) => {
+            deadlines_repository::sync_initial(
+                tx,
+                &id,
+                anterior,
+                request.data_recebimento,
+                &request.apuratorio_id,
+                &request.documento_iniciador_id,
+            )
+            .await?;
+        }
+        None => {
+            if let Some(data_recebimento) = request.data_recebimento {
+                let (dias, _) = deadlines_repository::dias_base(
+                    &mut **tx,
+                    &request.apuratorio_id,
+                    &request.documento_iniciador_id,
+                )
+                .await?;
+                deadlines_repository::create_initial(tx, &id, data_recebimento, dias).await?;
+            }
+        }
+    }
+
+    Ok(id)
+}
+
+async fn gravar_extensao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    config: &ConfigApuratorio,
+) -> Result<(), AppError> {
+    // Trocar o apuratório de um processo pode deixar uma extensão órfã.
+    if config.codigo_extensao.as_deref() != Some(EXTENSAO_CARTA_PRECATORIA) {
+        sqlx::query("DELETE FROM carta_precatoria_detalhes WHERE processo_id = $1::uuid")
+            .bind(processo_id)
+            .execute(&mut **tx)
+            .await?;
+        return Ok(());
+    }
+
+    let Some(cp) = &request.carta_precatoria else {
+        return Ok(());
+    };
+    sqlx::query(
+        "INSERT INTO carta_precatoria_detalhes (processo_id, deprecante, unidade_deprecada_id)
+         VALUES ($1::uuid, $2, $3::uuid)
+         ON CONFLICT (processo_id) DO UPDATE
+            SET deprecante = EXCLUDED.deprecante,
+                unidade_deprecada_id = EXCLUDED.unidade_deprecada_id,
+                updated_at = now()",
     )
-    .bind(ano.map(|a| a as i64))
-    .fetch_all(pool)
+    .bind(processo_id)
+    .bind(cp.deprecante.trim())
+    .bind(&cp.unidade_deprecada_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Substitui a lista de envolvidos. Quem sai leva junto o próprio enquadramento,
+/// por `ON DELETE CASCADE` nas quatro associativas — que é o comportamento certo:
+/// o vínculo não tem significado sem o envolvido.
+async fn gravar_envolvidos(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+) -> Result<(), AppError> {
+    let manter_ids: Vec<String> = request
+        .envolvidos
+        .iter()
+        .filter_map(|e| e.id.clone())
+        .collect();
+    // Compatibilidade com clientes anteriores ao id no request: uma linha sem
+    // id ainda encontra o vínculo pelo PM. O frontend atual sempre manda o id
+    // ao editar, inclusive para o marcador "À apurar".
+    let manter_pms_sem_id: Vec<String> = request
+        .envolvidos
+        .iter()
+        .filter(|e| e.id.is_none())
+        .filter_map(|e| e.policial_militar_id.clone())
+        .collect();
+    let manter_a_apurar_sem_id = request
+        .envolvidos
+        .iter()
+        .any(|e| e.id.is_none() && e.policial_militar_id.is_none());
+
+    sqlx::query(
+        "DELETE FROM processo_envolvidos
+          WHERE processo_id = $1::uuid
+            AND NOT (id::text = ANY($2::text[])
+                  OR policial_militar_id::text = ANY($3::text[])
+                  OR ($4 AND policial_militar_id IS NULL))",
+    )
+    .bind(processo_id)
+    .bind(&manter_ids)
+    .bind(&manter_pms_sem_id)
+    .bind(manter_a_apurar_sem_id)
+    .execute(&mut **tx)
+    .await?;
+
+    // Identificados vêm primeiro. Assim a transição simultânea
+    // "À apurar" -> PM e PM -> "À apurar" libera o único NULL antes de criá-lo.
+    let ordenados = request
+        .envolvidos
+        .iter()
+        .filter(|e| e.policial_militar_id.is_some())
+        .chain(
+            request
+                .envolvidos
+                .iter()
+                .filter(|e| e.policial_militar_id.is_none()),
+        );
+
+    for envolvido in ordenados {
+        let envolvido_id = if let Some(id) = envolvido.id.as_deref() {
+            sqlx::query_scalar::<_, String>(
+                "UPDATE processo_envolvidos
+                    SET policial_militar_id = $3::uuid,
+                        status_envolvido_id = $4::uuid,
+                        ordem = $5,
+                        e_condutor = $6,
+                        updated_at = now()
+                  WHERE id = $1::uuid AND processo_id = $2::uuid
+              RETURNING id::text",
+            )
+            .bind(id)
+            .bind(processo_id)
+            .bind(envolvido.policial_militar_id.as_deref())
+            .bind(&envolvido.status_envolvido_id)
+            .bind(envolvido.ordem)
+            .bind(envolvido.e_condutor)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| {
+                AppError::Domain(
+                    "Um dos envolvidos não pertence mais a este apuratório. Recarregue a página."
+                        .to_string(),
+                )
+            })?
+        } else {
+            let existente: Option<String> = sqlx::query_scalar(
+                "SELECT id::text FROM processo_envolvidos
+                  WHERE processo_id = $1::uuid
+                    AND policial_militar_id IS NOT DISTINCT FROM $2::uuid",
+            )
+            .bind(processo_id)
+            .bind(envolvido.policial_militar_id.as_deref())
+            .fetch_optional(&mut **tx)
+            .await?;
+
+            match existente {
+                Some(id) => {
+                    sqlx::query(
+                        "UPDATE processo_envolvidos
+                            SET status_envolvido_id = $2::uuid,
+                                ordem = $3,
+                                e_condutor = $4,
+                                updated_at = now()
+                          WHERE id = $1::uuid",
+                    )
+                    .bind(&id)
+                    .bind(&envolvido.status_envolvido_id)
+                    .bind(envolvido.ordem)
+                    .bind(envolvido.e_condutor)
+                    .execute(&mut **tx)
+                    .await?;
+                    id
+                }
+                None => {
+                    sqlx::query_scalar(
+                        "INSERT INTO processo_envolvidos
+                             (processo_id, policial_militar_id, status_envolvido_id, ordem, e_condutor)
+                         VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)
+                      RETURNING id::text",
+                    )
+                    .bind(processo_id)
+                    .bind(envolvido.policial_militar_id.as_deref())
+                    .bind(&envolvido.status_envolvido_id)
+                    .bind(envolvido.ordem)
+                    .bind(envolvido.e_condutor)
+                    .fetch_one(&mut **tx)
+                    .await?
+                }
+            }
+        };
+
+        if let Some(acusacoes) = &envolvido.acusacoes {
+            evidence_repository::save_acusacoes(tx, &envolvido_id, acusacoes).await?;
+        }
+    }
+    Ok(())
+}
+
+/// O que já está gravado para o processo, com o que decide se ainda pode mudar.
+#[derive(sqlx::FromRow)]
+struct DesignacaoGravada {
+    id: String,
+    papel_id: String,
+    papel: String,
+    policial_militar_id: String,
+    /// `data_fim` preenchida: o militar já saiu do papel. É histórico puro.
+    encerrada: bool,
+    /// Nasceu de uma substituição. Vigente, mas fora do alcance do cadastro.
+    e_substituicao: bool,
+}
+
+impl DesignacaoGravada {
+    /// Designação que o formulário do processo não altera nem remove. As duas
+    /// razões são diferentes e as duas valem: já terminou, ou já é elo de uma
+    /// cadeia. Mexer em qualquer das duas reescreveria fato registrado —
+    /// princípio 5. A troca de ocupante existe, mas é pela página de detalhes,
+    /// que preserva a cadeia.
+    fn imutavel(&self) -> bool {
+        self.encerrada || self.e_substituicao
+    }
+}
+
+/// Um papel previsto para o apuratório, como o cadastro o configurou.
+#[derive(sqlx::FromRow)]
+struct PapelConfigurado {
+    papel_id: String,
+    papel: String,
+    max_ocupantes: i32,
+    ativo: bool,
+}
+
+/// As regras de designação que dependem do cadastro do apuratório, verificadas
+/// ANTES de qualquer escrita.
+///
+/// Sem isto, cada uma destas situações chegava ao usuário como a frase genérica
+/// do banco: a FK composta recusando um papel que a espécie não prevê, e o
+/// `tg_max_ocupantes` — que, por ser `DEFERRABLE`, só falha no `commit`, longe
+/// da linha que a causou. A aplicação sabe qual linha está errada; é ela que
+/// deve dizer.
+async fn validar_designacoes(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveProceedingRequest,
+) -> Result<(), AppError> {
+    let configurados = sqlx::query_as::<_, PapelConfigurado>(
+        "SELECT ap.papel_id::text AS papel_id,
+                pap.nome          AS papel,
+                ap.max_ocupantes  AS max_ocupantes,
+                ap.ativo          AS ativo
+           FROM apuratorio_papeis ap
+           JOIN papeis_processo pap ON pap.id = ap.papel_id
+          WHERE ap.apuratorio_id = $1::uuid",
+    )
+    .bind(&request.apuratorio_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for designacao in &request.designacoes {
+        let Some(config) = configurados
+            .iter()
+            .find(|c| c.papel_id == designacao.papel_id)
+        else {
+            return Err(AppError::Domain(
+                "A função escolhida não está prevista para esta espécie de apuratório. \
+                 Cadastre-a em Catálogos → Apuratórios ou escolha outra."
+                    .to_string(),
+            ));
+        };
+
+        // Papel desativado continua valendo para quem já o exercia (princípio
+        // 6), mas não recebe designação nova.
+        if !config.ativo && designacao.id.is_none() {
+            return Err(AppError::Domain(format!(
+                "A função {} foi desativada e não aceita novas designações.",
+                config.papel
+            )));
+        }
+
+        let informados = request
+            .designacoes
+            .iter()
+            .filter(|d| d.papel_id == designacao.papel_id)
+            .count();
+        if informados > config.max_ocupantes as usize {
+            return Err(AppError::Domain(format!(
+                "A função {} aceita no máximo {} ocupante(s) ao mesmo tempo, e foram informados {}.",
+                config.papel, config.max_ocupantes, informados
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Sincroniza as designações **iniciais** do processo, pelo id de cada uma.
+///
+/// Antes disto a função só inseria o que não existisse, e o formulário não
+/// tinha como corrigir um encarregado lançado errado: reeditar com outro militar
+/// criava uma segunda designação vigente em vez de arrumar a primeira. O `id`
+/// que `DesignacaoRequest` passou a carregar é o que dá alvo ao UPDATE.
+///
+/// Três campos não vêm do formulário porque não são digitados — são derivados do
+/// cabeçalho do processo, e rederivados a cada gravação:
+///
+/// - `data_inicio` = data de instauração. Corrigir a instauração move junto o
+///   início de quem ainda não tem histórico, pelo mesmo motivo que
+///   `deadlines::sync_initial` move o prazo inicial quando o recebimento muda:
+///   uma informação, uma fonte de verdade (princípio 4).
+/// - `documento_autorizador_id` e `numero_documento` = o documento que instaurou
+///   o processo, que é o que de fato designou o encarregado inicial.
+///
+/// **O que a função nunca toca**: designação encerrada e designação nascida de
+/// substituição. Ver `DesignacaoGravada::imutavel`.
+async fn gravar_designacoes(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+) -> Result<(), AppError> {
+    validar_designacoes(tx, request).await?;
+
+    // `FOR UPDATE` porque a decisão de cada linha (atualizar, apagar, recusar)
+    // depende do estado lido: sem o travamento, uma substituição concorrente
+    // poderia transformar uma linha livre em elo de cadeia entre a leitura e a
+    // escrita, e o cadastro a apagaria por baixo da substituição.
+    let gravadas = sqlx::query_as::<_, DesignacaoGravada>(
+        "SELECT d.id::text                        AS id,
+                d.papel_id::text                  AS papel_id,
+                pap.nome                          AS papel,
+                d.policial_militar_id::text       AS policial_militar_id,
+                d.data_fim IS NOT NULL            AS encerrada,
+                d.designacao_anterior_id IS NOT NULL AS e_substituicao
+           FROM processo_designacoes d
+           JOIN papeis_processo pap ON pap.id = d.papel_id
+          WHERE d.processo_id = $1::uuid
+          ORDER BY d.data_inicio
+            FOR UPDATE OF d",
+    )
+    .bind(processo_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut mantidas: Vec<&str> = Vec::new();
+
+    for designacao in &request.designacoes {
+        let Some(id) = designacao.id.as_deref() else {
+            // Sem `id`, é linha nova — e linha nova não pode repetir alguém que
+            // já ocupa a mesma função. O EXCLUDE do schema também recusaria,
+            // mas falando de "período que se sobrepõe", que não é o que o
+            // usuário fez: ele acrescentou uma designação repetida.
+            if let Some(repetida) = gravadas.iter().find(|g| {
+                !g.encerrada
+                    && g.papel_id == designacao.papel_id
+                    && g.policial_militar_id == designacao.policial_militar_id
+            }) {
+                return Err(AppError::Domain(format!(
+                    "Este policial militar já está designado como {} neste apuratório.",
+                    repetida.papel
+                )));
+            }
+            inserir_designacao(tx, processo_id, request, designacao).await?;
+            continue;
+        };
+
+        let Some(gravada) = gravadas.iter().find(|g| g.id == id) else {
+            return Err(AppError::Domain(
+                "Uma das designações não existe mais neste apuratório. \
+                 Recarregue a página antes de salvar."
+                    .to_string(),
+            ));
+        };
+        mantidas.push(id);
+
+        if gravada.imutavel() {
+            // Chegou até aqui contornando a tela, que a mostra bloqueada. Se
+            // nada mudou é ruído inofensivo do formulário reenviando o que leu;
+            // se mudou, é a alteração que a cadeia não admite.
+            if gravada.papel_id != designacao.papel_id
+                || gravada.policial_militar_id != designacao.policial_militar_id
+            {
+                return Err(AppError::Domain(format!(
+                    "A designação de {} já tem histórico de substituição e não pode ser alterada aqui. \
+                     Use Substituir, na página de detalhes do apuratório.",
+                    gravada.papel
+                )));
+            }
+            continue;
+        }
+
+        // Só quem entra agora precisa estar ativo. Reeditar um processo cujo
+        // encarregado foi desativado depois não pode virar um erro.
+        if gravada.policial_militar_id != designacao.policial_militar_id {
+            exigir_militar_ativo(tx, &designacao.policial_militar_id).await?;
+        }
+        atualizar_designacao(tx, processo_id, request, designacao, id).await?;
+    }
+
+    for gravada in &gravadas {
+        // Designação encerrada é histórico e nunca viaja no formulário: a tela
+        // só manda as vigentes. Ausência dela aqui não significa remoção.
+        if gravada.encerrada || mantidas.contains(&gravada.id.as_str()) {
+            continue;
+        }
+        if gravada.imutavel() {
+            return Err(AppError::Domain(format!(
+                "A designação de {} nasceu de uma substituição e não pode ser removida aqui. \
+                 Desfaça a substituição na página de detalhes do apuratório.",
+                gravada.papel
+            )));
+        }
+        sqlx::query("DELETE FROM processo_designacoes WHERE id = $1::uuid")
+            .bind(&gravada.id)
+            .execute(&mut **tx)
+            .await?;
+    }
+
+    Ok(())
+}
+
+async fn inserir_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    designacao: &DesignacaoRequest,
+) -> Result<(), AppError> {
+    exigir_militar_ativo(tx, &designacao.policial_militar_id).await?;
+    sqlx::query(
+        "INSERT INTO processo_designacoes
+             (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
+              documento_autorizador_id, numero_documento, motivo)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
+                 CASE WHEN (SELECT usa_documento_designacao
+                                   FROM apuratorio_papeis
+                                  WHERE apuratorio_id = $2::uuid AND papel_id = $4::uuid)
+                      THEN $6::uuid END,
+                 CASE WHEN (SELECT usa_documento_designacao
+                                   FROM apuratorio_papeis
+                                  WHERE apuratorio_id = $2::uuid AND papel_id = $4::uuid)
+                      THEN $7 END,
+                 $8)",
+    )
+    .bind(processo_id)
+    .bind(&request.apuratorio_id)
+    .bind(&designacao.policial_militar_id)
+    .bind(&designacao.papel_id)
+    .bind(request.data_instauracao)
+    .bind(&request.documento_iniciador_id)
+    .bind(request.numero_documento.trim())
+    .bind(MOTIVO_DESIGNACAO_INICIAL)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn atualizar_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    designacao: &DesignacaoRequest,
+    id: &str,
+) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE processo_designacoes
+            SET policial_militar_id      = $3::uuid,
+                papel_id                 = $4::uuid,
+                data_inicio              = $5,
+                documento_autorizador_id = CASE WHEN (SELECT usa_documento_designacao
+                                                         FROM apuratorio_papeis
+                                                        WHERE apuratorio_id = $9::uuid
+                                                          AND papel_id = $4::uuid)
+                                                   THEN $6::uuid END,
+                numero_documento         = CASE WHEN (SELECT usa_documento_designacao
+                                                         FROM apuratorio_papeis
+                                                        WHERE apuratorio_id = $9::uuid
+                                                          AND papel_id = $4::uuid)
+                                                   THEN $7 END,
+                motivo                   = $8,
+                updated_at               = now()
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(id)
+    .bind(processo_id)
+    .bind(&designacao.policial_militar_id)
+    .bind(&designacao.papel_id)
+    .bind(request.data_instauracao)
+    .bind(&request.documento_iniciador_id)
+    .bind(request.numero_documento.trim())
+    .bind(MOTIVO_DESIGNACAO_INICIAL)
+    .bind(&request.apuratorio_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Militar desativado não recebe designação nova.
+///
+/// A recíproca **não** vale, e é por isso que a checagem está aqui e não na
+/// leitura: quem já exercia um papel continua exibido depois de desativado, e
+/// reeditar o processo não pode apagar esse vínculo (princípio 6).
+async fn exigir_militar_ativo(
+    tx: &mut Transaction<'_, Postgres>,
+    policial_militar_id: &str,
+) -> Result<(), AppError> {
+    let ativo: Option<bool> =
+        sqlx::query_scalar("SELECT ativo FROM policiais_militares WHERE id = $1::uuid")
+            .bind(policial_militar_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    match ativo {
+        Some(true) => Ok(()),
+        Some(false) => Err(AppError::Domain(
+            "O policial militar escolhido está desativado e não pode receber designação."
+                .to_string(),
+        )),
+        None => Err(AppError::Domain(
+            "O policial militar escolhido não existe mais no cadastro.".to_string(),
+        )),
+    }
+}
+
+async fn gravar_pessoas(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM processo_pessoas WHERE processo_id = $1::uuid")
+        .bind(processo_id)
+        .execute(&mut **tx)
+        .await?;
+    for pessoa in &request.pessoas {
+        sqlx::query(
+            "INSERT INTO processo_pessoas (processo_id, papel_pessoa_id, nome, ordem)
+             VALUES ($1::uuid, $2::uuid, $3, $4)",
+        )
+        .bind(processo_id)
+        .bind(&pessoa.papel_pessoa_id)
+        .bind(pessoa.nome.trim().to_uppercase())
+        .bind(pessoa.ordem)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Sincroniza os Ofendidos/Vítimas — **somente quando a espécie os registra**.
+///
+/// Com o atributo desligado a função não toca na tabela, nem para apagar. É o
+/// princípio 5 no caso concreto: desligar `permite_cadastro_vitima` de uma
+/// espécie que já registrou ofendidos não apaga nenhum. Eles saem do alcance do
+/// formulário e continuam existindo, do mesmo jeito que a data de julgamento
+/// sobrevive a alguém desligar `permite_julgamento`.
+///
+/// O silêncio nunca é resposta a um pedido: quem MANDA vítima para um
+/// apuratório que não as registra é recusado antes, em
+/// `validar_contra_configuracao`. Aqui só chega lista vazia.
+async fn gravar_vitimas(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    request: &SaveProceedingRequest,
+    config: &ConfigApuratorio,
+) -> Result<(), AppError> {
+    if !config.permite_cadastro_vitima {
+        return Ok(());
+    }
+    sqlx::query("DELETE FROM processo_vitimas WHERE processo_id = $1::uuid")
+        .bind(processo_id)
+        .execute(&mut **tx)
+        .await?;
+    for vitima in &request.vitimas {
+        sqlx::query(
+            "INSERT INTO processo_vitimas (processo_id, nome, ordem)
+             VALUES ($1::uuid, $2, $3)",
+        )
+        .bind(processo_id)
+        .bind(vitima.nome.trim().to_uppercase())
+        .bind(vitima.ordem)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+// ── Substituição: criar, corrigir e desfazer ─────────────────────────────────
+//
+// As três operam sobre a MESMA cadeia e compartilham o mesmo cuidado: travar as
+// linhas envolvidas com `FOR UPDATE` e reverificar tudo no banco. Nenhuma delas
+// confia no que a tela mandou — o IPC é chamável direto, e duas janelas do app
+// podem estar na mesma página.
+
+/// Uma designação com o que as regras da cadeia precisam saber, já travada.
+#[derive(sqlx::FromRow)]
+struct DesignacaoTravada {
+    id: String,
+    apuratorio_id: String,
+    papel_id: String,
+    papel: String,
+    usa_documento_designacao: bool,
+    policial_militar_id: String,
+    ocupante: String,
+    data_inicio: chrono::NaiveDate,
+    data_fim: Option<chrono::NaiveDate>,
+    designacao_anterior_id: Option<String>,
+}
+
+/// Ids que a substituição mexeu. Os dois são auditados: a antecessora muda de
+/// estado tanto quanto a sucessora, e uma trilha que registrasse só uma das duas
+/// não explicaria o que aconteceu com a outra.
+pub struct SubstituicaoAplicada {
+    pub designacao_id: String,
+    pub anterior_id: String,
+}
+
+/// Lê e trava uma designação do processo. `None` quando o id não é do processo
+/// informado — o que também cobre a tentativa de alcançar designação alheia
+/// passando um id qualquer pelo IPC.
+async fn travar_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<Option<DesignacaoTravada>, AppError> {
+    sqlx::query_as::<_, DesignacaoTravada>(
+        "SELECT d.id::text                    AS id,
+                d.apuratorio_id::text         AS apuratorio_id,
+                d.papel_id::text              AS papel_id,
+                pap.nome                      AS papel,
+                ap.usa_documento_designacao   AS usa_documento_designacao,
+                d.policial_militar_id::text   AS policial_militar_id,
+                pg.sigla || ' ' || pm.matricula || ' ' || pm.nome AS ocupante,
+                d.data_inicio                 AS data_inicio,
+                d.data_fim                    AS data_fim,
+                d.designacao_anterior_id::text AS designacao_anterior_id
+           FROM processo_designacoes d
+           JOIN papeis_processo pap    ON pap.id = d.papel_id
+           JOIN apuratorio_papeis ap   ON ap.apuratorio_id = d.apuratorio_id
+                                      AND ap.papel_id = d.papel_id
+           JOIN policiais_militares pm ON pm.id = d.policial_militar_id
+           JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+          WHERE d.id = $1::uuid AND d.processo_id = $2::uuid
+            FOR UPDATE OF d",
+    )
+    .bind(designacao_id)
+    .bind(processo_id)
+    .fetch_optional(&mut **tx)
     .await
+    .map_err(AppError::from)
 }
 
-pub async fn driver_ranking(
-    _pool: &PgPool,
-    _ano: Option<i32>,
-) -> Result<Vec<DriverRankingItem>, sqlx::Error> {
-    Ok(vec![])
+const DESIGNACAO_AUSENTE: &str = "A designação informada não pertence a este apuratório. \
+                                  Recarregue a página e tente de novo.";
+
+/// Regras comuns a criar e a corrigir uma substituição: quem sai, quem entra e
+/// quando. `antecessora` é sempre a designação que será encerrada na troca.
+async fn validar_troca(
+    tx: &mut Transaction<'_, Postgres>,
+    antecessora: &DesignacaoTravada,
+    sucessor_id: &str,
+    data_troca: chrono::NaiveDate,
+) -> Result<(), AppError> {
+    if data_troca <= antecessora.data_inicio {
+        return Err(AppError::Domain(format!(
+            "A substituição precisa ser posterior a {}, quando {} assumiu como {}.",
+            antecessora.data_inicio.format("%d/%m/%Y"),
+            antecessora.ocupante,
+            antecessora.papel
+        )));
+    }
+    if antecessora.policial_militar_id == sucessor_id {
+        return Err(AppError::Domain(format!(
+            "{} já ocupa a função de {}. Escolha outro policial militar como sucessor.",
+            antecessora.ocupante, antecessora.papel
+        )));
+    }
+    exigir_militar_ativo(tx, sucessor_id).await
 }
 
-pub async fn nature_stats(
-    _pool: &PgPool,
-    _ano: Option<i32>,
-) -> Result<Vec<NatureStatItem>, sqlx::Error> {
-    Ok(vec![])
+/// Encerra uma designação vigente e abre a do sucessor no MESMO dia.
+///
+/// `data_fim` é exclusiva (decisão 6): os períodos se encostam sem sobrepor e
+/// sem lacuna, com uma data só registrada. O vínculo `designacao_anterior_id` é
+/// o que torna a troca reversível depois.
+pub async fn substituir_designacao(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SubstituirDesignacaoRequest,
+) -> Result<SubstituicaoAplicada, AppError> {
+    crate::db::processo::exigir_em_andamento(
+        tx,
+        &request.processo_id,
+        "registrar uma substituição",
+    )
+    .await?;
+    let antecessora = travar_designacao(tx, &request.processo_id, &request.designacao_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    if antecessora.data_fim.is_some() {
+        return Err(AppError::Domain(format!(
+            "A designação de {} como {} já foi encerrada em {}. \
+             Substitua quem está vigente na função.",
+            antecessora.ocupante,
+            antecessora.papel,
+            antecessora
+                .data_fim
+                .expect("data_fim conferida logo acima")
+                .format("%d/%m/%Y")
+        )));
+    }
+
+    validar_troca(tx, &antecessora, &request.sucessor_id, request.data_troca).await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes SET data_fim = $2, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(&antecessora.id)
+    .bind(request.data_troca)
+    .execute(&mut **tx)
+    .await?;
+
+    let documento = antecessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.documento_autorizador_id.as_deref()))
+        .flatten();
+    let numero_documento = antecessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.numero_documento.as_deref()))
+        .flatten();
+    let designacao_id: String = sqlx::query_scalar(
+        "INSERT INTO processo_designacoes
+             (processo_id, apuratorio_id, policial_militar_id, papel_id, data_inicio,
+              documento_autorizador_id, numero_documento, motivo, designacao_anterior_id)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid, $7, $8, $9::uuid)
+      RETURNING id::text",
+    )
+    .bind(&request.processo_id)
+    .bind(&antecessora.apuratorio_id)
+    .bind(&request.sucessor_id)
+    .bind(&antecessora.papel_id)
+    .bind(request.data_troca)
+    .bind(documento)
+    .bind(numero_documento)
+    .bind(request.motivo.trim())
+    .bind(&antecessora.id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id,
+        anterior_id: antecessora.id,
+    })
 }
 
-pub async fn military_crimes_stats(
+/// A substituição que está na ponta da cadeia, travada junto com a antecessora.
+///
+/// "Última" é por CADEIA, não pelo processo nem pelo papel: uma designação
+/// vigente que tem antecessora é a ponta da sua própria cadeia. A diferença
+/// aparece quando um papel admite dois ocupantes — a configuração de Escrivão
+/// prevê isso —, e aí corrigir a troca de um escrivão não pode depender da troca
+/// do outro. Ser vigente (`data_fim IS NULL`) já garante que nada a sucedeu.
+async fn travar_ultima_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<(DesignacaoTravada, DesignacaoTravada), AppError> {
+    let sucessora = travar_designacao(tx, processo_id, designacao_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    let Some(anterior_id) = sucessora.designacao_anterior_id.clone() else {
+        return Err(AppError::Domain(format!(
+            "A designação de {} como {} é a inicial do apuratório, não uma substituição. \
+             Corrija-a pelo cadastro do apuratório.",
+            sucessora.ocupante, sucessora.papel
+        )));
+    };
+
+    if sucessora.data_fim.is_some() {
+        return Err(AppError::Domain(format!(
+            "Esta substituição de {} já foi sucedida por outra. \
+             Desfaça primeiro a substituição mais recente da função.",
+            sucessora.papel
+        )));
+    }
+
+    let anterior = travar_designacao(tx, processo_id, &anterior_id)
+        .await?
+        .ok_or_else(|| AppError::Domain(DESIGNACAO_AUSENTE.to_string()))?;
+
+    Ok((sucessora, anterior))
+}
+
+/// Corrige a última substituição da cadeia sem abrir lacuna nem sobreposição.
+///
+/// A data move as DUAS linhas: é uma data só, o fim da antecessora e o início da
+/// sucessora. Alterar apenas uma delas é o que produziria o buraco — e é também
+/// o que `tg_cadeia_designacao` recusa no `commit`, caso algum caminho futuro
+/// tente.
+pub async fn atualizar_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &AtualizarSubstituicaoRequest,
+) -> Result<SubstituicaoAplicada, AppError> {
+    let (sucessora, anterior) =
+        travar_ultima_substituicao(tx, &request.processo_id, &request.designacao_id).await?;
+
+    validar_troca(tx, &anterior, &request.sucessor_id, request.data_troca).await?;
+
+    let documento = sucessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.documento_autorizador_id.as_deref()))
+        .flatten();
+    let numero_documento = sucessora
+        .usa_documento_designacao
+        .then(|| texto_opcional(request.numero_documento.as_deref()))
+        .flatten();
+
+    sqlx::query(
+        "UPDATE processo_designacoes SET data_fim = $2, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(&anterior.id)
+    .bind(request.data_troca)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes
+            SET policial_militar_id      = $2::uuid,
+                data_inicio              = $3,
+                documento_autorizador_id = $4::uuid,
+                numero_documento         = $5,
+                motivo                   = $6,
+                updated_at               = now()
+          WHERE id = $1::uuid",
+    )
+    .bind(&sucessora.id)
+    .bind(&request.sucessor_id)
+    .bind(request.data_troca)
+    .bind(documento)
+    .bind(numero_documento)
+    .bind(request.motivo.trim())
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id: sucessora.id,
+        anterior_id: anterior.id,
+    })
+}
+
+/// Desfaz a última substituição da cadeia: apaga a sucessora e reabre a
+/// antecessora.
+///
+/// Reabrir é limpar `data_fim` — a vigência é derivada dela, não de uma coluna
+/// `ativo`. Feito isto, a substituição anterior passa a ser a ponta da cadeia e
+/// pode ser desfeita em seguida, uma a uma, de trás para frente. É o mesmo
+/// desenho de `deadlines::delete_extension`.
+pub async fn remover_substituicao(
+    tx: &mut Transaction<'_, Postgres>,
+    processo_id: &str,
+    designacao_id: &str,
+) -> Result<SubstituicaoAplicada, AppError> {
+    let (sucessora, anterior) = travar_ultima_substituicao(tx, processo_id, designacao_id).await?;
+
+    // Nesta ordem: enquanto a sucessora existir, a FK `fk_designacao_anterior`
+    // segura a antecessora — que é exatamente o que impede alguém apagar o meio
+    // da cadeia por fora.
+    sqlx::query("DELETE FROM processo_designacoes WHERE id = $1::uuid")
+        .bind(&sucessora.id)
+        .execute(&mut **tx)
+        .await?;
+
+    sqlx::query(
+        "UPDATE processo_designacoes SET data_fim = NULL, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(&anterior.id)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(SubstituicaoAplicada {
+        designacao_id: sucessora.id,
+        anterior_id: anterior.id,
+    })
+}
+
+/// Campo de texto opcional vindo da tela: em branco é ausência, não string
+/// vazia. Sem isto, um `<input>` intocado gravaria `''` e o documento passaria a
+/// "existir" vazio no histórico.
+fn texto_opcional(valor: Option<&str>) -> Option<String> {
+    valor
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+/// Atualiza somente as datas registradas depois do cadastro. Uma conclusão já
+/// gravada pode ser corrigida aqui, mas sua remoção continua sendo a operação
+/// explícita `reopen`, com autorização e auditoria próprias.
+pub async fn update_dates(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateProceedingDatesRequest,
+) -> Result<(), AppError> {
+    let (
+        data_instauracao,
+        data_recebimento,
+        remessa_comissao_atual,
+        julgamento_atual,
+        conclusao_atual,
+        permite_remessa_comissao,
+        permite_julgamento,
+    ): (
+        chrono::NaiveDate,
+        Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
+        Option<chrono::NaiveDate>,
+        bool,
+        bool,
+    ) = sqlx::query_as(
+        "SELECT p.data_instauracao, p.data_recebimento, p.data_remessa_comissao,
+                    p.data_julgamento, p.data_conclusao,
+                    a.permite_remessa_comissao, a.permite_julgamento
+               FROM processos_procedimentos p
+               JOIN apuratorios a ON a.id = p.apuratorio_id
+              WHERE p.id = $1::uuid AND p.ativo
+              FOR UPDATE",
+    )
+    .bind(&request.processo_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
+
+    validar_ordem_datas(
+        data_instauracao,
+        data_recebimento,
+        request.data_remessa_encarregado,
+        request.data_remessa_comissao,
+        request.data_julgamento,
+        request.data_conclusao,
+    )
+    .map_err(AppError::Domain)?;
+    if conclusao_atual.is_some() && request.data_conclusao.is_none() {
+        return Err(AppError::Domain(
+            "Para remover a conclusão, use a ação Reabrir apuratório.".to_string(),
+        ));
+    }
+    if permite_remessa_comissao && request.data_remessa_encarregado.is_some() {
+        return Err(AppError::Domain(
+            "Neste apuratório, informe somente a remessa à comissão.".to_string(),
+        ));
+    }
+    // Configuração governa novos fatos. Se um dado histórico já existir depois
+    // de a configuração mudar, ele continua corrigível ou removível — não se
+    // apaga nem se torna inacessível em silêncio (princípio 5).
+    if !permite_remessa_comissao
+        && remessa_comissao_atual.is_none()
+        && request.data_remessa_comissao.is_some()
+    {
+        return Err(AppError::Domain(
+            "Este apuratório não prevê remessa à comissão.".to_string(),
+        ));
+    }
+    if !permite_julgamento && julgamento_atual.is_none() && request.data_julgamento.is_some() {
+        return Err(AppError::Domain(
+            "Este apuratório não prevê data de julgamento.".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        "UPDATE processos_procedimentos
+            SET data_remessa_encarregado = $2, data_remessa_comissao = $3,
+                data_julgamento = $4, data_conclusao = $5, updated_at = now()
+          WHERE id = $1::uuid AND ativo",
+    )
+    .bind(&request.processo_id)
+    .bind(request.data_remessa_encarregado)
+    .bind(request.data_remessa_comissao)
+    .bind(request.data_julgamento)
+    .bind(request.data_conclusao)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Atualiza o resultado de um único envolvido sem regravar os demais dados do
+/// processo. Os atributos dos catálogos, e não seus nomes, controlam punição e
+/// quantidade de dias.
+pub async fn update_involved_outcome(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UpdateInvolvedOutcomeRequest,
+) -> Result<(), AppError> {
+    let (permite_punicao, permite_solucao_sugerida, solucao_sugerida_atual): (
+        bool,
+        bool,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT a.permite_punicao, a.permite_solucao_sugerida,
+                e.solucao_sugerida_id::text
+           FROM processo_envolvidos e
+           JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+           JOIN apuratorios a ON a.id = p.apuratorio_id
+          WHERE e.id = $1::uuid AND e.processo_id = $2::uuid
+          FOR UPDATE OF e",
+    )
+    .bind(&request.envolvido_id)
+    .bind(&request.processo_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("envolvido não encontrado neste apuratório".to_string()))?;
+
+    if !permite_solucao_sugerida && request.solucao_sugerida_id.is_some() {
+        return Err(AppError::Domain(
+            "solução sugerida é permitida somente para procedimentos".to_string(),
+        ));
+    }
+    let solucao_sugerida = if permite_solucao_sugerida {
+        request.solucao_sugerida_id.as_deref()
+    } else {
+        solucao_sugerida_atual.as_deref()
+    };
+
+    if request.penalidade_tipo_id.is_some() {
+        if !permite_punicao {
+            return Err(AppError::Domain(
+                "este apuratório não permite registrar penalidade".to_string(),
+            ));
+        }
+        let permite_penalidade: bool = match request.solucao_decidida_id.as_deref() {
+            Some(id) => sqlx::query_scalar(
+                "SELECT permite_penalidade FROM tipos_solucao_decidida WHERE id = $1::uuid",
+            )
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .unwrap_or(false),
+            None => false,
+        };
+        if !permite_penalidade {
+            return Err(AppError::Domain(
+                "a solução decidida selecionada não permite penalidade".to_string(),
+            ));
+        }
+    }
+
+    if let Some(penalidade_id) = request.penalidade_tipo_id.as_deref() {
+        let usa_dias: bool = sqlx::query_scalar(
+            "SELECT usa_quantidade_dias FROM tipos_penalidade WHERE id = $1::uuid",
+        )
+        .bind(penalidade_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| AppError::Domain("tipo de penalidade não encontrado".to_string()))?;
+        if request.penalidade_dias.is_some() && !usa_dias {
+            return Err(AppError::Domain(
+                "este tipo de penalidade não usa quantidade de dias".to_string(),
+            ));
+        }
+    } else if request.penalidade_dias.is_some() {
+        return Err(AppError::Domain(
+            "selecione a penalidade antes de informar a quantidade de dias".to_string(),
+        ));
+    }
+
+    sqlx::query(
+        "UPDATE processo_envolvidos
+            SET solucao_sugerida_id = $3::uuid, solucao_decidida_id = $4::uuid,
+                penalidade_tipo_id = $5::uuid, penalidade_dias = $6, updated_at = now()
+          WHERE id = $1::uuid AND processo_id = $2::uuid",
+    )
+    .bind(&request.envolvido_id)
+    .bind(&request.processo_id)
+    .bind(solucao_sugerida)
+    .bind(request.solucao_decidida_id.as_deref())
+    .bind(request.penalidade_tipo_id.as_deref())
+    .bind(request.penalidade_dias)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn soft_delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {
+    let n = sqlx::query(
+        "UPDATE processos_procedimentos SET ativo = false, updated_at = now() WHERE id = $1::uuid",
+    )
+    .bind(id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Err(AppError::Domain("apuratório não encontrado".to_string()));
+    }
+    Ok(())
+}
+
+/// Reabrir é limpar a data de conclusão — que é o que define "concluído".
+pub async fn reopen(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), AppError> {
+    let n = sqlx::query(
+        "UPDATE processos_procedimentos SET data_conclusao = NULL, updated_at = now()
+          WHERE id = $1::uuid AND ativo",
+    )
+    .bind(id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Err(AppError::Domain("apuratório não encontrado".to_string()));
+    }
+    Ok(())
+}
+
+// ── Anexos ───────────────────────────────────────────────────────────────────
+
+/// Um processo pode ter vários anexos — antes eram cinco colunas `pdf_*` dentro
+/// de cada tabela de espécie, coexistindo com uma tabela de PDFs nunca usada.
+pub async fn upload_anexo(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &UploadAttachmentRequest,
+    autor_id: &str,
+) -> Result<String, AppError> {
+    let conteudo = base64::engine::general_purpose::STANDARD
+        .decode(request.conteudo.as_bytes())
+        .map_err(|_| AppError::Domain("conteudo do anexo nao esta em base64".to_string()))?;
+
+    if conteudo.is_empty() {
+        return Err(AppError::Domain("o anexo esta vazio".to_string()));
+    }
+    if conteudo.len() > MAX_ANEXO_BYTES {
+        return Err(AppError::Domain(format!(
+            "o anexo excede o limite de {} MB",
+            MAX_ANEXO_BYTES / 1024 / 1024
+        )));
+    }
+
+    sqlx::query_scalar(
+        "INSERT INTO processo_anexos
+             (processo_id, nome_arquivo, mime_type, conteudo, enviado_por_id)
+         VALUES ($1::uuid, $2, $3, $4, $5::uuid)
+      RETURNING id::text",
+    )
+    .bind(&request.processo_id)
+    .bind(request.nome_arquivo.trim())
+    .bind(request.mime_type.trim())
+    .bind(conteudo)
+    .bind(autor_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(AppError::from)
+}
+
+pub async fn get_anexo(
     pool: &PgPool,
-    ano: Option<i32>,
-) -> Result<Vec<MilitaryCrimeItem>, sqlx::Error> {
-    sqlx::query_as::<_, MilitaryCrimeItem>(
-        r#"
-        SELECT
-            (cc.dispositivo_legal || ' - Art. ' || cc.artigo) AS artigo,
-            cc.descricao_artigo AS descricao,
-            COUNT(pec.id)::bigint AS quantidade
-        FROM v_processos p
-        JOIN pm_envolvido_indicios pei ON pei.procedimento_id = p.id
-        JOIN pm_envolvido_crimes pec ON pei.id = pec.pm_indicios_id
-        JOIN crimes_contravencoes cc ON pec.crime_id = cc.id
-        WHERE coalesce(p.ativo, true) = true
-          AND p.tipo_detalhe IN ('IPM', 'IPPM')
-          AND cc.dispositivo_legal = 'Código Penal Militar'
-          AND ($1::bigint IS NULL OR EXTRACT(YEAR FROM p.data_instauracao)::bigint = $1)
-        GROUP BY cc.artigo, cc.descricao_artigo, cc.dispositivo_legal
-        ORDER BY quantidade DESC, cc.artigo
-        "#,
+    anexo_id: &str,
+) -> Result<Option<AttachmentContent>, sqlx::Error> {
+    let linha: Option<(String, String, Vec<u8>)> = sqlx::query_as(
+        "SELECT nome_arquivo, mime_type, conteudo FROM processo_anexos
+          WHERE id = $1::uuid AND cancelado_em IS NULL",
     )
-    .bind(ano.map(|a| a as i64))
-    .fetch_all(pool)
-    .await
+    .bind(anexo_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(
+        linha.map(|(nome_arquivo, mime_type, conteudo)| AttachmentContent {
+            nome_arquivo,
+            mime_type,
+            conteudo: base64::engine::general_purpose::STANDARD.encode(conteudo),
+        }),
+    )
 }
 
-pub async fn in_progress_stats(pool: &PgPool) -> Result<InProgressStats, sqlx::Error> {
-    let por_tipo = sqlx::query_as::<_, TipoCount>(
-        r#"
-        SELECT tipo_detalhe AS tipo, COUNT(*)::bigint AS quantidade
-        FROM v_processos
-        WHERE coalesce(ativo, true) = true
-          AND coalesce(concluido, false) = false
-          AND data_conclusao IS NULL
-        GROUP BY tipo_detalhe
-        ORDER BY quantidade DESC
-        "#,
+pub async fn remove_anexo(
+    tx: &mut Transaction<'_, Postgres>,
+    anexo_id: &str,
+) -> Result<(), AppError> {
+    let n = sqlx::query(
+        "UPDATE processo_anexos SET cancelado_em = now()
+          WHERE id = $1::uuid AND cancelado_em IS NULL",
     )
-    .fetch_all(pool)
-    .await?;
+    .bind(anexo_id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Err(AppError::Domain("anexo nao encontrado".to_string()));
+    }
+    Ok(())
+}
 
-    let (concluidos,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::bigint FROM v_processos WHERE coalesce(ativo, true) = true AND data_conclusao IS NOT NULL",
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+/// Panorama geral: os quatro números do painel de entrada.
+///
+/// As quatro quebras por FK que ficavam aqui saíram na rodada 29 — ver o
+/// cabeçalho de `DashboardSummary`. Continuam existindo, em `maps_reports`, e lá
+/// aceitam o escopo que aqui nunca houve.
+pub async fn dashboard(pool: &PgPool) -> Result<DashboardSummary, sqlx::Error> {
+    let (total, em_andamento, concluidos): (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*),
+                count(*) FILTER (WHERE data_conclusao IS NULL),
+                count(*) FILTER (WHERE data_conclusao IS NOT NULL)
+           FROM processos_procedimentos WHERE ativo",
     )
     .fetch_one(pool)
     .await?;
 
-    let (total,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::bigint FROM v_processos WHERE coalesce(ativo, true) = true",
+    // Quem já remeteu sai da conta, como sai das listagens de Prazos: o prazo
+    // é do encarregado, e ele já entregou. Sem isto, o KPI diria oito e a
+    // tabela logo abaixo — servida pelo `deadlines::report` — mostraria seis.
+    let prazos_vencidos: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+           FROM processos_procedimentos p
+           JOIN LATERAL (
+               SELECT pr.data_vencimento FROM processo_prazos pr
+                WHERE pr.processo_id = p.id ORDER BY pr.ordem DESC LIMIT 1
+           ) prazo ON true
+          WHERE p.ativo AND p.data_conclusao IS NULL
+            AND COALESCE(p.data_remessa_comissao,
+                         p.data_remessa_encarregado) IS NULL
+            AND prazo.data_vencimento < CURRENT_DATE",
     )
     .fetch_one(pool)
     .await?;
 
-    Ok(InProgressStats { por_tipo, concluidos, total })
+    Ok(DashboardSummary {
+        total,
+        em_andamento,
+        concluidos,
+        prazos_vencidos,
+    })
 }

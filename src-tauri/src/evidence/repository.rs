@@ -1,391 +1,545 @@
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
-use crate::legal_catalogs::domain::{Art29Item, Art32Item, CrimeItem, TransgressionItem};
+use crate::db::lote::{agrupar, linha_agrupada};
+use crate::error::AppError;
+use crate::evidence::domain::{
+    AcusacoesRequest, CategoriaIndicioItem, EnvolvidoComIndicios, EvidenceData,
+    InfracaoEstatutoItem, InfracaoEstatutoVinculo, InfracaoPenalItem, InfracaoPenalVinculo,
+    SaveEvidenceRequest, TransgressaoItem,
+};
 
-use super::domain::{EvidenceData, InfractionEvidence, PmWithEvidence, SaveEvidenceRequest};
+/// Rótulos montados a partir do dado. No schema anterior estes textos eram
+/// `format!` no Rust, com o nome da lei escrito no código.
+///
+/// Os três seguem a ordem em que se cita uma norma — o artigo primeiro, a norma
+/// depois: "Art. 312 do Código Penal Militar - …". O conector vem de
+/// `dispositivos_legais.nome_feminino`, atributo semântico da linha, e não de
+/// leitura do nome, que o administrador pode renomear.
+///
+/// **O rótulo já termina na descrição.** Quem o exibe não deve concatenar
+/// `descricao`/`texto` de novo: era assim que o PDF do mapa mensal saía com o
+/// texto da infração repetido duas vezes.
+const ROTULO_PENAL: &str = r#"
+    'Art. ' || ip.artigo
+      || COALESCE(', § ' || ip.paragrafo, '')
+      || COALESCE(', inciso ' || ip.inciso, '')
+      || COALESCE(', alínea ' || ip.alinea, '')
+      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+      || ' - ' || ip.descricao
+"#;
 
-/// Resolve o vínculo PM<->procedimento para o par canônico (processo_procedimento_id, envolvido_id).
-async fn resolve_pm<'e, E>(executor: E, pm_envolvido_id: &str) -> Result<Option<(String, String)>, sqlx::Error>
-where
-    E: sqlx::Executor<'e, Database = Postgres>,
-{
-    sqlx::query_as::<_, (String, String)>(
-        "SELECT procedimento_id::text, pm_id::text FROM procedimento_pms_envolvidos WHERE id = $1::uuid",
-    )
-    .bind(pm_envolvido_id)
-    .fetch_optional(executor)
-    .await
-}
+// `artigos_rdpm.artigo` e `infracoes_estatuto.artigo` já guardam o artigo por
+// extenso ("Art. 15", "Art. 29") — é o que o administrador digita e o que a
+// tela de catálogos exibe. Prefixar com 'Art. ' aqui produzia "Art. Art. 15".
+// `infracoes_penais.artigo`, ao contrário, guarda só o número ("121"), e é por
+// isso que só o rótulo penal acima escreve o prefixo.
+const ROTULO_TRANSGRESSAO: &str = r#"
+    ar.artigo || ', inciso ' || t.inciso || ' do RDPM (' || nt.nome || ') - ' || t.texto
+"#;
 
-const EVIDENCE_TABLES: [&str; 5] = [
-    "pm_envolvido_crimes_militares",
-    "pm_envolvido_crimes_comuns",
-    "pm_envolvido_rdpm",
-    "pm_envolvido_art29",
-    "pm_envolvido_art32",
-];
+const ROTULO_ESTATUTO: &str = r#"
+    ie.artigo || ', inciso ' || ie.inciso
+      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
+      || ' - ' || ie.texto
+"#;
 
-pub async fn save_for_pm(
-    tx: &mut Transaction<'_, Postgres>,
-    request: &SaveEvidenceRequest,
-) -> Result<(), sqlx::Error> {
-    let (proc_id, envolvido_id) = match resolve_pm(&mut **tx, &request.pm_envolvido_id).await? {
-        Some(pair) => pair,
-        None => return Err(sqlx::Error::RowNotFound),
-    };
+// ── Buscas para o formulário ─────────────────────────────────────────────────
 
-    // Categorias permanecem em pm_envolvido_indicios (jsonb).
-    let categorias_json = serde_json::to_value(&request.categorias)
-        .unwrap_or(serde_json::Value::Array(vec![]));
-    let primeira = request.categorias.first().map(String::as_str).unwrap_or("");
-
-    let existing: Option<(String,)> = sqlx::query_as(
-        "SELECT id::text FROM pm_envolvido_indicios WHERE pm_envolvido_id = $1::uuid AND coalesce(ativo, true) = true",
-    )
-    .bind(&request.pm_envolvido_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-
-    if let Some((iid,)) = existing {
-        sqlx::query(
-            "UPDATE pm_envolvido_indicios SET categorias_indicios = $2, categoria = $3, ativo = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1::uuid",
-        )
-        .bind(&iid)
-        .bind(&categorias_json)
-        .bind(primeira)
-        .execute(&mut **tx)
-        .await?;
-    } else {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_indicios (pm_envolvido_id, procedimento_id, categorias_indicios, categoria, ativo) VALUES ($1::uuid, $2::uuid, $3, $4, true)",
-        )
-        .bind(&request.pm_envolvido_id)
-        .bind(&proc_id)
-        .bind(&categorias_json)
-        .bind(primeira)
-        .execute(&mut **tx)
-        .await?;
-    }
-
-    // Substituição destrutiva das 5 famílias de evidência por (processo, envolvido).
-    for table in EVIDENCE_TABLES {
-        sqlx::query(&format!(
-            "DELETE FROM {table} WHERE processo_procedimento_id = $1::uuid AND envolvido_id = $2::uuid"
-        ))
-        .bind(&proc_id)
-        .bind(&envolvido_id)
-        .execute(&mut **tx)
-        .await?;
-    }
-
-    for crime_id in &request.crimes_militares {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_crimes_militares (processo_procedimento_id, envolvido_id, crime_id) VALUES ($1::uuid, $2::uuid, $3::uuid)",
-        )
-        .bind(&proc_id).bind(&envolvido_id).bind(crime_id)
-        .execute(&mut **tx).await?;
-    }
-
-    for crime_id in &request.crimes_comuns {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_crimes_comuns (processo_procedimento_id, envolvido_id, crime_id) VALUES ($1::uuid, $2::uuid, $3::uuid)",
-        )
-        .bind(&proc_id).bind(&envolvido_id).bind(crime_id)
-        .execute(&mut **tx).await?;
-    }
-
-    for trans_id in &request.rdpm {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_rdpm (processo_procedimento_id, envolvido_id, transgressao_id) VALUES ($1::uuid, $2::uuid, $3::uuid)",
-        )
-        .bind(&proc_id).bind(&envolvido_id).bind(trans_id)
-        .execute(&mut **tx).await?;
-    }
-
-    for sel in &request.art29 {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_art29 (processo_procedimento_id, envolvido_id, infracao_art29_id, analogia_art_rdpm_id) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)",
-        )
-        .bind(&proc_id).bind(&envolvido_id).bind(&sel.infracao_id).bind(&sel.analogia_id)
-        .execute(&mut **tx).await?;
-    }
-
-    for sel in &request.art32 {
-        sqlx::query(
-            "INSERT INTO pm_envolvido_art32 (processo_procedimento_id, envolvido_id, infracao_art32_id, analogia_art_rdpm_id) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)",
-        )
-        .bind(&proc_id).bind(&envolvido_id).bind(&sel.infracao_id).bind(&sel.analogia_id)
-        .execute(&mut **tx).await?;
-    }
-
-    Ok(())
-}
-
-async fn load_crimes(pool: &PgPool, table: &str, proc_id: &str, envolvido_id: &str) -> Result<Vec<CrimeItem>, sqlx::Error> {
-    sqlx::query_as::<_, CrimeItem>(&format!(
-        r#"
-        SELECT c.id::text AS id,
-               dl.nome_dispositivo_legal AS dispositivo_legal,
-               c.dispositivo_legal_id::text AS dispositivo_legal_id,
-               c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea, c.ativo
-        FROM {table} ev
-        JOIN crimes_contravencoes c ON c.id = ev.crime_id
-        LEFT JOIN dispositivos_legais dl ON dl.id = c.dispositivo_legal_id
-        WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid
-        "#
-    ))
-    .bind(proc_id)
-    .bind(envolvido_id)
-    .fetch_all(pool)
-    .await
-}
-
-async fn load_infractions(
-    pool: &PgPool,
-    table: &str,
-    infracao_table: &str,
-    infracao_fk: &str,
-    proc_id: &str,
-    envolvido_id: &str,
-) -> Result<Vec<InfractionEvidence>, sqlx::Error> {
-    sqlx::query_as::<_, InfractionEvidence>(&format!(
-        r#"
-        SELECT ev.id::text AS id,
-               inf.id::text AS infracao_id, inf.inciso AS infracao_inciso, inf.texto AS infracao_texto,
-               an.id::text AS analogia_id, an.inciso AS analogia_inciso, an.texto AS analogia_texto,
-               ar.artigo AS analogia_artigo
-        FROM {table} ev
-        JOIN {infracao_table} inf ON inf.id = ev.{infracao_fk}
-        JOIN transgressoes an ON an.id = ev.analogia_art_rdpm_id
-        LEFT JOIN artigo_rdpm_natureza_transgressao ar ON ar.id = an.artigo_id
-        WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid
-        "#
-    ))
-    .bind(proc_id)
-    .bind(envolvido_id)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn load_for_pm(pool: &PgPool, pm_envolvido_id: &str) -> Result<EvidenceData, sqlx::Error> {
-    let (proc_id, envolvido_id) = match resolve_pm(pool, pm_envolvido_id).await? {
-        Some(pair) => pair,
-        None => return Ok(EvidenceData::empty(pm_envolvido_id)),
-    };
-
-    let categorias: Vec<String> = sqlx::query_as::<_, (Option<serde_json::Value>,)>(
-        "SELECT categorias_indicios FROM pm_envolvido_indicios WHERE pm_envolvido_id = $1::uuid AND coalesce(ativo, true) = true LIMIT 1",
-    )
-    .bind(pm_envolvido_id)
-    .fetch_optional(pool)
-    .await?
-    .and_then(|(v,)| v)
-    .and_then(|v| serde_json::from_value(v).ok())
-    .unwrap_or_default();
-
-    let crimes_militares = load_crimes(pool, "pm_envolvido_crimes_militares", &proc_id, &envolvido_id).await?;
-    let crimes_comuns = load_crimes(pool, "pm_envolvido_crimes_comuns", &proc_id, &envolvido_id).await?;
-
-    let rdpm = sqlx::query_as::<_, TransgressionItem>(
-        r#"
-        SELECT t.id::text AS id, ar.artigo AS artigo, nt.nome_natureza AS natureza,
-               t.artigo_id::text AS artigo_id, t.inciso, t.texto, t.ativo
-        FROM pm_envolvido_rdpm ev
-        JOIN transgressoes t ON t.id = ev.transgressao_id
-        LEFT JOIN artigo_rdpm_natureza_transgressao ar ON ar.id = t.artigo_id
-        LEFT JOIN natureza_transgressao nt ON nt.id = ar.natureza_id
-        WHERE ev.processo_procedimento_id = $1::uuid AND ev.envolvido_id = $2::uuid
-        "#,
-    )
-    .bind(&proc_id)
-    .bind(&envolvido_id)
-    .fetch_all(pool)
-    .await?;
-
-    let art29 = load_infractions(pool, "pm_envolvido_art29", "infracoes_estatuto_art29", "infracao_art29_id", &proc_id, &envolvido_id).await?;
-    let art32 = load_infractions(pool, "pm_envolvido_art32", "infracoes_estatuto_art32", "infracao_art32_id", &proc_id, &envolvido_id).await?;
-
-    Ok(EvidenceData {
-        pm_envolvido_id: pm_envolvido_id.to_string(),
-        categorias,
-        crimes_militares,
-        crimes_comuns,
-        rdpm,
-        art29,
-        art32,
-    })
-}
-
-pub async fn list_for_proceeding(
-    pool: &PgPool,
-    procedimento_id: &str,
-) -> Result<Vec<PmWithEvidence>, sqlx::Error> {
-    #[derive(sqlx::FromRow)]
-    struct PmRow {
-        id: String,
-        pm_id: String,
-        nome: Option<String>,
-        posto_graduacao: Option<String>,
-        matricula: Option<String>,
-        status_pm: Option<String>,
-    }
-
-    let pms = sqlx::query_as::<_, PmRow>(
-        r#"
-        SELECT pe.id::text AS id, pe.pm_id::text AS pm_id,
-               u.nome, pg.codigo AS posto_graduacao, u.matricula,
-               se.codigo AS status_pm
-        FROM procedimento_pms_envolvidos pe
-        LEFT JOIN usuarios u ON pe.pm_id = u.id
-        LEFT JOIN postos_graduacoes pg ON pg.id = u.posto_graduacao_id
-        LEFT JOIN status_envolvido se ON se.id = pe.status_pm_id
-        WHERE pe.procedimento_id = $1::uuid
-        ORDER BY pe.ordem NULLS LAST
-        "#,
-    )
-    .bind(procedimento_id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut result = Vec::with_capacity(pms.len());
-    for pm in pms {
-        let indicios = load_for_pm(pool, &pm.id).await?;
-        result.push(PmWithEvidence {
-            pm_envolvido_id: pm.id,
-            pm_id: pm.pm_id,
-            nome: pm.nome,
-            posto_graduacao: pm.posto_graduacao,
-            matricula: pm.matricula,
-            status_pm: pm.status_pm,
-            indicios,
-        });
-    }
-    Ok(result)
-}
-
-pub async fn remove_for_pm(
-    tx: &mut Transaction<'_, Postgres>,
-    pm_envolvido_id: &str,
-) -> Result<(), sqlx::Error> {
-    if let Some((proc_id, envolvido_id)) = resolve_pm(&mut **tx, pm_envolvido_id).await? {
-        for table in EVIDENCE_TABLES {
-            sqlx::query(&format!(
-                "DELETE FROM {table} WHERE processo_procedimento_id = $1::uuid AND envolvido_id = $2::uuid"
-            ))
-            .bind(&proc_id)
-            .bind(&envolvido_id)
-            .execute(&mut **tx)
-            .await?;
-        }
-        sqlx::query("UPDATE pm_envolvido_indicios SET ativo = false WHERE pm_envolvido_id = $1::uuid")
-            .bind(pm_envolvido_id)
-            .execute(&mut **tx)
-            .await?;
-    }
-    Ok(())
-}
-
-pub async fn search_crimes(pool: &PgPool, termo: &str) -> Result<Vec<CrimeItem>, sqlx::Error> {
-    let base = r#"
-        SELECT c.id::text AS id,
-               dl.nome_dispositivo_legal AS dispositivo_legal,
-               c.dispositivo_legal_id::text AS dispositivo_legal_id,
-               c.artigo, c.descricao_artigo, c.paragrafo, c.inciso, c.alinea, c.ativo
-        FROM crimes_contravencoes c
-        LEFT JOIN dispositivos_legais dl ON dl.id = c.dispositivo_legal_id
-        WHERE coalesce(c.ativo, true) = true
-    "#;
-
-    if termo.is_empty() {
-        return sqlx::query_as::<_, CrimeItem>(&format!(
-            "{base} ORDER BY dl.nome_dispositivo_legal, c.artigo LIMIT 50"
-        ))
-        .fetch_all(pool)
-        .await;
-    }
-
-    let pattern = format!("%{termo}%");
-    sqlx::query_as::<_, CrimeItem>(&format!(
-        "{base} AND (c.artigo ILIKE $1 OR c.descricao_artigo ILIKE $1 OR dl.nome_dispositivo_legal ILIKE $1) ORDER BY dl.nome_dispositivo_legal, c.artigo LIMIT 50"
-    ))
-    .bind(pattern)
-    .fetch_all(pool)
-    .await
-}
-
-pub async fn search_rdpm(
+pub async fn search_infracoes_penais(
     pool: &PgPool,
     termo: &str,
-    natureza: Option<&str>,
-) -> Result<Vec<TransgressionItem>, sqlx::Error> {
-    let base = r#"
-        SELECT t.id::text AS id, ar.artigo AS artigo, nt.nome_natureza AS natureza,
-               t.artigo_id::text AS artigo_id, t.inciso, t.texto, t.ativo
-        FROM transgressoes t
-        LEFT JOIN artigo_rdpm_natureza_transgressao ar ON ar.id = t.artigo_id
-        LEFT JOIN natureza_transgressao nt ON nt.id = ar.natureza_id
-        WHERE coalesce(t.ativo, true) = true
-    "#;
-    let order = " ORDER BY ar.artigo NULLS LAST, t.inciso NULLS LAST LIMIT 50";
-
-    match (termo.is_empty(), natureza) {
-        (true, None) => {
-            sqlx::query_as::<_, TransgressionItem>(&format!("{base}{order}"))
-                .fetch_all(pool).await
-        }
-        (true, Some(n)) => {
-            sqlx::query_as::<_, TransgressionItem>(&format!("{base} AND nt.nome_natureza = $1{order}"))
-                .bind(n).fetch_all(pool).await
-        }
-        (false, None) => {
-            let pattern = format!("%{termo}%");
-            sqlx::query_as::<_, TransgressionItem>(&format!("{base} AND (t.inciso ILIKE $1 OR t.texto ILIKE $1){order}"))
-                .bind(pattern).fetch_all(pool).await
-        }
-        (false, Some(n)) => {
-            let pattern = format!("%{termo}%");
-            sqlx::query_as::<_, TransgressionItem>(&format!("{base} AND nt.nome_natureza = $2 AND (t.inciso ILIKE $1 OR t.texto ILIKE $1){order}"))
-                .bind(pattern).bind(n).fetch_all(pool).await
-        }
-    }
-}
-
-pub async fn search_art29(pool: &PgPool, termo: &str) -> Result<Vec<Art29Item>, sqlx::Error> {
-    if termo.is_empty() {
-        return sqlx::query_as::<_, Art29Item>(
-            r#"SELECT id::text AS id, inciso, texto, ativo FROM infracoes_estatuto_art29
-               WHERE coalesce(ativo, true) = true ORDER BY length(inciso), inciso LIMIT 50"#,
-        )
-        .fetch_all(pool)
-        .await;
-    }
-    let pattern = format!("%{termo}%");
-    sqlx::query_as::<_, Art29Item>(
-        r#"SELECT id::text AS id, inciso, texto, ativo FROM infracoes_estatuto_art29
-           WHERE coalesce(ativo, true) = true AND (inciso ILIKE $1 OR texto ILIKE $1)
-           ORDER BY length(inciso), inciso LIMIT 50"#,
-    )
-    .bind(pattern)
+    dispositivo_legal_id: Option<&str>,
+) -> Result<Vec<InfracaoPenalItem>, sqlx::Error> {
+    sqlx::query_as::<_, InfracaoPenalItem>(&format!(
+        "SELECT ip.id::text AS id, dl.nome AS dispositivo_legal, e.nome AS especie,
+                ip.artigo, ip.descricao, {ROTULO_PENAL} AS rotulo
+           FROM infracoes_penais ip
+           JOIN dispositivos_legais dl     ON dl.id = ip.dispositivo_legal_id
+           JOIN especies_infracao_penal e  ON e.id = ip.especie_id
+          WHERE ip.ativo
+            AND ($2::uuid IS NULL OR ip.dispositivo_legal_id = $2::uuid)
+            AND (lower(ip.artigo) LIKE $1 OR lower(ip.descricao) LIKE $1)
+          ORDER BY dl.nome, numero_do_artigo(ip.artigo) NULLS LAST, ip.artigo,
+                   ip.paragrafo NULLS FIRST, valor_do_romano(ip.inciso) NULLS FIRST,
+                   ip.inciso NULLS FIRST, ip.alinea NULLS FIRST
+          LIMIT 50"
+    ))
+    .bind(format!("%{}%", termo.trim().to_lowercase()))
+    .bind(dispositivo_legal_id)
     .fetch_all(pool)
     .await
 }
 
-pub async fn search_art32(pool: &PgPool, termo: &str) -> Result<Vec<Art32Item>, sqlx::Error> {
-    if termo.is_empty() {
-        return sqlx::query_as::<_, Art32Item>(
-            r#"SELECT id::text AS id, inciso, texto, ativo FROM infracoes_estatuto_art32
-               WHERE coalesce(ativo, true) = true ORDER BY length(inciso), inciso LIMIT 50"#,
-        )
-        .fetch_all(pool)
-        .await;
-    }
-    let pattern = format!("%{termo}%");
-    sqlx::query_as::<_, Art32Item>(
-        r#"SELECT id::text AS id, inciso, texto, ativo FROM infracoes_estatuto_art32
-           WHERE coalesce(ativo, true) = true AND (inciso ILIKE $1 OR texto ILIKE $1)
-           ORDER BY length(inciso), inciso LIMIT 50"#,
-    )
-    .bind(pattern)
+pub async fn search_transgressoes(
+    pool: &PgPool,
+    termo: &str,
+    natureza_id: Option<&str>,
+) -> Result<Vec<TransgressaoItem>, sqlx::Error> {
+    sqlx::query_as::<_, TransgressaoItem>(&format!(
+        "SELECT t.id::text AS id, ar.artigo, nt.nome AS natureza, t.inciso, t.texto,
+                {ROTULO_TRANSGRESSAO} AS rotulo
+           FROM transgressoes t
+           JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
+           JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+          WHERE t.ativo
+            AND ($2::uuid IS NULL OR ar.natureza_transgressao_id = $2::uuid)
+            AND (lower(t.inciso) LIKE $1 OR lower(t.texto) LIKE $1)
+          ORDER BY numero_do_artigo(ar.artigo) NULLS LAST, ar.artigo,
+                   valor_do_romano(t.inciso) NULLS LAST, t.inciso
+          LIMIT 50"
+    ))
+    .bind(format!("%{}%", termo.trim().to_lowercase()))
+    .bind(natureza_id)
     .fetch_all(pool)
     .await
+}
+
+pub async fn search_infracoes_estatuto(
+    pool: &PgPool,
+    termo: &str,
+    artigo: Option<&str>,
+) -> Result<Vec<InfracaoEstatutoItem>, sqlx::Error> {
+    sqlx::query_as::<_, InfracaoEstatutoItem>(&format!(
+        "SELECT ie.id::text AS id, dl.nome AS dispositivo_legal, ie.artigo, ie.inciso, ie.texto,
+                {ROTULO_ESTATUTO} AS rotulo
+           FROM infracoes_estatuto ie
+           JOIN dispositivos_legais dl ON dl.id = ie.dispositivo_legal_id
+          WHERE ie.ativo
+            AND ($2::text IS NULL OR ie.artigo = $2)
+            AND (lower(ie.inciso) LIKE $1 OR lower(ie.texto) LIKE $1)
+          ORDER BY numero_do_artigo(ie.artigo) NULLS LAST, ie.artigo,
+                   valor_do_romano(ie.inciso) NULLS LAST, ie.inciso
+          LIMIT 50"
+    ))
+    .bind(format!("%{}%", termo.trim().to_lowercase()))
+    .bind(artigo)
+    .fetch_all(pool)
+    .await
+}
+
+// ── Leitura do enquadramento ─────────────────────────────────────────────────
+
+linha_agrupada!(LinhaCategoria, CategoriaIndicioItem);
+linha_agrupada!(LinhaInfracaoPenal, InfracaoPenalVinculo);
+linha_agrupada!(LinhaTransgressao, TransgressaoItem);
+linha_agrupada!(LinhaInfracaoEstatuto, InfracaoEstatutoVinculo);
+
+async fn categorias_de_envolvidos<'e, E: PgExecutor<'e>>(
+    executor: E,
+    envolvido_ids: &[String],
+) -> Result<HashMap<String, Vec<CategoriaIndicioItem>>, sqlx::Error> {
+    // Sem filtro de `ativo`: uma categoria desativada hoje precisa continuar
+    // aparecendo no processo que a usou.
+    let linhas = sqlx::query_as::<_, LinhaCategoria>(
+        "SELECT eci.envolvido_id::text AS chave,
+                ci.id::text AS id, ci.nome, ci.indica_ausencia
+           FROM envolvido_categorias_indicio eci
+           JOIN categorias_indicio ci ON ci.id = eci.categoria_indicio_id
+          WHERE eci.envolvido_id = ANY($1::uuid[])
+          ORDER BY eci.envolvido_id, ci.nome",
+    )
+    .bind(envolvido_ids)
+    .fetch_all(executor)
+    .await?;
+    Ok(agrupar(linhas.into_iter().map(LinhaCategoria::partir)))
+}
+
+pub async fn load_for_envolvido(
+    pool: &PgPool,
+    envolvido_id: &str,
+) -> Result<EvidenceData, sqlx::Error> {
+    let mut conn = pool.acquire().await?;
+    Ok(load_for_envolvidos(&mut conn, &[envolvido_id.to_string()])
+        .await?
+        .remove(envolvido_id)
+        .unwrap_or_else(|| EvidenceData {
+            envolvido_id: envolvido_id.to_string(),
+            categorias: Vec::new(),
+            infracoes_penais: Vec::new(),
+            transgressoes: Vec::new(),
+            infracoes_estatuto: Vec::new(),
+        }))
+}
+
+/// O enquadramento de vários envolvidos, em quatro consultas — não em quatro
+/// por envolvido.
+///
+/// Devolve uma entrada para **cada** id pedido, mesmo sem nenhum indício
+/// lançado: é o que preserva o contrato de `load_for_envolvido`, que sempre
+/// devolveu o `EvidenceData` vazio em vez de "não encontrado".
+pub async fn load_for_envolvidos(
+    conn: &mut sqlx::PgConnection,
+    envolvido_ids: &[String],
+) -> Result<HashMap<String, EvidenceData>, sqlx::Error> {
+    if envolvido_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let mut categorias = categorias_de_envolvidos(&mut *conn, envolvido_ids).await?;
+
+    let linhas_penais = sqlx::query_as::<_, LinhaInfracaoPenal>(&format!(
+        "SELECT eip.envolvido_id::text AS chave,
+                ip.id::text AS infracao_penal_id, ep.id::text AS esfera_penal_id,
+                ep.nome AS esfera_penal, dl.nome AS dispositivo_legal, e.nome AS especie,
+                ip.artigo, ip.descricao, {ROTULO_PENAL} AS rotulo
+           FROM envolvido_infracoes_penais eip
+           JOIN infracoes_penais ip        ON ip.id = eip.infracao_penal_id
+           JOIN esferas_penais ep          ON ep.id = eip.esfera_penal_id
+           JOIN dispositivos_legais dl     ON dl.id = ip.dispositivo_legal_id
+           JOIN especies_infracao_penal e  ON e.id = ip.especie_id
+          WHERE eip.envolvido_id = ANY($1::uuid[])
+          ORDER BY eip.envolvido_id, dl.nome,
+                   numero_do_artigo(ip.artigo) NULLS LAST, ip.artigo,
+                   ip.paragrafo NULLS FIRST, valor_do_romano(ip.inciso) NULLS FIRST,
+                   ip.inciso NULLS FIRST, ip.alinea NULLS FIRST"
+    ))
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut infracoes_penais = agrupar(linhas_penais.into_iter().map(LinhaInfracaoPenal::partir));
+
+    let linhas_transgressoes = sqlx::query_as::<_, LinhaTransgressao>(&format!(
+        "SELECT et.envolvido_id::text AS chave,
+                t.id::text AS id, ar.artigo, nt.nome AS natureza, t.inciso, t.texto,
+                {ROTULO_TRANSGRESSAO} AS rotulo
+           FROM envolvido_transgressoes et
+           JOIN transgressoes t           ON t.id = et.transgressao_id
+           JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
+           JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+          WHERE et.envolvido_id = ANY($1::uuid[])
+          ORDER BY et.envolvido_id,
+                   numero_do_artigo(ar.artigo) NULLS LAST, ar.artigo,
+                   valor_do_romano(t.inciso) NULLS LAST, t.inciso"
+    ))
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut transgressoes = agrupar(
+        linhas_transgressoes
+            .into_iter()
+            .map(LinhaTransgressao::partir),
+    );
+
+    let linhas_estatuto = sqlx::query_as::<_, LinhaInfracaoEstatuto>(&format!(
+        "SELECT eie.envolvido_id::text AS chave,
+                ie.id::text AS infracao_estatuto_id,
+                {ROTULO_ESTATUTO} AS rotulo,
+                t.id::text AS analogia_transgressao_id,
+                {ROTULO_TRANSGRESSAO} AS analogia_rotulo
+           FROM envolvido_infracoes_estatuto eie
+           JOIN infracoes_estatuto ie     ON ie.id = eie.infracao_estatuto_id
+           JOIN dispositivos_legais dl    ON dl.id = ie.dispositivo_legal_id
+           JOIN transgressoes t           ON t.id = eie.analogia_transgressao_id
+           JOIN artigos_rdpm ar           ON ar.id = t.artigo_rdpm_id
+           JOIN naturezas_transgressao nt ON nt.id = ar.natureza_transgressao_id
+          WHERE eie.envolvido_id = ANY($1::uuid[])
+          ORDER BY eie.envolvido_id,
+                   numero_do_artigo(ie.artigo) NULLS LAST, ie.artigo,
+                   valor_do_romano(ie.inciso) NULLS LAST, ie.inciso"
+    ))
+    .bind(envolvido_ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut infracoes_estatuto = agrupar(
+        linhas_estatuto
+            .into_iter()
+            .map(LinhaInfracaoEstatuto::partir),
+    );
+
+    Ok(envolvido_ids
+        .iter()
+        .map(|envolvido_id| {
+            (
+                envolvido_id.clone(),
+                EvidenceData {
+                    envolvido_id: envolvido_id.clone(),
+                    categorias: categorias.remove(envolvido_id).unwrap_or_default(),
+                    infracoes_penais: infracoes_penais.remove(envolvido_id).unwrap_or_default(),
+                    transgressoes: transgressoes.remove(envolvido_id).unwrap_or_default(),
+                    infracoes_estatuto: infracoes_estatuto.remove(envolvido_id).unwrap_or_default(),
+                },
+            )
+        })
+        .collect())
+}
+
+#[derive(sqlx::FromRow)]
+struct LinhaEnvolvidoIndicios {
+    chave: String,
+    envolvido_id: String,
+    policial_militar_id: Option<String>,
+    nome: String,
+    matricula: String,
+    posto_graduacao: String,
+    status_envolvido: String,
+    ordem: i32,
+}
+
+/// Envolvidos do processo com o enquadramento de cada um.
+pub async fn list_for_proceeding(
+    pool: &PgPool,
+    processo_id: &str,
+) -> Result<Vec<EnvolvidoComIndicios>, AppError> {
+    let mut conn = pool.acquire().await.map_err(AppError::from)?;
+    Ok(
+        list_for_proceeding_muitos(&mut conn, &[processo_id.to_string()])
+            .await?
+            .remove(processo_id)
+            .unwrap_or_default(),
+    )
+}
+
+/// O painel de indícios de vários processos em cinco consultas, contra as
+/// `1 + 4×envolvidos` que a versão por processo custava — o N+1 de dentro do
+/// N+1 que fazia o Mapa do Período nunca terminar.
+pub async fn list_for_proceeding_muitos(
+    conn: &mut sqlx::PgConnection,
+    processo_ids: &[String],
+) -> Result<HashMap<String, Vec<EnvolvidoComIndicios>>, AppError> {
+    if processo_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let envolvidos = sqlx::query_as::<_, LinhaEnvolvidoIndicios>(
+        "SELECT e.processo_id::text         AS chave,
+                e.id::text                  AS envolvido_id,
+                e.policial_militar_id::text AS policial_militar_id,
+                COALESCE(pm.nome, 'À apurar') AS nome,
+                COALESCE(pm.matricula, '')  AS matricula,
+                COALESCE(pg.sigla, '')      AS posto_graduacao,
+                se.nome                     AS status_envolvido,
+                e.ordem                     AS ordem
+           FROM processo_envolvidos e
+           LEFT JOIN policiais_militares pm ON pm.id = e.policial_militar_id
+           LEFT JOIN postos_graduacoes pg   ON pg.id = pm.posto_graduacao_id
+           JOIN status_envolvido se    ON se.id = e.status_envolvido_id
+          WHERE e.processo_id = ANY($1::uuid[])
+          ORDER BY e.processo_id, e.ordem",
+    )
+    .bind(processo_ids)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let envolvido_ids: Vec<String> = envolvidos
+        .iter()
+        .map(|linha| linha.envolvido_id.clone())
+        .collect();
+    // Sem envolvido não há o que enquadrar: as quatro consultas de indício
+    // seriam quatro idas ao banco para receber nada.
+    let mut indicios = load_for_envolvidos(&mut *conn, &envolvido_ids).await?;
+
+    Ok(agrupar(envolvidos.into_iter().map(|linha| {
+        let dados = indicios
+            .remove(&linha.envolvido_id)
+            .unwrap_or_else(|| EvidenceData {
+                envolvido_id: linha.envolvido_id.clone(),
+                categorias: Vec::new(),
+                infracoes_penais: Vec::new(),
+                transgressoes: Vec::new(),
+                infracoes_estatuto: Vec::new(),
+            });
+        (
+            linha.chave,
+            EnvolvidoComIndicios {
+                envolvido_id: linha.envolvido_id,
+                policial_militar_id: linha.policial_militar_id,
+                nome: linha.nome,
+                matricula: linha.matricula,
+                posto_graduacao: linha.posto_graduacao,
+                status_envolvido: linha.status_envolvido,
+                ordem: linha.ordem,
+                indicios: dados,
+            },
+        )
+    })))
+}
+
+// ── Escrita ──────────────────────────────────────────────────────────────────
+
+/// Substitui todo o enquadramento do envolvido, numa transação: o que o
+/// formulário mandou passa a ser a verdade completa.
+pub async fn save_for_envolvido(
+    tx: &mut Transaction<'_, Postgres>,
+    request: &SaveEvidenceRequest,
+) -> Result<(), AppError> {
+    validar_categorias(tx, &request.categorias_ids).await?;
+
+    sqlx::query("DELETE FROM envolvido_categorias_indicio WHERE envolvido_id = $1::uuid")
+        .bind(&request.envolvido_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for categoria_id in &request.categorias_ids {
+        sqlx::query(
+            "INSERT INTO envolvido_categorias_indicio (envolvido_id, categoria_indicio_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(&request.envolvido_id)
+        .bind(categoria_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    save_acusacoes(
+        tx,
+        &request.envolvido_id,
+        &AcusacoesRequest {
+            infracoes_penais: request
+                .infracoes_penais
+                .iter()
+                .map(|item| crate::evidence::domain::SelecaoInfracaoPenal {
+                    infracao_penal_id: item.infracao_penal_id.clone(),
+                    esfera_penal_id: item.esfera_penal_id.clone(),
+                })
+                .collect(),
+            transgressoes_ids: request.transgressoes_ids.clone(),
+            infracoes_estatuto: request
+                .infracoes_estatuto
+                .iter()
+                .map(|item| crate::evidence::domain::SelecaoInfracaoEstatuto {
+                    infracao_estatuto_id: item.infracao_estatuto_id.clone(),
+                    analogia_transgressao_id: item.analogia_transgressao_id.clone(),
+                })
+                .collect(),
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Sincroniza somente o enquadramento juridico. Acusacoes usam esta parte sem
+/// tocar nas categorias, que pertencem exclusivamente ao fluxo de indicios.
+pub async fn save_acusacoes(
+    tx: &mut Transaction<'_, Postgres>,
+    envolvido_id: &str,
+    request: &AcusacoesRequest,
+) -> Result<(), AppError> {
+    for tabela in [
+        "envolvido_infracoes_penais",
+        "envolvido_transgressoes",
+        "envolvido_infracoes_estatuto",
+    ] {
+        sqlx::query(&format!(
+            "DELETE FROM {tabela} WHERE envolvido_id = $1::uuid"
+        ))
+        .bind(envolvido_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    for selecao in &request.infracoes_penais {
+        sqlx::query(
+            "INSERT INTO envolvido_infracoes_penais
+                 (envolvido_id, infracao_penal_id, esfera_penal_id)
+             VALUES ($1::uuid, $2::uuid, $3::uuid)",
+        )
+        .bind(envolvido_id)
+        .bind(&selecao.infracao_penal_id)
+        .bind(&selecao.esfera_penal_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    for transgressao_id in &request.transgressoes_ids {
+        sqlx::query(
+            "INSERT INTO envolvido_transgressoes (envolvido_id, transgressao_id)
+             VALUES ($1::uuid, $2::uuid)",
+        )
+        .bind(envolvido_id)
+        .bind(transgressao_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    for selecao in &request.infracoes_estatuto {
+        sqlx::query(
+            "INSERT INTO envolvido_infracoes_estatuto
+                 (envolvido_id, infracao_estatuto_id, analogia_transgressao_id)
+             VALUES ($1::uuid, $2::uuid, $3::uuid)",
+        )
+        .bind(envolvido_id)
+        .bind(&selecao.infracao_estatuto_id)
+        .bind(&selecao.analogia_transgressao_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Impede que o comando de indicios seja usado como atalho para alterar uma
+/// acusacao ou para criar enquadramento em especie que nao investiga fatos.
+pub async fn exigir_permissao_indicios(
+    tx: &mut Transaction<'_, Postgres>,
+    envolvido_id: &str,
+) -> Result<(), AppError> {
+    let permite: bool = sqlx::query_scalar(
+        "SELECT a.permite_indicios
+           FROM processo_envolvidos e
+           JOIN processos_procedimentos p ON p.id = e.processo_id AND p.ativo
+           JOIN apuratorios a ON a.id = p.apuratorio_id
+          WHERE e.id = $1::uuid
+          FOR UPDATE OF e",
+    )
+    .bind(envolvido_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| AppError::Domain("envolvido não encontrado".to_string()))?;
+
+    if !permite {
+        return Err(AppError::Domain(
+            "Indícios são registrados somente em procedimentos investigativos. Em processos, corrija a acusação pelo botão Editar."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// A categoria que indica ausência de indícios não convive com nenhuma outra.
+/// A regra é lida do catálogo (`indica_ausencia`), não do nome da opção — o
+/// administrador pode renomear "Não houve indícios" à vontade.
+async fn validar_categorias(
+    tx: &mut Transaction<'_, Postgres>,
+    categorias_ids: &[String],
+) -> Result<(), AppError> {
+    if categorias_ids.len() < 2 {
+        return Ok(());
+    }
+    let ausencia: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM categorias_indicio
+          WHERE indica_ausencia AND id = ANY($1::uuid[])",
+    )
+    .bind(categorias_ids)
+    .fetch_one(&mut **tx)
+    .await?;
+    if ausencia > 0 {
+        return Err(AppError::Domain(
+            "A categoria que indica ausência de indícios não pode ser combinada com outras. \
+             Escolha apenas ela, ou remova-a da seleção."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub async fn remove_for_envolvido(
+    tx: &mut Transaction<'_, Postgres>,
+    envolvido_id: &str,
+) -> Result<(), sqlx::Error> {
+    for tabela in [
+        "envolvido_categorias_indicio",
+        "envolvido_infracoes_penais",
+        "envolvido_transgressoes",
+        "envolvido_infracoes_estatuto",
+    ] {
+        sqlx::query(&format!(
+            "DELETE FROM {tabela} WHERE envolvido_id = $1::uuid"
+        ))
+        .bind(envolvido_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }

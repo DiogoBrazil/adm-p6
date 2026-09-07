@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "mapas-mensais-pdf": {
+      "targetKind": "new-ui",
+      "projectId": "50a5d9a8-af9f-4fa0-a930-810820737e93",
+      "activeDraftId": "d58adefd-c2dc-4350-b02a-5f6cc12c68ae",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "src-tauri-icons-icon.png"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "src-tauri-icons-icon.png",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/50a5d9a8-af9f-4fa0-a930-810820737e93/brand-assets/src-tauri-icons-icon.png/icon.png",
+          "sourcePath": "src-tauri/icons/icon.png"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        ".superdesign/init/theme.md:1:30",
+        "src/telas/mapas.ts",
+        "src/telas/mapa-pdf.ts",
+        "src/telas/processo.ts:1490:2033",
+        "src/dom.ts",
+        "src/styles.css:1:220",
+        "src/styles.css:930:1405",
+        "src/styles.css:1900:2110",
+        "src/types.ts:430:520",
+        "src/types.ts:620:835"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f5d0b1ba1f75b20c1d4b6221f6c16cc285c036e1960dd7cc5f57ba76a8ce1abc",
+        ".superdesign/init/theme.md": "2b68df698383f243cd3e5d8ff455037f94abe1ce4f7b8c8af58cf475ac1e783c",
+        "src/telas/mapas.ts": "f0bef54628b915a40dd4ba42e294b04d9ac9992c7128dada34156d47806a69a2",
+        "src/telas/mapa-pdf.ts": "bd46770e76c563fd22ec4efaf4ea2c0aa6e5cb7eb000b77471fe93734841531d",
+        "src/telas/processo.ts": "f8ebf3adc0aabc078f4ea1156c066decbbd34f882adfe1e4378317e370831c28",
+        "src/dom.ts": "db246e67d181825912bead991e40c10fde9329169319e7240b11471dd5983599",
+        "src/styles.css": "8ffb623974e01a53f91e4cff224c834425ac670a0e930de906d58e9ef55343c8",
+        "src/types.ts": "121424b597cfb62e090988124fcfd146734ea6a08f144677eeca0bf1f28b2c95"
+      },
+      "components": [],
+      "drafts": {
+        "d58adefd-c2dc-4350-b02a-5f6cc12c68ae": {
+          "title": "Preview A4 Paisagem — Mapa Mensal IPM",
+          "visualDirection": "documento institucional PMRO em A4 paisagem, com capa por apuratório e fichas em fluxo contínuo",
+          "currentVersion": 3
+        }
+      },
+      "updatedAt": "2026-08-28T15:26:12-04:00"
+    }
+  }
+}
