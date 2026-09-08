@@ -117,7 +117,7 @@ docker compose up -d
 # Backend
 cd src-tauri
 cargo fmt --check
-cargo test                           # 180 testes, bancos descartáveis
+cargo test                           # 205 testes, bancos descartáveis
 cargo run                            # aplica as migrations no startup e abre o app
 
 # Frontend
@@ -154,6 +154,8 @@ Credenciais no Windows; Secret Service no Linux). Só então aplica migrations e
 libera o login. Nas próximas aberturas, recupera a configuração do cofre. O
 ambiente/`.env` continua sendo usado somente no desenvolvimento; falha de rede
 não apaga a configuração salva. No Linux, o cofre precisa estar disponível.
+Para exercitar esse fluxo sem gerar instalador, `ADM_P6_USAR_COFRE=1` faz o build
+de debug abrir mão do `.env` e seguir o caminho do cofre.
 
 ### 1.1 Primeiro uso — **só numa instalação nova**
 
@@ -885,6 +887,9 @@ Coisas que já custaram tempo e vão custar de novo se esquecidas.
 | Fixtura de impressão que reproduz o resultado sem reproduzir o caminho | `calibrado-designacoes-folha1` seguia congelando o gráfico num PNG depois que o app passou a imprimir a tabela do cartão: ela certificava um documento que o app não emite mais. Passava, e não provava nada | A fixtura monta o cartão com as **duas** views e roda `trocaPelaTabela`, que é a sequência de `tabelasNoLugarDosGraficos` — canvas composto visível, view do gráfico fora do DOM, tabela revelada |
 | Repartir a largura de uma tabela genérica em partes iguais | Funciona com três colunas e falha com dezesseis: a coluna que identifica o registro recebe a mesma fatia da que mostra "sim/não". Em Apuratórios davam ~76px cada, e o Nome saía "Consel…" enquanto oito colunas de três letras sobravam de espaço. E como `.tabela-dados--fixa` declara `min-width: 0`, a tabela **sempre** cabe em 100%: o `.table-wrap` rola, mas nunca tem o que rolar | Largura por **tipo** de coluna, em px (`catalogos.ts::LARGURA_PX`), com a coluna de identificação **sem** `width` — sob `table-layout: fixed` é ela que absorve a sobra —, e `data-piso` na tabela para ela rolar em vez de espremer. Precisa sobrar sempre ao menos uma coluna livre: sem nenhuma, o navegador reparte o excedente entre todas e Ações cresce sem motivo |
 | Um mesmo `rotulo` servindo o formulário e o cabeçalho da tabela | São dois lugares com espaço muito diferente: ao lado do campo cabe "Permite acusação disciplinar" com o `efeito` explicando embaixo; numa coluna de 78px, não. Encurtar o `rotulo` conserta a tabela e piora o cadastro | `rotulo_curto` no registro, com o completo no `title` do `<th>`. Mesma ideia de `na_listagem`, que tira a coluna da tabela sem tirá-la do formulário — `ReferenciaFixa` é outra coisa: aquela não existe em tela nenhuma |
+| Conferir o fluxo do cofre com `tauri dev` | Em build de debug o `AppState` nasce com `development: Some(...)` e o cofre **nunca** é lido: o modal de primeiro uso não aparece, e clicar "Configurar conexão" ali grava no cofre pessoal do desenvolvedor um segredo que a abertura seguinte ignora em silêncio. Quem testou em dev não testou nada — o fluxo só existe em release | `ADM_P6_USAR_COFRE=1` faz o debug abrir mão do `.env` e seguir o caminho do app instalado (`database_config::usar_cofre_em_dev`). A decisão é função pura e testada, porque variável de ambiente é estado global do processo e mexer nela dentro de teste paralelo é intermitência garantida |
+| Anunciar a conexão na tela de abertura | O painel "Conexão com o banco — Preparando a conexão…" ficava na frente do usuário em **toda** abertura, enquanto o pool subia e as migrations corriam — com o Postgres serverless frio, segundos. Mas a configuração está no cofre desde o primeiro uso: em 99% das aberturas aquele painel anunciava um pedido de credenciais que não viria | A abertura é neutra e usa o **mesmo cabeçalho** de `renderLogin`, então o login aparece por baixo do topo que já estava na tela. O painel do banco fica exclusivo dos estados que não são `ready`. Quem informa a espera é o véu global (`comCarregamento`), que envolve também o `ready()` — sem isso sobra um intervalo sem véu entre "conexão pronta" e "login desenhado" |
+| Pedir as credenciais de novo quando a conexão falha | Rede fora, cofre bloqueado e migration que falhou **não** são falta de configuração: a entrada continua no cofre, e reabrir o modal faria o usuário redigitar uma senha que já está salva e correta. Só `missing` e `invalid_config` pedem | `database-setup.ts::resultado` decide pelo `StartupState`, e `read_config` separa os três casos na origem. O texto do fundo é o do backend — no primeiro uso não há "configuração já salva" para sugerir |
 
 ---
 

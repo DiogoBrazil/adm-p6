@@ -46,7 +46,14 @@ banco nem receber `.env.producao`; a opção antiga `--env-file` foi removida.
 ### Linux — pacote .deb
 
 Com os [pré-requisitos Linux do Tauri](https://v2.tauri.app/start/prerequisites/#linux)
-instalados:
+instalados, **mais `libdbus-1-dev`**: a feature `sync-secret-service` do
+`keyring` puxa `libdbus-sys`, que compila por `pkg-config` e não consta da lista
+do Tauri.
+
+```bash
+sudo apt-get install -y libdbus-1-dev
+```
+
 
 ```bash
 npm ci
@@ -171,7 +178,11 @@ os dados completos. Cancelar não salva e mantém o acesso bloqueado. Falha nas
 migrations mantém a conexão salva, mas impede o login até resolver a atualização.
 
 Em desenvolvimento, `tauri dev` continua usando `.env`/`DB_*`; `DATABASE_URL`
-é alternativa quando `DB_HOST` está ausente. O script de execução contra Neon
+é alternativa quando `DB_HOST` está ausente — e, por isso, o cofre **nunca** é
+consultado ali. Para percorrer o fluxo real (modal de primeiro uso, cofre
+bloqueado, reabertura direta no login) sem gerar instalador, exporte
+`ADM_P6_USAR_COFRE=1`: o build de debug passa a ignorar o ambiente e a ler a
+configuração do cofre, como o app instalado. O script de execução contra Neon
 continua sobrescrevendo as variáveis para aquele processo. Testes usam bancos
 descartáveis e cofres simulados, sem escrever no cofre pessoal.
 
@@ -193,9 +204,10 @@ rede indisponível e cofre bloqueado/ausente, sem expor credenciais em mensagens
 ```bash
 cd src-tauri
 cargo fmt --check
-cargo test                    # 180 testes, em bancos descartáveis
+cargo test                    # 205 testes, em bancos descartáveis
 cd ..
 npm run typecheck             # é aqui que erro de comando aparece
+npm test                      # 50 testes de frontend
 npm run build                 # typecheck + vite build
 ```
 

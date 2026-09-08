@@ -119,6 +119,26 @@ impl ConnectionInput {
     }
 }
 
+/// Nome da variável que faz um build de debug seguir o caminho real do cofre.
+#[cfg(debug_assertions)]
+pub const VAR_USAR_COFRE: &str = "ADM_P6_USAR_COFRE";
+
+/// Se o build de debug deve ignorar o ambiente e ler a configuração do cofre.
+///
+/// Sem isso, `tauri dev` **nunca** consulta o cofre: o modal de primeiro uso só
+/// pode ser visto num instalador de release, e clicar "Configurar conexão" em
+/// desenvolvimento grava no cofre pessoal um segredo que a abertura seguinte
+/// ignora em silêncio. Recebe o valor em vez de lê-lo para poder ser testada:
+/// variável de ambiente é estado global do processo, e mexer nela dentro de um
+/// teste que corre em paralelo com os outros é fonte de intermitência.
+#[cfg(debug_assertions)]
+pub fn usar_cofre_em_dev(valor: Option<&str>) -> bool {
+    // Aceita a variável apenas presente (o hábito de `FOO=1`), mas recusa os
+    // desligamentos escritos à mão — quem exporta `ADM_P6_USAR_COFRE=0` está
+    // dizendo o contrário do que a presença sozinha diria.
+    valor.is_some_and(|valor| !matches!(valor.trim(), "" | "0" | "false" | "no"))
+}
+
 #[cfg(debug_assertions)]
 pub fn development_config() -> ConnectionInput {
     let get = |key: &str, default: &str| {
@@ -390,6 +410,22 @@ mod tests {
             username: "a@b".into(),
             password: "p@:/?#% ç".into(),
             sslmode: "verify-full".into(),
+        }
+    }
+    #[test]
+    fn cofre_em_dev_so_liga_quando_a_variavel_diz_que_sim() {
+        for valor in [Some("1"), Some("true"), Some("sim")] {
+            assert!(usar_cofre_em_dev(valor), "{valor:?} deveria ligar o cofre");
+        }
+        for valor in [
+            None,
+            Some(""),
+            Some(" "),
+            Some("0"),
+            Some("false"),
+            Some("no"),
+        ] {
+            assert!(!usar_cofre_em_dev(valor), "{valor:?} deveria manter o .env");
         }
     }
     #[test]

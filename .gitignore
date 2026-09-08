@@ -17,6 +17,15 @@ admp6_db_atualizado.sql
 *.dump
 *.sql.gz
 
+# Pacotes .deb. Duas origens, as duas fora do git:
+#  - os baixados por `apt-get download` para preparar a compilacao cruzada do
+#    Windows (clang, llvm, lld, nsis). Sao 82 MB de binarios de terceiros que o
+#    `apt` refaz num comando, e o commit f7c189f os versionou na raiz por
+#    engano, junto com uma copia identica em `scripts/`.
+#  - o instalador que `scripts/empacotar.sh` gera. Esse ja cai em
+#    `src-tauri/target`, mas a regra vale igual: artefato nao se versiona.
+*.deb
+
 # Build do Vite: artefato, regenerado por `npm run build`.
 dist
 

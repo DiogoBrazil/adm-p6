@@ -327,13 +327,19 @@ function renderLogin(error = "") {
         <label>Senha<input name="senha" type="password" autocomplete="current-password" placeholder="Digite sua senha" required /></label>
         <p id="login-erro" class="feedback feedback--error" role="alert"${error ? "" : " hidden"}>${escapeHtml(error)}</p>
         <button type="submit">Entrar no GESTÃO P6/7ºBPM</button>
-        <button type="button" id="configurar-banco" class="secondary">Configurar conexão</button>
+        <p class="login-rodape">
+          <button type="button" id="configurar-banco" class="ghost small">Configurar conexão com o banco</button>
+        </p>
       </form>
       <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     </main>
   `;
 
-  document.querySelector("#configurar-banco")!.addEventListener("click", () => configurarBanco(app, () => renderLogin()));
+  // Cancelar aqui devolve o login: a conexão já funciona, e a tela do banco só
+  // apareceu porque o usuário pediu para trocá-la. No primeiro uso é o
+  // contrário, e por isso `resultado()` não passa `aoCancelar` nenhum.
+  document.querySelector("#configurar-banco")!.addEventListener("click", () =>
+    configurarBanco(app, () => renderLogin(), { aoCancelar: () => renderLogin() }));
   const formulario = document.querySelector<HTMLFormElement>("#login-form")!;
   const erro = document.querySelector<HTMLElement>("#login-erro")!;
 

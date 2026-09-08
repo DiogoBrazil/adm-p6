@@ -44,8 +44,13 @@ de usar `--execute`:
 ```
 configuração:   .env.producao
 binários psql:  docker
-servidor:       admp6db_owner@ep-blue-union-ae94habf.c-2.us-east-2.aws.neon.tech:5432  (EXTERNO)
+servidor:       USUARIO@ep-XXXX-XXXX.REGIAO.aws.neon.tech:5432  (EXTERNO)
 ```
+
+O endereço acima está mascarado de propósito: o banner do script imprime o
+usuário e o host **reais**, e este arquivo é versionado. Endpoint da Neon não é
+senha, mas é metade de uma credencial e diz onde os dados de 235 militares
+moram — quem confere olha a saída do próprio script, não este exemplo.
 
 `.env.producao` é **gitignorado** — tem senha. O que se versiona é o
 `.env.producao.example`.

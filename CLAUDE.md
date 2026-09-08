@@ -127,6 +127,9 @@ entender X → olhe em Y".
 | Excluir algo do relatório de prazos sem excluir do cartão | Prazos e Painel desenham o KPI com uma consulta e a tabela abaixo dele com outra. O número deixa de bater com as linhas, e é exatamente o defeito que o piso da janela veio corrigir. Toda exclusão nova entra nas duas ao mesmo tempo |
 | Coluna `nowrap` mais estreita que o conteúdo em tabela `--fixa` | `table-layout: fixed` não encolhe nem corta: a célula **transborda por cima da vizinha**. Só `truncar` corta com reticências (e dá o `title`). Largura de coluna com dado de tamanho conhecido se mede no motor, não se estima — data `dd/mm/aaaa` pede ~96px |
 | Uma consulta por linha, dentro de um laço | O custo de uma tela é o **número de idas e voltas**, não o tempo de cada consulta: 0,2 ms em `localhost` esconde o que ~224 ms na nuvem cobra. O Mapa do Período fazia 1.013 e levava 3,8 min. Folha vira lote (`= ANY($1::uuid[])`), a de um id só é casca fina sobre ela, e o agrupamento preserva a ordem — `db/lote.rs`. Lista vazia não vai ao banco. Teste de agrupamento precisa de **mais de um grupo** |
+| Conferir o fluxo do cofre com `tauri dev` | em debug o `AppState` nasce com `development: Some(...)` e o cofre **nunca** é lido: o modal de primeiro uso não aparece, e "Configurar conexão" ali grava no cofre pessoal um segredo que a abertura seguinte ignora. Quem testou em dev não testou nada. `ADM_P6_USAR_COFRE=1` faz o debug seguir o caminho do app instalado |
+| Anunciar a conexão na tela de abertura | a configuração está no cofre desde o primeiro uso: em quase toda abertura o painel "Conexão com o banco" anuncia um pedido de credenciais que não vem. A abertura é neutra e repete o cabeçalho do `renderLogin`; o painel do banco é exclusivo dos estados que não são `ready` |
+| Pedir as credenciais de novo quando a conexão falha | rede fora, cofre bloqueado e migration que falhou **não** são falta de configuração — a entrada segue no cofre. Só `missing` e `invalid_config` abrem o modal, e `read_config` separa os três casos na origem |
 | Desligar `test_before_acquire` para fugir do ping por consulta | É ele que impede receber socket que o servidor já matou, e num banco que suspende por ociosidade isso acontece. A resposta é pedir **menos conexões**: uma sequência de consultas tira um `acquire()` e reusa `&mut *conn`. E `min_connections` fica em zero — conexão aberta impede a suspensão |
 
 A seção 7 do guia tem a lista completa, com o que cada uma já custou.
@@ -134,8 +137,8 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 ## Antes de dar algo por pronto
 
 ```bash
-cd src-tauri && cargo fmt --check && cargo test   # 195 testes
-cd .. && npm test && npm run typecheck            # 40 testes frontend
+cd src-tauri && cargo fmt --check && cargo test   # 205 testes
+cd .. && npm test && npm run typecheck            # 50 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —

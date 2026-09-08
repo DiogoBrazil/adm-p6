@@ -21,7 +21,18 @@ impl AppState {
             development: {
                 #[cfg(debug_assertions)]
                 {
-                    Some(crate::database_config::development_config())
+                    // `ADM_P6_USAR_COFRE=1` faz o build de debug abrir mão do
+                    // `.env` e seguir o mesmo caminho do app instalado — é a
+                    // única forma de exercitar o primeiro uso, o cofre
+                    // bloqueado e a reabertura sem gerar instalador. O
+                    // `dotenvy::dotenv()` de `lib.rs::run` já correu, então a
+                    // variável também pode vir do próprio `.env`.
+                    let variavel = std::env::var(crate::database_config::VAR_USAR_COFRE).ok();
+                    if crate::database_config::usar_cofre_em_dev(variavel.as_deref()) {
+                        None
+                    } else {
+                        Some(crate::database_config::development_config())
+                    }
                 }
                 #[cfg(not(debug_assertions))]
                 {
