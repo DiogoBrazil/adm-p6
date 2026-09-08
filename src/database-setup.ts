@@ -1,39 +1,84 @@
 import { call, type ConnectionInput, type StartupStatus } from "./api";
-import { escapeHtml, montarModal } from "./dom";
+import { comCarregamento, escapeHtml, montarModal } from "./dom";
 import { brasaoUrl } from "./brasao";
 
 type Ready = () => void | Promise<void>;
 
-function tela(app: HTMLElement, message: string, ready: Ready, retry = true) {
+/** O que a configuração faz ao ser cancelada, e o texto que fica no fundo. */
+type OpcoesConfiguracao = {
+  /** Chamado ao cancelar. Sem ele, cancelar mantém o acesso bloqueado. */
+  aoCancelar?: () => void;
+  /** Mensagem do painel por baixo do modal. */
+  mensagemDeFundo?: string;
+};
+
+/**
+ * A abertura, enquanto ainda não se sabe se há configuração salva.
+ *
+ * O cabeçalho é **o mesmo** de `main.ts::renderLogin`, de propósito: quem já
+ * configurou o banco — a imensa maioria das aberturas, porque a configuração
+ * fica no cofre desde o primeiro uso — vê o formulário de login aparecer sob o
+ * topo que já estava na tela, e não uma tela de banco trocada por outra. Falar
+ * em conexão aqui anunciaria um pedido de credenciais que não vai acontecer.
+ */
+function abertura(app: HTMLElement): void {
+  app.innerHTML = `<main class="login-screen"><section class="login-panel" aria-label="Iniciando">
+    <div class="login-brand"><img src="${brasaoUrl}" alt="" /><div><span>Sistema administrativo</span><h1>GESTÃO P6/7ºBPM</h1><p>Seção de Justiça e Disciplina</p></div></div>
+    <p role="status">Iniciando…</p>
+  </section></main>`;
+}
+
+/** O painel do banco. Só aparece quando a conexão **não** está pronta. */
+function tela(app: HTMLElement, message: string, ready: Ready) {
   app.innerHTML = `<main class="login-screen"><section class="login-panel" aria-label="Conexão com o banco">
     <div class="login-brand"><img src="${brasaoUrl}" alt="" /><div><h1>GESTÃO P6/7ºBPM</h1><p>Conexão com o banco</p></div></div>
     <p role="status">${escapeHtml(message)}</p>
-    ${retry ? '<button id="db-retry" type="button">Tentar novamente</button><button id="db-configure" type="button" class="secondary">Configurar conexão</button>' : ""}
+    <button id="db-retry" type="button">Tentar novamente</button><button id="db-configure" type="button" class="secondary">Configurar conexão</button>
   </section></main>`;
   app.querySelector("#db-retry")?.addEventListener("click", () => void iniciarBanco(app, ready));
   app.querySelector("#db-configure")?.addEventListener("click", () => configurarBanco(app, ready));
 }
 
 export async function iniciarBanco(app: HTMLElement, ready: Ready): Promise<void> {
-  tela(app, "Preparando a conexão com o banco…", ready, false);
-  const response = await call("database_initialize");
-  if (!response.ok || !response.data) {
-    tela(app, response.error ?? "Não foi possível verificar a conexão. Tente novamente.", ready);
-    return;
-  }
-  await resultado(app, response.data, ready);
+  abertura(app);
+  // O véu cobre a partida inteira, e não só o IPC: o `ready()` ainda vai buscar
+  // a sessão e desenhar a primeira rota. Ele mora fora de `#app` (`index.html`)
+  // e por isso sobrevive aos `innerHTML` daqui; `comCarregamento` conta
+  // profundidade, então o véu que `renderRoute` abre lá dentro não derruba este.
+  await comCarregamento("Iniciando…", async (passo) => {
+    const response = await call("database_initialize");
+    if (!response.ok || !response.data) {
+      tela(app, response.error ?? "Não foi possível verificar a conexão. Tente novamente.", ready);
+      return;
+    }
+    await passo("Preparando o sistema…");
+    await resultado(app, response.data, ready);
+  });
 }
 
 async function resultado(app: HTMLElement, status: StartupStatus, ready: Ready) {
   if (status.state === "ready") { await ready(); return; }
   tela(app, status.message, ready);
-  if (status.state === "missing" || status.state === "invalid_config") configurarBanco(app, ready);
+  // Só falta de configuração pede credenciais. Rede fora, cofre bloqueado e
+  // migration que falhou já têm o que precisam no painel: tentar de novo. E a
+  // mensagem do fundo é a do backend — no primeiro uso não há "configuração já
+  // salva" para sugerir.
+  if (status.state === "missing" || status.state === "invalid_config") {
+    configurarBanco(app, ready, { mensagemDeFundo: status.message });
+  }
 }
 
-export function configurarBanco(app: HTMLElement, ready: Ready): void {
-  // Retira o formulário de login enquanto configura; cancelar nunca libera login.
-  tela(app, "Configure a conexão ou tente usar a configuração já salva para continuar.", ready);
+export function configurarBanco(app: HTMLElement, ready: Ready, opcoes: OpcoesConfiguracao = {}): void {
+  // Retira o formulário de login enquanto configura. Cancelar só o devolve
+  // quando quem abriu tinha um login para voltar (`aoCancelar`); vindo do
+  // primeiro uso não há conexão nenhuma, e cancelar nunca libera o login.
+  tela(app, opcoes.mensagemDeFundo ?? "Configure a conexão ou tente usar a configuração já salva para continuar.", ready);
   let busy = false;
+  const cancelar = () => {
+    if (busy) return;
+    modal?.fechar();
+    opcoes.aoCancelar?.();
+  };
   const modal = montarModal(`
     <header><h2>Configurar conexão</h2><p>Informe os dados fornecidos pelo responsável pelo banco. Eles serão salvos no cofre seguro da sua conta neste computador.</p></header>
     <form id="db-form" autocomplete="off">
@@ -60,7 +105,7 @@ export function configurarBanco(app: HTMLElement, ready: Ready): void {
       </fieldset>
       <p id="db-feedback" role="status" aria-live="polite"></p>
       <div class="db-actions"><button type="button" class="secondary" data-fechar-modal>Cancelar</button><button type="submit">Testar e salvar</button></div>
-    </form>`, "Configurar conexão", () => { if (!busy) modal?.fechar(); });
+    </form>`, "Configurar conexão", cancelar);
   if (!modal) return;
   const form = modal.overlay.querySelector<HTMLFormElement>("#db-form")!;
   const feedback = modal.overlay.querySelector<HTMLElement>("#db-feedback")!;

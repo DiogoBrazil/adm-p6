@@ -2857,6 +2857,22 @@ label .campo-efeito,
   font-size: 0.88rem;
 }
 
+/*
+ * Trocar a conexão do banco é exceção — acontece uma vez por computador, no
+ * primeiro uso, e depois só se as credenciais mudarem. Como segundo botão do
+ * mesmo tamanho de "Entrar", disputava peso com o acesso ao sistema; aqui é um
+ * rodapé discreto.
+ *
+ * Classe nova de propósito: `.login-screen` e `.login-panel` estão declaradas
+ * DUAS vezes neste arquivo (a base, lá em cima, e o tema logo acima), e mexer
+ * numa delas depende da ordem, não da intenção. `.login-panel` é grid, então
+ * sem este parágrafo o botão nasceria esticado na largura toda.
+ */
+.login-rodape {
+  margin: 0;
+  text-align: center;
+}
+
 /* Feedback e estados */
 .feedback,
 .aviso,

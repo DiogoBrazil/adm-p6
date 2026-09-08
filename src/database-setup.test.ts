@@ -25,15 +25,36 @@ const submit = () => document.querySelector("#db-form")!.dispatchEvent(new Event
 
 describe("configuração inicial do banco", () => {
   it("abre modal se não houver configuração e cancelar não libera login", async () => {
-    ipc.mockResolvedValueOnce(status("missing"));
+    ipc.mockResolvedValueOnce(status("missing", "Configure a conexão com o banco para começar."));
     await iniciarBanco(app, ready);
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    // No primeiro uso não existe "configuração já salva" para sugerir: o fundo
+    // repete o que o backend disse, e não um texto fixo da tela.
+    expect(app.querySelector('[role="status"]')!.textContent).toBe("Configure a conexão com o banco para começar.");
     expect(ready).not.toHaveBeenCalled();
     click("[data-fechar-modal]");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(ready).not.toHaveBeenCalled();
     click("#db-configure");
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("a abertura não anuncia o banco enquanto a configuração salva é usada", async () => {
+    // Quem já configurou vê abertura → login. O painel "Conexão com o banco" e
+    // os botões dele só existem para os estados que não são `ready`.
+    let finish!: (value: ReturnType<typeof status>) => void;
+    ipc.mockImplementationOnce((() => new Promise(resolve => { finish = resolve; })) as typeof call);
+    const partida = iniciarBanco(app, ready);
+    // `comCarregamento` cede um quadro antes de agir, para o véu pintar: sem
+    // esperar por ele, a asserção correria antes de o IPC sequer sair.
+    await vi.waitFor(() => expect(ipc).toHaveBeenCalledOnce());
+    expect(app.textContent).not.toContain("Conexão com o banco");
+    expect(document.querySelector("#db-retry")).toBeNull();
+    expect(document.querySelector("#db-configure")).toBeNull();
+    expect(ready).not.toHaveBeenCalled();
+    finish(status("ready"));
+    await partida;
+    expect(ready).toHaveBeenCalledOnce();
   });
 
   it("configuração pronta abre login sem solicitar credenciais", async () => {
@@ -72,6 +93,17 @@ describe("configuração inicial do banco", () => {
     finish(status("ready"));
     await vi.waitFor(() => expect(ready).toHaveBeenCalledOnce());
     expect(document.querySelector('[name="password"]')).toBeNull();
+  });
+
+  it("cancelar devolve ao login quando a conexão já funciona", async () => {
+    // Contraponto do primeiro teste: aqui a tela do banco só apareceu porque o
+    // usuário pediu para trocar a conexão, e desistir tem de devolver o login.
+    const aoCancelar = vi.fn();
+    configurarBanco(app, ready, { aoCancelar });
+    click("[data-fechar-modal]");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(aoCancelar).toHaveBeenCalledOnce();
+    expect(ready).not.toHaveBeenCalled();
   });
 
   it("não libera login quando o cofre recusa salvar; permite nova tentativa", async () => {
