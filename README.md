@@ -1085,6 +1085,18 @@ o cofre foi limpo. Falha de rede **não** apaga a configuração — nesse caso 
 oferece `Tentar novamente`, e não o formulário. Ver
 [9](#9-a-conexão-no-primeiro-uso).
 
+**"O véu de carregamento aparece, mas o círculo não gira." (Windows)**
+O app está obedecendo a uma configuração do sistema. Quando os efeitos de
+animação do Windows estão desligados, o navegador embutido informa
+*"prefiro menos movimento"*, e o app para **todas** as animações — o anel fica
+visível, porém imóvel. Ligue em **Configurações → Acessibilidade → Efeitos
+visuais → Efeitos de animação**. No Linux esse ajuste vem ligado por padrão, e
+por isso o `.deb` nunca mostra o problema.
+
+Vale saber que o giro **não** é o recado: quem informa que há trabalho em curso é
+o véu escurecendo a tela mais a mensagem, que muda por etapa. Durante um trabalho
+pesado o giro pode travar mesmo com a animação ligada — a mensagem continua certa.
+
 **"Marquei o envolvido como condutor e a caixa sumiu."**
 A caixa `Condutor` só existe quando a **natureza geral do fato** está marcada como
 exigindo condutor. Trocar a natureza para uma que não exige esconde o campo.
@@ -1308,6 +1320,19 @@ novo pedido de conexão**. Atualizar o pacote preserva a configuração; outra c
 do sistema recebe o modal. Conferir também cancelamento, troca de senha, rede
 indisponível e cofre bloqueado ou ausente, sem que nenhuma mensagem exponha
 credenciais.
+
+**Dois itens que só o Windows revela**, e que esta lista não tinha até um pacote
+chegar ao PC de destino com os dois:
+
+- **Nenhum terminal atrás da janela.** Se aparecer um, o executável saiu no
+  subsistema errado — fechar esse terminal mata o app com o trabalho aberto
+  dentro. Confere-se antes de distribuir, sem precisar de Windows:
+  `file …/x86_64-pc-windows-msvc/release/gestao-p6.exe` tem de dizer
+  **`PE32+ executable (GUI)`**.
+- **O círculo do véu de carregamento girando.** Parado significa que os efeitos
+  de animação do Windows estão desligados naquela máquina — não é defeito do
+  pacote, mas atrapalha quem usa. Ver as
+  [Perguntas frequentes](#5-perguntas-frequentes).
 
 ---
 
