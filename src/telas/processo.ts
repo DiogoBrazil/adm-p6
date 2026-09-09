@@ -1912,6 +1912,10 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
   inicio.addEventListener("input", sincronizarDatas);
   fim.addEventListener("input", sincronizarDatas);
   sincronizarDatas();
+  // Sem callback: o limite recíproco dos dois campos já é mantido pelo `input`
+  // acima. O que falta aqui é o que todo campo de data do app faz — fechar o
+  // seletor depois da escolha com o mouse, e não tirar o foco de quem digita.
+  ligarCamposDeData(form);
   const erroDosFiltros = () => form.querySelector<HTMLElement>("[data-erro-filtros]")!;
 
   form.addEventListener("submit", (evento) => {
@@ -2997,6 +3001,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   // formulários seriam a mesma marcação duas vezes, com duas chances de
   // divergir.
   const formSubstituicao = document.querySelector<HTMLFormElement>("#form-substituicao");
+  // `data_troca` é campo de data como qualquer outro: mesmo tratamento do
+  // seletor e da digitação. O limite (`data-limite-max`) já vem na marcação e é
+  // cobrado pela validação global de `dom.ts`, então não há o que recalcular.
+  ligarCamposDeData(formSubstituicao);
   const resumoSubstituicao = document.querySelector<HTMLElement>("#resumo-substituicao");
   const botaoSalvarSubstituicao =
     document.querySelector<HTMLButtonElement>("#salvar-substituicao");
@@ -3226,10 +3234,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   );
 
   const formProrrogacao = document.querySelector<HTMLFormElement>("#form-prorrogacao");
-  formProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
-    const input = e.currentTarget as HTMLInputElement;
-    window.requestAnimationFrame(() => input.blur());
-  });
+  // Este `change` era escrito à mão e blurava SEMPRE — a cópia manual do que
+  // `ligarCamposDeData` faz, sem a guarda de teclado que o helper ganhou. Como
+  // o `change` de um campo de data dispara assim que o valor fica completo, e
+  // ao digitar o ano o primeiro `2` já é o ano `0002`, o campo perdia o foco no
+  // primeiro dígito e não havia como terminar de digitar. O helper fecha o
+  // seletor do mouse pelo mesmo motivo de antes, e só para quem usou o mouse.
+  ligarCamposDeData(formProrrogacao);
   formProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
@@ -3260,10 +3271,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   document.querySelector<HTMLButtonElement>("#cancelar-edicao-prorrogacao")?.addEventListener("click", () => {
     alternarEdicaoProrrogacao(false);
   });
-  formEditarProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
-    const input = e.currentTarget as HTMLInputElement;
-    window.requestAnimationFrame(() => input.blur());
-  });
+  // Mesma correção do `#form-prorrogacao` logo acima: o `change` manual daqui
+  // tinha o mesmo `blur()` sem guarda, e o mesmo efeito de impedir a digitação.
+  ligarCamposDeData(formEditarProrrogacao);
   formEditarProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!ultimaProrrogacao) return;

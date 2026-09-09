@@ -9,6 +9,7 @@ import {
   instalarValidacaoAmigavel,
   ligarCamposDeData,
   mensagemDeLimiteDeData,
+  preservarRolagem,
   revalidarLimiteDeData,
   sincronizarSelectsPesquisaveis,
   tabela,
@@ -210,6 +211,78 @@ describe("campos de data", () => {
 
     expect(document.activeElement).not.toBe(campo);
     expect(vistos).toEqual(["data_conclusao"]);
+  });
+
+  // O callback é opcional porque três formulários — os dois campos do filtro e
+  // a data da substituição — só querem o comportamento do seletor. Foi por não
+  // ter esse padrão que dois campos de prorrogação ficaram com uma cópia
+  // manual do `change`, sem a guarda de teclado, e passaram uma rodada inteira
+  // sem aceitar digitação.
+  it("dispensa o callback e ainda trata o seletor e a digitação", async () => {
+    const escopo = document.createElement("div");
+    escopo.innerHTML = `<input type="date" name="nova_data_vencimento" />`;
+    document.body.append(escopo);
+    const campo = escopo.querySelector("input")!;
+    ligarCamposDeData(escopo);
+
+    campo.focus();
+    campo.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true }));
+    campo.value = "0002-01-01";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    await proximoQuadro();
+    expect(document.activeElement).toBe(campo);
+
+    campo.dispatchEvent(new FocusEvent("blur"));
+    campo.focus();
+    campo.value = "2027-03-10";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    await proximoQuadro();
+    expect(document.activeElement).not.toBe(campo);
+  });
+});
+
+// O `shell()` refaz o `innerHTML` do app inteiro a cada tela, e a `.sidebar`
+// tem rolagem própria. O que estes testes prendem é a LIGAÇÃO — leu antes,
+// escreveu depois —, que é o que uma refatoração do `shell()` pode desfazer
+// sem ninguém notar. O happy-dom guarda `scrollTop` como propriedade simples,
+// sem layout, então a rolagem de verdade do WebView continua sendo coisa de
+// conferir na tela.
+describe("preservarRolagem", () => {
+  it("devolve a posição ao elemento recriado", () => {
+    document.body.innerHTML = `<aside class="sidebar">antes</aside>`;
+    document.querySelector<HTMLElement>(".sidebar")!.scrollTop = 420;
+
+    preservarRolagem(".sidebar", () => {
+      document.body.innerHTML = `<aside class="sidebar">depois</aside>`;
+    });
+
+    const recriado = document.querySelector<HTMLElement>(".sidebar")!;
+    expect(recriado.textContent).toBe("depois");
+    expect(recriado.scrollTop).toBe(420);
+  });
+
+  it("redesenha mesmo sem elemento antes ou depois", () => {
+    document.body.innerHTML = "";
+    let redesenhou = 0;
+
+    // Primeira tela depois do login: vem da tela de acesso, que não tem menu.
+    expect(() =>
+      preservarRolagem(".sidebar", () => {
+        redesenhou += 1;
+        document.body.innerHTML = `<aside class="sidebar"></aside>`;
+      }),
+    ).not.toThrow();
+
+    // E o inverso: havia menu, o redesenho não o recria.
+    document.querySelector<HTMLElement>(".sidebar")!.scrollTop = 90;
+    expect(() =>
+      preservarRolagem(".sidebar", () => {
+        redesenhou += 1;
+        document.body.innerHTML = `<main>tela de acesso</main>`;
+      }),
+    ).not.toThrow();
+
+    expect(redesenhou).toBe(2);
   });
 });
 

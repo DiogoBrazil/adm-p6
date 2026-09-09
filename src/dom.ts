@@ -371,7 +371,12 @@ export function revalidarLimiteDeData(campo: HTMLInputElement | null): void {
  */
 export function ligarCamposDeData(
   escopo: ParentNode | null | undefined,
-  aoMudar: (campo: HTMLInputElement) => void,
+  // Opcional porque nem todo formulário tem o que recalcular: os filtros da
+  // listagem e a data da substituição só querem o fechamento do seletor e a
+  // guarda de teclado. Sem o padrão, cada um deles inventaria um `() => {}` —
+  // e a alternativa de não chamar o helper foi justamente como dois campos de
+  // data ficaram com uma cópia manual do `change`, sem a guarda.
+  aoMudar: (campo: HTMLInputElement) => void = () => {},
 ): void {
   escopo?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((campo) => {
     let veioDoTeclado = false;
@@ -387,6 +392,35 @@ export function ligarCamposDeData(
       window.requestAnimationFrame(() => campo.blur());
     });
   });
+}
+
+/**
+ * Mantém a rolagem própria de um elemento que vai ser recriado no redesenho.
+ *
+ * O `shell()` refaz o `innerHTML` do app inteiro a cada troca de tela, e a
+ * `.sidebar` tem rolagem própria (`height: 100vh; overflow-y: auto`). Recriar o
+ * DOM zera o `scrollTop`: quem clicava num dos últimos catálogos — são 26, e
+ * nascem em runtime — voltava ao topo do menu e tinha de rolar de novo para
+ * alcançar o vizinho.
+ *
+ * Lê antes, redesenha, reaplica. Tudo síncrono, antes do próximo quadro, para
+ * não haver salto visível. Mora aqui, e não no `main.ts`, porque é lá que o
+ * Vitest não alcança — o módulo importa a API do Tauri.
+ *
+ * A posição NÃO é persistida: vive só enquanto o app está aberto. Recolhido e
+ * grupos abertos vão para o `localStorage` porque são preferência declarada;
+ * rolagem é onde a pessoa parou, e reabrir o programa com o menu no meio seria
+ * estranho.
+ */
+export function preservarRolagem(seletor: string, redesenhar: () => void): void {
+  const anterior = document.querySelector<HTMLElement>(seletor)?.scrollTop ?? 0;
+  redesenhar();
+  if (anterior <= 0) return;
+  const recriado = document.querySelector<HTMLElement>(seletor);
+  // Sem elemento não há o que restaurar — é o caso da primeira tela depois do
+  // login, que vem da tela de acesso, onde não existe menu. Posição maior que o
+  // novo conteúdo o navegador mesmo limita.
+  if (recriado) recriado.scrollTop = anterior;
 }
 
 /** Traduz o `ValidityState` do WebView sem substituir as regras do HTML. */

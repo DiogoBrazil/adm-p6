@@ -251,6 +251,24 @@ continuam sendo um select comum, onde clicar é mais rápido que digitar.
 a data, inclusive o ano. O calendário navega para **qualquer ano** — não há piso
 nem teto na navegação, então um processo de 2018 se cadastra sem rodeio.
 
+São oito campos, e "todo" é literal: cabeçalho do cadastro, datas posteriores e
+conclusão no detalhe, os dois do filtro de instauração, a data da substituição
+de encarregado e o novo vencimento das duas telas de prorrogação. Escolhendo com
+o mouse, o calendário fecha sozinho depois da escolha; digitando, o campo
+mantém o foco até o fim do ano.
+
+**A ordem dos segmentos é `dd/mm/aaaa`, e vem do idioma do Windows** — não da
+aplicação, que não tem como decidir isso. O campo vazio sempre exibe o gabarito
+em uso, então dá para conferir a olho. Numa máquina com Windows em inglês ele
+passaria a `mm/dd/yyyy`, e aí o primeiro segmento é o mês: quem digitasse `20`
+para o dia receberia `12`, porque mês não passa disso. O ajuste, se acontecer, é
+no idioma de exibição do Windows daquela máquina.
+
+> Rodando por `tauri dev` no **Linux**, o campo aparece como `mm/dd/yyyy` de
+> qualquer jeito: o WebKitGTK ignora idioma e locale nesse controle. É limitação
+> do motor de desenvolvimento, não do app — conferir formato de data ali não diz
+> nada sobre o que o usuário vê.
+
 Isso **não** afrouxa nenhuma regra. A ordem das datas do fluxo (instauração ≤
 recebimento ≤ remessa ≤ julgamento ≤ conclusão) e o "não pode ser futura"
 continuam valendo: a data fora de ordem recebe o aviso embaixo do campo, dizendo
