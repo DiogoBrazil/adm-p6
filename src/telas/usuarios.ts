@@ -28,6 +28,7 @@ import {
   carregarTudo,
   comCarregamento,
   escapeHtml,
+  formatarData,
   ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
   ligarExportacao,
@@ -755,8 +756,8 @@ function tabelaProcessos(itens: UserProcessItem[], coluna: string, campo: "papel
       `${p.apuratorio_sigla} nº ${p.numero_controle}`,
       p.apuratorio_nome,
       p[campo] ?? "—",
-      p.data_instauracao,
-      p.data_conclusao ? `concluído em ${p.data_conclusao}` : "em andamento",
+      formatarData(p.data_instauracao),
+      p.data_conclusao ? `concluído em ${formatarData(p.data_conclusao)}` : "em andamento",
     ]),
     "Nenhum.",
     // Dezesseis cabem na folha em retrato (`medicao-usuario-processos`); 14

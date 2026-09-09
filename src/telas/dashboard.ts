@@ -26,6 +26,7 @@ import { faixasDePrazo } from "../graficos/dados";
 import {
   barraDeExportacao,
   escapeHtml,
+  formatarData,
   formatarQualificacaoMilitar,
   ligarExportacao,
   tabela,
@@ -64,7 +65,7 @@ export async function renderDashboard(ctx: ContextoTela): Promise<void> {
       i.responsavel_matricula,
       i.responsavel_nome,
     ),
-    i.data_vencimento,
+    formatarData(i.data_vencimento),
     { texto: `${-i.dias_restantes} dias`, numerica: true },
   ];
 

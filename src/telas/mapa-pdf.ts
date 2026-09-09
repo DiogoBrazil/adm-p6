@@ -13,7 +13,7 @@ import type {
   ProceedingDetail,
 } from "../api";
 import { call } from "../api";
-import { escapeHtml, formatarOrigem } from "../dom";
+import { escapeHtml, formatarData, formatarOrigem } from "../dom";
 import { brasaoUrl } from "../brasao";
 
 export type ContextoPdfMapa = {
@@ -27,12 +27,9 @@ export type ContextoPdfMapa = {
 const informado = (valor: unknown): string =>
   valor === null || valor === undefined || valor === "" ? "Não informado" : String(valor);
 
-function data(valor: string | null | undefined): string {
-  if (!valor) return "Não informado";
-  const apenasData = valor.slice(0, 10).split("-");
-  if (apenasData.length !== 3) return valor;
-  return `${apenasData[2]}/${apenasData[1]}/${apenasData[0]}`;
-}
+/** O documento diz "Não informado" onde a tela diz `—`; o formato é o mesmo. */
+const data = (valor: string | null | undefined): string =>
+  formatarData(valor, "Não informado");
 
 function dataHora(valor: string | null | undefined): string {
   if (!valor) return "Não informado";

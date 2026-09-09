@@ -45,10 +45,18 @@ export function formatarDataHora(iso: string): string {
   return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}` : iso;
 }
 
-/** `2026-08-31` → `31/08/2026`. Vazio vira travessão, para a coluna não sumir. */
-export function formatarData(iso: string | null | undefined): string {
+/**
+ * `2026-08-31` → `31/08/2026`. Aceita também o `timestamp` inteiro, porque a
+ * expressão está ancorada no começo e ignora o que vem depois do dia.
+ *
+ * O `vazio` existe porque o mesmo formato era escrito em quatro lugares que só
+ * discordavam no que fazer com a data ausente: a listagem quer o travessão para
+ * a coluna não sumir, o PDF do mapa quer "Não informado" e quem formata um
+ * limite de campo — que nunca é vazio — quer o próprio valor de volta.
+ */
+export function formatarData(iso: string | null | undefined, vazio = "—"): string {
   const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : "—";
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : vazio;
 }
 
 /** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
@@ -268,9 +276,88 @@ function ehCampoValidavel(alvo: EventTarget | null): alvo is CampoValidavel {
   );
 }
 
-function dataPtBr(valor: string): string {
-  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
-  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : valor;
+/**
+ * O limite de um campo de data **orienta, não prende**.
+ *
+ * A ordem cronológica (decisão 47) morava nos atributos `min`/`max`, e o preço
+ * era o calendário travado: num apuratório instaurado em 2025, o campo de
+ * recebimento não voltava a 2024 — nem para consertar uma instauração errada.
+ * O limite passou a `data-limite-min`/`data-limite-max`, que o navegador não
+ * conhece: o calendário navega para qualquer ano e a regra continua cobrada
+ * aqui, com a mesma mensagem e o mesmo bloqueio de submit de antes.
+ *
+ * Compara em ISO como texto — `AAAA-MM-DD` ordena lexicograficamente, que é o
+ * que `menorDataIso`/`maiorDataIso` já exploram. Data vazia não viola limite:
+ * o que exige o preenchimento é o `required`.
+ */
+export function mensagemDeLimiteDeData(campo: CampoValidavel): string {
+  if (!(campo instanceof HTMLInputElement) || campo.type !== "date") return "";
+  const valor = campo.value;
+  if (!valor) return "";
+
+  const min = campo.dataset.limiteMin ?? "";
+  if (min && valor < min) {
+    return (
+      campo.dataset.mensagemMin ??
+      `Escolha uma data igual ou posterior a ${formatarData(min, min)}.`
+    );
+  }
+  const max = campo.dataset.limiteMax ?? "";
+  if (max && valor > max) {
+    return (
+      campo.dataset.mensagemMax ??
+      `Escolha uma data igual ou anterior a ${formatarData(max, max)}.`
+    );
+  }
+  return "";
+}
+
+/**
+ * Reavalia um campo cujo limite acabou de mudar.
+ *
+ * Sem isto, corrigir a data de instauração deixaria o erro do recebimento na
+ * tela até alguém tocar no recebimento — o campo culpado não é o que mudou.
+ */
+export function revalidarLimiteDeData(campo: HTMLInputElement | null): void {
+  if (!campo) return;
+  const mensagem = mensagemDeLimiteDeData(campo);
+  if (mensagem) {
+    campo.setCustomValidity(mensagem);
+    if (errosDeCampo.has(campo)) mostrarErroDoCampo(campo, mensagem);
+  } else {
+    limparErroDoCampo(campo);
+  }
+}
+
+/**
+ * Liga os campos de data de um formulário: chama `aoMudar` a cada escolha e
+ * fecha o seletor nativo, que em algumas plataformas do WebView permanece
+ * aberto depois da escolha.
+ *
+ * O fechamento é um `blur()` — e **só** vale para a escolha com o mouse. Em
+ * `input[type="date"]` o `change` dispara assim que o valor fica completo, e ao
+ * digitar o ano o primeiro dígito `2` já é o ano completo `0002`: tirar o foco
+ * ali era o que impedia digitar o resto do ano. Quem teclou no campo desde o
+ * último `blur` fica com o foco onde está.
+ */
+export function ligarCamposDeData(
+  escopo: ParentNode | null | undefined,
+  aoMudar: (campo: HTMLInputElement) => void,
+): void {
+  escopo?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((campo) => {
+    let veioDoTeclado = false;
+    campo.addEventListener("keydown", () => {
+      veioDoTeclado = true;
+    });
+    campo.addEventListener("blur", () => {
+      veioDoTeclado = false;
+    });
+    campo.addEventListener("change", () => {
+      aoMudar(campo);
+      if (veioDoTeclado) return;
+      window.requestAnimationFrame(() => campo.blur());
+    });
+  });
 }
 
 /** Traduz o `ValidityState` do WebView sem substituir as regras do HTML. */
@@ -278,6 +365,12 @@ function mensagemDeValidacao(campo: CampoValidavel): string {
   // Uma mensagem personalizada anterior mantém `customError=true` mesmo
   // depois que o valor muda. Limpar primeiro revela o estado nativo atual.
   campo.setCustomValidity("");
+
+  // Antes do `validity`: o limite de data não é atributo que o navegador
+  // conheça, então o campo fora de ordem chega aqui nativamente válido.
+  const limite = mensagemDeLimiteDeData(campo);
+  if (limite) return limite;
+
   const validade = campo.validity;
   if (validade.valid) return "";
 
@@ -292,17 +385,13 @@ function mensagemDeValidacao(campo: CampoValidavel): string {
   if (validade.typeMismatch && campo instanceof HTMLInputElement && campo.type === "email") {
     return "Informe um endereço de e-mail válido.";
   }
+  // Só os campos numéricos ainda declaram `min`/`max` nativos — porta do banco,
+  // prazo em dias, máximo de ocupantes. Os de data foram tratados acima.
   if (validade.rangeUnderflow && campo instanceof HTMLInputElement) {
-    if (campo.dataset.mensagemMin) return campo.dataset.mensagemMin;
-    return campo.type === "date"
-      ? `Escolha uma data igual ou posterior a ${dataPtBr(campo.min)}.`
-      : `Informe um valor maior ou igual a ${campo.min}.`;
+    return campo.dataset.mensagemMin ?? `Informe um valor maior ou igual a ${campo.min}.`;
   }
   if (validade.rangeOverflow && campo instanceof HTMLInputElement) {
-    if (campo.dataset.mensagemMax) return campo.dataset.mensagemMax;
-    return campo.type === "date"
-      ? `Escolha uma data igual ou anterior a ${dataPtBr(campo.max)}.`
-      : `Informe um valor menor ou igual a ${campo.max}.`;
+    return campo.dataset.mensagemMax ?? `Informe um valor menor ou igual a ${campo.max}.`;
   }
   if (validade.tooShort && campo instanceof HTMLInputElement) {
     return `Informe pelo menos ${campo.minLength} caracteres.`;
@@ -401,12 +490,18 @@ export function instalarValidacaoAmigavel(): void {
   );
 
   const revisarCampo = (evento: Event) => {
-    if (!ehCampoValidavel(evento.target) || !errosDeCampo.has(evento.target)) return;
+    if (!ehCampoValidavel(evento.target)) return;
     const campo = evento.target;
+    // Campo que já errou continua sendo revisto a cada tecla, para o aviso
+    // sumir sozinho. Campo de data com limite próprio entra aqui **antes** de
+    // errar: como o navegador não conhece `data-limite-*`, é este
+    // `setCustomValidity` que torna o campo inválido e faz o submit parar.
+    const temLimiteDeData = campo instanceof HTMLInputElement && campo.type === "date";
+    if (!errosDeCampo.has(campo) && !temLimiteDeData) return;
     const mensagem = mensagemDeValidacao(campo);
     if (mensagem) {
       campo.setCustomValidity(mensagem);
-      mostrarErroDoCampo(campo, mensagem);
+      if (errosDeCampo.has(campo)) mostrarErroDoCampo(campo, mensagem);
     } else {
       limparErroDoCampo(campo);
     }

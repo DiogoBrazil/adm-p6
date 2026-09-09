@@ -46,10 +46,12 @@ import {
   comCarregamento,
   destruirSelectsPesquisaveis,
   escapeHtml,
+  formatarData,
   formatarOrigem,
   formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
+  ligarCamposDeData,
   ligarPaginacao,
   limparFormularioPendente,
   marcarCarregando,
@@ -59,6 +61,7 @@ import {
   paginacao,
   podeDescartarFormulario,
   protegerFormulario,
+  revalidarLimiteDeData,
 } from "../dom";
 import { abrirCadastroRapidoCatalogo, type ContextoTela } from "./catalogos";
 import { pedirAnalogia, renderIndicios } from "./indicios";
@@ -268,7 +271,8 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
 
   // A designação travada é desenhada como texto, sem `<select>`: `dados.has()`
   // devolve false para ela e o valor do rascunho é preservado. É o mesmo
-  // cuidado de `textoSePresente` — campo ausente do DOM não é campo apagado.
+  // cuidado que esta função toma em todo campo condicional — campo ausente do
+  // DOM não é campo apagado.
   rascunho.designacoes = rascunho.designacoes.map((d, i) => ({
     id: d.id ?? null,
     policial_militar_id: dados.has(`des_${i}_pm`)
@@ -383,8 +387,8 @@ function campoData(
     <label for="${id}">${escapeHtml(rotulo)}</label>
     <div class="campo-data-controle">
       <input id="${id}" name="${escapeHtml(nome)}" type="date" value="${escapeHtml(valor ?? "")}"
-        ${opcoes.min ? `min="${escapeHtml(opcoes.min)}"` : ""}
-        ${opcoes.max ? `max="${escapeHtml(opcoes.max)}"` : ""}${obrigatorio ? " required" : ""} />
+        ${opcoes.min ? `data-limite-min="${escapeHtml(opcoes.min)}"` : ""}
+        ${opcoes.max ? `data-limite-max="${escapeHtml(opcoes.max)}"` : ""}${obrigatorio ? " required" : ""} />
       ${
         obrigatorio
           ? ""
@@ -982,12 +986,12 @@ async function desenharFormularioProcesso(
       ...posteriores,
     ]);
     const maximoRecebimento = menorDataIso([hoje, ...posteriores]);
-    aplicarIntervaloData(
+    aplicarLimiteData(
       instauracao,
       "",
       maximoInstauracao,
     );
-    aplicarIntervaloData(
+    aplicarLimiteData(
       recebimento,
       instauracao.value,
       maximoRecebimento,
@@ -995,28 +999,22 @@ async function desenharFormularioProcesso(
     instauracao.dataset.mensagemMax =
       maximoInstauracao === hoje
         ? "A data de instauração não pode ser futura."
-        : `A data de instauração não pode ser posterior a ${dataParaExibicao(maximoInstauracao)}.`;
+        : `A data de instauração não pode ser posterior a ${formatarData(maximoInstauracao)}.`;
     recebimento.dataset.mensagemMin =
       "A data de recebimento não pode ser anterior à data de instauração.";
     recebimento.dataset.mensagemMax =
       maximoRecebimento === hoje
         ? "A data de recebimento não pode ser futura."
-        : `A data de recebimento não pode ser posterior a ${dataParaExibicao(maximoRecebimento)}.`;
+        : `A data de recebimento não pode ser posterior a ${formatarData(maximoRecebimento)}.`;
   };
   atualizarLimitesCabecalho();
 
-  // O seletor nativo do WebView permanece aberto depois da escolha em algumas
-  // plataformas. Tirar o foco no quadro seguinte fecha o popover sem substituir
-  // o controle nativo nem introduzir uma dependência de calendário.
-  form.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      atualizarLimitesCabecalho();
-      const limpar = form.querySelector<HTMLButtonElement>(
-        `[data-limpar-data="${input.name}"]`,
-      );
-      if (limpar) limpar.disabled = input.value === "";
-      window.requestAnimationFrame(() => input.blur());
-    });
+  ligarCamposDeData(form, (input) => {
+    atualizarLimitesCabecalho();
+    const limpar = form.querySelector<HTMLButtonElement>(
+      `[data-limpar-data="${input.name}"]`,
+    );
+    if (limpar) limpar.disabled = input.value === "";
   });
 
   form.querySelectorAll<HTMLButtonElement>("[data-limpar-data]").forEach((botao) => {
@@ -1575,11 +1573,6 @@ function rotuloMilitarFiltro(
   return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
 }
 
-function dataFiltroPtBr(valor: string): string {
-  const [ano, mes, dia] = valor.split("-");
-  return ano && mes && dia ? `${dia}/${mes}/${ano}` : valor;
-}
-
 type ChipFiltro = { chave: string; texto: string };
 
 function chipsDosFiltros(): ChipFiltro[] {
@@ -1616,10 +1609,10 @@ function chipsDosFiltros(): ChipFiltro[] {
   }
   if (filtro.data_instauracao_inicio || filtro.data_instauracao_fim) {
     const periodo = filtro.data_instauracao_inicio && filtro.data_instauracao_fim
-      ? `${dataFiltroPtBr(filtro.data_instauracao_inicio)} a ${dataFiltroPtBr(filtro.data_instauracao_fim)}`
+      ? `${formatarData(filtro.data_instauracao_inicio)} a ${formatarData(filtro.data_instauracao_fim)}`
       : filtro.data_instauracao_inicio
-        ? `desde ${dataFiltroPtBr(filtro.data_instauracao_inicio)}`
-        : `até ${dataFiltroPtBr(filtro.data_instauracao_fim)}`;
+        ? `desde ${formatarData(filtro.data_instauracao_inicio)}`
+        : `até ${formatarData(filtro.data_instauracao_fim)}`;
     chips.push({ chave: "periodo", texto: `Instauração: ${periodo}` });
   }
   if (filtro.ano !== null) chips.push({ chave: "ano", texto: `Ano: ${filtro.ano}` });
@@ -1886,8 +1879,13 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
   const inicio = form.elements.namedItem("data_instauracao_inicio") as HTMLInputElement;
   const fim = form.elements.namedItem("data_instauracao_fim") as HTMLInputElement;
   const sincronizarDatas = () => {
-    fim.min = inicio.value;
-    inicio.max = fim.value;
+    // Limite suave, como nos demais campos de data: um lado orienta o outro
+    // sem travar o calendário. O submit é barrado logo abaixo, com caixa de
+    // erro própria do modal.
+    if (inicio.value) fim.dataset.limiteMin = inicio.value;
+    else delete fim.dataset.limiteMin;
+    if (fim.value) inicio.dataset.limiteMax = fim.value;
+    else delete inicio.dataset.limiteMax;
   };
   inicio.addEventListener("input", sincronizarDatas);
   fim.addEventListener("input", sincronizarDatas);
@@ -2055,11 +2053,6 @@ function somarDiasIso(dataIso: string, dias: number): string {
   return data.toISOString().slice(0, 10);
 }
 
-function dataParaExibicao(dataIso: string): string {
-  const [ano, mes, dia] = dataIso.split("-");
-  return `${dia}/${mes}/${ano}`;
-}
-
 /** Hoje em ISO, para o `max` dos campos que não aceitam data futura. */
 function hojeIso(): string {
   const hoje = new Date();
@@ -2077,12 +2070,21 @@ function maiorDataIso(datas: Array<string | null | undefined>): string {
   return datas.filter((data): data is string => !!data).sort().at(-1) ?? "";
 }
 
-function aplicarIntervaloData(input: HTMLInputElement | null, min: string, max: string): void {
+/**
+ * Recalcula o limite de um campo de data. Escreve `data-limite-*`, e não
+ * `min`/`max`: o navegador não conhece esses atributos, então o calendário
+ * continua navegando para qualquer ano — ver `dom.ts::mensagemDeLimiteDeData`.
+ *
+ * Revalida o campo em seguida porque o limite muda pelo campo **vizinho**:
+ * corrigir a instauração tem de apagar sozinho o erro do recebimento.
+ */
+function aplicarLimiteData(input: HTMLInputElement | null, min: string, max: string): void {
   if (!input) return;
-  if (min) input.min = min;
-  else input.removeAttribute("min");
-  if (max) input.max = max;
-  else input.removeAttribute("max");
+  if (min) input.dataset.limiteMin = min;
+  else delete input.dataset.limiteMin;
+  if (max) input.dataset.limiteMax = max;
+  else delete input.dataset.limiteMax;
+  revalidarLimiteDeData(input);
 }
 
 /** O ato que autorizou a designação, como a Seção o escreve. */
@@ -2190,7 +2192,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
           <label for="detalhe-${escapeHtml(nome)}">${escapeHtml(rotulo)}</label>
           <div class="campo-data-controle">
             <input id="detalhe-${escapeHtml(nome)}" name="${escapeHtml(nome)}" type="date"
-              min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+              data-limite-min="${escapeHtml(d.data_instauracao)}" data-limite-max="${escapeHtml(hojeIso())}"
               value="${escapeHtml(valor ?? "")}" />
             <button type="button" class="ghost small campo-data-limpar"
               data-limpar-data-detalhe="${escapeHtml(nome)}"${valor ? "" : " disabled"}>Limpar</button>
@@ -2206,6 +2208,11 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     valor === null || valor === undefined || valor === ""
       ? ""
       : `<tr><th>${escapeHtml(rotulo)}</th><td>${escapeHtml(String(valor))}</td></tr>`;
+  // A ficha OMITE a linha da data ausente — não a mostra com travessão —, e é
+  // por isso que não dá para passar `formatarData` direto: o vazio dela é `—`,
+  // e a ficha ganharia meia dúzia de linhas que hoje não existem.
+  const linhaData = (rotulo: string, iso: string | null | undefined) =>
+    iso ? linha(rotulo, formatarData(iso)) : "";
 
   ctx.shell(`
     <section class="panel">
@@ -2231,12 +2238,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         ${linha("Subunidade/Seção de origem", d.subunidade_secao_origem)}
         ${linha("Município do fato", d.municipio_fato)}
         ${linha("Natureza geral do fato", d.natureza_fato)}
-        ${linha("Instauração", d.data_instauracao)}
-        ${linha("Recebimento", d.data_recebimento)}
-        ${usaRemessaComissao ? "" : linha("Remessa do encarregado", d.data_remessa_encarregado)}
-        ${linha("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
-        ${linha("Julgamento", d.data_julgamento)}
-        ${linha("Conclusão", d.data_conclusao)}
+        ${linhaData("Instauração", d.data_instauracao)}
+        ${linhaData("Recebimento", d.data_recebimento)}
+        ${usaRemessaComissao ? "" : linhaData("Remessa do encarregado", d.data_remessa_encarregado)}
+        ${linhaData("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
+        ${linhaData("Julgamento", d.data_julgamento)}
+        ${linhaData("Conclusão", d.data_conclusao)}
         ${linha(
           "Responsável",
           d.responsavel_nome
@@ -2296,7 +2303,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                }
                <label>Conclusão
                  <input name="data_conclusao" type="date"
-                   min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+                   data-limite-min="${escapeHtml(d.data_instauracao)}" data-limite-max="${escapeHtml(hojeIso())}"
                    value="${escapeHtml(d.data_conclusao ?? "")}"${d.data_conclusao ? " required" : ""} />
                </label>
                <button type="submit">Salvar datas</button>
@@ -2435,8 +2442,8 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                   (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>
                     <td>${escapeHtml(x.papel)}${x.e_responsavel ? " (responsável)" : ""}</td>
                     <td>${escapeHtml(qualificacaoDesignado(x))}</td>
-                    <td>${escapeHtml(dataParaExibicao(x.data_inicio))}</td>
-                    <td>${escapeHtml(x.data_fim ? dataParaExibicao(x.data_fim) : "vigente")}</td>
+                    <td>${escapeHtml(formatarData(x.data_inicio))}</td>
+                    <td>${escapeHtml(x.data_fim ? formatarData(x.data_fim) : "vigente")}</td>
                     <td>${escapeHtml(documentoDaDesignacao(x))}</td>
                     <td>${escapeHtml(x.motivo ?? "")}</td>
                     ${
@@ -2486,7 +2493,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                  <small class="campo-erro" data-erro="sucessor_id" hidden></small>
                </label>
                <label>Data da substituição
-                 <input name="data_troca" type="date" max="${escapeHtml(hojeIso())}" required />
+                 <input name="data_troca" type="date" data-limite-max="${escapeHtml(hojeIso())}" required />
                  <small class="campo-erro" data-erro="data_troca" hidden></small>
                </label>
                <label>Motivo
@@ -2516,9 +2523,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                 .map(
                   (p) => `<tr${p.vigente ? ' class="vigente"' : ""}>
                     <td>${p.ordem === 0 ? "inicial" : `${p.ordem}ª prorrogação`}</td>
-                    <td>${escapeHtml(p.data_inicio)}</td>
+                    <td>${escapeHtml(formatarData(p.data_inicio))}</td>
                     <td>${p.dias}</td>
-                    <td>${escapeHtml(p.data_vencimento)}</td>
+                    <td>${escapeHtml(formatarData(p.data_vencimento))}</td>
                     <td>${escapeHtml(p.ordem === 0 ? "Prazo inicial" : (p.motivo ?? ""))}</td>
                     ${
                       podeEscrever
@@ -2544,11 +2551,11 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       ${
         podeEscrever && !d.concluido && prazoVigente
           ? `<form id="form-prorrogacao" class="linha-form">
-               <label>Novo vencimento<input name="nova_data_vencimento" type="date" min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
+               <label>Novo vencimento<input name="nova_data_vencimento" type="date" data-limite-min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
                <label>Motivo<input name="motivo" required /></label>
                <button type="submit">Prorrogar</button>
              </form>
-             <p class="secao-ajuda">Vencimento atual: <strong>${escapeHtml(dataParaExibicao(prazoVigente.data_vencimento))}</strong>. A nova data deve ser posterior; a prorrogação começa no vencimento atual.</p>`
+             <p class="secao-ajuda">Vencimento atual: <strong>${escapeHtml(formatarData(prazoVigente.data_vencimento))}</strong>. A nova data deve ser posterior; a prorrogação começa no vencimento atual.</p>`
           : ""
       }
       ${
@@ -2556,13 +2563,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
           ? `<form id="form-editar-prorrogacao" class="linha-form" hidden>
                <label>Corrigir vencimento
                  <input name="nova_data_vencimento" type="date"
-                   min="${somarDiasIso(ultimaProrrogacao.data_inicio, 1)}"
+                   data-limite-min="${somarDiasIso(ultimaProrrogacao.data_inicio, 1)}"
                    value="${escapeHtml(ultimaProrrogacao.data_vencimento)}" required />
                </label>
                <button type="submit">Salvar alteração</button>
                <button type="button" class="secondary" id="cancelar-edicao-prorrogacao">Cancelar</button>
              </form>
-             <p id="ajuda-edicao-prorrogacao" class="secao-ajuda" hidden>A data deve ser posterior ao prazo anterior, vencido em <strong>${escapeHtml(dataParaExibicao(ultimaProrrogacao.data_inicio))}</strong>. O motivo da prorrogação será preservado.</p>`
+             <p id="ajuda-edicao-prorrogacao" class="secao-ajuda" hidden>A data deve ser posterior ao prazo anterior, vencido em <strong>${escapeHtml(formatarData(ultimaProrrogacao.data_inicio))}</strong>. O motivo da prorrogação será preservado.</p>`
           : ""
       }
 
@@ -2574,7 +2581,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
               <tbody>${andamentos
                 .map(
                   (a) => `<tr>
-                  <td>${escapeHtml(a.ocorrido_em.slice(0, 10))}</td>
+                  <td>${escapeHtml(formatarData(a.ocorrido_em))}</td>
                   <td>${escapeHtml(a.tipo_andamento ?? "")}</td>
                   <td>${escapeHtml(a.registrado_por ?? "")}</td>
                   <td class="col-descricao">${escapeHtml(a.descricao)}</td>
@@ -2744,9 +2751,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     const antesDaRemessa = maiorDataIso([d.data_instauracao, recebimento]);
     const depoisDaRemessa = menorDataIso([hojeIso(), valorJulgamento, valorConclusao]);
 
-    aplicarIntervaloData(remessaEncarregado, antesDaRemessa, depoisDaRemessa);
-    aplicarIntervaloData(remessaComissaoInput, antesDaRemessa, depoisDaRemessa);
-    aplicarIntervaloData(
+    aplicarLimiteData(remessaEncarregado, antesDaRemessa, depoisDaRemessa);
+    aplicarLimiteData(remessaComissaoInput, antesDaRemessa, depoisDaRemessa);
+    aplicarLimiteData(
       julgamento,
       maiorDataIso([
         d.data_instauracao,
@@ -2756,7 +2763,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       ]),
       menorDataIso([hojeIso(), valorConclusao]),
     );
-    aplicarIntervaloData(
+    aplicarLimiteData(
       conclusao,
       maiorDataIso([
         d.data_instauracao,
@@ -2769,15 +2776,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     );
   };
   atualizarLimitesDatasPosteriores();
-  formDatas?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      atualizarLimitesDatasPosteriores();
-      const limpar = formDatas.querySelector<HTMLButtonElement>(
-        `[data-limpar-data-detalhe="${input.name}"]`,
-      );
-      if (limpar) limpar.disabled = input.value === "";
-      window.requestAnimationFrame(() => input.blur());
-    });
+  ligarCamposDeData(formDatas, (input) => {
+    atualizarLimitesDatasPosteriores();
+    const limpar = formDatas?.querySelector<HTMLButtonElement>(
+      `[data-limpar-data-detalhe="${input.name}"]`,
+    );
+    if (limpar) limpar.disabled = input.value === "";
   });
   formDatas?.querySelectorAll<HTMLButtonElement>("[data-limpar-data-detalhe]").forEach((botao) => {
     botao.addEventListener("click", () => {
@@ -3017,17 +3021,17 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       resumoSubstituicao.innerHTML = editando
         ? `Corrigindo a substituição de <strong>${escapeHtml(antecessora.papel)}</strong>: ` +
           `${escapeHtml(qualificacaoDesignado(antecessora))} saiu em ` +
-          `<strong>${escapeHtml(dataParaExibicao(designacao.data_inicio))}</strong>.`
+          `<strong>${escapeHtml(formatarData(designacao.data_inicio))}</strong>.`
         : `Substituindo <strong>${escapeHtml(qualificacaoDesignado(designacao))}</strong> ` +
           `na função de <strong>${escapeHtml(designacao.papel)}</strong>, ` +
-          `ocupada desde ${escapeHtml(dataParaExibicao(designacao.data_inicio))}.`;
+          `ocupada desde ${escapeHtml(formatarData(designacao.data_inicio))}.`;
     }
 
     // `min` é o dia seguinte ao início da antecessora: a troca tem de ser
     // posterior, e o backend recusa o contrário com a mesma conta.
     const data = campo("data_troca") as HTMLInputElement | null;
     if (data) {
-      data.min = somarDiasIso(antecessora.data_inicio, 1);
+      data.dataset.limiteMin = somarDiasIso(antecessora.data_inicio, 1);
       data.value = editando ? designacao.data_inicio : "";
     }
     const preencher = (nome: string, valor: string) => {
@@ -3100,7 +3104,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     if (dataTroca <= antecessora.data_inicio) {
       return marcarErro(
         "data_troca",
-        `A data deve ser posterior a ${dataParaExibicao(antecessora.data_inicio)}.`,
+        `A data deve ser posterior a ${formatarData(antecessora.data_inicio)}.`,
       );
     }
     if (dataTroca > hojeIso()) {
@@ -3153,7 +3157,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       if (
         !confirm(
           `Desfazer a substituição de ${designacao.papel} feita em ` +
-            `${dataParaExibicao(designacao.data_inicio)}?\n\n` +
+            `${formatarData(designacao.data_inicio)}?\n\n` +
             `A designação de ${qualificacaoDesignado(designacao)} será excluída e ${volta}.`,
         )
       ) {
@@ -3231,7 +3235,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
 
   document.querySelector<HTMLButtonElement>("[data-excluir-prorrogacao]")?.addEventListener("click", async (evento) => {
     if (!ultimaProrrogacao) return;
-    const vencimento = dataParaExibicao(ultimaProrrogacao.data_vencimento);
+    const vencimento = formatarData(ultimaProrrogacao.data_vencimento);
     if (!confirm(`Excluir a ${ultimaProrrogacao.ordem}ª prorrogação, com vencimento em ${vencimento}? O prazo anterior voltará a ser o vigente.`)) return;
     await comCarregamento(
       "Excluindo a prorrogação…",

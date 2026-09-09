@@ -240,6 +240,18 @@ A **busca instantânea** filtra enquanto você digita. A **exportação de plani
 e a **impressão** levam sempre o **filtro inteiro**, não a página que está na
 tela: exportar da página 1 de 5 traz as cinco.
 
+**Todo campo de data** aceita as duas formas: escolher no calendário ou **digitar**
+a data, inclusive o ano. O calendário navega para **qualquer ano** — não há piso
+nem teto na navegação, então um processo de 2018 se cadastra sem rodeio.
+
+Isso **não** afrouxa nenhuma regra. A ordem das datas do fluxo (instauração ≤
+recebimento ≤ remessa ≤ julgamento ≤ conclusão) e o "não pode ser futura"
+continuam valendo: a data fora de ordem recebe o aviso embaixo do campo, dizendo
+qual é o limite e por quê, e o formulário não é salvo enquanto ela estiver ali. A
+diferença é que agora o campo **avisa** em vez de impedir a navegação — o que
+importa quando é a data de instauração que precisa ser corrigida, e é ela quem
+define o limite das outras.
+
 ---
 
 ### 3.2 Painel

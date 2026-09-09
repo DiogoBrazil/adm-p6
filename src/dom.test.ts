@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { blocosDeImpressao, botaoIcone, tabela } from "./dom";
+// @vitest-environment happy-dom
+import { beforeAll, describe, expect, it } from "vitest";
+import {
+  blocosDeImpressao,
+  botaoIcone,
+  formatarData,
+  instalarValidacaoAmigavel,
+  ligarCamposDeData,
+  mensagemDeLimiteDeData,
+  revalidarLimiteDeData,
+  tabela,
+} from "./dom";
 
 describe("tabela para impressão", () => {
   it("marca somente as tabelas que optam pela fragmentação no WebKitGTK", () => {
@@ -66,5 +76,136 @@ describe("botão de ícone", () => {
     // Nada fora das tags: o nome acessível vem de `aria-label`/`title`, não de
     // texto no corpo do botão.
     expect(html.replace(/<[^>]*>/g, "").trim()).toBe("");
+  });
+});
+
+describe("formatação de data", () => {
+  it("inverte a ordem ISO e aceita o timestamp inteiro", () => {
+    expect(formatarData("2026-08-31")).toBe("31/08/2026");
+    expect(formatarData("2026-08-31T16:10:39Z")).toBe("31/08/2026");
+  });
+
+  // O mesmo formato era escrito em quatro lugares que só discordavam no vazio.
+  // Sobrou um, e é o parâmetro que carrega a diferença: a listagem quer o
+  // travessão, o PDF do mapa quer "Não informado".
+  it("deixa o chamador escolher o que dizer quando não há data", () => {
+    expect(formatarData(null)).toBe("—");
+    expect(formatarData("")).toBe("—");
+    expect(formatarData(undefined, "Não informado")).toBe("Não informado");
+    expect(formatarData("31/08/2026", "Não informado")).toBe("Não informado");
+  });
+});
+
+describe("limite de data", () => {
+  const campoDeData = (atributos: Record<string, string>): HTMLInputElement => {
+    const campo = document.createElement("input");
+    campo.type = "date";
+    for (const [nome, valor] of Object.entries(atributos)) campo.setAttribute(nome, valor);
+    document.body.append(campo);
+    return campo;
+  };
+
+  // O defeito relatado: num apuratório instaurado em 2025, o campo com
+  // `min="2025-…"` não deixava o calendário voltar a 2024 — nem para consertar
+  // a instauração errada. O limite saiu dos atributos que o navegador conhece,
+  // e é esta ausência que destrava a navegação por ano.
+  it("não escreve `min` nem `max`, que são o que trava o calendário", () => {
+    const campo = campoDeData({ "data-limite-min": "2025-06-01" });
+    campo.value = "2024-03-10";
+    revalidarLimiteDeData(campo);
+
+    expect(campo.hasAttribute("min")).toBe(false);
+    expect(campo.hasAttribute("max")).toBe(false);
+  });
+
+  it("continua cobrando a ordem, com a mensagem de quem declarou o limite", () => {
+    const padrao = campoDeData({ "data-limite-min": "2025-06-01" });
+    padrao.value = "2024-03-10";
+    expect(mensagemDeLimiteDeData(padrao)).toBe(
+      "Escolha uma data igual ou posterior a 01/06/2025.",
+    );
+
+    const proprio = campoDeData({
+      "data-limite-max": "2026-09-09",
+      "data-mensagem-max": "A data de instauração não pode ser futura.",
+    });
+    proprio.value = "2026-12-25";
+    expect(mensagemDeLimiteDeData(proprio)).toBe("A data de instauração não pode ser futura.");
+  });
+
+  it("não reclama de data dentro do intervalo nem de campo vazio", () => {
+    const dentro = campoDeData({ "data-limite-min": "2025-06-01", "data-limite-max": "2026-09-09" });
+    dentro.value = "2025-06-01";
+    expect(mensagemDeLimiteDeData(dentro)).toBe("");
+
+    // Quem exige o preenchimento é o `required`; limite não fala de ausência.
+    const vazio = campoDeData({ "data-limite-min": "2025-06-01" });
+    expect(mensagemDeLimiteDeData(vazio)).toBe("");
+  });
+
+  // Tirar `min`/`max` tira também o `invalid` nativo: sem isto o formulário
+  // seria enviado em silêncio com a data fora de ordem, e só o Rust reclamaria.
+  it("bloqueia o envio do formulário sem os atributos nativos", () => {
+    instalarValidacaoAmigavel();
+    const form = document.createElement("form");
+    const campo = document.createElement("input");
+    campo.type = "date";
+    campo.name = "data_recebimento";
+    campo.dataset.limiteMin = "2025-06-01";
+    form.append(campo);
+    document.body.append(form);
+
+    campo.value = "2024-03-10";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(form.checkValidity()).toBe(false);
+    expect(campo.validationMessage).toBe("Escolha uma data igual ou posterior a 01/06/2025.");
+
+    // Corrigido o valor, o bloqueio some sozinho.
+    campo.value = "2025-07-01";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(form.checkValidity()).toBe(true);
+  });
+});
+
+describe("campos de data", () => {
+  const proximoQuadro = () =>
+    new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+  // O `change` de um `input[type="date"]` dispara assim que o valor fica
+  // completo — e ao digitar o ano o primeiro dígito `2` já é o ano `0002`.
+  // Tirar o foco ali era o que impedia digitar o resto do ano.
+  it("não tira o foco de quem está digitando", async () => {
+    const escopo = document.createElement("div");
+    escopo.innerHTML = `<input type="date" name="data_instauracao" />`;
+    document.body.append(escopo);
+    const campo = escopo.querySelector("input")!;
+    ligarCamposDeData(escopo, () => {});
+
+    campo.focus();
+    campo.dispatchEvent(new KeyboardEvent("keydown", { key: "2", bubbles: true }));
+    campo.value = "0002-01-01";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    await proximoQuadro();
+
+    expect(document.activeElement).toBe(campo);
+  });
+
+  // E o motivo de o `blur()` existir continua atendido: o seletor nativo do
+  // WebView permanece aberto depois da escolha em algumas plataformas.
+  it("fecha o seletor de quem escolheu com o mouse", async () => {
+    const escopo = document.createElement("div");
+    escopo.innerHTML = `<input type="date" name="data_conclusao" />`;
+    document.body.append(escopo);
+    const campo = escopo.querySelector("input")!;
+    const vistos: string[] = [];
+    ligarCamposDeData(escopo, (alvo) => vistos.push(alvo.name));
+
+    campo.focus();
+    campo.value = "2026-03-10";
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+    await proximoQuadro();
+
+    expect(document.activeElement).not.toBe(campo);
+    expect(vistos).toEqual(["data_conclusao"]);
   });
 });
