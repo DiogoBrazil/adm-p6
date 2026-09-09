@@ -46,6 +46,7 @@ import {
   comCarregamento,
   destruirSelectsPesquisaveis,
   escapeHtml,
+  focarCampo,
   formatarData,
   formatarOrigem,
   formatarQualificacaoMilitar,
@@ -62,6 +63,7 @@ import {
   podeDescartarFormulario,
   protegerFormulario,
   revalidarLimiteDeData,
+  sincronizarSelectsPesquisaveis,
 } from "../dom";
 import { abrirCadastroRapidoCatalogo, type ContextoTela } from "./catalogos";
 import { pedirAnalogia, renderIndicios } from "./indicios";
@@ -1942,9 +1944,7 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
     // Focar o `<select>` cru de um campo pesquisável mandaria o foco para o
     // elemento que o Tom Select mantém recortado — o mesmo lugar errado onde a
     // validação amigável ainda cai. Quem recebe o foco é o controle visível.
-    const primeiro = form.querySelector<HTMLSelectElement>("select");
-    if (primeiro?.tomselect) primeiro.tomselect.focus();
-    else primeiro?.focus();
+    focarCampo(form.querySelector<HTMLSelectElement>("select"));
   });
 }
 
@@ -2663,6 +2663,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     </section>
   `);
 
+  // O detalhe desenha cinco selects que já pedem busca no markup — o Sucessor
+  // da substituição entre eles, com os 245 militares ativos. Faltava só ligar:
+  // sem esta chamada o `data-select-pesquisavel` não faz nada, e a tela abre um
+  // `<select>` nativo onde o cadastro abre um campo com busca. O redraw é
+  // seguro porque `shell()` destrói as instâncias antes de reescrever o `#app`.
+  ativarSelectsPesquisaveis(document.querySelector("#app") ?? document);
+
   const recarregar = () => renderDetalheProcesso(ctx, id);
   /**
    * O fecho comum das doze ações do detalhe: avisa o erro, se houve, e
@@ -2859,7 +2866,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         decisaoHistoricaPermitia);
     if (campoPenalidade) campoPenalidade.hidden = !permitePena;
     const selectPena = selectResultado("penalidade_tipo_id");
-    if (!permitePena && selectPena) selectPena.value = "";
+    if (!permitePena && selectPena) {
+      selectPena.value = "";
+      selectPena.tomselect?.sync();
+    }
 
     const penalidadeId = selectPena?.value ?? "";
     const penalidadeHistoricaUsavaDias =
@@ -2877,6 +2887,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     resultadoEmEdicao = null;
     formResultado?.reset();
     limparOpcoesHistoricasResultado();
+    // `reset()` e a remoção das opções históricas mexem no `<select>` nativo;
+    // o controle visível só reflete isso depois do `sync()`.
+    sincronizarSelectsPesquisaveis(formResultado);
     if (formResultado) formResultado.hidden = true;
   };
 
@@ -2908,6 +2921,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       selectResultado("solucao_decidida_id")!.value = envolvido.solucao_decidida_id ?? "";
       selectResultado("penalidade_tipo_id")!.value = envolvido.penalidade_tipo_id ?? "";
       inputDias()!.value = envolvido.penalidade_dias?.toString() ?? "";
+      // A opção histórica é inserida no `<select>` em runtime, e é ela que
+      // mantém na tela a solução desativada de um processo de 2019 (princípio
+      // 6). O Tom Select não a enxerga sozinho: sem o `sync()` a opção some do
+      // menu e o campo abre vazio sobre um valor que existe. Vale também para
+      // as três atribuições logo acima.
+      sincronizarSelectsPesquisaveis(formResultado);
       if (resumoResultado) {
         resumoResultado.textContent =
           `Editando o resultado de ${formatarQualificacaoMilitar(envolvido.posto_graduacao, envolvido.matricula, envolvido.nome)}.`;
@@ -2915,7 +2934,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       formResultado.hidden = false;
       atualizarCamposPenalidade();
       formResultado.scrollIntoView({ block: "nearest" });
-      (selectResultado("solucao_sugerida_id") ?? selectResultado("solucao_decidida_id"))?.focus();
+      focarCampo(selectResultado("solucao_sugerida_id") ?? selectResultado("solucao_decidida_id"));
     }),
   );
 
@@ -2988,7 +3007,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       aviso.textContent = mensagem;
       aviso.hidden = false;
     }
-    campo(nome)?.focus();
+    // `sucessor_id` e `documento_autorizador_id` são pesquisáveis: focar o
+    // `<select>` cru mandaria o cursor para o elemento recortado, justamente
+    // quando o operador precisa corrigir o campo.
+    focarCampo(campo(nome));
   };
 
   const fecharSubstituicao = () => {
@@ -3036,7 +3058,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     }
     const preencher = (nome: string, valor: string) => {
       const alvo = campo(nome);
-      if (alvo) alvo.value = valor;
+      if (!alvo) return;
+      alvo.value = valor;
+      // Num campo pesquisável a atribuição zera o `<select>` e **não** mexe no
+      // controle visível: sem esta linha, abrir "substituir" depois de um
+      // "corrigir" mostraria o sucessor anterior sobre um valor já vazio.
+      if (alvo instanceof HTMLSelectElement) alvo.tomselect?.sync();
     };
     preencher("sucessor_id", editando ? designacao.policial_militar_id : "");
     preencher("motivo", editando ? (designacao.motivo ?? "") : "");
@@ -3055,7 +3082,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       botaoSalvarSubstituicao.textContent = editando ? "Salvar correção" : "Substituir";
     }
     formSubstituicao.scrollIntoView({ block: "nearest" });
-    campo("sucessor_id")?.focus();
+    focarCampo(campo("sucessor_id"));
   };
 
   document.querySelectorAll<HTMLButtonElement>("[data-substituir]").forEach((b) =>

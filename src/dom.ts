@@ -158,6 +158,35 @@ export function destruirSelectsPesquisaveis(root: ParentNode = document): void {
   });
 }
 
+/**
+ * Devolve ao controle visível o que foi mexido no `<select>` nativo.
+ *
+ * Sob Tom Select, quem manda no que aparece é a **instância**, não o `<select>`:
+ * `select.value = "…"`, `form.reset()` e `<option>` inserida ou removida em
+ * runtime mudam o elemento e deixam o controle exibindo o estado anterior —
+ * sem erro nenhum. `sync()` relê opções e valor do original e é o que reconcilia
+ * os dois; chame-a **depois** de qualquer manipulação nativa.
+ *
+ * O valor entra em silêncio, sem disparar `change` — igual à atribuição nativa
+ * que ela acompanha, para não acordar listener que hoje não é acordado.
+ */
+export function sincronizarSelectsPesquisaveis(root: ParentNode | null | undefined): void {
+  root?.querySelectorAll<HTMLSelectElement>("select.tomselected").forEach((select) => {
+    select.tomselect?.sync();
+  });
+}
+
+/**
+ * Foca um campo, e o controle **visível** quando ele é pesquisável.
+ *
+ * O `<select>` de um campo pesquisável fica recortado (`clip`) pelo Tom Select:
+ * focá-lo manda o foco para um elemento que ninguém vê, e o cursor some.
+ */
+export function focarCampo(campo: HTMLElement | null | undefined): void {
+  if (campo instanceof HTMLSelectElement && campo.tomselect) campo.tomselect.focus();
+  else campo?.focus();
+}
+
 export type ModalMontado = {
   overlay: HTMLDivElement;
   fechar: () => void;

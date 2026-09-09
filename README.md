@@ -240,6 +240,13 @@ A **busca instantânea** filtra enquanto você digita. A **exportação de plani
 e a **impressão** levam sempre o **filtro inteiro**, não a página que está na
 tela: exportar da página 1 de 5 traz as cinco.
 
+**Os campos de escolha longos têm busca**: em vez de rolar a lista, digite parte
+do que procura e o campo filtra — nome, posto ou matrícula, no caso de policial
+militar. Vale no cadastro do apuratório e também no detalhe dele: o `Sucessor` de
+uma substituição, a solução sugerida, a solução decidida, o tipo de penalidade e
+o documento autorizador. Listas curtas e fixas — mês, ano, situação, ordenação —
+continuam sendo um select comum, onde clicar é mais rápido que digitar.
+
 **Todo campo de data** aceita as duas formas: escolher no calendário ou **digitar**
 a data, inclusive o ano. O calendário navega para **qualquer ano** — não há piso
 nem teto na navegação, então um processo de 2018 se cadastra sem rodeio.

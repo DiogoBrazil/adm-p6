@@ -1,13 +1,16 @@
 // @vitest-environment happy-dom
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  ativarSelectsPesquisaveis,
   blocosDeImpressao,
   botaoIcone,
+  focarCampo,
   formatarData,
   instalarValidacaoAmigavel,
   ligarCamposDeData,
   mensagemDeLimiteDeData,
   revalidarLimiteDeData,
+  sincronizarSelectsPesquisaveis,
   tabela,
 } from "./dom";
 
@@ -207,5 +210,73 @@ describe("campos de data", () => {
 
     expect(document.activeElement).not.toBe(campo);
     expect(vistos).toEqual(["data_conclusao"]);
+  });
+});
+
+describe("select pesquisável", () => {
+  const montarSelect = (): HTMLSelectElement => {
+    document.body.innerHTML = `
+      <form>
+        <select name="solucao_decidida_id" data-select-pesquisavel>
+          <option value=""></option>
+          <option value="arq">Arquivamento</option>
+        </select>
+      </form>`;
+    ativarSelectsPesquisaveis(document.body);
+    return document.querySelector("select")!;
+  };
+
+  const rotuloVisivel = () => document.querySelector(".ts-control")?.textContent ?? "";
+
+  // `garantirOpcaoHistorica` insere a opção desativada no `<select>` em runtime,
+  // e é ela que mantém na tela a solução de um processo de 2019 (princípio 6).
+  // A instância do Tom Select não a enxerga: sem `sync()` a opção some do menu e
+  // o campo abre vazio sobre um valor que existe — sem erro nenhum.
+  it("enxerga a opção histórica inserida em runtime só depois do sync", () => {
+    const select = montarSelect();
+    const historica = document.createElement("option");
+    historica.value = "sind";
+    historica.textContent = "Sindicância (desativada)";
+    select.append(historica);
+    select.value = "sind";
+
+    expect(Object.keys(select.tomselect!.options)).not.toContain("sind");
+
+    sincronizarSelectsPesquisaveis(document.body);
+
+    expect(Object.keys(select.tomselect!.options)).toContain("sind");
+    expect(select.tomselect!.getValue()).toBe("sind");
+    expect(rotuloVisivel()).toContain("Sindicância (desativada)");
+  });
+
+  // O `preencher` da substituição e o `reset()` do formulário de resultado
+  // mexem no `<select>` nativo: sem o sync, abrir "substituir" logo depois de
+  // "corrigir" mostraria o sucessor anterior sobre um valor já vazio.
+  it("limpa o controle visível quando o valor nativo é zerado", () => {
+    const select = montarSelect();
+    select.tomselect!.setValue("arq", true);
+    expect(rotuloVisivel()).toContain("Arquivamento");
+
+    select.closest("form")!.reset();
+    expect(rotuloVisivel()).toContain("Arquivamento");
+
+    sincronizarSelectsPesquisaveis(document.body);
+    expect(rotuloVisivel()).not.toContain("Arquivamento");
+  });
+
+  it("manda o foco ao controle visível, não ao select recortado", () => {
+    const select = montarSelect();
+    let recebeu = false;
+    select.tomselect!.focus = () => {
+      recebeu = true;
+    };
+    focarCampo(select);
+    expect(recebeu).toBe(true);
+
+    // Campo comum continua recebendo o foco nativo.
+    const texto = document.createElement("input");
+    document.body.append(texto);
+    focarCampo(texto);
+    expect(document.activeElement).toBe(texto);
   });
 });
