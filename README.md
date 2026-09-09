@@ -1155,6 +1155,14 @@ produção por engano. Para conectar de propósito, usando as credenciais de
 
 Vale só para aquele processo do shell; um terminal novo volta ao banco local.
 
+Produção é o projeto Neon **`adm-p6-sp`, região `sa-east-1` (São Paulo)**. A
+região é escolha medida, não preferência: cada ida e volta ao banco custava
+**215 ms** em `us-east-2` (Ohio) e custa **80 ms** em São Paulo. Como o custo de
+uma tela é o *número* de idas e voltas, e não o tempo de cada consulta, isso
+aparece em toda tela ao mesmo tempo — a ficha de um apuratório são 8 consultas
+em sequência, ou seja 1,7 s em Ohio contra 0,6 s em São Paulo. O porquê está em
+[`GUIA.md`](GUIA.md), decisão 71.
+
 ### Exercitar o cofre em desenvolvimento
 
 Em build de debug o app **nunca** consulta o cofre do sistema operacional: usa o
@@ -1323,6 +1331,15 @@ login** — só a tela de abertura aparece no meio, enquanto a conexão sobe.
 instale `gnome-keyring` se não houver; o `.deb` já o recomenda. O sistema
 operacional pode pedir o desbloqueio do cofre mesmo quando a conexão já está
 salva.
+
+**Trocar o banco de produção de lugar obriga cada PC a reconfigurar.** A
+conexão mora no cofre do sistema operacional de cada máquina, uma por conta de
+usuário — não há configuração central, e nenhuma atualização do pacote a
+reescreve. Mudar o projeto Neon (foi o que a migração para São Paulo fez) chega
+ao usuário como *falha de conexão*, não como pedido de reconfiguração: o app
+tenta o endereço antigo, que ainda existe. Quem opera precisa saber que o
+caminho é `Configurar conexão com o banco`, no rodapé da tela de login, e que a
+senha salva não volta para a interface — informe os dados completos.
 
 **Falha de rede não apaga credenciais.** Nesse caso a tela oferece
 `Tentar novamente`, e não o formulário. Para corrigir ou trocar os dados, o botão

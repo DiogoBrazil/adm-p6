@@ -578,17 +578,37 @@ async function desenharFormularioProcesso(
     datasPosterioresEdicao = datasPosterioresVazias();
     subunidadeHistorica = null;
   }
-  const cats = await carregarCatalogos();
+  // Os catálogos não dependem do apuratório, nem o apuratório dos catálogos —
+  // mas o `await` os punha em fila, e a segunda espera só começava quando a
+  // primeira terminava. O custo de uma tela é o NÚMERO de idas e voltas
+  // (seção 7 do GUIA), e cada `call` custa duas: o ping do pool mais a
+  // consulta. Nascendo juntas, as duas esperas viram uma.
+  //
+  // A promessa que nasce e não é esperada em algum caminho é segura aqui:
+  // `api.ts::call` nunca rejeita — falha de IPC vira `{ ok: false }`. Mesmo
+  // assim a do detalhe só nasce quando vai ser consumida, para não pedir ao
+  // banco o que ninguém vai ler.
+  const catalogosPendentes = carregarCatalogos();
+  const detalhePendente =
+    !rascunhoAtual && id
+      ? Promise.all([
+          call("proceedings_get", { id }),
+          call("evidence_list_for_proceeding", { processoId: id }),
+        ])
+      : null;
+
+  const cats = await catalogosPendentes;
   let rascunho = rascunhoAtual;
 
   if (!rascunho) {
     rascunho = rascunhoVazio();
     designacoesTravadas.clear();
-    if (id) {
-      const [r, evidenciasResp] = await Promise.all([
-        call("proceedings_get", { id }),
-        call("evidence_list_for_proceeding", { processoId: id }),
-      ]);
+    // `detalhePendente` não é nulo exatamente quando `id` existe e não há
+    // rascunho — as mesmas duas condições de antes, agora já decididas lá em
+    // cima. Testar a promessa em vez do `id` é o que dispensa a asserção de
+    // não-nulo.
+    if (detalhePendente) {
+      const [r, evidenciasResp] = await detalhePendente;
       const d = r.data;
       if (!d) {
         ctx.shell(`<section class="panel"><p class="error">Apuratório não encontrado.</p></section>`);
