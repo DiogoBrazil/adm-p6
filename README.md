@@ -1266,7 +1266,22 @@ npm run tauri -- build \
 A primeira execução baixa o SDK/CRT da Microsoft e o plugin do NSIS: reserve
 internet e alguns GB. Nas seguintes, o cache em `xwin-cache` é reaproveitado.
 
-Saída, renomeada para tirar o espaço do nome:
+O bundler nomeia o arquivo pelo `productName`, que tem espaço — e **nada renomeia
+sozinho** neste caminho: `empacotar.sh` só normaliza `.deb`/`.rpm`/`.AppImage`, e
+a receita do Windows não passa por ele. Renomeie na hora, no mesmo comando:
+
+```bash
+cd src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+mv -f "Gestao P6_0.1.0_x64-setup.exe" gestao-p6_0.1.0_x64-setup.exe
+```
+
+O `mv -f` é deliberado, e é a parte que protege: o build novo sai com o nome
+**com espaço**, então o arquivo já renomeado que estiver ali é de uma geração
+ANTERIOR — e é justamente ele que tem o nome que se distribui. Foi assim que um
+instalador de 7/9, com o defeito do subsistema console, ficou por dois dias ao
+lado do build novo, com o nome bom. Sobrescreva, não conviva com os dois.
+
+Saída:
 
 ```text
 src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/gestao-p6_0.1.0_x64-setup.exe
@@ -1283,7 +1298,7 @@ esse terminal mata o processo. O Linux ignora o atributo, então o `.deb` não
 denuncia o problema:
 
 ```bash
-file src-tauri/target/x86_64-pc-windows-msvc/release/adm-p6-tauri.exe
+file src-tauri/target/x86_64-pc-windows-msvc/release/gestao-p6.exe
 # tem de dizer: PE32+ executable (GUI) ...   — e não (console)
 ```
 
