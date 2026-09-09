@@ -933,7 +933,7 @@ async function desenharFormularioProcesso(
         }
 
         <fieldset>
-          <legend>Pessoas inquiridas</legend>
+          <legend>Pessoas inquiridas (Exceto as envolvidas diretamente)</legend>
           ${r.pessoas
             .map(
               (p, i) => `
@@ -2420,7 +2420,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
          * defeito. `list_pessoas` já devolve ordenado por papel e ordem.
          */
         d.pessoas.length
-          ? `<h2>Pessoas inquiridas</h2>
+          ? `<h2>Pessoas inquiridas (Exceto as envolvidas diretamente)</h2>
       <div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo">
         <thead><tr><th>Papel</th><th>Nome</th></tr></thead>
         <tbody>${d.pessoas

@@ -120,7 +120,7 @@ que a resposta tem de ser mantida.
 | `BEGIN;`/`COMMIT;` em arquivo servido por `psql --single-transaction` | o `BEGIN` vira aviso e o `COMMIT` **encerra a transação externa**: o resto corre em autocommit e a carga deixa de ser tudo-ou-nada, sem erro nenhum. As etapas de `importacao/` não abrem transação — quem abre é `scripts/migrar_dados_legados.sh` |
 | Converter `timestamp` do legado sem dizer o fuso | a hora do legado é ingênua e foi digitada em Ariquemes; o cast para `timestamptz` usa o fuso da **sessão**, que no container é `Etc/UTC`. Tudo entra 4h adiantado e o que passou das 20h muda de dia. `SET LOCAL TimeZone = 'America/Porto_Velho'` |
 | Contar com migration corretiva para consertar dado importado | a 0007 (Escrivão de Processo), a 0008 (cadeia de substituição) e a 0016 ("À apurar") corrigiam a carga **e já foram aplicadas**: não rodam de novo. O dado nasce certo na etapa de importação, ou não nasce |
-| Semear catálogo por migration quando quem o INSERE é a importação | `sqlx::migrate!` corre no start do app, portanto **antes** de `importacao/01_catalogos.sql`. Num destino novo o `UPDATE ... WHERE lower(sigla)='sr'` acha a tabela vazia, não acerta linha nenhuma **sem erro**, e o catálogo nasce todo no `DEFAULT`. Foi assim que o Neon perdeu a ordem SR/IPM/PADS do mapa (0019 → 0022): o valor vai no `INSERT` da etapa de importação, e a migration só alcança o que já foi importado |
+| Semear catálogo por migration quando quem o INSERE é a importação | `sqlx::migrate!` corre no start do app, portanto **antes** de `importacao/01_catalogos.sql`. Num destino novo o `UPDATE ... WHERE lower(sigla)='sr'` acha a tabela vazia, não acerta linha nenhuma **sem erro**, e o catálogo nasce todo no `DEFAULT`. Foi assim que o Neon perdeu a ordem SR/IPM/PADS do mapa (0019 → 0022) **e** nasceu com `permite_cadastro_vitima` falso nas onze espécies (0012 → 0024), o que tirou a seção de Ofendido/Vítima do formulário: o valor vai no `INSERT` da etapa de importação, e a migration só alcança o que já foi importado |
 | Carregar o dump legado sob outro nome de schema | os 10 arquivos de `importacao/` dizem `legado.` literalmente, e um `legado` preexistente com o dump ANTERIOR faz ler 128 processos em vez de 163 **em silêncio**. O preflight conta a origem e recusa |
 | `psql -At -F','` para gerar CSV | não escapa nada: `Art. 29, IV` vira duas colunas. `psql --csv` |
 | Imagem criada no clique de imprimir | o WebKitGTK imprime **espaço em branco** por uma `<img>` ainda não decodificada, sem erro. `await img.decode()` antes de chamar o comando de impressão — `mapa-pdf.ts::aguardarImagens` e `dom.ts::inserirCabecalhoInstitucional` |
@@ -146,7 +146,7 @@ A seção 7 do guia tem a lista completa, com o que cada uma já custou.
 
 ```bash
 cd src-tauri && cargo fmt --check && cargo test   # 205 testes
-cd .. && npm test && npm run typecheck            # 50 testes frontend
+cd .. && npm test && npm run typecheck            # 61 testes frontend
 ```
 
 Escreva comentário explicando **o porquê**, no tom do resto do repositório —
