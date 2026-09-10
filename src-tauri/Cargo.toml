@@ -50,6 +50,7 @@ regex = "1"
 # frontend sem outra biblioteca pesada e para entregar bytes pelo mesmo fluxo
 # nativo já usado nos demais downloads.
 rust_xlsxwriter = { version = "0.99", features = ["chrono"] }
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls", "rustls-native-certs", "hostname", "ring"] }
 
 # A orientação da folha impressa não existe no CSS: o WebKitGTK ignora
 # `@page { size: … }` e só o `GtkPageSetup` decide. Ver src/print/commands.rs.

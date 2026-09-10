@@ -24,6 +24,7 @@ import {
   type ContextoTela,
 } from "./telas/catalogos";
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
+import { ROTA as ROTA_CONFIG_EMAIL, renderConfiguracaoEmail } from "./telas/email-config";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 import { ROTA as ROTA_ENCARREGADOS, renderEncarregados } from "./telas/encarregados";
@@ -76,6 +77,12 @@ let routes: Route[] = [
   {
     path: ROTA_CONFIG_APURATORIO,
     label: "Configuração de apuratórios",
+    group: "Catálogos",
+    adminOnly: true
+  },
+  {
+    path: ROTA_CONFIG_EMAIL,
+    label: "Configuração de e-mail",
     group: "Catálogos",
     adminOnly: true
   },
@@ -430,6 +437,7 @@ async function despacharRota() {
   const chaveCatalogo = chaveDaRota(activePath);
   if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
   if (activePath === ROTA_CONFIG_APURATORIO) return renderConfiguracaoApuratorio(contexto);
+  if (activePath === ROTA_CONFIG_EMAIL) return renderConfiguracaoEmail(contexto);
   if (activePath === ROTA_PROCESSOS) return renderListaProcessos(contexto);
 
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;

@@ -14,11 +14,12 @@
 \set ON_ERROR_STOP on
 
 -- ------------------------------------------------- 1. identidade do destino --
--- Um banco sem `_sqlx_migrations` não é o destino; um com menos de 24
+-- Um banco sem `_sqlx_migrations` não é o destino; um com menos de 25
 -- migrations é um destino velho, e as etapas contam com colunas que só existem
 -- a partir da 0021 — mais a 0022, que semeia a ordem dos apuratórios, a 0023,
--- que cria as funções de ordenação de artigo e inciso, e a 0024, que religa o
--- cadastro de Ofendido/Vítima nas espécies já importadas.
+-- que cria as funções de ordenação de artigo e inciso, a 0024, que religa o
+-- cadastro de Ofendido/Vítima nas espécies já importadas, e a 0025, que cria o
+-- e-mail do encarregado e os textos dos avisos.
 --
 -- A igualdade é exata de propósito: um destino ADIANTE do código também é
 -- recusado, porque as etapas não sabem o que a migration seguinte mudou. O
@@ -31,8 +32,8 @@ BEGIN
         RAISE EXCEPTION 'destino não tem _sqlx_migrations: este banco não é o ADM-P6.';
     END IF;
     SELECT count(*) INTO n FROM _sqlx_migrations WHERE success;
-    IF n <> 24 THEN
-        RAISE EXCEPTION 'destino tem % migrations aplicadas com sucesso, e a migração espera 24 (0001..0024). Rode a aplicação uma vez para migrar antes.', n;
+    IF n <> 25 THEN
+        RAISE EXCEPTION 'destino tem % migrations aplicadas com sucesso, e a migração espera 25 (0001..0025). Rode a aplicação uma vez para migrar antes.', n;
     END IF;
     SELECT string_agg(t, ', ' ORDER BY t) INTO falhas
       FROM unnest(ARRAY['processos_procedimentos','processo_envolvidos','processo_designacoes',

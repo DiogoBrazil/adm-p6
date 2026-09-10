@@ -49,7 +49,7 @@ implementação estão **lá**.
    · [Mapas Salvos](#310-mapas-salvos)
    · [Relatório Anual](#311-relatório-anual)
    · [Estatísticas dos Apuratórios](#312-estatísticas-dos-apuratórios)
-   · [Os 26 catálogos](#313-os-26-catálogos)
+   · [Os 27 catálogos](#313-os-27-catálogos)
 4. [Os números, um por um](#4-os-números-um-por-um)
    · [Escopo](#41-escopo-a-regra-que-vale-para-todos-os-relatórios)
    · [Painel](#42-os-números-do-painel)
@@ -737,7 +737,7 @@ têm a coluna `Quantidade`; as de enquadramento têm `Classificação`, `Descri�
 
 ---
 
-### 3.13 Os 26 catálogos
+### 3.13 Os 27 catálogos
 
 *Menu: Catálogos.* Cada catálogo é uma tela igual às outras — `Novo`, busca
 `Filtrar…`, caixa `Mostrar inativos`, e por linha `Editar`, `Desativar`/`Reativar`
@@ -1340,6 +1340,37 @@ O `.msi` usa WiX e exige o recurso VBScript do Windows habilitado.
 
 A política de segurança de conteúdo restritiva **só vale no build**: `tauri dev`
 e `cargo run` usam uma versão afrouxada. Para conferi-la, é o binário de produção.
+
+---
+
+## 8.1 Avisar o encarregado por e-mail
+
+Na tela de um apuratório, **Notificar encarregado** abre a escolha entre três
+avisos — designação, prazo a vencer, prazo vencido —, mostra o texto **já
+preenchido com os dados do apuratório** e envia ao responsável vigente. A prévia
+não é cerimônia: o texto vem de um catálogo que o administrador edita, e e-mail
+enviado não volta.
+
+Três coisas precisam existir, e a recusa diz qual falta:
+
+1. **Encarregado designado** no apuratório.
+2. **E-mail do militar.** Em *Usuários*, marcando "Pode ser designado" aparece
+   *E-mail para avisos* — opcional. Quem tem conta de acesso e deixar em branco
+   recebe no e-mail da conta.
+3. **Mensagem cadastrada** em *Catálogos → Mensagens de e-mail*. As três nascem
+   prontas na instalação; o texto é editável, e os marcadores entre chaves
+   (`{encarregado}`, `{apuratorio}`, `{numero_documento}`, `{unidade}`,
+   `{data_instauracao}`, `{prazo_vencimento}`) são trocados no envio. Marcador
+   desconhecido aparece como está — é o que a prévia serve para pegar.
+
+O servidor é configurado uma vez, em *Catálogos → Configuração de e-mail*, e vale
+para **todos os computadores da seção** — diferente da conexão do banco, que é
+por máquina. No Gmail a senha é a **senha de aplicativo** de 16 letras gerada na
+conta Google; a senha comum é recusada. A porta 587 usa STARTTLS e é o padrão;
+465 também funciona.
+
+> Os envios **não ficam registrados**: o sistema não guarda quem foi avisado nem
+> quando.
 
 ---
 

@@ -10,7 +10,7 @@
 // exatamente essa regra.
 
 /** `legal_catalogs` */
-export type TipoColuna = "texto" | "texto_opcional" | "booleano" | "inteiro" | "inteiro_opcional" | "referencia" | "referencia_opcional" | "referencia_fixa";
+export type TipoColuna = "texto" | "texto_longo" | "texto_opcional" | "booleano" | "inteiro" | "inteiro_opcional" | "referencia" | "referencia_opcional" | "referencia_fixa";
 
 /** `apuratorio_config` */
 export interface ApuratorioConfig {
@@ -432,6 +432,8 @@ export interface Catalogo {
   rotulo: string;
   colunas: Coluna[];
   ordenacao: string;
+  /** Só edição das linhas que existem: sem "Novo" e sem "Excluir". */
+  so_edicao: boolean;
 }
 
 /** `legal_catalogs` */
@@ -1151,6 +1153,8 @@ export interface UserListItem {
   posto_graduacao_sigla: string;
   circulo_hierarquico: string;
   is_encarregado: boolean;
+  /** E-mail para os avisos. Diferente de `conta_email`, que é credencial. */
+  email: string | null;
   ativo: boolean;
   conta_id: string | null;
   conta_email: string | null;
@@ -1185,6 +1189,8 @@ export interface SaveUserRequest {
   /** quebrar o cadastro. */
   posto_graduacao_id: string;
   is_encarregado: boolean;
+  /** E-mail para avisos. Vazio é ausência, não erro. */
+  email?: string | null;
   conta?: SaveAccountRequest | null;
 }
 
@@ -1228,4 +1234,37 @@ export interface UserProcessItem {
   papel: string | null;
   /** Status no processo, quando a listagem é de envolvimentos. */
   status_envolvido: string | null;
+}
+
+/** `email` — qual dos três avisos. É o `codigo` de `mensagens_email`. */
+export type TipoAviso = "designacao" | "prazo_vencendo" | "prazo_vencido";
+
+/** `email` — o e-mail pronto. A prévia e o envio devolvem o MESMO objeto: é
+ *  isso que garante que o texto aprovado na tela é o texto que sai. */
+export interface AvisoMontado {
+  destinatario: string;
+  destinatario_nome: string;
+  assunto: string;
+  corpo: string;
+}
+
+/** `email` — a configuração do servidor, SEM a senha. */
+export interface ConfiguracaoEmailVisivel {
+  host: string;
+  porta: number;
+  usuario: string;
+  remetente: string;
+  ativo: boolean;
+  /** Se já há senha gravada — a tela diz "em branco mantém a atual". */
+  tem_senha: boolean;
+}
+
+/** `email` — o que a tela de configuração envia. Senha vazia mantém a atual. */
+export interface SaveEmailConfigRequest {
+  host: string;
+  porta: number;
+  usuario: string;
+  senha: string;
+  remetente: string;
+  ativo: boolean;
 }

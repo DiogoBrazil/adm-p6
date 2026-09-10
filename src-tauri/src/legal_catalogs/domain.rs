@@ -8,6 +8,11 @@ use serde_json::{Map, Value};
 pub enum TipoColuna {
     Texto,
     TextoOpcional,
+    /// Texto de vários parágrafos — o corpo de um aviso por e-mail. Guarda-se
+    /// como qualquer `TEXT`; o que muda é a tela, que precisa de `<textarea>`
+    /// em vez de `<input>` e de truncamento na listagem. Um `<input>` aceitaria
+    /// o valor e esconderia as quebras de linha, que são o formato do texto.
+    TextoLongo,
     Booleano,
     Inteiro,
     InteiroOpcional,
@@ -90,6 +95,21 @@ const fn texto_opcional(nome: &'static str, rotulo: &'static str) -> Coluna {
         na_listagem: true,
     }
 }
+const fn texto_longo(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
+    Coluna {
+        nome,
+        rotulo,
+        tipo: TipoColuna::TextoLongo,
+        alvo: None,
+        efeito: Some(efeito),
+        marcador: None,
+        visivel_se: None,
+        centralizar: false,
+        rotulo_curto: None,
+        na_listagem: true,
+    }
+}
+
 const fn booleano(nome: &'static str, rotulo: &'static str, efeito: &'static str) -> Coluna {
     Coluna {
         nome,
@@ -235,6 +255,15 @@ pub struct Catalogo {
     pub rotulo: &'static str,
     pub colunas: &'static [Coluna],
     pub ordenacao: &'static str,
+    /// Se a tela oferece "Novo" e "Excluir", ou só edição das linhas que existem.
+    ///
+    /// `mensagens_email` é o caso: as três linhas nascem na migration e são
+    /// escolhidas pelo `codigo`, que NÃO é coluna editável — deixá-lo à mão do
+    /// administrador permitiria dois textos para o mesmo aviso, ou nenhum. Um
+    /// "Novo" ali insere sem `codigo` e morre no `NOT NULL`, e a recusa que
+    /// chega é "Falta preencher um campo obrigatório", sobre um campo que a
+    /// tela nem mostra. Melhor não oferecer o caminho.
+    pub so_edicao: bool,
     /// Consulta que devolve o assunto de UMA linha para a trilha de auditoria.
     /// `$1` é o id; o resultado é o texto da coluna "Sobre o quê".
     ///
@@ -264,6 +293,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de apuratório",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_apuratorio WHERE id = $1::uuid",
     },
     Catalogo {
@@ -310,6 +340,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             // pela tela não a apaga.
         ],
         ordenacao: "sigla",
+        so_edicao: false,
         assunto_sql: "SELECT sigla || ' - ' || nome FROM apuratorios WHERE id = $1::uuid",
     },
     Catalogo {
@@ -318,6 +349,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de documento",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_documento WHERE id = $1::uuid",
     },
     Catalogo {
@@ -326,6 +358,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Funções no apuratório",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM papeis_processo WHERE id = $1::uuid",
     },
     Catalogo {
@@ -334,6 +367,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Naturezas de transgressão",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM naturezas_transgressao WHERE id = $1::uuid",
     },
     Catalogo {
@@ -346,6 +380,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Marca as rubricas de sinistro: o cadastro passa a exigir o PM condutor."),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM naturezas_fato WHERE id = $1::uuid",
     },
     Catalogo {
@@ -354,6 +389,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Status do envolvido",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM status_envolvido WHERE id = $1::uuid",
     },
     Catalogo {
@@ -362,6 +398,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Soluções sugeridas",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_solucao_sugerida WHERE id = $1::uuid",
     },
     Catalogo {
@@ -374,6 +411,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Só com uma solução assim marcada o cadastro aceita tipo e dias de penalidade."),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_solucao_decidida WHERE id = $1::uuid",
     },
     Catalogo {
@@ -386,6 +424,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Habilita o campo de dias. Penalidades sem duração ficam desmarcadas."),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_penalidade WHERE id = $1::uuid",
     },
     Catalogo {
@@ -398,6 +437,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "A categoria marcada assim não pode conviver com nenhuma outra no mesmo envolvido."),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM categorias_indicio WHERE id = $1::uuid",
     },
     Catalogo {
@@ -406,6 +446,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Esferas penais",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM esferas_penais WHERE id = $1::uuid",
     },
     Catalogo {
@@ -414,6 +455,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Espécies de infração penal",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM especies_infracao_penal WHERE id = $1::uuid",
     },
     Catalogo {
@@ -427,6 +469,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                  'Art. 33 da Lei de Drogas'; desmarcado, 'Art. 312 do Código Penal'.")),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM dispositivos_legais WHERE id = $1::uuid",
     },
     Catalogo {
@@ -449,6 +492,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
                     paragrafo NULLS FIRST, valor_do_romano(inciso) NULLS FIRST, \
                     inciso NULLS FIRST, alinea NULLS FIRST",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT 'Art. ' || ip.artigo
                      || COALESCE(', § ' || ip.paragrafo, '')
@@ -470,6 +514,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia("natureza_transgressao_id", "Natureza", "naturezas_transgressao")),
         ],
         ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT ar.artigo || ' do RDPM (' || nt.nome || ')'
               FROM artigos_rdpm ar
@@ -493,6 +538,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         ordenacao: "(SELECT numero_do_artigo(ar.artigo) FROM artigos_rdpm ar \
                       WHERE ar.id = transgressoes.artigo_rdpm_id) NULLS LAST, \
                     valor_do_romano(inciso) NULLS LAST, inciso",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT ar.artigo || ', inciso ' || t.inciso || ' do RDPM ('
                      || nt.nome || ') - ' || t.texto
@@ -521,6 +567,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         // base legada (0003): no dia em que o 32 entrar, quem ordena é o número.
         ordenacao: "numero_do_artigo(artigo) NULLS LAST, artigo, \
                     valor_do_romano(inciso) NULLS LAST, inciso",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT ie.artigo || ', inciso ' || ie.inciso
                      || CASE WHEN dl.nome_feminino THEN ' da ' ELSE ' do ' END || dl.nome
@@ -536,6 +583,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Tipos de andamento",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM tipos_andamento WHERE id = $1::uuid",
     },
     Catalogo {
@@ -544,6 +592,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Papéis de pessoa (Exceto Vítima)",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM papeis_pessoa WHERE id = $1::uuid",
     },
     Catalogo {
@@ -558,6 +607,7 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "municipios_distritos", "e_distrito")),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT nome || CASE WHEN e_distrito THEN ' (distrito)' ELSE '' END
               FROM municipios_distritos WHERE id = $1::uuid
@@ -572,6 +622,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia_opcional("municipio_id", "Município", "municipios_distritos")),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM unidades_pm WHERE id = $1::uuid",
     },
     Catalogo {
@@ -583,6 +634,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(texto("nome", "Nome")),
         ],
         ordenacao: "unidade_pm_id, nome",
+        so_edicao: false,
         assunto_sql: r#"
             SELECT u.nome || ' / ' || s.nome
               FROM subunidades_secoes s
@@ -596,6 +648,7 @@ pub const CATALOGOS: &[Catalogo] = &[
         rotulo: "Círculos hierárquicos",
         colunas: &[centralizada(texto("nome", "Nome"))],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM circulos_hierarquicos WHERE id = $1::uuid",
     },
     Catalogo {
@@ -608,6 +661,7 @@ pub const CATALOGOS: &[Catalogo] = &[
             centralizada(referencia("circulo_hierarquico_id", "Círculo hierárquico", "circulos_hierarquicos")),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT sigla || ' - ' || nome FROM postos_graduacoes WHERE id = $1::uuid",
     },
     Catalogo {
@@ -620,7 +674,36 @@ pub const CATALOGOS: &[Catalogo] = &[
                 "Concede acesso às telas de cadastro e configuração. O sistema impede que sobre nenhum."),
         ],
         ordenacao: "nome",
+        so_edicao: false,
         assunto_sql: "SELECT nome FROM perfis_acesso WHERE id = $1::uuid",
+    },
+    // Os textos dos avisos ao encarregado. `codigo` NÃO entra como coluna
+    // editável: ele é o que o código lê para escolher a mensagem, e deixá-lo à
+    // mão do administrador permitiria apontar dois textos para o mesmo aviso ou
+    // nenhum para outro. As três linhas nascem na migration `0025` e o que se
+    // edita aqui é o que a pessoa lê — nome, assunto e corpo.
+    Catalogo {
+        chave: "mensagens_email",
+        tabela: "mensagens_email",
+        rotulo: "Mensagens de e-mail",
+        colunas: &[
+            texto("nome", "Nome do aviso"),
+            abreviada(
+                texto("assunto", "Assunto do e-mail"),
+                "Assunto",
+            ),
+            abreviada(
+                texto_longo("corpo", "Corpo da mensagem",
+                    "Marcadores substituídos no envio: {encarregado}, {apuratorio}, \
+                     {numero_documento}, {unidade}, {data_instauracao} e \
+                     {prazo_vencimento}. Marcador desconhecido fica como está — \
+                     confira na prévia antes de enviar."),
+                "Corpo",
+            ),
+        ],
+        ordenacao: "nome",
+        so_edicao: true,
+        assunto_sql: "SELECT nome FROM mensagens_email WHERE id = $1::uuid",
     },
 ];
 

@@ -38,6 +38,7 @@ import {
   type SelecaoInfracaoEstatuto,
   type SelecaoInfracaoPenal,
   type UserListItem,
+  type TipoAviso,
 } from "../api";
 import {
   ativarSelectsPesquisaveis,
@@ -2129,6 +2130,114 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   await comCarregamento("Abrindo o apuratório…", () => desenharDetalheProcesso(ctx, id));
 }
 
+/** Os três avisos, na ordem em que a Seção os usa. */
+const AVISOS: { tipo: TipoAviso; rotulo: string; descricao: string }[] = [
+  {
+    tipo: "designacao",
+    rotulo: "Designação",
+    descricao: "Comunica a designação e convoca à Seção para esclarecimentos.",
+  },
+  {
+    tipo: "prazo_vencendo",
+    rotulo: "Prazo a vencer",
+    descricao: "Avisa que o prazo se aproxima e pede a prorrogação, se couber.",
+  },
+  {
+    tipo: "prazo_vencido",
+    rotulo: "Prazo vencido",
+    descricao: "Avisa que o prazo venceu e pede a prorrogação com urgência.",
+  },
+];
+
+/**
+ * Escolher o aviso, LER o texto final, e só então enviar.
+ *
+ * A prévia não é cerimônia: o corpo vem de um catálogo que o administrador
+ * edita, com marcadores que ele pode digitar errado — e um marcador que a
+ * montagem não conhece fica literal no texto, de propósito. Quem vê a frase
+ * pronta pega o engano; quem clica num botão direto manda `{apuratorio}` para
+ * um oficial. E-mail enviado não volta.
+ *
+ * Um botão só na barra de ações, e não três: ela já tem Voltar, Editar e às
+ * vezes Reabrir, e num monitor estreito os três avisos a quebrariam em duas
+ * linhas.
+ */
+function abrirNotificacao(ctx: ContextoTela, id: string, gatilho: HTMLButtonElement): void {
+  let modal: ReturnType<typeof montarModal> = null;
+  modal = montarModal(
+    `<header><h2>Notificar encarregado</h2>
+       <p>Escolha o aviso, confira o texto e envie. O e-mail vai para o encarregado
+          responsável pelo apuratório.</p></header>
+     <div class="aviso-opcoes">
+       ${AVISOS.map(
+         (a, i) => `
+         <label class="aviso-opcao">
+           <input type="radio" name="tipo-aviso" value="${a.tipo}"${i === 0 ? " checked" : ""} />
+           <span><strong>${escapeHtml(a.rotulo)}</strong><small>${escapeHtml(a.descricao)}</small></span>
+         </label>`,
+       ).join("")}
+     </div>
+     <div class="aviso-previa" data-previa aria-live="polite">
+       <p class="hint">Carregando a prévia…</p>
+     </div>
+     <div class="form-actions">
+       <button type="button" class="secondary" data-fechar-modal>Cancelar</button>
+       <button type="button" id="enviar-aviso" disabled>Enviar e-mail</button>
+     </div>`,
+    "Notificar encarregado",
+    () => {},
+    gatilho,
+  );
+  if (!modal) return;
+
+  const area = modal.overlay.querySelector<HTMLElement>("[data-previa]")!;
+  const enviar = modal.overlay.querySelector<HTMLButtonElement>("#enviar-aviso")!;
+  const escolhido = (): TipoAviso =>
+    (modal!.overlay.querySelector<HTMLInputElement>('input[name="tipo-aviso"]:checked')?.value ??
+      "designacao") as TipoAviso;
+
+  const carregarPrevia = async () => {
+    enviar.disabled = true;
+    area.innerHTML = `<p class="hint">Carregando a prévia…</p>`;
+    const r = await call("email_preview", { processoId: id, tipo: escolhido() });
+    if (!r.ok || !r.data) {
+      // A recusa é a informação: diz qual dado falta e onde cadastrá-lo.
+      area.innerHTML = `<p class="error">${escapeHtml(r.error ?? "")}</p>`;
+      return;
+    }
+    const p = r.data;
+    area.innerHTML = `
+      <dl class="aviso-cabecalho">
+        <dt>Para</dt><dd>${escapeHtml(p.destinatario_nome)} &lt;${escapeHtml(p.destinatario)}&gt;</dd>
+        <dt>Assunto</dt><dd>${escapeHtml(p.assunto)}</dd>
+      </dl>
+      <pre class="aviso-corpo">${escapeHtml(p.corpo)}</pre>`;
+    enviar.disabled = false;
+  };
+
+  modal.overlay.querySelectorAll<HTMLInputElement>('input[name="tipo-aviso"]').forEach((radio) => {
+    radio.addEventListener("change", () => void carregarPrevia());
+  });
+  void carregarPrevia();
+
+  enviar.addEventListener("click", async () => {
+    const tipo = escolhido();
+    await comCarregamento(
+      "Enviando o e-mail…",
+      async () => {
+        const r = await call("email_send", { processoId: id, tipo });
+        if (!r.ok || !r.data) {
+          notificar(r.error ?? "", "erro");
+          return;
+        }
+        notificar(`Aviso enviado para ${r.data.destinatario}.`, "sucesso");
+        modal?.fechar();
+      },
+      enviar,
+    );
+  });
+}
+
 async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
   // `users_list_ativos` e não um comando paginado: lista de OPÇÕES não pagina.
   // O teto de 200 de uma listagem cortaria o seletor em silêncio, que foi o
@@ -2248,6 +2357,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         <div class="actions">
           <button class="secondary" id="voltar">Voltar</button>
           ${podeEscrever ? `<button id="editar">Editar</button>` : ""}
+          ${podeEscrever ? `<button class="secondary" id="notificar">Notificar encarregado</button>` : ""}
           ${podeEscrever && d.concluido ? `<button class="secondary" id="reabrir">Reabrir</button>` : ""}
         </div>
       </div>
@@ -2735,6 +2845,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
 
   document.querySelector("#voltar")?.addEventListener("click", () => void renderListaProcessos(ctx));
   document.querySelector("#editar")?.addEventListener("click", () => void renderFormularioProcesso(ctx, id));
+  document
+    .querySelector<HTMLButtonElement>("#notificar")
+    ?.addEventListener("click", (evento) => {
+      abrirNotificacao(ctx, id, evento.currentTarget as HTMLButtonElement);
+    });
+
   document.querySelector<HTMLButtonElement>("#reabrir")?.addEventListener("click", async (evento) => {
     if (!confirm("Reabrir este apuratório?")) return;
     await comCarregamento(

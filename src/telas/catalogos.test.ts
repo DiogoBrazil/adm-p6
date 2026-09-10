@@ -92,6 +92,7 @@ const cat = (colunas: Coluna[]): Catalogo => ({
   chave: "teste",
   tabela: "teste",
   rotulo: "Teste",
+  so_edicao: false,
   colunas,
   ordenacao: "nome",
 });
@@ -130,6 +131,22 @@ describe("larguras da listagem de catálogos", () => {
     // Centralizado é o sinal de "texto curto" que o registro já declarava.
     expect(larguraFixaPx(centrada(coluna("sigla", "texto")))).toBe(LARGURA_PX.textoCompacto);
     expect(larguraFixaPx(coluna("nome", "texto"))).toBeNull();
+  });
+
+  // O corpo de um aviso tem centenas de caracteres. Sem largura fixa ele seria
+  // a coluna flexível e comeria a tabela inteira, deixando o "Nome do aviso" —
+  // que é quem identifica a linha — espremido.
+  it("texto longo tem teto e não disputa a sobra com a identificação", () => {
+    expect(larguraFixaPx(coluna("corpo", "texto_longo"))).toBe(LARGURA_PX.textoLongo);
+
+    const colunas = [
+      coluna("nome", "texto"),
+      coluna("assunto", "texto"),
+      coluna("corpo", "texto_longo"),
+    ];
+    const flex = colunasFlexiveis(colunas);
+    expect(flex.has("corpo")).toBe(false);
+    expect(flex.has("nome")).toBe(true);
   });
 
   it("a coluna de identificação é a que absorve a sobra", () => {

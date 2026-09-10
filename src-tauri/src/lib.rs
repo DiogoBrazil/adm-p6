@@ -7,6 +7,7 @@ pub mod auth;
 pub mod database_config;
 pub mod db;
 pub mod deadlines;
+pub mod email;
 pub mod error;
 pub mod evidence;
 pub mod files;
@@ -90,6 +91,10 @@ pub fn registrar_comandos<R: tauri::Runtime>(builder: tauri::Builder<R>) -> taur
             deadlines::commands::deadlines_add_extension,
             deadlines::commands::deadlines_update_extension,
             deadlines::commands::deadlines_delete_extension,
+            email::commands::email_preview,
+            email::commands::email_send,
+            email::commands::email_config_get,
+            email::commands::email_config_save,
             movements::commands::movements_list,
             movements::commands::movements_add,
             movements::commands::movements_update,

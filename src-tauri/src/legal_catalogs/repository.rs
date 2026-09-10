@@ -27,7 +27,9 @@ fn ler_linha(cat: &Catalogo, row: &PgRow) -> Result<Map<String, Value>, sqlx::Er
     mapa.insert("id".into(), Value::String(row.try_get::<String, _>("id")?));
     for c in cat.colunas {
         let valor = match c.tipo {
-            TipoColuna::Texto => Value::String(row.try_get::<String, _>(c.nome)?),
+            TipoColuna::Texto | TipoColuna::TextoLongo => {
+                Value::String(row.try_get::<String, _>(c.nome)?)
+            }
             TipoColuna::TextoOpcional | TipoColuna::ReferenciaOpcional => row
                 .try_get::<Option<String>, _>(c.nome)?
                 .map(Value::String)
@@ -172,7 +174,7 @@ pub async fn save(
     for coluna in colunas_ligadas(cat) {
         let valor = valores.get(coluna.nome);
         query = match coluna.tipo {
-            TipoColuna::Texto | TipoColuna::Referencia => {
+            TipoColuna::Texto | TipoColuna::TextoLongo | TipoColuna::Referencia => {
                 let v = valor
                     .and_then(|v| v.as_str())
                     .map(|s| s.trim().to_string())

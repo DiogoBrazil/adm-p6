@@ -562,6 +562,9 @@ export async function abrirCadastroRapidoMilitar(
           matricula: String(dados.get("matricula") ?? "").trim(),
           posto_graduacao_id: String(dados.get("posto_graduacao_id") ?? ""),
           is_encarregado: dados.get("is_encarregado") === "on",
+          // O atalho não pede e-mail: ele existe para destravar o cadastro de um
+          // processo, e o endereço se acrescenta depois em Usuários.
+          email: null,
           conta: null,
         },
       });
@@ -645,9 +648,17 @@ async function desenharFormularioUsuario(
             <input name="matricula" type="text" required value="${escapeHtml(usuario?.matricula ?? "")}" />
           </label>
           <label class="checkbox-inline">
-            <input name="is_encarregado" type="checkbox" ${usuario?.is_encarregado ? "checked" : ""} />
+            <input name="is_encarregado" type="checkbox" id="pode-designar" ${usuario?.is_encarregado ? "checked" : ""} />
             Pode ser designado
           </label>
+          <div id="campos-encarregado" ${usuario?.is_encarregado ? "" : "hidden"}>
+            <label>E-mail para avisos
+              <input name="email" type="email" value="${escapeHtml(usuario?.email ?? "")}" />
+              <span class="hint">Opcional. É para onde vão os avisos de designação e de prazo
+                enviados pela tela do apuratório. Quem tem conta de acesso e deixar isto em branco
+                recebe no e-mail da conta.</span>
+            </label>
+          </div>
         </fieldset>
 
         <fieldset class="conta-fieldset">
@@ -692,6 +703,18 @@ async function desenharFormularioUsuario(
   };
   document.querySelector<HTMLInputElement>("#tem-conta")?.addEventListener("change", alternarConta);
 
+  // Mesmo desenho do bloco da conta: o campo só aparece para quem pode ser
+  // designado, porque só esse recebe aviso. O valor NÃO é limpo ao desmarcar —
+  // quem desmarca por engano e remarca não perde o endereço digitado, e o
+  // backend guarda o campo de qualquer jeito.
+  const alternarEncarregado = () => {
+    const marcado = document.querySelector<HTMLInputElement>("#pode-designar")?.checked ?? false;
+    document.querySelector<HTMLElement>("#campos-encarregado")?.toggleAttribute("hidden", !marcado);
+  };
+  document
+    .querySelector<HTMLInputElement>("#pode-designar")
+    ?.addEventListener("change", alternarEncarregado);
+
   document.querySelector<HTMLButtonElement>("#btn-cancelar")?.addEventListener("click", () => {
     if (!podeDescartarFormulario()) return;
     void renderListaUsuarios(ctx);
@@ -724,6 +747,7 @@ async function desenharFormularioUsuario(
         matricula: String(f.get("matricula") ?? "").trim(),
         posto_graduacao_id: String(f.get("posto_graduacao_id") ?? ""),
         is_encarregado: f.get("is_encarregado") === "on",
+        email: String(f.get("email") ?? "").trim() || null,
         conta,
       },
     });
