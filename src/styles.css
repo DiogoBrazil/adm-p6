@@ -4738,3 +4738,12 @@ button.filtro-chip:focus-visible {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* A prévia mostra o texto, não a moldura: a CSP do app é `style-src 'self'` e
+   recusaria o estilo inline que Gmail e Outlook exigem. A nota existe para a
+   diferença não parecer defeito. */
+.aviso-nota {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-strong);
+}

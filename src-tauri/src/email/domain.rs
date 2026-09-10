@@ -120,6 +120,97 @@ fn vazio_vira_padrao(valor: &str) -> String {
     }
 }
 
+/// Escapa o que vai para dentro do HTML do e-mail.
+///
+/// Não é zelo teórico: o corpo é texto que o administrador digita na tela de
+/// catálogos e o nome do militar vem do banco. Um `<` solto em qualquer um dos
+/// dois quebraria a marcação no cliente de quem recebe, e um `<script>` digitado
+/// por engano viraria conteúdo ativo numa caixa de entrada alheia. Tudo o que é
+/// variável passa por aqui; só a moldura é literal.
+fn escapar(texto: &str) -> String {
+    let mut saida = String::with_capacity(texto.len());
+    for c in texto.chars() {
+        match c {
+            '&' => saida.push_str("&amp;"),
+            '<' => saida.push_str("&lt;"),
+            '>' => saida.push_str("&gt;"),
+            '"' => saida.push_str("&quot;"),
+            '\'' => saida.push_str("&#39;"),
+            _ => saida.push(c),
+        }
+    }
+    saida
+}
+
+/// A moldura HTML do aviso, a partir do MESMO texto puro que vai na outra parte.
+///
+/// POR QUE O ESTILO É INLINE
+///
+/// Gmail e Outlook descartam `<style>` de forma inconsistente; atributo `style`
+/// é o que todos respeitam. Isso NÃO pode ser reaproveitado na prévia da tela: a
+/// CSP do app é `style-src 'self'`, sem `unsafe-inline`, e recusaria o mesmo
+/// HTML. A prévia mostra o texto — que é o que o administrador controla e o que
+/// pode sair errado; a moldura é fixa.
+///
+/// POR QUE O ADMINISTRADOR NÃO ESCREVE HTML
+///
+/// Quem edita a mensagem é um sargento da Seção, não quem programa. Ele digita
+/// texto puro, com linhas em branco separando parágrafos, e a moldura é
+/// aplicada aqui. Uma convenção só, e tolerante: **parágrafo cujas linhas
+/// começam com espaço vira o bloco destacado** — é o formato em que as três
+/// mensagens semeadas listam os dados do apuratório. Tirar a indentação não
+/// quebra nada: vira parágrafo comum.
+pub fn montar_html(corpo: &str) -> String {
+    let mut blocos = String::new();
+    for paragrafo in corpo.replace("\r\n", "\n").split("\n\n") {
+        let linhas: Vec<&str> = paragrafo.lines().filter(|l| !l.trim().is_empty()).collect();
+        if linhas.is_empty() {
+            continue;
+        }
+        let destacado = linhas
+            .iter()
+            .all(|l| l.starts_with(' ') || l.starts_with('\t'));
+        let texto = linhas
+            .iter()
+            .map(|l| escapar(l.trim()))
+            .collect::<Vec<_>>()
+            .join("<br />");
+        if destacado {
+            blocos.push_str(&format!(
+                "<div style=\"margin:16px 0;padding:12px 16px;background:#f8fafc;\
+                 border-left:4px solid #10b981;border-radius:0 6px 6px 0;\
+                 font-size:15px;line-height:1.7;color:#1f2937\">{texto}</div>"
+            ));
+        } else {
+            blocos.push_str(&format!(
+                "<p style=\"margin:0 0 14px;font-size:15px;line-height:1.65;\
+                 color:#1f2937\">{texto}</p>"
+            ));
+        }
+    }
+
+    format!(
+        "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" />\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" /></head>\
+         <body style=\"margin:0;padding:24px 12px;background:#eef2f5;\
+         font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif\">\
+         <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" \
+         style=\"margin:0 auto;max-width:640px;width:100%;background:#ffffff;\
+         border-radius:10px;overflow:hidden;border:1px solid #d9e0e6\"><tr><td>\
+         <div style=\"padding:18px 24px;background:#111827;color:#ffffff\">\
+         <div style=\"font-size:16px;font-weight:600;letter-spacing:.02em\">\
+         GESTÃO P6 / 7º BPM</div>\
+         <div style=\"font-size:13px;color:#9fb0bf;margin-top:2px\">\
+         Seção de Justiça e Disciplina</div></div>\
+         <div style=\"padding:24px\">{blocos}</div>\
+         <div style=\"padding:14px 24px;background:#f8fafc;border-top:1px solid #e5e7eb;\
+         font-size:12px;color:#6b7280;line-height:1.5\">\
+         Mensagem automática do sistema GESTÃO P6/7º BPM. \
+         Não responda a este e-mail &#8212; procure a Seção de Justiça e Disciplina.\
+         </div></td></tr></table></body></html>"
+    )
+}
+
 /// O e-mail pronto, como a prévia mostra e como o envio manda. São os mesmos
 /// campos nos dois caminhos de propósito: o que a pessoa aprova é o que sai.
 #[derive(Debug, Clone, Serialize)]
@@ -191,6 +282,55 @@ mod tests {
             aplicar_marcadores("{encarregado}", &d),
             "{apuratorio}",
             "o valor foi reinterpretado como marcador"
+        );
+    }
+
+    /// O corpo vem da tela de catálogos e o nome do militar vem do banco: os
+    /// dois são texto de terceiro dentro de HTML que vai para a caixa de
+    /// entrada de outra pessoa. Sem escape, um `<` quebra a marcação e um
+    /// `<script>` digitado por engano viraria conteúdo ativo lá.
+    #[test]
+    fn o_texto_de_quem_edita_e_escapado_no_html() {
+        let html = montar_html("Fulano & Cia <script>alert(1)</script> \"aspas\"");
+        assert!(html.contains("&amp;"), "e comercial cru: {html}");
+        assert!(html.contains("&lt;script&gt;"), "tag crua no html");
+        assert!(!html.contains("<script>"), "script ativo no e-mail");
+        assert!(html.contains("&quot;"));
+    }
+
+    /// A convenção é uma só e é tolerante: parágrafo indentado vira o bloco
+    /// destacado, e é assim que as três mensagens semeadas listam os dados.
+    /// Tirar a indentação não quebra — vira parágrafo comum.
+    #[test]
+    fn paragrafo_indentado_vira_bloco_destacado_e_o_resto_vira_paragrafo() {
+        let html =
+            montar_html("Prezado,\n\n  Documento: 012/2026\n  Unidade: 7º BPM\n\nAtenciosamente.");
+        assert_eq!(html.matches("border-left:4px solid").count(), 1);
+        // As duas linhas do bloco ficam juntas, separadas por quebra.
+        assert!(html.contains("Documento: 012/2026<br />Unidade: 7º BPM"));
+        // Prezado e Atenciosamente são parágrafos comuns.
+        assert_eq!(html.matches("<p style=").count(), 2);
+    }
+
+    #[test]
+    fn sem_indentacao_nao_ha_bloco_destacado() {
+        let html = montar_html("Linha um.\n\nLinha dois.");
+        assert!(!html.contains("border-left:4px solid"));
+        assert_eq!(html.matches("<p style=").count(), 2);
+    }
+
+    /// A moldura é fixa e o conteúdo é o que varia — mas o conteúdo precisa
+    /// mesmo estar lá dentro, e não só a moldura.
+    #[test]
+    fn o_html_carrega_a_moldura_e_o_texto() {
+        let html = montar_html("Comparecer à Seção.");
+        assert!(html.starts_with("<!doctype html>"));
+        assert!(html.contains("Seção de Justiça e Disciplina"));
+        assert!(html.contains("Comparecer à Seção."));
+        // Estilo inline, e não `<style>`: é o que Gmail e Outlook respeitam.
+        assert!(
+            !html.contains("<style"),
+            "folha de estilo que o cliente descarta"
         );
     }
 

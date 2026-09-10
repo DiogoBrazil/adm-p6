@@ -9,11 +9,11 @@
 //! jeito que `database_config.rs::SetupBackend` separa salvar/migrar/publicar
 //! para poder testar a ordem sem tocar no cofre.
 
-use lettre::message::header::ContentType;
+use lettre::message::MultiPart;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
-use crate::email::domain::AvisoMontado;
+use crate::email::domain::{montar_html, AvisoMontado};
 use crate::email::repository::ConfiguracaoSmtp;
 use crate::error::AppError;
 
@@ -52,12 +52,21 @@ impl EnviaEmail for Smtp {
             )
         })?;
 
+        // As DUAS versões, do MESMO texto: `multipart/alternative` deixa o
+        // cliente escolher. Quem tem HTML vê a moldura; quem lê em terminal,
+        // celular antigo ou cliente com HTML desligado recebe o texto puro
+        // inteiro — e não um "sua mensagem requer HTML".
+        //
+        // A ordem importa e é a do padrão: o texto puro primeiro, o HTML
+        // depois. O cliente exibe a ÚLTIMA parte que sabe renderizar.
         let mensagem = Message::builder()
             .from(de)
             .to(para)
             .subject(&aviso.assunto)
-            .header(ContentType::TEXT_PLAIN)
-            .body(aviso.corpo.clone())
+            .multipart(MultiPart::alternative_plain_html(
+                aviso.corpo.clone(),
+                montar_html(&aviso.corpo),
+            ))
             .map_err(|e| AppError::Interno(format!("montagem da mensagem: {e}")))?;
 
         // A porta decide o modo, e não há um terceiro caso: 465 é TLS desde o

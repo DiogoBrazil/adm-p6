@@ -1369,6 +1369,12 @@ por máquina. No Gmail a senha é a **senha de aplicativo** de 16 letras gerada 
 conta Google; a senha comum é recusada. A porta 587 usa STARTTLS e é o padrão;
 465 também funciona.
 
+O e-mail sai com o cabeçalho e a formatação da Seção, e leva junto uma versão em
+texto puro para quem lê sem HTML. **O texto do catálogo é texto puro** — quem
+edita não escreve HTML. Uma convenção: parágrafo cujas linhas começam com espaço
+vira o bloco destacado, que é como as três mensagens listam os dados do
+apuratório. A prévia mostra o texto, não a moldura.
+
 > Os envios **não ficam registrados**: o sistema não guarda quem foi avisado nem
 > quando.
 

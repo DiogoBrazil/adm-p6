@@ -2164,6 +2164,11 @@ const AVISOS: { tipo: TipoAviso; rotulo: string; descricao: string }[] = [
  */
 function abrirNotificacao(ctx: ContextoTela, id: string, gatilho: HTMLButtonElement): void {
   let modal: ReturnType<typeof montarModal> = null;
+  // `montarModal` liga Cancelar, Esc e o clique fora ao `aoCancelar` — NÃO ao
+  // `fechar`. Quem fecha é o chamador, e é isso que permite a um formulário
+  // sujo perguntar antes de descartar. Passar `() => {}` deixa os três gestos
+  // sem efeito, e o modal fica preso na tela.
+  const cancelar = () => modal?.fechar();
   modal = montarModal(
     `<header><h2>Notificar encarregado</h2>
        <p>Escolha o aviso, confira o texto e envie. O e-mail vai para o encarregado
@@ -2185,7 +2190,7 @@ function abrirNotificacao(ctx: ContextoTela, id: string, gatilho: HTMLButtonElem
        <button type="button" id="enviar-aviso" disabled>Enviar e-mail</button>
      </div>`,
     "Notificar encarregado",
-    () => {},
+    cancelar,
     gatilho,
   );
   if (!modal) return;
@@ -2211,7 +2216,9 @@ function abrirNotificacao(ctx: ContextoTela, id: string, gatilho: HTMLButtonElem
         <dt>Para</dt><dd>${escapeHtml(p.destinatario_nome)} &lt;${escapeHtml(p.destinatario)}&gt;</dd>
         <dt>Assunto</dt><dd>${escapeHtml(p.assunto)}</dd>
       </dl>
-      <pre class="aviso-corpo">${escapeHtml(p.corpo)}</pre>`;
+      <pre class="aviso-corpo">${escapeHtml(p.corpo)}</pre>
+      <p class="hint aviso-nota">O e-mail sai com o cabeçalho e a formatação da Seção;
+         aqui aparece o texto, que é o que muda de um aviso para outro.</p>`;
     enviar.disabled = false;
   };
 
