@@ -411,7 +411,14 @@ async fn atualizar_registro_inexistente_e_recusado() {
         )
         .await
         .expect_err("id inexistente");
-        assert!(erro.message().contains("nao encontrado"), "{erro}");
+        // A frase diz o que aconteceu E o que fazer. A versão anterior era
+        // "registro nao encontrado", e esta asserção casava com ela — um teste
+        // que prendia o defeito no lugar em vez de denunciá-lo.
+        let mensagem = erro.message();
+        assert!(
+            mensagem.contains("não existe mais") && mensagem.contains("Recarregue"),
+            "{mensagem}"
+        );
         drop(tx);
 
         let mut tx = pool.begin().await.unwrap();

@@ -725,6 +725,10 @@ pub async fn carta_precatoria_muitos<'e, E: PgExecutor<'e>>(
 #[derive(sqlx::FromRow)]
 struct ConfigApuratorio {
     exige_natureza_fato: bool,
+    /// `NULL` é ilimitado, e é o caso de 6 das 11 espécies. As outras cinco
+    /// (CD, CJ, PAD, PADE, PADS) valem 1 — e é por isso que este limite precisa
+    /// ser cobrado aqui: lançar um segundo envolvido num PADS é rotina.
+    max_envolvidos: Option<i32>,
     permite_acusacao: bool,
     permite_acusacao_penal: bool,
     permite_cadastro_vitima: bool,
@@ -736,14 +740,18 @@ async fn config_apuratorio(
     apuratorio_id: &str,
 ) -> Result<ConfigApuratorio, AppError> {
     sqlx::query_as::<_, ConfigApuratorio>(
-        "SELECT exige_natureza_fato, permite_acusacao, permite_acusacao_penal,
+        "SELECT exige_natureza_fato, max_envolvidos, permite_acusacao, permite_acusacao_penal,
                 permite_cadastro_vitima, codigo_extensao
            FROM apuratorios WHERE id = $1::uuid",
     )
     .bind(apuratorio_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("apuratorio nao encontrado".to_string()))
+    .ok_or_else(|| {
+        AppError::Domain(
+            "A espécie de apuratório escolhida não existe mais. Recarregue a página.".to_string(),
+        )
+    })
 }
 
 /// Validações que dependem de configuração. Todas leem atributos semânticos dos
@@ -774,15 +782,35 @@ async fn validar_contra_configuracao(
         .unwrap_or(false);
         if reclassificaria_enquadramento {
             return Err(AppError::Domain(
-                "não é possível trocar a espécie porque já há acusação ou indícios registrados"
+                "Não é possível trocar a espécie: já há acusação ou indícios registrados neste apuratório. Remova-os antes."
                     .to_string(),
             ));
         }
     }
 
+    // O limite de envolvidos existe no banco como `tg_max_envolvidos`, mas
+    // aquele gatilho é `DEFERRABLE INITIALLY DEFERRED` e levanta
+    // `check_violation` **sem nome de constraint** — sem nome, `error.rs` cai na
+    // categoria e responde "Os dados informados não atendem a uma regra do
+    // cadastro", no `commit`, sem dizer que fala de envolvidos nem qual é o
+    // limite. Cobrar aqui é a terceira camada que o próprio `error.rs`
+    // recomenda: quem sabe qual campo a pessoa errou responde antes do SQL.
+    //
+    // O gatilho continua sendo a garantia do banco; deixa de ser o que o
+    // usuário encontra. Mesma forma da mensagem de `max_ocupantes`.
+    if let Some(limite) = config.max_envolvidos {
+        let informados = request.envolvidos.len();
+        if informados > limite as usize {
+            return Err(AppError::Domain(format!(
+                "Esta espécie de apuratório aceita no máximo {limite} envolvido(s), \
+                 e foram informados {informados}."
+            )));
+        }
+    }
+
     if config.exige_natureza_fato && request.natureza_fato_id.is_none() {
         return Err(AppError::Domain(
-            "este apuratorio exige a natureza geral do fato apurado".to_string(),
+            "Esta espécie de apuratório exige a natureza geral do fato apurado.".to_string(),
         ));
     }
 
@@ -791,14 +819,14 @@ async fn validar_contra_configuracao(
     // desligado, então esta mensagem só alcança quem chamou o IPC direto.
     if !config.permite_cadastro_vitima && !request.vitimas.is_empty() {
         return Err(AppError::Domain(
-            "este apuratório não registra ofendido/vítima".to_string(),
+            "Esta espécie de apuratório não registra ofendido/vítima.".to_string(),
         ));
     }
 
     let enviou_acusacao = request.envolvidos.iter().any(|e| e.acusacoes.is_some());
     if !config.permite_acusacao && enviou_acusacao {
         return Err(AppError::Domain(
-            "este apuratório não recebe acusação no cadastro".to_string(),
+            "Esta espécie de apuratório não recebe acusação no cadastro.".to_string(),
         ));
     }
 
@@ -811,7 +839,7 @@ async fn validar_contra_configuracao(
             })
         {
             return Err(AppError::Domain(
-                "este processo admite somente acusações disciplinares do RDPM ou do Estatuto"
+                "Este processo admite somente acusações disciplinares do RDPM ou do Estatuto."
                     .to_string(),
             ));
         }
@@ -855,12 +883,12 @@ async fn validar_contra_configuracao(
         if request.id.is_none() {
             if request.envolvidos.len() != 1 {
                 return Err(AppError::Domain(
-                    "informe o policial militar acusado neste processo".to_string(),
+                    "Informe o policial militar acusado neste processo.".to_string(),
                 ));
             }
             if quantidade_efetiva == 0 {
                 return Err(AppError::Domain(
-                    "selecione ao menos uma acusação para o policial militar".to_string(),
+                    "Selecione ao menos uma acusação para o policial militar.".to_string(),
                 ));
             }
         } else {
@@ -882,7 +910,7 @@ async fn validar_contra_configuracao(
             .await?;
             if quantidade_atual > 0 && quantidade_efetiva == 0 {
                 return Err(AppError::Domain(
-                    "um processo que já possui acusação não pode ficar sem enquadramento"
+                    "Um processo que já possui acusação não pode ficar sem enquadramento."
                         .to_string(),
                 ));
             }
@@ -898,12 +926,15 @@ async fn validar_contra_configuracao(
                 .fetch_optional(&mut **tx)
                 .await?
                 .ok_or_else(|| {
-                    AppError::Domain("natureza geral do fato nao encontrada".to_string())
+                    AppError::Domain(
+                        "A natureza geral do fato escolhida não existe mais. Recarregue a página."
+                            .to_string(),
+                    )
                 })?;
 
         if exige_condutor && !request.envolvidos.iter().any(|e| e.e_condutor) {
             return Err(AppError::Domain(
-                "esta natureza exige indicar o PM condutor entre os envolvidos".to_string(),
+                "Esta natureza exige indicar o PM condutor entre os envolvidos.".to_string(),
             ));
         }
     }
@@ -912,7 +943,8 @@ async fn validar_contra_configuracao(
         && request.carta_precatoria.is_none()
     {
         return Err(AppError::Domain(
-            "este apuratorio exige deprecante e unidade deprecada".to_string(),
+            "Esta espécie de apuratório exige informar o deprecante e a unidade deprecada."
+                .to_string(),
         ));
     }
 
@@ -1014,7 +1046,9 @@ pub async fn save(
         .bind(id)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
+        .ok_or_else(|| {
+            AppError::Domain("Este apuratório não existe mais. Recarregue a página.".to_string())
+        })?;
 
         validar_ordem_datas(
             request.data_instauracao,
@@ -1059,7 +1093,7 @@ pub async fn save(
         .await?;
         if let Some(sigla) = conflito {
             return Err(AppError::Domain(format!(
-                "este apuratório já tem designações registradas como {sigla}; não é possível trocar a espécie do apuratório"
+                "Este apuratório já tem designações registradas como {sigla}. Remova-as antes de trocar a espécie."
             )));
         }
     }
@@ -1094,7 +1128,9 @@ pub async fn save(
         .bind(request.resumo_fatos.as_deref())
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?,
+        .ok_or_else(|| {
+            AppError::Domain("Este apuratório não existe mais. Recarregue a página.".to_string())
+        })?,
         None => {
             sqlx::query_scalar(
                 "INSERT INTO processos_procedimentos
@@ -2051,7 +2087,9 @@ pub async fn update_dates(
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("apuratório não encontrado".to_string()))?;
+    .ok_or_else(|| {
+        AppError::Domain("Este apuratório não existe mais. Recarregue a página.".to_string())
+    })?;
 
     validar_ordem_datas(
         data_instauracao,
@@ -2129,11 +2167,15 @@ pub async fn update_involved_outcome(
     .bind(&request.processo_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("envolvido não encontrado neste apuratório".to_string()))?;
+    .ok_or_else(|| {
+        AppError::Domain(
+            "Este envolvido não existe mais neste apuratório. Recarregue a página.".to_string(),
+        )
+    })?;
 
     if !permite_solucao_sugerida && request.solucao_sugerida_id.is_some() {
         return Err(AppError::Domain(
-            "solução sugerida é permitida somente para procedimentos".to_string(),
+            "A solução sugerida é permitida somente para procedimentos.".to_string(),
         ));
     }
     let solucao_sugerida = if permite_solucao_sugerida {
@@ -2145,7 +2187,7 @@ pub async fn update_involved_outcome(
     if request.penalidade_tipo_id.is_some() {
         if !permite_punicao {
             return Err(AppError::Domain(
-                "este apuratório não permite registrar penalidade".to_string(),
+                "Esta espécie de apuratório não permite registrar penalidade.".to_string(),
             ));
         }
         let permite_penalidade: bool = match request.solucao_decidida_id.as_deref() {
@@ -2160,7 +2202,7 @@ pub async fn update_involved_outcome(
         };
         if !permite_penalidade {
             return Err(AppError::Domain(
-                "a solução decidida selecionada não permite penalidade".to_string(),
+                "A solução decidida escolhida não permite penalidade.".to_string(),
             ));
         }
     }
@@ -2172,15 +2214,19 @@ pub async fn update_involved_outcome(
         .bind(penalidade_id)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or_else(|| AppError::Domain("tipo de penalidade não encontrado".to_string()))?;
+        .ok_or_else(|| {
+            AppError::Domain(
+                "O tipo de penalidade escolhido não existe mais. Recarregue a página.".to_string(),
+            )
+        })?;
         if request.penalidade_dias.is_some() && !usa_dias {
             return Err(AppError::Domain(
-                "este tipo de penalidade não usa quantidade de dias".to_string(),
+                "Este tipo de penalidade não usa quantidade de dias.".to_string(),
             ));
         }
     } else if request.penalidade_dias.is_some() {
         return Err(AppError::Domain(
-            "selecione a penalidade antes de informar a quantidade de dias".to_string(),
+            "Selecione a penalidade antes de informar a quantidade de dias.".to_string(),
         ));
     }
 
@@ -2210,7 +2256,9 @@ pub async fn soft_delete(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("apuratório não encontrado".to_string()));
+        return Err(AppError::Domain(
+            "Este apuratório não existe mais. Recarregue a página.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -2226,7 +2274,9 @@ pub async fn reopen(tx: &mut Transaction<'_, Postgres>, id: &str) -> Result<(), 
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("apuratório não encontrado".to_string()));
+        return Err(AppError::Domain(
+            "Este apuratório não existe mais. Recarregue a página.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -2242,14 +2292,20 @@ pub async fn upload_anexo(
 ) -> Result<String, AppError> {
     let conteudo = base64::engine::general_purpose::STANDARD
         .decode(request.conteudo.as_bytes())
-        .map_err(|_| AppError::Domain("conteudo do anexo nao esta em base64".to_string()))?;
+        .map_err(|_| {
+            AppError::Domain(
+                "Não foi possível ler o arquivo escolhido. Tente anexá-lo novamente.".to_string(),
+            )
+        })?;
 
     if conteudo.is_empty() {
-        return Err(AppError::Domain("o anexo esta vazio".to_string()));
+        return Err(AppError::Domain(
+            "O arquivo escolhido está vazio. Escolha outro arquivo.".to_string(),
+        ));
     }
     if conteudo.len() > MAX_ANEXO_BYTES {
         return Err(AppError::Domain(format!(
-            "o anexo excede o limite de {} MB",
+            "O arquivo escolhido excede o limite de {} MB. Escolha um arquivo menor.",
             MAX_ANEXO_BYTES / 1024 / 1024
         )));
     }
@@ -2304,7 +2360,9 @@ pub async fn remove_anexo(
     .await?
     .rows_affected();
     if n == 0 {
-        return Err(AppError::Domain("anexo nao encontrado".to_string()));
+        return Err(AppError::Domain(
+            "Este anexo não existe mais. Recarregue a página.".to_string(),
+        ));
     }
     Ok(())
 }

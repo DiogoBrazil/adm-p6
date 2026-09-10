@@ -130,7 +130,7 @@ pub async fn users_deactivate(
                 }
                 if repository::outros_administradores_ativos(&mut *tx, Some(&conta)).await? == 0 {
                     return Err(AppError::Domain(
-                        "esta e a unica conta que pode administrar o sistema".to_string(),
+                        "Esta é a única conta que pode administrar o sistema. Dê perfil de administrador a outra conta antes.".to_string(),
                     ));
                 }
             }

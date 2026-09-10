@@ -486,7 +486,11 @@ pub async fn exigir_permissao_indicios(
     .bind(envolvido_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| AppError::Domain("envolvido não encontrado".to_string()))?;
+    .ok_or_else(|| {
+        AppError::Domain(
+            "Este envolvido não existe mais neste apuratório. Recarregue a página.".to_string(),
+        )
+    })?;
 
     if !permite {
         return Err(AppError::Domain(

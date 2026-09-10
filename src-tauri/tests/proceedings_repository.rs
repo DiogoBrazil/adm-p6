@@ -12,6 +12,7 @@
 use adm_p6_tauri_lib::deadlines::{
     domain::AddExtensionRequest, repository as deadlines_repository,
 };
+use adm_p6_tauri_lib::error::AppError;
 use adm_p6_tauri_lib::evidence::domain::{AcusacoesRequest, SelecaoInfracaoPenal};
 use adm_p6_tauri_lib::proceedings::domain::{
     AtualizarSubstituicaoRequest, CartaPrecatoriaRequest, DesignacaoRequest, EnvolvidoRequest,
@@ -140,7 +141,16 @@ async fn salvar(pool: &PgPool, request: &SaveProceedingRequest) -> Result<String
         Ok(id) => {
             // O commit importa: as duas constraint triggers são DEFERRABLE
             // INITIALLY DEFERRED, então limite estourado só falha aqui.
-            tx.commit().await.map_err(|e| e.to_string())?;
+            //
+            // E converte por `AppError::message()`, como o comando faz com o
+            // `?` de `tx.commit().await?` — não por `to_string()`. Eram coisas
+            // diferentes: `to_string()` devolve o texto CRU do PL/pgSQL
+            // ("apuratorio aceita no maximo 1 envolvido(s)"), que o usuário
+            // nunca vê. Um teste que afirmava `contains("envolvid")` passava
+            // lendo esse texto enquanto a tela recebia "Os dados informados não
+            // atendem a uma regra do cadastro" — o helper aprovava o que o app
+            // reprovava.
+            tx.commit().await.map_err(|e| AppError::from(e).message())?;
             Ok(id)
         }
         Err(e) => Err(e.message()),
@@ -1216,7 +1226,10 @@ async fn limite_de_envolvidos_e_configuravel_e_nao_reescreve_o_passado() {
         let erro = salvar(&pool, &req)
             .await
             .expect_err("estoura max_envolvidos");
-        assert!(erro.contains("envolvid"), "mensagem: {erro}");
+        assert!(
+            erro.contains("no máximo 1 envolvido(s)") && erro.contains("informados 2"),
+            "mensagem: {erro}"
+        );
 
         let mut livre = base(&m, "002");
         livre.apuratorio_id = m.apuratorio_livre.clone();
@@ -2760,8 +2773,16 @@ async fn anexos_sao_multiplos_e_a_remocao_e_logica() {
             &autor,
         )
         .await
-        .expect_err("base64 invalido");
-        assert!(erro.message().contains("base64"));
+        .expect_err("conteúdo ilegível");
+        // A mensagem fala do ARQUIVO, não do transporte. "base64" é como o
+        // conteúdo viaja no IPC — vocabulário de implementação, e a asserção
+        // anterior cobrava justamente que ele aparecesse na tela.
+        let mensagem = erro.message();
+        assert!(
+            mensagem.contains("arquivo escolhido") && mensagem.contains("novamente"),
+            "{mensagem}"
+        );
+        assert!(!mensagem.contains("base64"), "{mensagem}");
     })
     .await;
 }
@@ -3222,11 +3243,59 @@ async fn a_apurar_ocupa_vaga_no_limite_de_envolvidos() {
         let erro = salvar(&pool, &req)
             .await
             .expect_err("o marcador coletivo também conta");
-        assert!(erro.contains("envolvid"), "mensagem: {erro}");
+        assert!(
+            erro.contains("no máximo 1 envolvido(s)") && erro.contains("informados 2"),
+            "mensagem: {erro}"
+        );
 
         // Sozinho ele cabe.
         req.envolvidos = vec![envolvido_a_apurar(&m, 1)];
         salvar(&pool, &req).await.expect("um só cabe no limite");
+    })
+    .await;
+}
+
+/// O limite de envolvidos é dito antes do SQL, como o de ocupantes.
+///
+/// O guarda no banco é `tg_max_envolvidos`, `DEFERRABLE INITIALLY DEFERRED`, e
+/// ele levanta `check_violation` **sem nome de constraint**. Sem nome, `error.rs`
+/// só alcança a categoria e responde "Os dados informados não atendem a uma
+/// regra do cadastro. Revise os campos." — no `commit`, sem dizer que fala de
+/// envolvidos nem qual é o limite. Cinco das onze espécies valem 1 (CD, CJ, PAD,
+/// PADE, PADS), então lançar um segundo envolvido é rotina, não caso de borda.
+///
+/// Este teste prende as três coisas que a frase precisa carregar: o número do
+/// limite, quantos foram informados, e nenhum vestígio da categoria genérica.
+#[tokio::test]
+async fn limite_de_envolvidos_fala_antes_da_constraint() {
+    util::com_banco_descartavel("proc_maxenv_frase", |pool| async move {
+        let m = fixtures::mundo_configurado(&pool).await;
+
+        // Precisa passar do limite para exercer o limite: a espécie aceita 1.
+        let mut req = base(&m, "MAXENV-1");
+        req.envolvidos = vec![
+            envolvido(&m, &m.pm_dois, 1),
+            envolvido(&m, &m.pm_tres, 2),
+            envolvido_a_apurar(&m, 3),
+        ];
+
+        let erro = salvar(&pool, &req).await.expect_err("três não cabem em um");
+        assert!(
+            erro.contains("no máximo 1 envolvido(s)"),
+            "a frase precisa dizer o limite: {erro}"
+        );
+        assert!(
+            erro.contains("informados 3"),
+            "a frase precisa dizer quantos foram informados: {erro}"
+        );
+        assert!(
+            !erro.contains("regra do cadastro"),
+            "caiu na categoria genérica em vez da validação de domínio: {erro}"
+        );
+
+        // Dentro do limite, grava — a validação não é um bloqueio cego.
+        req.envolvidos = vec![envolvido(&m, &m.pm_dois, 1)];
+        salvar(&pool, &req).await.expect("um cabe");
     })
     .await;
 }
