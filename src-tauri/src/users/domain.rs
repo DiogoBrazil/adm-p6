@@ -22,6 +22,11 @@ pub struct UserListItem {
     pub posto_graduacao_sigla: String,
     pub circulo_hierarquico: String,
     pub is_encarregado: bool,
+    /// Endereço para os avisos de designação e prazo. Opcional, e diferente do
+    /// `conta_email`: aquele é credencial de acesso e é obrigatório para quem
+    /// opera o sistema; este é para quem só recebe aviso. Na falta dele o envio
+    /// cai no da conta — ver `email/repository.rs::destinatario`.
+    pub email: Option<String>,
     pub ativo: bool,
     pub conta_id: Option<String>,
     pub conta_email: Option<String>,
@@ -58,6 +63,8 @@ pub struct SaveUserRequest {
     /// quebrar o cadastro.
     pub posto_graduacao_id: String,
     pub is_encarregado: bool,
+    /// E-mail de notificação. Vazio é ausência, não erro.
+    pub email: Option<String>,
     pub conta: Option<SaveAccountRequest>,
 }
 
@@ -78,6 +85,21 @@ impl SaveUserRequest {
         }
         if self.posto_graduacao_id.trim().is_empty() {
             return Err("Escolha o posto ou graduação do policial militar.".to_string());
+        }
+        // Opcional, mas se vier tem de ser endereço: gravar lixo aqui só
+        // apareceria muito depois, na hora do envio, como recusa do servidor.
+        if let Some(email) = self
+            .email
+            .as_deref()
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+        {
+            if !is_valid_email(email) {
+                return Err(
+                    "O e-mail para avisos não é um endereço válido. Corrija-o ou deixe em branco."
+                        .to_string(),
+                );
+            }
         }
         if let Some(conta) = &self.conta {
             if !is_valid_email(conta.email.trim()) {

@@ -4655,3 +4655,95 @@ button.filtro-chip:focus-visible {
 #db-form [hidden] { display: none; }
 .db-actions { display: flex; justify-content: flex-end; gap: 12px; }
 @media (max-width: 600px) { #db-form .db-fields { grid-template-columns: 1fr; } }
+
+/* ── Aviso por e-mail ao encarregado ──────────────────────────────────────
+   O modal é `display:flex; flex-direction:column; max-height:100%` e o
+   `.modal--cadastro` declara `overflow:hidden`: quem rola é a prévia, aqui
+   dentro, e não a caixa. Daí o `min-height:0` — sem ele um filho de flex se
+   recusa a encolher abaixo do conteúdo e o texto empurra os botões para fora
+   da tela, que é exatamente o defeito que o recorte da busca de incisos já
+   tinha resolvido no mesmo lugar. */
+
+.aviso-opcoes {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.aviso-opcao {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.aviso-opcao:has(input:checked) {
+  border-color: var(--brand-600, #10b981);
+  background: rgb(16 185 129 / 6%);
+}
+
+.aviso-opcao span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aviso-opcao small {
+  color: var(--muted, #6b7280);
+}
+
+.aviso-previa {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, #f8fafc);
+}
+
+.aviso-cabecalho {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.aviso-cabecalho dt {
+  color: var(--muted, #6b7280);
+  font-weight: 600;
+}
+
+/* `overflow-wrap` porque o assunto carrega o número do documento e o endereço
+   do destinatário não tem espaço onde quebrar: numa janela estreita eles
+   estourariam a coluna. */
+.aviso-cabecalho dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* `pre-wrap`, e não o `pre` que a tag traz por padrão: as quebras de linha do
+   corpo são o formato do texto e precisam ser respeitadas, mas as linhas
+   longas têm de dobrar em vez de rolar a caixa na horizontal. */
+.aviso-corpo {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A prévia mostra o texto, não a moldura: a CSP do app é `style-src 'self'` e
+   recusaria o estilo inline que Gmail e Outlook exigem. A nota existe para a
+   diferença não parecer defeito. */
+.aviso-nota {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-strong);
+}

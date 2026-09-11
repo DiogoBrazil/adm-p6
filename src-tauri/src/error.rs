@@ -198,6 +198,13 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         "fk_designacao_processo" => {
             "A espécie do apuratório não confere com a das designações já registradas."
         }
+        "ck_municipio_distrito_tem_pai" => {
+            "Um distrito precisa indicar o município a que pertence."
+        }
+        "ck_municipio_nao_e_pai_de_si" => {
+            "Um município não pode ser o próprio distrito de origem."
+        }
+
         "fk_processo_subunidade_unidade" => {
             "Esta subunidade/seção já está vinculada a apuratórios. Preserve a Unidade PM atual ou cadastre outra subunidade/seção."
         }
@@ -205,6 +212,9 @@ fn mensagem_de_constraint(constraint: &str) -> Option<&'static str> {
         // ── Campo obrigatório ────────────────────────────────────────────────
         "ck_andamento_descricao" => "Descreva o andamento antes de registrar.",
         "ck_pessoa_nome" => "Informe o nome da pessoa.",
+        // A família da vítima ficou de fora quando a 0012 entrou: `ck_pessoa_nome`
+        // tinha frase e `ck_vitima_nome` não, sem nada que denunciasse a falta.
+        "ck_vitima_nome" => "Informe o nome do ofendido/vítima.",
         "ck_prazo_motivo" => "Informe o motivo da prorrogação.",
         "ck_anexo_nome" => "O arquivo precisa de um nome.",
         "ck_usuario_tem_nome" => {
@@ -326,6 +336,9 @@ mod tests {
             "ck_designacao_cadeia",
             "fk_designacao_anterior",
             "ck_usuario_tem_nome",
+            "ck_vitima_nome",
+            "ck_municipio_distrito_tem_pai",
+            "ck_municipio_nao_e_pai_de_si",
         ];
         let categorias = [
             "23505", "23P01", "23503", "23514", "23502", "40001", "xxxxx",

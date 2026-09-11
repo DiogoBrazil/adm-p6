@@ -33,6 +33,10 @@ import type {
   AddExtensionRequest,
   UpdateExtensionRequest,
   AddMovementRequest,
+  AvisoMontado,
+  ConfiguracaoEmailVisivel,
+  SaveEmailConfigRequest,
+  TipoAviso,
   UpdateMovementRequest,
   AnexoItem,
   ApuratorioConfig,
@@ -213,6 +217,14 @@ export interface Commands {
   deadlines_add_extension: { args: { request: AddExtensionRequest }; result: string };
   deadlines_update_extension: { args: { request: UpdateExtensionRequest }; result: boolean };
   deadlines_delete_extension: { args: { processoId: string; prazoId: string }; result: boolean };
+
+  // ── Avisos por e-mail ─────────────────────────────────────────────
+  // `email_preview` não toca no servidor de e-mail: conferir o texto não pode
+  // depender de o SMTP estar configurado nem de a rede estar de pé.
+  email_preview: { args: { processoId: string; tipo: TipoAviso }; result: AvisoMontado };
+  email_send: { args: { processoId: string; tipo: TipoAviso }; result: AvisoMontado };
+  email_config_get: { args: Record<string, never>; result: ConfiguracaoEmailVisivel | null };
+  email_config_save: { args: { request: SaveEmailConfigRequest }; result: null };
 
   // ── Andamentos ────────────────────────────────────────────────────
   movements_list: { args: { processoId: string }; result: MovementItem[] };

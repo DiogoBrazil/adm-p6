@@ -133,6 +133,16 @@ export const LARGURA_PX = {
   acoes: 128,
   /** O que a coluna de identificação garante ao entrar no piso da tabela. */
   identificacaoMinima: 220,
+  /**
+   * Corpo de e-mail na listagem: largura fixa e truncado.
+   *
+   * Sem teto ele seria a coluna flexível e comeria a tabela inteira — são
+   * centenas de caracteres contra o "Nome do aviso", que é quem identifica a
+   * linha. Fixo aqui e `truncar` na célula: numa tabela `--fixa` o
+   * `table-layout` não encolhe nem corta, e uma coluna estreita demais
+   * transbordaria por cima da vizinha.
+   */
+  textoLongo: 320,
 } as const;
 
 /**
@@ -153,6 +163,8 @@ export function larguraFixaPx(coluna: Coluna): number | null {
     case "referencia":
     case "referencia_opcional":
       return LARGURA_PX.referencia;
+    case "texto_longo":
+      return LARGURA_PX.textoLongo;
     default:
       return coluna.centralizar ? LARGURA_PX.textoCompacto : null;
   }
@@ -294,8 +306,23 @@ function campo(
       </div>`;
   }
 
-  const numero = coluna.tipo === "inteiro" || coluna.tipo === "inteiro_opcional";
   const texto = valor === null || valor === undefined ? "" : String(valor);
+
+  // Corpo de e-mail é texto de vários parágrafos: num `<input>` ele caberia — o
+  // valor não se perde —, mas as quebras de linha ficariam invisíveis, e é o
+  // desenho do texto que a pessoa está editando. O `<textarea>` não leva
+  // `value=`: o conteúdo vai entre as tags.
+  if (coluna.tipo === "texto_longo") {
+    return `
+      <div class="campo"${marca}${oculto}>
+        <label>${escapeHtml(coluna.rotulo)}
+          <textarea name="${coluna.nome}" rows="12" spellcheck="true"${obrigatorio}>${escapeHtml(texto)}</textarea>
+        </label>
+        ${ajuda}
+      </div>`;
+  }
+
+  const numero = coluna.tipo === "inteiro" || coluna.tipo === "inteiro_opcional";
   return `
     <div class="campo"${marca}${oculto}>
       <label>${escapeHtml(coluna.rotulo)}
@@ -631,10 +658,18 @@ function htmlResultadosCatalogo(cat: Catalogo, podeEscrever: boolean): string {
                                  dados: { reativar: linha.id },
                                })
                          }
-                         ${botaoIcone("excluir", "Excluir", {
-                           classe: "danger",
-                           dados: { excluir: linha.id },
-                         })}
+                         ${
+                           // Catálogo de só edição não oferece exclusão: as
+                           // linhas são escolhidas por `codigo` no backend, e
+                           // apagar uma quebraria o aviso correspondente. Quem
+                           // quiser tirá-la de uso desativa — que é reversível.
+                           cat.so_edicao
+                             ? ""
+                             : botaoIcone("excluir", "Excluir", {
+                                 classe: "danger",
+                                 dados: { excluir: linha.id },
+                               })
+                         }
                        </td>`
                     : ""
                 }
@@ -836,7 +871,7 @@ async function desenharCatalogo(chave: string, ctx: ContextoTela): Promise<void>
           <h1>${escapeHtml(cat.rotulo)}</h1>
           <p data-total-catalogo>${total} registro(s)</p>
         </div>
-        ${podeEscrever ? `<button id="novo">Novo</button>` : ""}
+        ${podeEscrever && !cat.so_edicao ? `<button id="novo">Novo</button>` : ""}
       </div>
       <div class="filtros">
         <input id="busca" type="search" autocomplete="off"

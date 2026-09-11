@@ -27,7 +27,9 @@ fn ler_linha(cat: &Catalogo, row: &PgRow) -> Result<Map<String, Value>, sqlx::Er
     mapa.insert("id".into(), Value::String(row.try_get::<String, _>("id")?));
     for c in cat.colunas {
         let valor = match c.tipo {
-            TipoColuna::Texto => Value::String(row.try_get::<String, _>(c.nome)?),
+            TipoColuna::Texto | TipoColuna::TextoLongo => {
+                Value::String(row.try_get::<String, _>(c.nome)?)
+            }
             TipoColuna::TextoOpcional | TipoColuna::ReferenciaOpcional => row
                 .try_get::<Option<String>, _>(c.nome)?
                 .map(Value::String)
@@ -172,7 +174,7 @@ pub async fn save(
     for coluna in colunas_ligadas(cat) {
         let valor = valores.get(coluna.nome);
         query = match coluna.tipo {
-            TipoColuna::Texto | TipoColuna::Referencia => {
+            TipoColuna::Texto | TipoColuna::TextoLongo | TipoColuna::Referencia => {
                 let v = valor
                     .and_then(|v| v.as_str())
                     .map(|s| s.trim().to_string())
@@ -203,10 +205,9 @@ pub async fn save(
         };
     }
 
-    query
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or_else(|| AppError::Domain("registro nao encontrado".to_string()))
+    query.fetch_optional(&mut **tx).await?.ok_or_else(|| {
+        AppError::Domain("Este registro não existe mais. Recarregue a página.".to_string())
+    })
 }
 
 /// Desativa em vez de apagar. As FKs do schema são `ON DELETE RESTRICT`: um item
@@ -228,7 +229,9 @@ pub async fn set_ativo(
         .await?
         .rows_affected();
     if afetadas == 0 {
-        return Err(AppError::Domain("registro nao encontrado".to_string()));
+        return Err(AppError::Domain(
+            "Este registro não existe mais. Recarregue a página.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -243,9 +246,9 @@ pub async fn delete(
 ) -> Result<(), AppError> {
     let sql = format!("DELETE FROM {} WHERE id = $1::uuid", cat.tabela);
     match sqlx::query(&sql).bind(id).execute(&mut **tx).await {
-        Ok(r) if r.rows_affected() == 0 => {
-            Err(AppError::Domain("registro nao encontrado".to_string()))
-        }
+        Ok(r) if r.rows_affected() == 0 => Err(AppError::Domain(
+            "Este registro não existe mais. Recarregue a página.".to_string(),
+        )),
         Ok(_) => Ok(()),
         Err(sqlx::Error::Database(e)) if e.is_foreign_key_violation() => Err(AppError::Domain(
             "Este item já foi usado em algum registro e não pode ser excluído. Desative-o."

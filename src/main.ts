@@ -13,6 +13,7 @@ import {
   instalarValidacaoAmigavel,
   notificar,
   podeDescartarFormulario,
+  preservarRolagem,
 } from "./dom";
 import {
   carregarDefinicoes,
@@ -23,6 +24,7 @@ import {
   type ContextoTela,
 } from "./telas/catalogos";
 import { ROTA as ROTA_CONFIG_APURATORIO, renderConfiguracaoApuratorio } from "./telas/apuratorio";
+import { ROTA as ROTA_CONFIG_EMAIL, renderConfiguracaoEmail } from "./telas/email-config";
 import { ROTA_LISTA as ROTA_PROCESSOS, renderListaProcessos } from "./telas/processo";
 import { ROTA as ROTA_PRAZOS, renderPrazos } from "./telas/prazos";
 import { ROTA as ROTA_ENCARREGADOS, renderEncarregados } from "./telas/encarregados";
@@ -75,6 +77,12 @@ let routes: Route[] = [
   {
     path: ROTA_CONFIG_APURATORIO,
     label: "Configuração de apuratórios",
+    group: "Catálogos",
+    adminOnly: true
+  },
+  {
+    path: ROTA_CONFIG_EMAIL,
+    label: "Configuração de e-mail",
     group: "Catálogos",
     adminOnly: true
   },
@@ -228,44 +236,49 @@ function shell(content: string) {
     `;
     }).join("");
 
-  app.innerHTML = `
-    <div class="app-shell${sidebarRecolhida ? " sidebar-is-collapsed" : ""}">
-    <aside class="sidebar" aria-label="Navegação principal">
-      <div class="brand">
-        <img src="${brasaoUrl}" alt="" />
-        <div><strong>GESTÃO P6/7ºBPM</strong><span>Justiça e Disciplina</span></div>
-      </div>
-      <button class="sidebar-toggle" id="sidebar-toggle" type="button"
-              aria-label="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}"
-              title="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}">
-        <span aria-hidden="true">${sidebarRecolhida ? "›" : "‹"}</span>
-      </button>
-      ${nav}
-    </aside>
-    <main class="main">
-      <header class="topbar">
-        <div class="session-info">
-          <span class="session-avatar" aria-hidden="true">${escapeHtml((session?.nome ?? "A").slice(0, 1).toUpperCase())}</span>
-          <div>
-          <strong>${escapeHtml(
-            session
-              ? formatarQualificacaoMilitar(
-                  session.posto_graduacao,
-                  session.matricula,
-                  session.nome,
-                )
-              : "Sessão não autenticada",
-          )}</strong>
-          <span>${escapeHtml(session?.perfil ?? "offline")}</span>
-          </div>
+  // O menu tem rolagem própria e é recriado inteiro aqui: sem isto, clicar
+  // num dos últimos itens de Catálogos — são 26, e nascem em runtime —
+  // devolvia o menu ao topo, e o vizinho do que se clicou saía da tela.
+  preservarRolagem(".sidebar", () => {
+    app.innerHTML = `
+      <div class="app-shell${sidebarRecolhida ? " sidebar-is-collapsed" : ""}">
+      <aside class="sidebar" aria-label="Navegação principal">
+        <div class="brand">
+          <img src="${brasaoUrl}" alt="" />
+          <div><strong>GESTÃO P6/7ºBPM</strong><span>Justiça e Disciplina</span></div>
         </div>
-        <button class="ghost small" id="logout">Sair</button>
-      </header>
-      <div class="content-area">${content}</div>
-    </main>
-    </div>
-    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
-  `;
+        <button class="sidebar-toggle" id="sidebar-toggle" type="button"
+                aria-label="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}"
+                title="${sidebarRecolhida ? "Expandir menu" : "Recolher menu"}">
+          <span aria-hidden="true">${sidebarRecolhida ? "›" : "‹"}</span>
+        </button>
+        ${nav}
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <div class="session-info">
+            <span class="session-avatar" aria-hidden="true">${escapeHtml((session?.nome ?? "A").slice(0, 1).toUpperCase())}</span>
+            <div>
+            <strong>${escapeHtml(
+              session
+                ? formatarQualificacaoMilitar(
+                    session.posto_graduacao,
+                    session.matricula,
+                    session.nome,
+                  )
+                : "Sessão não autenticada",
+            )}</strong>
+            <span>${escapeHtml(session?.perfil ?? "offline")}</span>
+            </div>
+          </div>
+          <button class="ghost small" id="logout">Sair</button>
+        </header>
+        <div class="content-area">${content}</div>
+      </main>
+      </div>
+      <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    `;
+  });
 
   // A largura de coluna declarada em
   // `Coluna.largura` sai num `data-largura` e só a CSSOM pode aplicá-la. Mora
@@ -424,6 +437,7 @@ async function despacharRota() {
   const chaveCatalogo = chaveDaRota(activePath);
   if (chaveCatalogo) return renderCatalogo(chaveCatalogo, contexto);
   if (activePath === ROTA_CONFIG_APURATORIO) return renderConfiguracaoApuratorio(contexto);
+  if (activePath === ROTA_CONFIG_EMAIL) return renderConfiguracaoEmail(contexto);
   if (activePath === ROTA_PROCESSOS) return renderListaProcessos(contexto);
 
   const route = routes.find((item) => item.path === activePath) ?? DASHBOARD;

@@ -38,6 +38,7 @@ import {
   type SelecaoInfracaoEstatuto,
   type SelecaoInfracaoPenal,
   type UserListItem,
+  type TipoAviso,
 } from "../api";
 import {
   ativarSelectsPesquisaveis,
@@ -46,10 +47,13 @@ import {
   comCarregamento,
   destruirSelectsPesquisaveis,
   escapeHtml,
+  focarCampo,
+  formatarData,
   formatarOrigem,
   formatarQualificacaoMilitar,
   ITENS_POR_PAGINA,
   ligarBuscaInstantanea,
+  ligarCamposDeData,
   ligarPaginacao,
   limparFormularioPendente,
   marcarCarregando,
@@ -59,6 +63,8 @@ import {
   paginacao,
   podeDescartarFormulario,
   protegerFormulario,
+  revalidarLimiteDeData,
+  sincronizarSelectsPesquisaveis,
 } from "../dom";
 import { abrirCadastroRapidoCatalogo, type ContextoTela } from "./catalogos";
 import { pedirAnalogia, renderIndicios } from "./indicios";
@@ -268,7 +274,8 @@ function absorverFormulario(rascunho: Rascunho, form: HTMLFormElement): void {
 
   // A designação travada é desenhada como texto, sem `<select>`: `dados.has()`
   // devolve false para ela e o valor do rascunho é preservado. É o mesmo
-  // cuidado de `textoSePresente` — campo ausente do DOM não é campo apagado.
+  // cuidado que esta função toma em todo campo condicional — campo ausente do
+  // DOM não é campo apagado.
   rascunho.designacoes = rascunho.designacoes.map((d, i) => ({
     id: d.id ?? null,
     policial_militar_id: dados.has(`des_${i}_pm`)
@@ -383,8 +390,8 @@ function campoData(
     <label for="${id}">${escapeHtml(rotulo)}</label>
     <div class="campo-data-controle">
       <input id="${id}" name="${escapeHtml(nome)}" type="date" value="${escapeHtml(valor ?? "")}"
-        ${opcoes.min ? `min="${escapeHtml(opcoes.min)}"` : ""}
-        ${opcoes.max ? `max="${escapeHtml(opcoes.max)}"` : ""}${obrigatorio ? " required" : ""} />
+        ${opcoes.min ? `data-limite-min="${escapeHtml(opcoes.min)}"` : ""}
+        ${opcoes.max ? `data-limite-max="${escapeHtml(opcoes.max)}"` : ""}${obrigatorio ? " required" : ""} />
       ${
         obrigatorio
           ? ""
@@ -572,17 +579,37 @@ async function desenharFormularioProcesso(
     datasPosterioresEdicao = datasPosterioresVazias();
     subunidadeHistorica = null;
   }
-  const cats = await carregarCatalogos();
+  // Os catálogos não dependem do apuratório, nem o apuratório dos catálogos —
+  // mas o `await` os punha em fila, e a segunda espera só começava quando a
+  // primeira terminava. O custo de uma tela é o NÚMERO de idas e voltas
+  // (seção 7 do GUIA), e cada `call` custa duas: o ping do pool mais a
+  // consulta. Nascendo juntas, as duas esperas viram uma.
+  //
+  // A promessa que nasce e não é esperada em algum caminho é segura aqui:
+  // `api.ts::call` nunca rejeita — falha de IPC vira `{ ok: false }`. Mesmo
+  // assim a do detalhe só nasce quando vai ser consumida, para não pedir ao
+  // banco o que ninguém vai ler.
+  const catalogosPendentes = carregarCatalogos();
+  const detalhePendente =
+    !rascunhoAtual && id
+      ? Promise.all([
+          call("proceedings_get", { id }),
+          call("evidence_list_for_proceeding", { processoId: id }),
+        ])
+      : null;
+
+  const cats = await catalogosPendentes;
   let rascunho = rascunhoAtual;
 
   if (!rascunho) {
     rascunho = rascunhoVazio();
     designacoesTravadas.clear();
-    if (id) {
-      const [r, evidenciasResp] = await Promise.all([
-        call("proceedings_get", { id }),
-        call("evidence_list_for_proceeding", { processoId: id }),
-      ]);
+    // `detalhePendente` não é nulo exatamente quando `id` existe e não há
+    // rascunho — as mesmas duas condições de antes, agora já decididas lá em
+    // cima. Testar a promessa em vez do `id` é o que dispensa a asserção de
+    // não-nulo.
+    if (detalhePendente) {
+      const [r, evidenciasResp] = await detalhePendente;
       const d = r.data;
       if (!d) {
         ctx.shell(`<section class="panel"><p class="error">Apuratório não encontrado.</p></section>`);
@@ -927,7 +954,7 @@ async function desenharFormularioProcesso(
         }
 
         <fieldset>
-          <legend>Pessoas inquiridas</legend>
+          <legend>Pessoas inquiridas (Exceto as envolvidas diretamente)</legend>
           ${r.pessoas
             .map(
               (p, i) => `
@@ -982,12 +1009,12 @@ async function desenharFormularioProcesso(
       ...posteriores,
     ]);
     const maximoRecebimento = menorDataIso([hoje, ...posteriores]);
-    aplicarIntervaloData(
+    aplicarLimiteData(
       instauracao,
       "",
       maximoInstauracao,
     );
-    aplicarIntervaloData(
+    aplicarLimiteData(
       recebimento,
       instauracao.value,
       maximoRecebimento,
@@ -995,28 +1022,22 @@ async function desenharFormularioProcesso(
     instauracao.dataset.mensagemMax =
       maximoInstauracao === hoje
         ? "A data de instauração não pode ser futura."
-        : `A data de instauração não pode ser posterior a ${dataParaExibicao(maximoInstauracao)}.`;
+        : `A data de instauração não pode ser posterior a ${formatarData(maximoInstauracao)}.`;
     recebimento.dataset.mensagemMin =
       "A data de recebimento não pode ser anterior à data de instauração.";
     recebimento.dataset.mensagemMax =
       maximoRecebimento === hoje
         ? "A data de recebimento não pode ser futura."
-        : `A data de recebimento não pode ser posterior a ${dataParaExibicao(maximoRecebimento)}.`;
+        : `A data de recebimento não pode ser posterior a ${formatarData(maximoRecebimento)}.`;
   };
   atualizarLimitesCabecalho();
 
-  // O seletor nativo do WebView permanece aberto depois da escolha em algumas
-  // plataformas. Tirar o foco no quadro seguinte fecha o popover sem substituir
-  // o controle nativo nem introduzir uma dependência de calendário.
-  form.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      atualizarLimitesCabecalho();
-      const limpar = form.querySelector<HTMLButtonElement>(
-        `[data-limpar-data="${input.name}"]`,
-      );
-      if (limpar) limpar.disabled = input.value === "";
-      window.requestAnimationFrame(() => input.blur());
-    });
+  ligarCamposDeData(form, (input) => {
+    atualizarLimitesCabecalho();
+    const limpar = form.querySelector<HTMLButtonElement>(
+      `[data-limpar-data="${input.name}"]`,
+    );
+    if (limpar) limpar.disabled = input.value === "";
   });
 
   form.querySelectorAll<HTMLButtonElement>("[data-limpar-data]").forEach((botao) => {
@@ -1575,11 +1596,6 @@ function rotuloMilitarFiltro(
   return `${militar.posto_graduacao} ${militar.matricula} ${militar.nome}`;
 }
 
-function dataFiltroPtBr(valor: string): string {
-  const [ano, mes, dia] = valor.split("-");
-  return ano && mes && dia ? `${dia}/${mes}/${ano}` : valor;
-}
-
 type ChipFiltro = { chave: string; texto: string };
 
 function chipsDosFiltros(): ChipFiltro[] {
@@ -1616,10 +1632,10 @@ function chipsDosFiltros(): ChipFiltro[] {
   }
   if (filtro.data_instauracao_inicio || filtro.data_instauracao_fim) {
     const periodo = filtro.data_instauracao_inicio && filtro.data_instauracao_fim
-      ? `${dataFiltroPtBr(filtro.data_instauracao_inicio)} a ${dataFiltroPtBr(filtro.data_instauracao_fim)}`
+      ? `${formatarData(filtro.data_instauracao_inicio)} a ${formatarData(filtro.data_instauracao_fim)}`
       : filtro.data_instauracao_inicio
-        ? `desde ${dataFiltroPtBr(filtro.data_instauracao_inicio)}`
-        : `até ${dataFiltroPtBr(filtro.data_instauracao_fim)}`;
+        ? `desde ${formatarData(filtro.data_instauracao_inicio)}`
+        : `até ${formatarData(filtro.data_instauracao_fim)}`;
     chips.push({ chave: "periodo", texto: `Instauração: ${periodo}` });
   }
   if (filtro.ano !== null) chips.push({ chave: "ano", texto: `Ano: ${filtro.ano}` });
@@ -1886,12 +1902,21 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
   const inicio = form.elements.namedItem("data_instauracao_inicio") as HTMLInputElement;
   const fim = form.elements.namedItem("data_instauracao_fim") as HTMLInputElement;
   const sincronizarDatas = () => {
-    fim.min = inicio.value;
-    inicio.max = fim.value;
+    // Limite suave, como nos demais campos de data: um lado orienta o outro
+    // sem travar o calendário. O submit é barrado logo abaixo, com caixa de
+    // erro própria do modal.
+    if (inicio.value) fim.dataset.limiteMin = inicio.value;
+    else delete fim.dataset.limiteMin;
+    if (fim.value) inicio.dataset.limiteMax = fim.value;
+    else delete inicio.dataset.limiteMax;
   };
   inicio.addEventListener("input", sincronizarDatas);
   fim.addEventListener("input", sincronizarDatas);
   sincronizarDatas();
+  // Sem callback: o limite recíproco dos dois campos já é mantido pelo `input`
+  // acima. O que falta aqui é o que todo campo de data do app faz — fechar o
+  // seletor depois da escolha com o mouse, e não tirar o foco de quem digita.
+  ligarCamposDeData(form);
   const erroDosFiltros = () => form.querySelector<HTMLElement>("[data-erro-filtros]")!;
 
   form.addEventListener("submit", (evento) => {
@@ -1944,9 +1969,7 @@ function abrirFiltrosAvancados(ctx: ContextoTela, gatilho: HTMLButtonElement): v
     // Focar o `<select>` cru de um campo pesquisável mandaria o foco para o
     // elemento que o Tom Select mantém recortado — o mesmo lugar errado onde a
     // validação amigável ainda cai. Quem recebe o foco é o controle visível.
-    const primeiro = form.querySelector<HTMLSelectElement>("select");
-    if (primeiro?.tomselect) primeiro.tomselect.focus();
-    else primeiro?.focus();
+    focarCampo(form.querySelector<HTMLSelectElement>("select"));
   });
 }
 
@@ -2055,11 +2078,6 @@ function somarDiasIso(dataIso: string, dias: number): string {
   return data.toISOString().slice(0, 10);
 }
 
-function dataParaExibicao(dataIso: string): string {
-  const [ano, mes, dia] = dataIso.split("-");
-  return `${dia}/${mes}/${ano}`;
-}
-
 /** Hoje em ISO, para o `max` dos campos que não aceitam data futura. */
 function hojeIso(): string {
   const hoje = new Date();
@@ -2077,12 +2095,21 @@ function maiorDataIso(datas: Array<string | null | undefined>): string {
   return datas.filter((data): data is string => !!data).sort().at(-1) ?? "";
 }
 
-function aplicarIntervaloData(input: HTMLInputElement | null, min: string, max: string): void {
+/**
+ * Recalcula o limite de um campo de data. Escreve `data-limite-*`, e não
+ * `min`/`max`: o navegador não conhece esses atributos, então o calendário
+ * continua navegando para qualquer ano — ver `dom.ts::mensagemDeLimiteDeData`.
+ *
+ * Revalida o campo em seguida porque o limite muda pelo campo **vizinho**:
+ * corrigir a instauração tem de apagar sozinho o erro do recebimento.
+ */
+function aplicarLimiteData(input: HTMLInputElement | null, min: string, max: string): void {
   if (!input) return;
-  if (min) input.min = min;
-  else input.removeAttribute("min");
-  if (max) input.max = max;
-  else input.removeAttribute("max");
+  if (min) input.dataset.limiteMin = min;
+  else delete input.dataset.limiteMin;
+  if (max) input.dataset.limiteMax = max;
+  else delete input.dataset.limiteMax;
+  revalidarLimiteDeData(input);
 }
 
 /** O ato que autorizou a designação, como a Seção o escreve. */
@@ -2101,6 +2128,121 @@ export async function renderDetalheProcesso(ctx: ContextoTela, id: string): Prom
   // abriu o véu (a troca de rota, ou uma ação), o helper conta
   // profundidade e este aqui apenas troca a mensagem.
   await comCarregamento("Abrindo o apuratório…", () => desenharDetalheProcesso(ctx, id));
+}
+
+/** Os três avisos, na ordem em que a Seção os usa. */
+const AVISOS: { tipo: TipoAviso; rotulo: string; descricao: string }[] = [
+  {
+    tipo: "designacao",
+    rotulo: "Designação",
+    descricao: "Comunica a designação e convoca à Seção para esclarecimentos.",
+  },
+  {
+    tipo: "prazo_vencendo",
+    rotulo: "Prazo a vencer",
+    descricao: "Avisa que o prazo se aproxima e pede a prorrogação, se couber.",
+  },
+  {
+    tipo: "prazo_vencido",
+    rotulo: "Prazo vencido",
+    descricao: "Avisa que o prazo venceu e pede a prorrogação com urgência.",
+  },
+];
+
+/**
+ * Escolher o aviso, LER o texto final, e só então enviar.
+ *
+ * A prévia não é cerimônia: o corpo vem de um catálogo que o administrador
+ * edita, com marcadores que ele pode digitar errado — e um marcador que a
+ * montagem não conhece fica literal no texto, de propósito. Quem vê a frase
+ * pronta pega o engano; quem clica num botão direto manda `{apuratorio}` para
+ * um oficial. E-mail enviado não volta.
+ *
+ * Um botão só na barra de ações, e não três: ela já tem Voltar, Editar e às
+ * vezes Reabrir, e num monitor estreito os três avisos a quebrariam em duas
+ * linhas.
+ */
+function abrirNotificacao(ctx: ContextoTela, id: string, gatilho: HTMLButtonElement): void {
+  let modal: ReturnType<typeof montarModal> = null;
+  // `montarModal` liga Cancelar, Esc e o clique fora ao `aoCancelar` — NÃO ao
+  // `fechar`. Quem fecha é o chamador, e é isso que permite a um formulário
+  // sujo perguntar antes de descartar. Passar `() => {}` deixa os três gestos
+  // sem efeito, e o modal fica preso na tela.
+  const cancelar = () => modal?.fechar();
+  modal = montarModal(
+    `<header><h2>Notificar encarregado</h2>
+       <p>Escolha o aviso, confira o texto e envie. O e-mail vai para o encarregado
+          responsável pelo apuratório.</p></header>
+     <div class="aviso-opcoes">
+       ${AVISOS.map(
+         (a, i) => `
+         <label class="aviso-opcao">
+           <input type="radio" name="tipo-aviso" value="${a.tipo}"${i === 0 ? " checked" : ""} />
+           <span><strong>${escapeHtml(a.rotulo)}</strong><small>${escapeHtml(a.descricao)}</small></span>
+         </label>`,
+       ).join("")}
+     </div>
+     <div class="aviso-previa" data-previa aria-live="polite">
+       <p class="hint">Carregando a prévia…</p>
+     </div>
+     <div class="form-actions">
+       <button type="button" class="secondary" data-fechar-modal>Cancelar</button>
+       <button type="button" id="enviar-aviso" disabled>Enviar e-mail</button>
+     </div>`,
+    "Notificar encarregado",
+    cancelar,
+    gatilho,
+  );
+  if (!modal) return;
+
+  const area = modal.overlay.querySelector<HTMLElement>("[data-previa]")!;
+  const enviar = modal.overlay.querySelector<HTMLButtonElement>("#enviar-aviso")!;
+  const escolhido = (): TipoAviso =>
+    (modal!.overlay.querySelector<HTMLInputElement>('input[name="tipo-aviso"]:checked')?.value ??
+      "designacao") as TipoAviso;
+
+  const carregarPrevia = async () => {
+    enviar.disabled = true;
+    area.innerHTML = `<p class="hint">Carregando a prévia…</p>`;
+    const r = await call("email_preview", { processoId: id, tipo: escolhido() });
+    if (!r.ok || !r.data) {
+      // A recusa é a informação: diz qual dado falta e onde cadastrá-lo.
+      area.innerHTML = `<p class="error">${escapeHtml(r.error ?? "")}</p>`;
+      return;
+    }
+    const p = r.data;
+    area.innerHTML = `
+      <dl class="aviso-cabecalho">
+        <dt>Para</dt><dd>${escapeHtml(p.destinatario_nome)} &lt;${escapeHtml(p.destinatario)}&gt;</dd>
+        <dt>Assunto</dt><dd>${escapeHtml(p.assunto)}</dd>
+      </dl>
+      <pre class="aviso-corpo">${escapeHtml(p.corpo)}</pre>
+      <p class="hint aviso-nota">O e-mail sai com o cabeçalho e a formatação da Seção;
+         aqui aparece o texto, que é o que muda de um aviso para outro.</p>`;
+    enviar.disabled = false;
+  };
+
+  modal.overlay.querySelectorAll<HTMLInputElement>('input[name="tipo-aviso"]').forEach((radio) => {
+    radio.addEventListener("change", () => void carregarPrevia());
+  });
+  void carregarPrevia();
+
+  enviar.addEventListener("click", async () => {
+    const tipo = escolhido();
+    await comCarregamento(
+      "Enviando o e-mail…",
+      async () => {
+        const r = await call("email_send", { processoId: id, tipo });
+        if (!r.ok || !r.data) {
+          notificar(r.error ?? "", "erro");
+          return;
+        }
+        notificar(`Aviso enviado para ${r.data.destinatario}.`, "sucesso");
+        modal?.fechar();
+      },
+      enviar,
+    );
+  });
 }
 
 async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<void> {
@@ -2190,7 +2332,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
           <label for="detalhe-${escapeHtml(nome)}">${escapeHtml(rotulo)}</label>
           <div class="campo-data-controle">
             <input id="detalhe-${escapeHtml(nome)}" name="${escapeHtml(nome)}" type="date"
-              min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+              data-limite-min="${escapeHtml(d.data_instauracao)}" data-limite-max="${escapeHtml(hojeIso())}"
               value="${escapeHtml(valor ?? "")}" />
             <button type="button" class="ghost small campo-data-limpar"
               data-limpar-data-detalhe="${escapeHtml(nome)}"${valor ? "" : " disabled"}>Limpar</button>
@@ -2206,6 +2348,11 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     valor === null || valor === undefined || valor === ""
       ? ""
       : `<tr><th>${escapeHtml(rotulo)}</th><td>${escapeHtml(String(valor))}</td></tr>`;
+  // A ficha OMITE a linha da data ausente — não a mostra com travessão —, e é
+  // por isso que não dá para passar `formatarData` direto: o vazio dela é `—`,
+  // e a ficha ganharia meia dúzia de linhas que hoje não existem.
+  const linhaData = (rotulo: string, iso: string | null | undefined) =>
+    iso ? linha(rotulo, formatarData(iso)) : "";
 
   ctx.shell(`
     <section class="panel">
@@ -2217,6 +2364,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         <div class="actions">
           <button class="secondary" id="voltar">Voltar</button>
           ${podeEscrever ? `<button id="editar">Editar</button>` : ""}
+          ${podeEscrever ? `<button class="secondary" id="notificar">Notificar encarregado</button>` : ""}
           ${podeEscrever && d.concluido ? `<button class="secondary" id="reabrir">Reabrir</button>` : ""}
         </div>
       </div>
@@ -2231,12 +2379,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         ${linha("Subunidade/Seção de origem", d.subunidade_secao_origem)}
         ${linha("Município do fato", d.municipio_fato)}
         ${linha("Natureza geral do fato", d.natureza_fato)}
-        ${linha("Instauração", d.data_instauracao)}
-        ${linha("Recebimento", d.data_recebimento)}
-        ${usaRemessaComissao ? "" : linha("Remessa do encarregado", d.data_remessa_encarregado)}
-        ${linha("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
-        ${linha("Julgamento", d.data_julgamento)}
-        ${linha("Conclusão", d.data_conclusao)}
+        ${linhaData("Instauração", d.data_instauracao)}
+        ${linhaData("Recebimento", d.data_recebimento)}
+        ${usaRemessaComissao ? "" : linhaData("Remessa do encarregado", d.data_remessa_encarregado)}
+        ${linhaData("Remessa da comissão", usaRemessaComissao ? remessaComissao : d.data_remessa_comissao)}
+        ${linhaData("Julgamento", d.data_julgamento)}
+        ${linhaData("Conclusão", d.data_conclusao)}
         ${linha(
           "Responsável",
           d.responsavel_nome
@@ -2296,7 +2444,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                }
                <label>Conclusão
                  <input name="data_conclusao" type="date"
-                   min="${escapeHtml(d.data_instauracao)}" max="${escapeHtml(hojeIso())}"
+                   data-limite-min="${escapeHtml(d.data_instauracao)}" data-limite-max="${escapeHtml(hojeIso())}"
                    value="${escapeHtml(d.data_conclusao ?? "")}"${d.data_conclusao ? " required" : ""} />
                </label>
                <button type="submit">Salvar datas</button>
@@ -2413,7 +2561,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
          * defeito. `list_pessoas` já devolve ordenado por papel e ordem.
          */
         d.pessoas.length
-          ? `<h2>Pessoas inquiridas</h2>
+          ? `<h2>Pessoas inquiridas (Exceto as envolvidas diretamente)</h2>
       <div class="table-wrap"><table class="tabela-dados tabela-dados--listagem tabela-detalhe-processo">
         <thead><tr><th>Papel</th><th>Nome</th></tr></thead>
         <tbody>${d.pessoas
@@ -2435,8 +2583,8 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                   (x) => `<tr${x.data_fim ? ' class="inativo"' : ""}>
                     <td>${escapeHtml(x.papel)}${x.e_responsavel ? " (responsável)" : ""}</td>
                     <td>${escapeHtml(qualificacaoDesignado(x))}</td>
-                    <td>${escapeHtml(dataParaExibicao(x.data_inicio))}</td>
-                    <td>${escapeHtml(x.data_fim ? dataParaExibicao(x.data_fim) : "vigente")}</td>
+                    <td>${escapeHtml(formatarData(x.data_inicio))}</td>
+                    <td>${escapeHtml(x.data_fim ? formatarData(x.data_fim) : "vigente")}</td>
                     <td>${escapeHtml(documentoDaDesignacao(x))}</td>
                     <td>${escapeHtml(x.motivo ?? "")}</td>
                     ${
@@ -2486,7 +2634,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                  <small class="campo-erro" data-erro="sucessor_id" hidden></small>
                </label>
                <label>Data da substituição
-                 <input name="data_troca" type="date" max="${escapeHtml(hojeIso())}" required />
+                 <input name="data_troca" type="date" data-limite-max="${escapeHtml(hojeIso())}" required />
                  <small class="campo-erro" data-erro="data_troca" hidden></small>
                </label>
                <label>Motivo
@@ -2516,9 +2664,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
                 .map(
                   (p) => `<tr${p.vigente ? ' class="vigente"' : ""}>
                     <td>${p.ordem === 0 ? "inicial" : `${p.ordem}ª prorrogação`}</td>
-                    <td>${escapeHtml(p.data_inicio)}</td>
+                    <td>${escapeHtml(formatarData(p.data_inicio))}</td>
                     <td>${p.dias}</td>
-                    <td>${escapeHtml(p.data_vencimento)}</td>
+                    <td>${escapeHtml(formatarData(p.data_vencimento))}</td>
                     <td>${escapeHtml(p.ordem === 0 ? "Prazo inicial" : (p.motivo ?? ""))}</td>
                     ${
                       podeEscrever
@@ -2544,11 +2692,11 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       ${
         podeEscrever && !d.concluido && prazoVigente
           ? `<form id="form-prorrogacao" class="linha-form">
-               <label>Novo vencimento<input name="nova_data_vencimento" type="date" min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
+               <label>Novo vencimento<input name="nova_data_vencimento" type="date" data-limite-min="${somarDiasIso(prazoVigente.data_vencimento, 1)}" required /></label>
                <label>Motivo<input name="motivo" required /></label>
                <button type="submit">Prorrogar</button>
              </form>
-             <p class="secao-ajuda">Vencimento atual: <strong>${escapeHtml(dataParaExibicao(prazoVigente.data_vencimento))}</strong>. A nova data deve ser posterior; a prorrogação começa no vencimento atual.</p>`
+             <p class="secao-ajuda">Vencimento atual: <strong>${escapeHtml(formatarData(prazoVigente.data_vencimento))}</strong>. A nova data deve ser posterior; a prorrogação começa no vencimento atual.</p>`
           : ""
       }
       ${
@@ -2556,13 +2704,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
           ? `<form id="form-editar-prorrogacao" class="linha-form" hidden>
                <label>Corrigir vencimento
                  <input name="nova_data_vencimento" type="date"
-                   min="${somarDiasIso(ultimaProrrogacao.data_inicio, 1)}"
+                   data-limite-min="${somarDiasIso(ultimaProrrogacao.data_inicio, 1)}"
                    value="${escapeHtml(ultimaProrrogacao.data_vencimento)}" required />
                </label>
                <button type="submit">Salvar alteração</button>
                <button type="button" class="secondary" id="cancelar-edicao-prorrogacao">Cancelar</button>
              </form>
-             <p id="ajuda-edicao-prorrogacao" class="secao-ajuda" hidden>A data deve ser posterior ao prazo anterior, vencido em <strong>${escapeHtml(dataParaExibicao(ultimaProrrogacao.data_inicio))}</strong>. O motivo da prorrogação será preservado.</p>`
+             <p id="ajuda-edicao-prorrogacao" class="secao-ajuda" hidden>A data deve ser posterior ao prazo anterior, vencido em <strong>${escapeHtml(formatarData(ultimaProrrogacao.data_inicio))}</strong>. O motivo da prorrogação será preservado.</p>`
           : ""
       }
 
@@ -2574,7 +2722,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
               <tbody>${andamentos
                 .map(
                   (a) => `<tr>
-                  <td>${escapeHtml(a.ocorrido_em.slice(0, 10))}</td>
+                  <td>${escapeHtml(formatarData(a.ocorrido_em))}</td>
                   <td>${escapeHtml(a.tipo_andamento ?? "")}</td>
                   <td>${escapeHtml(a.registrado_por ?? "")}</td>
                   <td class="col-descricao">${escapeHtml(a.descricao)}</td>
@@ -2656,6 +2804,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     </section>
   `);
 
+  // O detalhe desenha cinco selects que já pedem busca no markup — o Sucessor
+  // da substituição entre eles, com os 245 militares ativos. Faltava só ligar:
+  // sem esta chamada o `data-select-pesquisavel` não faz nada, e a tela abre um
+  // `<select>` nativo onde o cadastro abre um campo com busca. O redraw é
+  // seguro porque `shell()` destrói as instâncias antes de reescrever o `#app`.
+  ativarSelectsPesquisaveis(document.querySelector("#app") ?? document);
+
   const recarregar = () => renderDetalheProcesso(ctx, id);
   /**
    * O fecho comum das doze ações do detalhe: avisa o erro, se houve, e
@@ -2697,6 +2852,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
 
   document.querySelector("#voltar")?.addEventListener("click", () => void renderListaProcessos(ctx));
   document.querySelector("#editar")?.addEventListener("click", () => void renderFormularioProcesso(ctx, id));
+  document
+    .querySelector<HTMLButtonElement>("#notificar")
+    ?.addEventListener("click", (evento) => {
+      abrirNotificacao(ctx, id, evento.currentTarget as HTMLButtonElement);
+    });
+
   document.querySelector<HTMLButtonElement>("#reabrir")?.addEventListener("click", async (evento) => {
     if (!confirm("Reabrir este apuratório?")) return;
     await comCarregamento(
@@ -2744,9 +2905,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     const antesDaRemessa = maiorDataIso([d.data_instauracao, recebimento]);
     const depoisDaRemessa = menorDataIso([hojeIso(), valorJulgamento, valorConclusao]);
 
-    aplicarIntervaloData(remessaEncarregado, antesDaRemessa, depoisDaRemessa);
-    aplicarIntervaloData(remessaComissaoInput, antesDaRemessa, depoisDaRemessa);
-    aplicarIntervaloData(
+    aplicarLimiteData(remessaEncarregado, antesDaRemessa, depoisDaRemessa);
+    aplicarLimiteData(remessaComissaoInput, antesDaRemessa, depoisDaRemessa);
+    aplicarLimiteData(
       julgamento,
       maiorDataIso([
         d.data_instauracao,
@@ -2756,7 +2917,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       ]),
       menorDataIso([hojeIso(), valorConclusao]),
     );
-    aplicarIntervaloData(
+    aplicarLimiteData(
       conclusao,
       maiorDataIso([
         d.data_instauracao,
@@ -2769,15 +2930,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     );
   };
   atualizarLimitesDatasPosteriores();
-  formDatas?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((input) => {
-    input.addEventListener("change", () => {
-      atualizarLimitesDatasPosteriores();
-      const limpar = formDatas.querySelector<HTMLButtonElement>(
-        `[data-limpar-data-detalhe="${input.name}"]`,
-      );
-      if (limpar) limpar.disabled = input.value === "";
-      window.requestAnimationFrame(() => input.blur());
-    });
+  ligarCamposDeData(formDatas, (input) => {
+    atualizarLimitesDatasPosteriores();
+    const limpar = formDatas?.querySelector<HTMLButtonElement>(
+      `[data-limpar-data-detalhe="${input.name}"]`,
+    );
+    if (limpar) limpar.disabled = input.value === "";
   });
   formDatas?.querySelectorAll<HTMLButtonElement>("[data-limpar-data-detalhe]").forEach((botao) => {
     botao.addEventListener("click", () => {
@@ -2855,7 +3013,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
         decisaoHistoricaPermitia);
     if (campoPenalidade) campoPenalidade.hidden = !permitePena;
     const selectPena = selectResultado("penalidade_tipo_id");
-    if (!permitePena && selectPena) selectPena.value = "";
+    if (!permitePena && selectPena) {
+      selectPena.value = "";
+      selectPena.tomselect?.sync();
+    }
 
     const penalidadeId = selectPena?.value ?? "";
     const penalidadeHistoricaUsavaDias =
@@ -2873,6 +3034,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     resultadoEmEdicao = null;
     formResultado?.reset();
     limparOpcoesHistoricasResultado();
+    // `reset()` e a remoção das opções históricas mexem no `<select>` nativo;
+    // o controle visível só reflete isso depois do `sync()`.
+    sincronizarSelectsPesquisaveis(formResultado);
     if (formResultado) formResultado.hidden = true;
   };
 
@@ -2904,6 +3068,12 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       selectResultado("solucao_decidida_id")!.value = envolvido.solucao_decidida_id ?? "";
       selectResultado("penalidade_tipo_id")!.value = envolvido.penalidade_tipo_id ?? "";
       inputDias()!.value = envolvido.penalidade_dias?.toString() ?? "";
+      // A opção histórica é inserida no `<select>` em runtime, e é ela que
+      // mantém na tela a solução desativada de um processo de 2019 (princípio
+      // 6). O Tom Select não a enxerga sozinho: sem o `sync()` a opção some do
+      // menu e o campo abre vazio sobre um valor que existe. Vale também para
+      // as três atribuições logo acima.
+      sincronizarSelectsPesquisaveis(formResultado);
       if (resumoResultado) {
         resumoResultado.textContent =
           `Editando o resultado de ${formatarQualificacaoMilitar(envolvido.posto_graduacao, envolvido.matricula, envolvido.nome)}.`;
@@ -2911,7 +3081,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       formResultado.hidden = false;
       atualizarCamposPenalidade();
       formResultado.scrollIntoView({ block: "nearest" });
-      (selectResultado("solucao_sugerida_id") ?? selectResultado("solucao_decidida_id"))?.focus();
+      focarCampo(selectResultado("solucao_sugerida_id") ?? selectResultado("solucao_decidida_id"));
     }),
   );
 
@@ -2954,6 +3124,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   // formulários seriam a mesma marcação duas vezes, com duas chances de
   // divergir.
   const formSubstituicao = document.querySelector<HTMLFormElement>("#form-substituicao");
+  // `data_troca` é campo de data como qualquer outro: mesmo tratamento do
+  // seletor e da digitação. O limite (`data-limite-max`) já vem na marcação e é
+  // cobrado pela validação global de `dom.ts`, então não há o que recalcular.
+  ligarCamposDeData(formSubstituicao);
   const resumoSubstituicao = document.querySelector<HTMLElement>("#resumo-substituicao");
   const botaoSalvarSubstituicao =
     document.querySelector<HTMLButtonElement>("#salvar-substituicao");
@@ -2984,7 +3158,10 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       aviso.textContent = mensagem;
       aviso.hidden = false;
     }
-    campo(nome)?.focus();
+    // `sucessor_id` e `documento_autorizador_id` são pesquisáveis: focar o
+    // `<select>` cru mandaria o cursor para o elemento recortado, justamente
+    // quando o operador precisa corrigir o campo.
+    focarCampo(campo(nome));
   };
 
   const fecharSubstituicao = () => {
@@ -3017,22 +3194,27 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       resumoSubstituicao.innerHTML = editando
         ? `Corrigindo a substituição de <strong>${escapeHtml(antecessora.papel)}</strong>: ` +
           `${escapeHtml(qualificacaoDesignado(antecessora))} saiu em ` +
-          `<strong>${escapeHtml(dataParaExibicao(designacao.data_inicio))}</strong>.`
+          `<strong>${escapeHtml(formatarData(designacao.data_inicio))}</strong>.`
         : `Substituindo <strong>${escapeHtml(qualificacaoDesignado(designacao))}</strong> ` +
           `na função de <strong>${escapeHtml(designacao.papel)}</strong>, ` +
-          `ocupada desde ${escapeHtml(dataParaExibicao(designacao.data_inicio))}.`;
+          `ocupada desde ${escapeHtml(formatarData(designacao.data_inicio))}.`;
     }
 
     // `min` é o dia seguinte ao início da antecessora: a troca tem de ser
     // posterior, e o backend recusa o contrário com a mesma conta.
     const data = campo("data_troca") as HTMLInputElement | null;
     if (data) {
-      data.min = somarDiasIso(antecessora.data_inicio, 1);
+      data.dataset.limiteMin = somarDiasIso(antecessora.data_inicio, 1);
       data.value = editando ? designacao.data_inicio : "";
     }
     const preencher = (nome: string, valor: string) => {
       const alvo = campo(nome);
-      if (alvo) alvo.value = valor;
+      if (!alvo) return;
+      alvo.value = valor;
+      // Num campo pesquisável a atribuição zera o `<select>` e **não** mexe no
+      // controle visível: sem esta linha, abrir "substituir" depois de um
+      // "corrigir" mostraria o sucessor anterior sobre um valor já vazio.
+      if (alvo instanceof HTMLSelectElement) alvo.tomselect?.sync();
     };
     preencher("sucessor_id", editando ? designacao.policial_militar_id : "");
     preencher("motivo", editando ? (designacao.motivo ?? "") : "");
@@ -3051,7 +3233,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       botaoSalvarSubstituicao.textContent = editando ? "Salvar correção" : "Substituir";
     }
     formSubstituicao.scrollIntoView({ block: "nearest" });
-    campo("sucessor_id")?.focus();
+    focarCampo(campo("sucessor_id"));
   };
 
   document.querySelectorAll<HTMLButtonElement>("[data-substituir]").forEach((b) =>
@@ -3100,7 +3282,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
     if (dataTroca <= antecessora.data_inicio) {
       return marcarErro(
         "data_troca",
-        `A data deve ser posterior a ${dataParaExibicao(antecessora.data_inicio)}.`,
+        `A data deve ser posterior a ${formatarData(antecessora.data_inicio)}.`,
       );
     }
     if (dataTroca > hojeIso()) {
@@ -3153,7 +3335,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
       if (
         !confirm(
           `Desfazer a substituição de ${designacao.papel} feita em ` +
-            `${dataParaExibicao(designacao.data_inicio)}?\n\n` +
+            `${formatarData(designacao.data_inicio)}?\n\n` +
             `A designação de ${qualificacaoDesignado(designacao)} será excluída e ${volta}.`,
         )
       ) {
@@ -3175,10 +3357,13 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   );
 
   const formProrrogacao = document.querySelector<HTMLFormElement>("#form-prorrogacao");
-  formProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
-    const input = e.currentTarget as HTMLInputElement;
-    window.requestAnimationFrame(() => input.blur());
-  });
+  // Este `change` era escrito à mão e blurava SEMPRE — a cópia manual do que
+  // `ligarCamposDeData` faz, sem a guarda de teclado que o helper ganhou. Como
+  // o `change` de um campo de data dispara assim que o valor fica completo, e
+  // ao digitar o ano o primeiro `2` já é o ano `0002`, o campo perdia o foco no
+  // primeiro dígito e não havia como terminar de digitar. O helper fecha o
+  // seletor do mouse pelo mesmo motivo de antes, e só para quem usou o mouse.
+  ligarCamposDeData(formProrrogacao);
   formProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
@@ -3209,10 +3394,9 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
   document.querySelector<HTMLButtonElement>("#cancelar-edicao-prorrogacao")?.addEventListener("click", () => {
     alternarEdicaoProrrogacao(false);
   });
-  formEditarProrrogacao?.querySelector<HTMLInputElement>('input[type="date"]')?.addEventListener("change", (e) => {
-    const input = e.currentTarget as HTMLInputElement;
-    window.requestAnimationFrame(() => input.blur());
-  });
+  // Mesma correção do `#form-prorrogacao` logo acima: o `change` manual daqui
+  // tinha o mesmo `blur()` sem guarda, e o mesmo efeito de impedir a digitação.
+  ligarCamposDeData(formEditarProrrogacao);
   formEditarProrrogacao?.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!ultimaProrrogacao) return;
@@ -3231,7 +3415,7 @@ async function desenharDetalheProcesso(ctx: ContextoTela, id: string): Promise<v
 
   document.querySelector<HTMLButtonElement>("[data-excluir-prorrogacao]")?.addEventListener("click", async (evento) => {
     if (!ultimaProrrogacao) return;
-    const vencimento = dataParaExibicao(ultimaProrrogacao.data_vencimento);
+    const vencimento = formatarData(ultimaProrrogacao.data_vencimento);
     if (!confirm(`Excluir a ${ultimaProrrogacao.ordem}ª prorrogação, com vencimento em ${vencimento}? O prazo anterior voltará a ser o vigente.`)) return;
     await comCarregamento(
       "Excluindo a prorrogação…",

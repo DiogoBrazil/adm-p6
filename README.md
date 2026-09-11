@@ -49,7 +49,7 @@ implementação estão **lá**.
    · [Mapas Salvos](#310-mapas-salvos)
    · [Relatório Anual](#311-relatório-anual)
    · [Estatísticas dos Apuratórios](#312-estatísticas-dos-apuratórios)
-   · [Os 26 catálogos](#313-os-26-catálogos)
+   · [Os 27 catálogos](#313-os-27-catálogos)
 4. [Os números, um por um](#4-os-números-um-por-um)
    · [Escopo](#41-escopo-a-regra-que-vale-para-todos-os-relatórios)
    · [Painel](#42-os-números-do-painel)
@@ -239,6 +239,43 @@ escrevem `Perfil somente leitura.` no lugar deles.
 A **busca instantânea** filtra enquanto você digita. A **exportação de planilha**
 e a **impressão** levam sempre o **filtro inteiro**, não a página que está na
 tela: exportar da página 1 de 5 traz as cinco.
+
+**Os campos de escolha longos têm busca**: em vez de rolar a lista, digite parte
+do que procura e o campo filtra — nome, posto ou matrícula, no caso de policial
+militar. Vale no cadastro do apuratório e também no detalhe dele: o `Sucessor` de
+uma substituição, a solução sugerida, a solução decidida, o tipo de penalidade e
+o documento autorizador. Listas curtas e fixas — mês, ano, situação, ordenação —
+continuam sendo um select comum, onde clicar é mais rápido que digitar.
+
+**Todo campo de data** aceita as duas formas: escolher no calendário ou **digitar**
+a data, inclusive o ano. O calendário navega para **qualquer ano** — não há piso
+nem teto na navegação, então um processo de 2018 se cadastra sem rodeio.
+
+São oito campos, e "todo" é literal: cabeçalho do cadastro, datas posteriores e
+conclusão no detalhe, os dois do filtro de instauração, a data da substituição
+de encarregado e o novo vencimento das duas telas de prorrogação. Escolhendo com
+o mouse, o calendário fecha sozinho depois da escolha; digitando, o campo
+mantém o foco até o fim do ano.
+
+**A ordem dos segmentos é `dd/mm/aaaa`, e vem do idioma do Windows** — não da
+aplicação, que não tem como decidir isso. O campo vazio sempre exibe o gabarito
+em uso, então dá para conferir a olho. Numa máquina com Windows em inglês ele
+passaria a `mm/dd/yyyy`, e aí o primeiro segmento é o mês: quem digitasse `20`
+para o dia receberia `12`, porque mês não passa disso. O ajuste, se acontecer, é
+no idioma de exibição do Windows daquela máquina.
+
+> Rodando por `tauri dev` no **Linux**, o campo aparece como `mm/dd/yyyy` de
+> qualquer jeito: o WebKitGTK ignora idioma e locale nesse controle. É limitação
+> do motor de desenvolvimento, não do app — conferir formato de data ali não diz
+> nada sobre o que o usuário vê.
+
+Isso **não** afrouxa nenhuma regra. A ordem das datas do fluxo (instauração ≤
+recebimento ≤ remessa ≤ julgamento ≤ conclusão) e o "não pode ser futura"
+continuam valendo: a data fora de ordem recebe o aviso embaixo do campo, dizendo
+qual é o limite e por quê, e o formulário não é salvo enquanto ela estiver ali. A
+diferença é que agora o campo **avisa** em vez de impedir a navegação — o que
+importa quando é a data de instauração que precisa ser corrigida, e é ela quem
+define o limite das outras.
 
 ---
 
@@ -700,7 +737,7 @@ têm a coluna `Quantidade`; as de enquadramento têm `Classificação`, `Descri�
 
 ---
 
-### 3.13 Os 26 catálogos
+### 3.13 Os 27 catálogos
 
 *Menu: Catálogos.* Cada catálogo é uma tela igual às outras — `Novo`, busca
 `Filtrar…`, caixa `Mostrar inativos`, e por linha `Editar`, `Desativar`/`Reativar`
@@ -1136,6 +1173,14 @@ produção por engano. Para conectar de propósito, usando as credenciais de
 
 Vale só para aquele processo do shell; um terminal novo volta ao banco local.
 
+Produção é o projeto Neon **`adm-p6-sp`, região `sa-east-1` (São Paulo)**. A
+região é escolha medida, não preferência: cada ida e volta ao banco custava
+**215 ms** em `us-east-2` (Ohio) e custa **80 ms** em São Paulo. Como o custo de
+uma tela é o *número* de idas e voltas, e não o tempo de cada consulta, isso
+aparece em toda tela ao mesmo tempo — a ficha de um apuratório são 8 consultas
+em sequência, ou seja 1,7 s em Ohio contra 0,6 s em São Paulo. O porquê está em
+[`GUIA.md`](GUIA.md), decisão 71.
+
 ### Exercitar o cofre em desenvolvimento
 
 Em build de debug o app **nunca** consulta o cofre do sistema operacional: usa o
@@ -1239,7 +1284,22 @@ npm run tauri -- build \
 A primeira execução baixa o SDK/CRT da Microsoft e o plugin do NSIS: reserve
 internet e alguns GB. Nas seguintes, o cache em `xwin-cache` é reaproveitado.
 
-Saída, renomeada para tirar o espaço do nome:
+O bundler nomeia o arquivo pelo `productName`, que tem espaço — e **nada renomeia
+sozinho** neste caminho: `empacotar.sh` só normaliza `.deb`/`.rpm`/`.AppImage`, e
+a receita do Windows não passa por ele. Renomeie na hora, no mesmo comando:
+
+```bash
+cd src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+mv -f "Gestao P6_0.1.0_x64-setup.exe" gestao-p6_0.1.0_x64-setup.exe
+```
+
+O `mv -f` é deliberado, e é a parte que protege: o build novo sai com o nome
+**com espaço**, então o arquivo já renomeado que estiver ali é de uma geração
+ANTERIOR — e é justamente ele que tem o nome que se distribui. Foi assim que um
+instalador de 7/9, com o defeito do subsistema console, ficou por dois dias ao
+lado do build novo, com o nome bom. Sobrescreva, não conviva com os dois.
+
+Saída:
 
 ```text
 src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/gestao-p6_0.1.0_x64-setup.exe
@@ -1256,7 +1316,7 @@ esse terminal mata o processo. O Linux ignora o atributo, então o `.deb` não
 denuncia o problema:
 
 ```bash
-file src-tauri/target/x86_64-pc-windows-msvc/release/adm-p6-tauri.exe
+file src-tauri/target/x86_64-pc-windows-msvc/release/gestao-p6.exe
 # tem de dizer: PE32+ executable (GUI) ...   — e não (console)
 ```
 
@@ -1283,6 +1343,43 @@ e `cargo run` usam uma versão afrouxada. Para conferi-la, é o binário de prod
 
 ---
 
+## 8.1 Avisar o encarregado por e-mail
+
+Na tela de um apuratório, **Notificar encarregado** abre a escolha entre três
+avisos — designação, prazo a vencer, prazo vencido —, mostra o texto **já
+preenchido com os dados do apuratório** e envia ao responsável vigente. A prévia
+não é cerimônia: o texto vem de um catálogo que o administrador edita, e e-mail
+enviado não volta.
+
+Três coisas precisam existir, e a recusa diz qual falta:
+
+1. **Encarregado designado** no apuratório.
+2. **E-mail do militar.** Em *Usuários*, marcando "Pode ser designado" aparece
+   *E-mail para avisos* — opcional. Quem tem conta de acesso e deixar em branco
+   recebe no e-mail da conta.
+3. **Mensagem cadastrada** em *Catálogos → Mensagens de e-mail*. As três nascem
+   prontas na instalação; o texto é editável, e os marcadores entre chaves
+   (`{encarregado}`, `{apuratorio}`, `{numero_documento}`, `{unidade}`,
+   `{data_instauracao}`, `{prazo_vencimento}`) são trocados no envio. Marcador
+   desconhecido aparece como está — é o que a prévia serve para pegar.
+
+O servidor é configurado uma vez, em *Catálogos → Configuração de e-mail*, e vale
+para **todos os computadores da seção** — diferente da conexão do banco, que é
+por máquina. No Gmail a senha é a **senha de aplicativo** de 16 letras gerada na
+conta Google; a senha comum é recusada. A porta 587 usa STARTTLS e é o padrão;
+465 também funciona.
+
+O e-mail sai com o cabeçalho e a formatação da Seção, e leva junto uma versão em
+texto puro para quem lê sem HTML. **O texto do catálogo é texto puro** — quem
+edita não escreve HTML. Uma convenção: parágrafo cujas linhas começam com espaço
+vira o bloco destacado, que é como as três mensagens listam os dados do
+apuratório. A prévia mostra o texto, não a moldura.
+
+> Os envios **não ficam registrados**: o sistema não guarda quem foi avisado nem
+> quando.
+
+---
+
 ## 9. A conexão no primeiro uso
 
 Na primeira abertura, antes do login, o app pede a conexão: a URL PostgreSQL
@@ -1304,6 +1401,15 @@ login** — só a tela de abertura aparece no meio, enquanto a conexão sobe.
 instale `gnome-keyring` se não houver; o `.deb` já o recomenda. O sistema
 operacional pode pedir o desbloqueio do cofre mesmo quando a conexão já está
 salva.
+
+**Trocar o banco de produção de lugar obriga cada PC a reconfigurar.** A
+conexão mora no cofre do sistema operacional de cada máquina, uma por conta de
+usuário — não há configuração central, e nenhuma atualização do pacote a
+reescreve. Mudar o projeto Neon (foi o que a migração para São Paulo fez) chega
+ao usuário como *falha de conexão*, não como pedido de reconfiguração: o app
+tenta o endereço antigo, que ainda existe. Quem opera precisa saber que o
+caminho é `Configurar conexão com o banco`, no rodapé da tela de login, e que a
+senha salva não volta para a interface — informe os dados completos.
 
 **Falha de rede não apaga credenciais.** Nesse caso a tela oferece
 `Tentar novamente`, e não o formulário. Para corrigir ou trocar os dados, o botão

@@ -103,10 +103,22 @@ ON CONFLICT DO NOTHING;
 --                         nasceu com as dez espécies no `DEFAULT 100` e o mapa
 --                         voltou a sair alfabético. A 0022 alcança o que já foi
 --                         importado; esta coluna faz o dado nascer certo.
+--   permite_cadastro_vitima : vem do TIPO, como `max_envolvidos` — procedimento
+--                         apura um FATO, e fato tem ofendido; processo
+--                         disciplinar é instaurado CONTRA um militar (0012).
+--                         Está aqui pela mesma razão de `ordem`, e pelo mesmo
+--                         estrago: a 0012 semeia por UPDATE, roda no start do
+--                         app e num destino novo não acha linha nenhuma. O Neon
+--                         de produção nasceu com as onze espécies em `false`, e
+--                         a seção "Ofendidos/Vítimas" nunca apareceu no
+--                         formulário — nem para as 133 vítimas que a etapa 05
+--                         importou logo em seguida. A 0024 alcança o que já foi
+--                         importado; esta coluna faz o dado nascer certo.
 INSERT INTO apuratorios (sigla, nome, tipo_apuratorio_id, prazo_base_dias,
                          max_envolvidos, exige_natureza_fato, codigo_extensao,
                          permite_acusacao, permite_acusacao_penal,
-                         permite_indicios, permite_solucao_sugerida, ordem)
+                         permite_indicios, permite_solucao_sugerida, ordem,
+                         permite_cadastro_vitima)
 SELECT e.tipo_detalhe,
        e.tipo_detalhe,                       -- nome por extenso: revisar na tela
        ta.id,
@@ -124,7 +136,8 @@ SELECT e.tipo_detalhe,
        CASE lower(e.tipo_detalhe) WHEN 'sr'   THEN 1
                                   WHEN 'ipm'  THEN 2
                                   WHEN 'pads' THEN 3
-                                  ELSE 100 END
+                                  ELSE 100 END,
+       e.tipo_geral = 'procedimento'
   FROM (
       SELECT tipo_geral,
              tipo_detalhe,

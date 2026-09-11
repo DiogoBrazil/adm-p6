@@ -44,6 +44,7 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
                 matricula: "100000001".to_string(),
                 posto_graduacao_id: posto_id.clone(),
                 is_encarregado: true,
+                email: None,
                 conta: None,
             },
         )
@@ -65,6 +66,7 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
                 matricula: "100000002".to_string(),
                 posto_graduacao_id: posto_id.clone(),
                 is_encarregado: false,
+                email: None,
                 conta: Some(SaveAccountRequest {
                     email: "Maria.Souza@PM.RO".to_string(),
                     perfil_id: perfil_comum.clone(),
@@ -103,6 +105,7 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
                 matricula: "100000002".to_string(),
                 posto_graduacao_id: posto_id.clone(),
                 is_encarregado: true,
+                email: None,
                 conta: Some(SaveAccountRequest {
                     email: "maria.souza@pm.ro".to_string(),
                     perfil_id: perfil_comum.clone(),
@@ -132,6 +135,7 @@ async fn grava_policial_com_e_sem_conta_de_acesso() {
                 matricula: "100000002".to_string(),
                 posto_graduacao_id: posto_id.clone(),
                 is_encarregado: true,
+                email: None,
                 conta: None,
             },
         )

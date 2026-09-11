@@ -763,6 +763,51 @@ async fn as_decisoes_da_importacao_ficam_registradas_no_dado() {
             "o mapa abre por SR, IPM e PADS, e so essas tres sao nomeadas"
         );
 
+        // Quem registra Ofendido/Vitima nasce da IMPORTACAO, pela MESMA razao e
+        // com o mesmo estrago da `ordem` acima: a 0012 semeia
+        // `permite_cadastro_vitima` por UPDATE, corre no start do app e num
+        // destino novo nao acha linha nenhuma. O Neon de producao nasceu com as
+        // onze especies em `false`, e a secao "Ofendidos/Vitimas" nunca apareceu
+        // no formulario — nem para as vitimas que a etapa 05 importa logo
+        // adiante, que ficaram legiveis e nao editaveis. A 0024 alcanca o que ja
+        // foi importado; esta coluna faz o dado nascer certo.
+        //
+        // A asserção e por TIPO, e nao por lista de siglas: e o tipo que decide
+        // (procedimento apura um fato, e fato tem ofendido), e uma lista de
+        // siglas aqui passaria a mentir na primeira especie nova do legado.
+        let (procedimentos_ligados, procedimentos, processos_ligados, processos): (
+            i64,
+            i64,
+            i64,
+            i64,
+        ) = sqlx::query_as(
+            "SELECT count(*) FILTER (WHERE lower(ta.nome) = 'procedimento'
+                                       AND a.permite_cadastro_vitima),
+                    count(*) FILTER (WHERE lower(ta.nome) = 'procedimento'),
+                    count(*) FILTER (WHERE lower(ta.nome) = 'processo'
+                                       AND a.permite_cadastro_vitima),
+                    count(*) FILTER (WHERE lower(ta.nome) = 'processo')
+               FROM apuratorios a
+               JOIN tipos_apuratorio ta ON ta.id = a.tipo_apuratorio_id",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("ler o cadastro de ofendido por especie");
+        // Sem os dois lados povoados o teste passaria com a coluna fora do
+        // INSERT: zero de zero e igual a zero, e nenhum `false` seria exercido.
+        assert!(
+            procedimentos > 0 && processos > 0,
+            "o recorte legado precisa das duas classes para a asserção valer"
+        );
+        assert_eq!(
+            procedimentos_ligados, procedimentos,
+            "todo procedimento registra ofendido/vitima: ele apura um fato"
+        );
+        assert_eq!(
+            processos_ligados, 0,
+            "processo disciplinar e instaurado contra um militar, e nao registra ofendido"
+        );
+
         // O anexo entra, com nome e mime — os bytes da fixture são truncados.
         let anexo: (String, String) =
             sqlx::query_as("SELECT nome_arquivo, mime_type FROM processo_anexos")

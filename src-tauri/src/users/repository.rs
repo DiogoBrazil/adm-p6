@@ -17,6 +17,7 @@ const SELECT_PM: &str = r#"
            pg.sigla                     AS posto_graduacao_sigla,
            ch.nome                      AS circulo_hierarquico,
            pm.is_encarregado            AS is_encarregado,
+           pm.email                     AS email,
            pm.ativo                     AS ativo,
            u.id::text                   AS conta_id,
            u.email                      AS conta_email,
@@ -112,6 +113,18 @@ pub async fn list_encarregados(pool: &PgPool) -> Result<Vec<UserListItem>, sqlx:
 
 /// Grava o policial militar e, quando houver credenciais, a conta de acesso —
 /// tudo na mesma transação. São duas entidades; continua sendo um só formulário.
+/// Campo em branco é ausência de e-mail, não string vazia: `''` passaria pelo
+/// `COALESCE` da resolução do destinatário e o envio tentaria mandar para lugar
+/// nenhum.
+fn email_ou_nulo(request: &SaveUserRequest) -> Option<String> {
+    request
+        .email
+        .as_deref()
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .map(str::to_string)
+}
+
 pub async fn save(
     tx: &mut Transaction<'_, Postgres>,
     request: &SaveUserRequest,
@@ -123,7 +136,7 @@ pub async fn save(
         Some(id) => sqlx::query_scalar(
             "UPDATE policiais_militares
                     SET nome = $2, matricula = $3, posto_graduacao_id = $4::uuid,
-                        is_encarregado = $5, updated_at = now()
+                        is_encarregado = $5, email = $6, updated_at = now()
                   WHERE id = $1::uuid
               RETURNING id::text",
         )
@@ -132,6 +145,7 @@ pub async fn save(
         .bind(matricula)
         .bind(&request.posto_graduacao_id)
         .bind(request.is_encarregado)
+        .bind(email_ou_nulo(request))
         .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| {
@@ -141,14 +155,15 @@ pub async fn save(
             )
         })?,
         None => sqlx::query_scalar(
-            "INSERT INTO policiais_militares (nome, matricula, posto_graduacao_id, is_encarregado)
-                 VALUES ($1, $2, $3::uuid, $4)
+            "INSERT INTO policiais_militares (nome, matricula, posto_graduacao_id, is_encarregado, email)
+                 VALUES ($1, $2, $3::uuid, $4, $5)
               RETURNING id::text",
         )
         .bind(&nome)
         .bind(matricula)
         .bind(&request.posto_graduacao_id)
         .bind(request.is_encarregado)
+        .bind(email_ou_nulo(request))
         .fetch_one(&mut **tx)
         .await?,
     };

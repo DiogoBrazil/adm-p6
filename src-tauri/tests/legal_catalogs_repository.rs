@@ -1,4 +1,4 @@
-//! CRUD genérico dos 26 catálogos.
+//! CRUD genérico dos 27 catálogos.
 //!
 //! Este módulo monta SQL com **nome de tabela e de coluna interpolados**. Isso
 //! só é seguro porque esses nomes vêm sempre do registro `domain::CATALOGOS`,
@@ -101,7 +101,7 @@ fn metadados_centralizam_as_colunas_definidas_pela_interface() {
 #[tokio::test]
 async fn todo_catalogo_do_registro_existe_no_banco() {
     util::com_banco_descartavel("cat_registro", |pool| async move {
-        assert_eq!(CATALOGOS.len(), 26, "o guia fala em 26 catalogos");
+        assert_eq!(CATALOGOS.len(), 27, "o guia fala em 27 catalogos");
 
         for cat in CATALOGOS {
             // `list` monta o SELECT com todas as colunas declaradas: se alguma
@@ -411,7 +411,14 @@ async fn atualizar_registro_inexistente_e_recusado() {
         )
         .await
         .expect_err("id inexistente");
-        assert!(erro.message().contains("nao encontrado"), "{erro}");
+        // A frase diz o que aconteceu E o que fazer. A versão anterior era
+        // "registro nao encontrado", e esta asserção casava com ela — um teste
+        // que prendia o defeito no lugar em vez de denunciá-lo.
+        let mensagem = erro.message();
+        assert!(
+            mensagem.contains("não existe mais") && mensagem.contains("Recarregue"),
+            "{mensagem}"
+        );
         drop(tx);
 
         let mut tx = pool.begin().await.unwrap();
@@ -799,7 +806,7 @@ async fn referencia_fixa_e_resolvida_pelo_atributo() {
     .await;
 }
 
-/// Os 26 catálogos sabem dizer o assunto de uma linha para a trilha.
+/// Os 27 catálogos sabem dizer o assunto de uma linha para a trilha.
 ///
 /// `Catalogo::assunto_sql` é a única consulta do `audit::assunto` que não é
 /// literal — vem da tabela de metadados —, e por isso `sql_prepare.rs` não a

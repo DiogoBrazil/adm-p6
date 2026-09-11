@@ -45,10 +45,18 @@ export function formatarDataHora(iso: string): string {
   return partes ? `${partes[3]}/${partes[2]}/${partes[1]} ${partes[4]}` : iso;
 }
 
-/** `2026-08-31` → `31/08/2026`. Vazio vira travessão, para a coluna não sumir. */
-export function formatarData(iso: string | null | undefined): string {
+/**
+ * `2026-08-31` → `31/08/2026`. Aceita também o `timestamp` inteiro, porque a
+ * expressão está ancorada no começo e ignora o que vem depois do dia.
+ *
+ * O `vazio` existe porque o mesmo formato era escrito em quatro lugares que só
+ * discordavam no que fazer com a data ausente: a listagem quer o travessão para
+ * a coluna não sumir, o PDF do mapa quer "Não informado" e quem formata um
+ * limite de campo — que nunca é vazio — quer o próprio valor de volta.
+ */
+export function formatarData(iso: string | null | undefined, vazio = "—"): string {
   const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : "—";
+  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : vazio;
 }
 
 /** Qualificação compacta usada nas listagens: `POSTO MATRÍCULA NOME`. */
@@ -148,6 +156,35 @@ export function destruirSelectsPesquisaveis(root: ParentNode = document): void {
   root.querySelectorAll<HTMLSelectElement>("select.tomselected").forEach((select) => {
     select.tomselect?.destroy();
   });
+}
+
+/**
+ * Devolve ao controle visível o que foi mexido no `<select>` nativo.
+ *
+ * Sob Tom Select, quem manda no que aparece é a **instância**, não o `<select>`:
+ * `select.value = "…"`, `form.reset()` e `<option>` inserida ou removida em
+ * runtime mudam o elemento e deixam o controle exibindo o estado anterior —
+ * sem erro nenhum. `sync()` relê opções e valor do original e é o que reconcilia
+ * os dois; chame-a **depois** de qualquer manipulação nativa.
+ *
+ * O valor entra em silêncio, sem disparar `change` — igual à atribuição nativa
+ * que ela acompanha, para não acordar listener que hoje não é acordado.
+ */
+export function sincronizarSelectsPesquisaveis(root: ParentNode | null | undefined): void {
+  root?.querySelectorAll<HTMLSelectElement>("select.tomselected").forEach((select) => {
+    select.tomselect?.sync();
+  });
+}
+
+/**
+ * Foca um campo, e o controle **visível** quando ele é pesquisável.
+ *
+ * O `<select>` de um campo pesquisável fica recortado (`clip`) pelo Tom Select:
+ * focá-lo manda o foco para um elemento que ninguém vê, e o cursor some.
+ */
+export function focarCampo(campo: HTMLElement | null | undefined): void {
+  if (campo instanceof HTMLSelectElement && campo.tomselect) campo.tomselect.focus();
+  else campo?.focus();
 }
 
 export type ModalMontado = {
@@ -268,9 +305,122 @@ function ehCampoValidavel(alvo: EventTarget | null): alvo is CampoValidavel {
   );
 }
 
-function dataPtBr(valor: string): string {
-  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
-  return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : valor;
+/**
+ * O limite de um campo de data **orienta, não prende**.
+ *
+ * A ordem cronológica (decisão 47) morava nos atributos `min`/`max`, e o preço
+ * era o calendário travado: num apuratório instaurado em 2025, o campo de
+ * recebimento não voltava a 2024 — nem para consertar uma instauração errada.
+ * O limite passou a `data-limite-min`/`data-limite-max`, que o navegador não
+ * conhece: o calendário navega para qualquer ano e a regra continua cobrada
+ * aqui, com a mesma mensagem e o mesmo bloqueio de submit de antes.
+ *
+ * Compara em ISO como texto — `AAAA-MM-DD` ordena lexicograficamente, que é o
+ * que `menorDataIso`/`maiorDataIso` já exploram. Data vazia não viola limite:
+ * o que exige o preenchimento é o `required`.
+ */
+export function mensagemDeLimiteDeData(campo: CampoValidavel): string {
+  if (!(campo instanceof HTMLInputElement) || campo.type !== "date") return "";
+  const valor = campo.value;
+  if (!valor) return "";
+
+  const min = campo.dataset.limiteMin ?? "";
+  if (min && valor < min) {
+    return (
+      campo.dataset.mensagemMin ??
+      `Escolha uma data igual ou posterior a ${formatarData(min, min)}.`
+    );
+  }
+  const max = campo.dataset.limiteMax ?? "";
+  if (max && valor > max) {
+    return (
+      campo.dataset.mensagemMax ??
+      `Escolha uma data igual ou anterior a ${formatarData(max, max)}.`
+    );
+  }
+  return "";
+}
+
+/**
+ * Reavalia um campo cujo limite acabou de mudar.
+ *
+ * Sem isto, corrigir a data de instauração deixaria o erro do recebimento na
+ * tela até alguém tocar no recebimento — o campo culpado não é o que mudou.
+ */
+export function revalidarLimiteDeData(campo: HTMLInputElement | null): void {
+  if (!campo) return;
+  const mensagem = mensagemDeLimiteDeData(campo);
+  if (mensagem) {
+    campo.setCustomValidity(mensagem);
+    if (errosDeCampo.has(campo)) mostrarErroDoCampo(campo, mensagem);
+  } else {
+    limparErroDoCampo(campo);
+  }
+}
+
+/**
+ * Liga os campos de data de um formulário: chama `aoMudar` a cada escolha e
+ * fecha o seletor nativo, que em algumas plataformas do WebView permanece
+ * aberto depois da escolha.
+ *
+ * O fechamento é um `blur()` — e **só** vale para a escolha com o mouse. Em
+ * `input[type="date"]` o `change` dispara assim que o valor fica completo, e ao
+ * digitar o ano o primeiro dígito `2` já é o ano completo `0002`: tirar o foco
+ * ali era o que impedia digitar o resto do ano. Quem teclou no campo desde o
+ * último `blur` fica com o foco onde está.
+ */
+export function ligarCamposDeData(
+  escopo: ParentNode | null | undefined,
+  // Opcional porque nem todo formulário tem o que recalcular: os filtros da
+  // listagem e a data da substituição só querem o fechamento do seletor e a
+  // guarda de teclado. Sem o padrão, cada um deles inventaria um `() => {}` —
+  // e a alternativa de não chamar o helper foi justamente como dois campos de
+  // data ficaram com uma cópia manual do `change`, sem a guarda.
+  aoMudar: (campo: HTMLInputElement) => void = () => {},
+): void {
+  escopo?.querySelectorAll<HTMLInputElement>('input[type="date"]').forEach((campo) => {
+    let veioDoTeclado = false;
+    campo.addEventListener("keydown", () => {
+      veioDoTeclado = true;
+    });
+    campo.addEventListener("blur", () => {
+      veioDoTeclado = false;
+    });
+    campo.addEventListener("change", () => {
+      aoMudar(campo);
+      if (veioDoTeclado) return;
+      window.requestAnimationFrame(() => campo.blur());
+    });
+  });
+}
+
+/**
+ * Mantém a rolagem própria de um elemento que vai ser recriado no redesenho.
+ *
+ * O `shell()` refaz o `innerHTML` do app inteiro a cada troca de tela, e a
+ * `.sidebar` tem rolagem própria (`height: 100vh; overflow-y: auto`). Recriar o
+ * DOM zera o `scrollTop`: quem clicava num dos últimos catálogos — são 26, e
+ * nascem em runtime — voltava ao topo do menu e tinha de rolar de novo para
+ * alcançar o vizinho.
+ *
+ * Lê antes, redesenha, reaplica. Tudo síncrono, antes do próximo quadro, para
+ * não haver salto visível. Mora aqui, e não no `main.ts`, porque é lá que o
+ * Vitest não alcança — o módulo importa a API do Tauri.
+ *
+ * A posição NÃO é persistida: vive só enquanto o app está aberto. Recolhido e
+ * grupos abertos vão para o `localStorage` porque são preferência declarada;
+ * rolagem é onde a pessoa parou, e reabrir o programa com o menu no meio seria
+ * estranho.
+ */
+export function preservarRolagem(seletor: string, redesenhar: () => void): void {
+  const anterior = document.querySelector<HTMLElement>(seletor)?.scrollTop ?? 0;
+  redesenhar();
+  if (anterior <= 0) return;
+  const recriado = document.querySelector<HTMLElement>(seletor);
+  // Sem elemento não há o que restaurar — é o caso da primeira tela depois do
+  // login, que vem da tela de acesso, onde não existe menu. Posição maior que o
+  // novo conteúdo o navegador mesmo limita.
+  if (recriado) recriado.scrollTop = anterior;
 }
 
 /** Traduz o `ValidityState` do WebView sem substituir as regras do HTML. */
@@ -278,6 +428,12 @@ function mensagemDeValidacao(campo: CampoValidavel): string {
   // Uma mensagem personalizada anterior mantém `customError=true` mesmo
   // depois que o valor muda. Limpar primeiro revela o estado nativo atual.
   campo.setCustomValidity("");
+
+  // Antes do `validity`: o limite de data não é atributo que o navegador
+  // conheça, então o campo fora de ordem chega aqui nativamente válido.
+  const limite = mensagemDeLimiteDeData(campo);
+  if (limite) return limite;
+
   const validade = campo.validity;
   if (validade.valid) return "";
 
@@ -292,17 +448,13 @@ function mensagemDeValidacao(campo: CampoValidavel): string {
   if (validade.typeMismatch && campo instanceof HTMLInputElement && campo.type === "email") {
     return "Informe um endereço de e-mail válido.";
   }
+  // Só os campos numéricos ainda declaram `min`/`max` nativos — porta do banco,
+  // prazo em dias, máximo de ocupantes. Os de data foram tratados acima.
   if (validade.rangeUnderflow && campo instanceof HTMLInputElement) {
-    if (campo.dataset.mensagemMin) return campo.dataset.mensagemMin;
-    return campo.type === "date"
-      ? `Escolha uma data igual ou posterior a ${dataPtBr(campo.min)}.`
-      : `Informe um valor maior ou igual a ${campo.min}.`;
+    return campo.dataset.mensagemMin ?? `Informe um valor maior ou igual a ${campo.min}.`;
   }
   if (validade.rangeOverflow && campo instanceof HTMLInputElement) {
-    if (campo.dataset.mensagemMax) return campo.dataset.mensagemMax;
-    return campo.type === "date"
-      ? `Escolha uma data igual ou anterior a ${dataPtBr(campo.max)}.`
-      : `Informe um valor menor ou igual a ${campo.max}.`;
+    return campo.dataset.mensagemMax ?? `Informe um valor menor ou igual a ${campo.max}.`;
   }
   if (validade.tooShort && campo instanceof HTMLInputElement) {
     return `Informe pelo menos ${campo.minLength} caracteres.`;
@@ -401,12 +553,18 @@ export function instalarValidacaoAmigavel(): void {
   );
 
   const revisarCampo = (evento: Event) => {
-    if (!ehCampoValidavel(evento.target) || !errosDeCampo.has(evento.target)) return;
+    if (!ehCampoValidavel(evento.target)) return;
     const campo = evento.target;
+    // Campo que já errou continua sendo revisto a cada tecla, para o aviso
+    // sumir sozinho. Campo de data com limite próprio entra aqui **antes** de
+    // errar: como o navegador não conhece `data-limite-*`, é este
+    // `setCustomValidity` que torna o campo inválido e faz o submit parar.
+    const temLimiteDeData = campo instanceof HTMLInputElement && campo.type === "date";
+    if (!errosDeCampo.has(campo) && !temLimiteDeData) return;
     const mensagem = mensagemDeValidacao(campo);
     if (mensagem) {
       campo.setCustomValidity(mensagem);
-      mostrarErroDoCampo(campo, mensagem);
+      if (errosDeCampo.has(campo)) mostrarErroDoCampo(campo, mensagem);
     } else {
       limparErroDoCampo(campo);
     }

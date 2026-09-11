@@ -89,7 +89,7 @@ Preserve o `.env` local, pois os testes criam e derrubam bancos a partir dele.
 
 ## Banco de produção novo, ainda sem schema
 
-O preflight exige as **23 migrations aplicadas** — ele recusa um banco vazio, e
+O preflight exige as **24 migrations aplicadas** — ele recusa um banco vazio, e
 recusa também um schema que alguém tenha aplicado com `psql`, porque aí não
 existe `_sqlx_migrations` e o startup seguinte tentaria recriar tudo. Quem aplica
 é o `sqlx`:
@@ -118,7 +118,7 @@ migrations no startup. Depois disso, o script de migração.
 
 | | |
 |---|---|
-| Banco de destino | com as migrations **0001 a 0023** aplicadas (veja a seção acima) |
+| Banco de destino | com as migrations **0001 a 0024** aplicadas (veja a seção acima) |
 | Dump legado | `admp6_db_atualizado.sql` na raiz — SQL puro, 44 MB |
 | Postgres | o serviço `postgres` do `docker-compose.yml` **no ar** — mesmo migrando para outra máquina, é dele que saem os binários |
 | Ferramentas | `docker` e `sha256sum`. `psql`/`pg_dump` do host são opcionais |
